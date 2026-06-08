@@ -1,0 +1,9 @@
+[90m[main 2026-05-31T09:33:40.279Z][0m WindsurfWindowsMainManager: Window will load { windowId: 1, workspaceUri: undefined }
+[90m[main 2026-05-31T09:33:40.286Z][0m update#setState idle
+[90m[main 2026-05-31T09:33:44.049Z][0m Extension host with pid 37889 exited with code: 0, signal: unknown.
+[90m[main 2026-05-31T09:33:44.068Z][0m WindsurfWindowsMainManager: Window will close { windowId: 1, workspaceUri: undefined }
+[90m[main 2026-05-31T09:34:10.298Z][0m update#setState checking for updates
+[90m[main 2026-05-31T09:34:10.727Z][0m update#setState downloading
+[90m[main 2026-05-31T09:34:52.725Z][0m update#setState downloaded
+[90m[main 2026-05-31T09:34:52.725Z][0m Update downloaded: {"version":"c46c49e94b4d3f41181204d59809d8f1b2c48d68","productVersion":"1.110.1"}
+[90m[main 2026-05-31T09:34:52.726Z][0m update#setState ready

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.17.2/.schema/devbox.schema.json",
+  "packages": ["nodejs@24"],
+  "env": {
+    "DEVBOX_COREPACK_ENABLED": "true"
+  },
+  "shell": {
+    "init_hook": [
+      "echo \"lunma devbox: node $(node -v), pnpm $(pnpm -v 2>/dev/null || echo not-yet-pinned)\""
+    ],
+    "scripts": {
+      "install": "pnpm install",
+      "dev": "pnpm dev",
+      "build": "pnpm build",
+      "test": "pnpm test",
+      "test:e2e": "pnpm test:e2e",
+      "lint": "pnpm biome check .",
+      "format": "pnpm biome format --write ."
+    }
+  }
+}

@@ -1,0 +1,231 @@
+/*
+ * Sidebar shell styles.
+ *
+ * The active-Space hue cascades because `--base-hue` is rebound inside
+ * `.sidebar` to the inline `--space-h`. Every neutral declared in tokens.css
+ * recomputes against the rebind, and per-Space colour tokens (--space-c family)
+ * are declared HERE — not at :root — so they capture the scoped hue.
+ */
+
+html,
+body,
+#app {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  color-scheme: dark;
+  font-family: var(--font-sans);
+}
+
+.sidebar {
+  position: relative;
+  isolation: isolate;
+  box-sizing: border-box;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg);
+  color: var(--text);
+  /* Surfaces, borders, and text smoothly cross-fade as the active Space (and
+   * therefore the hue) changes. Children inherit transitions because they
+   * read from the same custom properties whose computed colours are changing. */
+  transition:
+    background-color var(--motion-slow) var(--ease-emphasised),
+    background-image var(--motion-slow) var(--ease-emphasised),
+    border-color var(--motion-slow) var(--ease-emphasised),
+    color var(--motion-slow) var(--ease-emphasised);
+}
+
+/* Hue rebind happens for any active tint. */
+.sidebar[data-tint='subtle'],
+.sidebar[data-tint='standard'],
+.sidebar[data-tint='vivid'] {
+  --base-hue: var(--space-h);
+
+  /* Top-down Space-colour wash — the same identity gesture as the new-tab home,
+   * tuned for a dense working surface: a soft halo strongest at the top (behind
+   * the search pill + Space header) that settles into the neutral substrate by
+   * ~two-thirds down, so the tab lists below read against plain `--bg`. Tracks
+   * the active Space hue (and `--space-chroma`, so a `gray` Space washes neutral)
+   * and cross-fades on Space switch via the `background-image` transition above.
+   * `--wash-a1`/`--wash-a2` are the top + mid alphas; per-tint overrides below
+   * keep the wash WCAG-safe (body text stays >7:1; the section label is lifted
+   * to AA in SectionHeader to clear the same-hue wash behind it). */
+  --wash-a1: 0.14;
+  --wash-a2: 0.05;
+  background-image: linear-gradient(
+    180deg,
+    oklch(var(--space-l) var(--space-chroma) var(--space-h) / var(--wash-a1)) 0%,
+    oklch(var(--space-l) var(--space-chroma) var(--space-h) / var(--wash-a2)) 35%,
+    transparent 68%
+  );
+}
+
+/* `subtle` stays the most restrained; `vivid` already tints the substrate, so a
+ * lighter wash avoids doubling up. `standard` keeps the full base alphas. */
+.sidebar[data-tint='subtle'] {
+  --wash-a1: 0.1;
+  --wash-a2: 0.04;
+}
+.sidebar[data-tint='vivid'] {
+  --wash-a1: 0.1;
+  --wash-a2: 0.04;
+}
+
+/* Per-Space colour family — declared HERE so `--space-h` is in scope.
+ * `--space-chroma` defaults to the saturated value; consumers that know the
+ * Space is `gray` override it inline to 0 so grey reads as a true neutral
+ * rather than a tint at the default hue.
+ *
+ * The hue-glow tokens belong to this per-Space family too, so they are declared
+ * HERE (not just at `:root`): a custom property substitutes its inner `var()`s at
+ * the element where it is declared, so the `:root` glow tokens resolve once at the
+ * base hue and inherit down unchanged — they would never recolour with the active
+ * Space. Redeclaring them at `.sidebar` (where `--space-h` is the active Space's hue
+ * and `--space-chroma` is in scope) makes the chip / editor / search-pill glows
+ * track the Space and wash neutral for a `gray` Space. The `:root` tokens keep their
+ * base-hue fallback for surfaces with no per-Space scope (e.g. the options page). */
+.sidebar {
+  --space-chroma: 0.15;
+  --space-c: oklch(var(--space-l) var(--space-chroma) var(--space-h));
+  --space-c-soft: oklch(var(--space-l) var(--space-chroma) var(--space-h) / 0.22);
+  --space-c-dim: oklch(var(--space-l) var(--space-chroma) var(--space-h) / 0.55);
+  --glow-space: 0 0 40px
+    oklch(clamp(0, calc(var(--space-l) + 0.1), 1) var(--space-chroma) var(--space-h) / 0.35);
+  --glow-space-soft: 0 8px 40px
+    oklch(clamp(0, calc(var(--space-l) + 0.1), 1) var(--space-chroma) var(--space-h) / 0.22);
+}
+
+/* Tint-intensity overrides — the colour-intensity dial (`tint` setting).
+ *
+ * `vivid` is the immersive DEFAULT: the substrate lifts a low-chroma cast of
+ * the active Space hue, the frosted-glass tokens stay hue-tinted (the :root
+ * defaults), and the aurora runs at full opacity. `subtle` and `standard` are
+ * the calm escape hatches — the substrate stays near-neutral (identity through
+ * the edge stripe, chip tiles, and section-label tint, not surface chroma), the
+ * glass loses its cast, and the aurora is reduced or nearly absent. Changing the
+ * level changes colour intensity ONLY — never layout. */
+.sidebar[data-tint='vivid'] {
+  --bg: oklch(0.155 0.045 var(--base-hue));
+  --bg-elev: oklch(0.180 0.045 var(--base-hue));
+  --surface: oklch(0.200 0.045 var(--base-hue));
+  --surface-2: oklch(0.230 0.045 var(--base-hue));
+  --hover: oklch(0.255 0.050 var(--base-hue));
+  --press: oklch(0.295 0.054 var(--base-hue));
+  /* Glass keeps its :root (hue-tinted) value. The aurora is kept QUIET on this
+   * dense working surface — far below the new-tab hero (`:root` default 0.9) —
+   * because it is masked to the upper region (see `.sidebar-aurora`) and sits
+   * behind content; it's a soft top glow, not a landing-page field. The
+   * `<Aurora>` is composed WITHOUT an `intensity` prop, so it inherits this
+   * scoped value; `standard`/`subtle` drop it further, satisfying "aurora reduced
+   * or absent" at the calm levels. */
+  --aurora-opacity: 0.35;
+}
+
+/* `standard` — a gentle cast on glass, a faint aurora; substrate neutral. */
+.sidebar[data-tint='standard'] {
+  --aurora-opacity: 0.16;
+  --glass-bg: oklch(0.23 0.014 var(--base-hue) / 0.5);
+  --glass-bg-strong: oklch(0.25 0.016 var(--base-hue) / 0.66);
+}
+
+/* `subtle` — the calmest: neutral glass and NO aurora, so the substrate reads
+ * truly near-neutral (identity carried by the edge stripe, chip, and label). */
+.sidebar[data-tint='subtle'] {
+  --aurora-opacity: 0;
+  --glass-bg: oklch(0.22 0 0 / 0.5);
+  --glass-bg-strong: oklch(0.24 0 0 / 0.66);
+}
+
+/* The edge stripe (a 3px Space-coloured inner-edge stripe) was removed on user
+ * feedback — Space identity now reads through hue-rebound surfaces, the tinted
+ * pinned-section header, and the top-down wash, without the hard colour line on the
+ * sidebar edge. (Reconciled in the `spaces-and-tabs` Per-Space colour identity spec:
+ * four signals → three.) */
+
+/* The aurora backdrop layer. The wrapper owns positioning at `--z-base` and a
+ * top-down mask so the aurora only shows in the upper region of the sidebar:
+ * fully present through the header band, fading to nothing by ~72% down. This is
+ * the fix for the drifting blobs pooling into an uneven splotch in a tall, narrow
+ * column — concentrating the glow at the top reads as one intentional identity
+ * gesture cohesive with the wash, and leaves the working area on a clean
+ * substrate. The inner `<Aurora>` fills this wrapper (its own `inset: 0`). */
+.sidebar-aurora {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-base);
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 28%, transparent 72%);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 28%, transparent 72%);
+}
+
+/* Foreground layering over the aurora. `.shell-search`, `.content-stage`,
+ * `.favicon-row`, and `.switcher` are `position: relative` and sit after the aurora
+ * layer in DOM order, so they paint above it. (The favicon grid — a `FaviconRow`
+ * sibling of `.content-stage` — owns its own positioned root, so it needs no wrapper.) */
+
+/* Top search bar wrapper: the first flow child of `.sidebar`, holding the
+ * trigger-mode `SearchField`. `--space-3` top inset lifts it off the panel edge; sides
+ * align to `--list-pad` (plumb with the favicon grid + lists). `position: relative`
+ * paints it above the aurora. */
+.shell-search {
+  position: relative;
+  padding: var(--space-3) var(--list-pad) 0;
+}
+
+/* Content stage: the single-track carousel viewport (the Model C spike). It CLIPS
+ * (`overflow: hidden`) so the off-centre Space panels only peek in as the user
+ * drags; `position: relative` keeps it (and the switcher) painting above the
+ * aurora layer and anchors the absolutely-positioned edge glows; `overscroll-
+ * behavior: none` stops Chrome's own two-finger back/forward navigation while the
+ * user is mid-swipe. Vertical scrolling lives on each `.content-slide`, not here. */
+.content-stage {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/* Single composited carousel track (the spike model): EVERY Space is a panel in
+ * one flex row; the active panel is centred by translating the WHOLE track. The
+ * transform is written IMPERATIVELY by App.svelte's rAF loop (`translate3d`),
+ * never via a reactive binding — that is what keeps the settle smooth and
+ * constant-speed. One transform on one element = a commit is a pure compositor
+ * transform, no per-slide re-key or mount. */
+.track {
+  display: flex;
+  flex-wrap: nowrap;
+  height: 100%;
+  will-change: transform;
+}
+
+.content-slide {
+  flex: 0 0 100%;
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: none;
+}
+
+/* The New Tab row shares the temporary list's horizontal inset (`--list-pad`) so
+ * its leading icon + label line up exactly with the favicons + titles of the
+ * temp rows directly below it — it reads as a row in the same list. */
+.new-tab-row {
+  position: relative;
+  padding: 0 var(--list-pad);
+}
+/* The recently-archived chip (auto-archive) sits at the trailing edge of the New
+ * Tab row, overlaying its empty right side (the New Tab label is left-aligned), so
+ * it adds no extra row. */
+.new-tab-row .archived-chip {
+  position: absolute;
+  top: 50%;
+  right: calc(var(--list-pad) + var(--space-2));
+  transform: translateY(-50%);
+}
+.new-tab-row .archived-chip:active {
+  transform: translateY(-50%) scale(var(--press-scale));
+}
+

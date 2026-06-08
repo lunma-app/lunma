@@ -1,0 +1,23 @@
+.DS_Store
+node_modules/
+dist/
+.devbox/
+.svelte-kit/
+.vite/
+coverage/
+playwright-report/
+test-results/
+.playwright-mcp/
+*.log
+.env
+.env.*
+!.env.example
+
+# Transient Claude Code harness artifact (runtime scheduler lock)
+.claude/scheduled_tasks.lock
+
+# Release artifacts (root-level output of the /release skill)
+/release/
+
+# Claude Code worktrees
+.claude/worktrees/

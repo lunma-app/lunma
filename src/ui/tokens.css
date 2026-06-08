@@ -1,0 +1,306 @@
+/*
+ * Lunma design tokens.
+ *
+ * Neutrals are OKLCH-derived from `--base-hue` so that re-binding the hue at
+ * a child scope (e.g. inside .sidebar to the active Space's hue) cascades to
+ * every surface, border, and text token without per-token overrides.
+ *
+ * Per-Space hue tokens (`--space-c`, `--space-c-soft`, `--space-c-dim`) are
+ * NOT declared here — they live at `.sidebar` scope (see src/sidebar/app.css)
+ * so they read the scoped `--space-h`. Declaring them at :root would freeze
+ * them at the global `--base-hue`.
+ */
+
+/*
+ * Brand fonts — bundled locally as Latin-subset woff2 under `public/fonts/`
+ * (served at `/fonts/*` on every extension page). No CDN: the MV3 CSP forbids
+ * remote font loading and the extension must work offline. `font-display: swap`
+ * paints the fallback stack immediately and swaps the brand face in on load.
+ *
+ *   - Mona Sans (body/UI): a variable face, weight axis 200–900.
+ *   - Instrument Serif (display): a single 400 weight (it has no variable axis);
+ *     used only for Space identity + the wordmark, so one weight is enough.
+ *
+ * The launcher overlay (a content script in arbitrary pages) cannot use these
+ * `@font-face` rules — it registers the faces itself via `document.fonts` +
+ * `chrome.runtime.getURL`, which is why `fonts/*` is in `web_accessible_resources`.
+ */
+@font-face {
+  font-family: 'Mona Sans';
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url('/fonts/MonaSans-Variable.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Instrument Serif';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/InstrumentSerif-Regular.woff2') format('woff2');
+}
+
+:root {
+  /* Hue axis — every neutral and accent reads from here. */
+  --base-hue: 62;
+  --space-h: var(--base-hue);
+
+  /* Per-Space canonical lightness + on-colour ink (space-palette-refresh).
+   * `--space-l` is the active Space's true lightness (yellow light, blue deep);
+   * `--space-on` is the readable ink for text drawn ON the Space colour. Both are
+   * re-bound inline to the active Space's canonical values wherever
+   * `--space-h`/`--space-chroma` are set (App, the switcher chip, the editor
+   * preview, the new-tab home, the drag clone, the launcher overlay). The
+   * defaults here are the resting ember: `--space-l` = the old flat identity
+   * lightness, `--space-on` = dark ink (the ember base is light). Unlike
+   * `--space-chroma` (declared only at the per-scope `.sidebar`/`.home`),
+   * `--space-l` carries a `:root` default so the identity tokens below resolve on
+   * every surface. */
+  --space-l: 0.62;
+  --space-on: oklch(0.21 0.038 62);
+
+  /* Dark theme neutrals — the base substrate stays pure grey (chroma 0). The
+   * calmer tints (`subtle`/`standard`) keep it that way and let identity come
+   * through coloured ELEMENTS (the edge stripe, chip tiles, section-label
+   * tint). The immersive `vivid` tint deliberately lifts a low-chroma cast of
+   * the active Space hue onto these surfaces (overridden at `.sidebar
+   * [data-tint='vivid']`) and the frosted-glass tokens below carry the same
+   * whisper of hue — that colour-forward fill is the point of `vivid`. */
+  --bg: oklch(0.155 0 0);
+  --bg-elev: oklch(0.180 0 0);
+  --surface: oklch(0.200 0 0);
+  --surface-2: oklch(0.230 0 0);
+  --surface-3: oklch(0.265 0 0);
+  --hover: oklch(0.255 0 0);
+  --press: oklch(0.295 0 0);
+
+  --border: oklch(0.300 0 0);
+  --border-soft: oklch(0.250 0 0 / 0.6);
+  --border-strong: oklch(0.380 0 0);
+  --divider: oklch(0.260 0 0 / 0.55);
+
+  --text: oklch(0.965 0 0);
+  --text-2: oklch(0.890 0 0);
+  --text-muted: oklch(0.760 0 0);
+  --text-dim: oklch(0.640 0 0);
+  --text-faint: oklch(0.540 0 0);
+  --text-inverse: oklch(0.155 0 0);
+
+  /* Accent (used for focus rings, primary buttons). Derived from the per-Space
+   * canonical triple (space-palette-refresh): a small `+0.065` lightness lift
+   * over `--space-l` keeps the old ember accent (0.62 + 0.065 = 0.685) while
+   * letting it follow the active Space's true colour inside `.sidebar`. The
+   * `--space-chroma` fallback (`, 0.15`) covers surfaces with no per-Space scope.
+   * `--accent-on` (the ink on a solid accent) is the per-Space `--space-on`, so
+   * on-accent text flips dark↔light with the Space colour. */
+  --accent: oklch(calc(var(--space-l, 0.62) + 0.065) var(--space-chroma, 0.15) var(--space-h));
+  --accent-soft: oklch(calc(var(--space-l, 0.62) + 0.065) var(--space-chroma, 0.15) var(--space-h) / 0.18);
+  --accent-text: oklch(0.965 0.010 var(--space-h));
+  --accent-on: var(--space-on);
+
+  /* Status. */
+  --warning: oklch(0.770 0.150 75);
+  --danger: oklch(0.660 0.205 25);
+  --success: oklch(0.720 0.150 150);
+  --info: oklch(0.700 0.140 240);
+
+  /* Radii. */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+  --r-pill: 999px;
+
+  /* Spacing scale. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* Density — vertical rhythm of the tab lists (Normal defaults; overridden by
+   * [data-density] selectors below). Font size never changes between modes. */
+  --row-h: 34px;
+  --row-gap: 2px;
+  --list-pad: 8px;
+
+  /* Motion. */
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --motion-slow: 320ms;
+  /* Space-switch carousel settle — a distinct, larger motion than a generic
+   * transition; validated on-device against the swipe spike (responsive-space-swipe
+   * D2). The JS settle ease in App.svelte reads this; reduced motion collapses it
+   * to --motion-fast via the block below. */
+  --motion-space-switch: 250ms;
+  --ease-standard: cubic-bezier(0.3, 0.7, 0.4, 1);
+  --ease-emphasised: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Typography. `--font-display` (Instrument Serif) carries Space identity, the
+   * wordmark, and large headings; `--font-sans` (Mona Sans) carries body + UI.
+   * The system stacks remain as the swap fallback and for any missing glyph. */
+  --font-display: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+  --font-sans:
+    'Mona Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono',
+    monospace;
+
+  /* Type scale — replaces the scattered hard-coded font sizes across the
+   * primitives. Mona Sans is variable so these stops are exact; the ~0.5px
+   * rounding on a few former sizes (12.5→13, 10.5→11, 9.5→10) is sub-pixel. */
+  --text-2xs: 10px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 22px;
+  --text-2xl: 32px;
+  --text-display: clamp(44px, 8vw, 72px);
+
+  /* Weight tokens. The two optical weights formerly in use (450, 550) collapse
+   * to medium / semibold. */
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* Shadows. */
+  --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.30);
+  --shadow-md: 0 4px 12px oklch(0 0 0 / 0.32);
+  --shadow-lg: 0 12px 36px oklch(0 0 0 / 0.40);
+  --shadow-pop: 0 18px 48px oklch(0 0 0 / 0.48);
+
+  /* Z-index layers — one scale so primitives stop inventing magic numbers
+   * (the launcher's `2147483647`, ad-hoc `50`/`60` popovers). */
+  --z-base: 0;
+  --z-raised: 10;
+  --z-sticky: 20;
+  --z-dropdown: 100;
+  --z-overlay: 1000;
+  --z-launcher: 2147483647;
+
+  /* Focus ring — one convention. `--focus-color` defaults to `--accent`, which
+   * auto-rebinds to the active Space hue inside `.sidebar`, so a focusable
+   * element there rings in the Space colour with no per-component override. */
+  --focus-color: var(--accent);
+  --focus-width: 2px;
+  --focus-offset: 2px;
+
+  /* Press feedback — the `:active` squish, one value everywhere. */
+  --press-scale: 0.97;
+
+  /* Control heights + icon slots — replace hard-coded 24/28/36/48px boxes,
+   * 16px favicon slots, and 28px icon buttons. */
+  --control-h-xs: 24px;
+  --control-h-sm: 28px;
+  --control-h-md: 36px;
+  --control-h-lg: 48px;
+  --control-h-xl: 56px;
+  --favicon-size: 16px;
+  --icon-btn: 28px;
+  /* Global favicon-row tile (a soft rounded-square plate) + its centred favicon image —
+   * larger than the 16px tab favicon (the favorites grid is a glanceable, icon-forward
+   * Arc-style grid of plated tiles). The plate runs notably larger than the icon so the
+   * favicon sits with generous padding inside it. */
+  --favicon-tile: 44px;
+  --favicon-img: 24px;
+
+  /* Immersive model (the `vivid` aesthetic). Frosted glass carries a whisper of
+   * the active Space hue via `--base-hue` so it reads as tinted, not grey; the
+   * hue glow + aurora read the scoped `--space-h`/`--space-chroma` (declared at
+   * `.sidebar`/`.home` scope), so they recolour with the active Space and a
+   * `gray` Space washes neutral. `--aurora-opacity` is the `vivid` default;
+   * calmer tints lower it (see `[data-tint]` in the sidebar shell).
+   *
+   * The glow tokens carry base-hue FALLBACKS on `--space-chroma`/`--space-h`
+   * (`, 0.15`/`, 62`). `--space-chroma` is undefined at `:root` (it is declared
+   * only at the per-scope `.sidebar`/`.home`), so WITHOUT the fallback these
+   * tokens would be invalid-at-computed-value where they are declared (`:root`)
+   * and inherit EMPTY into every scope — silently dropping every hue glow (the
+   * active-Space chip, the new-tab name + icon tile, the search pills). With the
+   * fallback they resolve to the base hue at `:root` and still pick up the scoped
+   * `--space-chroma`/`--space-h` where those are defined. This mirrors how
+   * `Aurora` and `overlay.css` already inline the same fallbacks. */
+  --glass-bg: oklch(0.24 0.03 var(--base-hue) / 0.5);
+  --glass-bg-strong: oklch(0.26 0.035 var(--base-hue) / 0.66);
+  --glass-border: oklch(0.99 0.01 var(--base-hue) / 0.1);
+  --glass-highlight: inset 0 1px 0 oklch(1 0 0 / 0.08);
+  --glass-blur: 22px;
+  --glow-space: 0 0 40px
+    oklch(clamp(0, calc(var(--space-l, 0.62) + 0.1), 1) var(--space-chroma, 0.15) var(--space-h, 62) / 0.35);
+  --glow-space-soft: 0 8px 40px
+    oklch(clamp(0, calc(var(--space-l, 0.62) + 0.1), 1) var(--space-chroma, 0.15) var(--space-h, 62) / 0.22);
+  --aurora-opacity: 0.9;
+  --scrim: oklch(0.08 0.02 var(--base-hue) / 0.5);
+  --scrim-blur: 8px;
+}
+
+/* Light theme override — neutrals invert; per-Space hue handling is the same. */
+:root[data-theme='light'] {
+  --bg: oklch(0.985 0.005 var(--base-hue));
+  --bg-elev: oklch(0.975 0.008 var(--base-hue));
+  --surface: oklch(0.965 0.010 var(--base-hue));
+  --surface-2: oklch(0.945 0.012 var(--base-hue));
+  --surface-3: oklch(0.920 0.014 var(--base-hue));
+  --hover: oklch(0.930 0.018 var(--base-hue));
+  --press: oklch(0.895 0.022 var(--base-hue));
+
+  --border: oklch(0.870 0.018 var(--base-hue));
+  --border-soft: oklch(0.900 0.014 var(--base-hue) / 0.7);
+  --border-strong: oklch(0.760 0.022 var(--base-hue));
+  --divider: oklch(0.890 0.014 var(--base-hue) / 0.6);
+
+  --text: oklch(0.190 0.020 var(--base-hue));
+  --text-2: oklch(0.300 0.020 var(--base-hue));
+  --text-muted: oklch(0.420 0.018 var(--base-hue));
+  --text-dim: oklch(0.560 0.016 var(--base-hue));
+  --text-faint: oklch(0.640 0.014 var(--base-hue));
+  --text-inverse: oklch(0.985 0.005 var(--base-hue));
+
+  --accent: oklch(0.540 0.180 var(--base-hue));
+  --accent-soft: oklch(0.540 0.180 var(--base-hue) / 0.16);
+  --accent-text: oklch(0.985 0.005 var(--base-hue));
+  --accent-on: oklch(0.985 0.005 var(--base-hue));
+
+  --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.10);
+  --shadow-md: 0 4px 12px oklch(0 0 0 / 0.12);
+  --shadow-lg: 0 12px 36px oklch(0 0 0 / 0.16);
+  --shadow-pop: 0 18px 48px oklch(0 0 0 / 0.20);
+
+  /* Glass + scrim invert for light: a bright translucent fill with a dark
+   * hairline border. Glow/aurora hue handling is shared with dark. */
+  --glass-bg: oklch(0.99 0.01 var(--base-hue) / 0.6);
+  --glass-bg-strong: oklch(1 0.008 var(--base-hue) / 0.74);
+  --glass-border: oklch(0.2 0.02 var(--base-hue) / 0.08);
+  --glass-highlight: inset 0 1px 0 oklch(1 0 0 / 0.5);
+  --scrim: oklch(0.92 0.01 var(--base-hue) / 0.45);
+}
+
+/* Density overrides — set `data-density` on `document.documentElement`. Normal
+ * is the `:root` default above, so it needs no selector (the attribute may be
+ * omitted entirely for Normal). */
+:root[data-density='compact'] {
+  --row-h: 28px;
+  --row-gap: 1px;
+  --list-pad: 6px;
+}
+:root[data-density='comfort'] {
+  --row-h: 40px;
+  --row-gap: 4px;
+  --list-pad: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    /* Collapse longer transitions to the fast tick — same end state, less
+     * motion. Per-component rules don't need their own override. */
+    --motion-base: var(--motion-fast);
+    --motion-slow: var(--motion-fast);
+    --motion-space-switch: var(--motion-fast);
+  }
+}

@@ -1,0 +1,300 @@
+/*
+ * Lunma new-tab page — the immersive empty-Space "home" + inline launcher.
+ *
+ * Identity-first and colour-forward: the active Space's colour fills the viewport
+ * as a drifting <Aurora> backdrop, the Space identity sits in a frosted-glass
+ * tile with a hue glow, the name is set in the editorial display serif, and the
+ * search + results are frosted-glass surfaces that rise in on load. The hue
+ * rebind mirrors the sidebar shell — every OKLCH-derived neutral (and the glass /
+ * glow / aurora families) recomputes against the active Space's `--space-h`, and
+ * the per-Space `--space-c` family is declared at `.home` scope so it captures
+ * the scoped hue. `--space-h` / `--space-chroma` are set inline by NewTab
+ * (`--space-chroma` 0 for `gray`). The composition uses the shared primitives
+ * (`Aurora`, `Surface`, `SearchField`) — it re-rolls no glass, aurora, or pill.
+ */
+
+html,
+body,
+#app {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  color-scheme: dark;
+  font-family: var(--font-sans);
+}
+
+.home {
+  --base-hue: var(--space-h);
+  --space-chroma: 0.15;
+  --space-c: oklch(var(--space-l) var(--space-chroma) var(--space-h));
+  /* Hue glows belong to the per-Space family: declared HERE (not just at `:root`)
+   * so they substitute against the active Space's canonical
+   * `--space-l`/`--space-chroma`/`--space-h` and the Space name + icon-tile glows
+   * recolour (true to name) on switch. A `:root`-only token substitutes at `:root`
+   * and inherits the base hue down, never recolouring. The `+0.1` lift keeps the
+   * glow a touch brighter than the identity fill, as before. */
+  --glow-space: 0 0 40px
+    oklch(clamp(0, calc(var(--space-l) + 0.1), 1) var(--space-chroma) var(--space-h) / 0.35);
+  --glow-space-soft: 0 8px 40px
+    oklch(clamp(0, calc(var(--space-l) + 0.1), 1) var(--space-chroma) var(--space-h) / 0.22);
+
+  box-sizing: border-box;
+  position: relative;
+  min-height: 100vh;
+  /* A single `1fr` row absorbs the `min-height: 100vh` free space, so `.stage`
+   * stretches to the full padded viewport height; the anchor grid
+   * (1fr / auto / 1fr) lives on `.stage` and only centres correctly when its
+   * height is the viewport (not its content). */
+  display: grid;
+  grid-template-rows: 1fr;
+  padding: var(--space-6);
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Tint dial — the aurora intensity is driven by the `intensity` prop (per the
+ * tint level); here we only calm the frosted glass so `subtle`/`standard` read
+ * near-neutral while `vivid` keeps the :root hue-tinted fill. Mirrors the
+ * sidebar's `[data-tint]` glass overrides; layout never changes. */
+.home[data-tint='standard'] {
+  --glass-bg: oklch(0.23 0.014 var(--base-hue) / 0.5);
+  --glass-bg-strong: oklch(0.25 0.016 var(--base-hue) / 0.66);
+}
+.home[data-tint='subtle'] {
+  --glass-bg: oklch(0.22 0 0 / 0.5);
+  --glass-bg-strong: oklch(0.24 0 0 / 0.66);
+}
+
+/* Two-pose anchor grid above the aurora. Idle, the flexible top + bottom bands
+ * are equal, so the search row (the centre `auto` band) sits at the vertical
+ * centre, the identity grows upward above it and results grow downward below it —
+ * and the input stays put as the result count changes (no per-keystroke jitter).
+ * On the first keystroke the TOP band collapses toward zero, so the identity (now
+ * a chip) and the input glide UP toward the top and the results band expands to
+ * fill — two stable poses with one smooth transition (newtab-anchored-search). */
+.stage {
+  position: relative;
+  z-index: var(--z-raised);
+  display: grid;
+  /* `minmax(0, 1fr)` (not `1fr`) so a tall identity or a long result list overflows
+   * its band rather than growing the track and drifting the input — the two bands
+   * stay exactly equal in the idle pose, pinning the input to centre. Chrome
+   * interpolates `grid-template-rows` between `fr` values, so re-weighting the top
+   * band animates the input's rise. */
+  grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
+  justify-items: center;
+  row-gap: var(--space-4);
+  transition: grid-template-rows var(--motion-base) var(--ease-emphasised);
+}
+
+/* Searching pose — collapse the top band so the chip + input ride up toward the
+ * top and the results band (bottom 1fr) takes the freed room. The identity-band's
+ * full identity (fading out) simply overflows the now-tiny band upward; only the
+ * chip, bottom-aligned in the band, stays visible just above the input. */
+.home.searching .stage {
+  grid-template-rows: minmax(0, 0.16fr) auto minmax(0, 1fr);
+}
+
+/* Identity band — top 1fr row, bottom-aligned so its content sits just above the
+ * anchored input. Holds the full identity and the compact chip in one stacked
+ * cell; the band (not its children) carries the staggered entrance (~120ms). */
+.identity-band {
+  grid-row: 1;
+  align-self: end;
+  width: min(560px, 86vw);
+  display: grid;
+  justify-items: center;
+  align-items: end;
+  animation: rise var(--motion-slow) var(--ease-emphasised) both;
+  animation-delay: 120ms;
+}
+
+/* Full identity + chip share one grid cell so the crossfade never reflows. */
+.identity,
+.identity-chip {
+  grid-area: 1 / 1;
+  transition:
+    opacity var(--motion-base) var(--ease-emphasised),
+    transform var(--motion-base) var(--ease-emphasised);
+}
+
+/* Identity — glass icon tile, the Space name in the display serif, a quiet meta
+ * line. The hero of the idle home. */
+.identity {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  text-align: center;
+}
+
+/* Compact identity chip — a quiet frosted pill (Space icon + name in the sans
+ * face). Hidden until searching, then it eases up into the full identity's place
+ * so the Space stays present without crowding the results. */
+.identity-chip {
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+}
+.identity-chip .surface {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--r-pill);
+}
+.chip-name {
+  font: var(--weight-medium) var(--text-sm) / 1 var(--font-sans);
+  color: var(--text);
+}
+
+/* Searching: the full identity eases out, the chip eases in (same cell). */
+.identity-band.searching .identity {
+  opacity: 0;
+  transform: translateY(-4px);
+  pointer-events: none;
+}
+.identity-band.searching .identity-chip {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* The frosted-glass icon tile (a sized <Surface variant="glass" glow>). This is a
+ * plain CSS file (not a Svelte <style>), so the child Surface's `.surface` class is
+ * targeted directly — `:global()` is Svelte-only syntax and is invalid here. */
+.icon-tile .surface {
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 96px;
+}
+
+.name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-display);
+  font-weight: var(--weight-regular);
+  line-height: 1.05;
+  letter-spacing: 0.01em;
+  color: var(--text);
+  /* Hue text-glow in the active Space's colour — the shared --glow-space token
+   * (a zero-offset coloured halo), so no hand-typed glow value lives here. */
+  text-shadow: var(--glow-space);
+}
+
+.meta {
+  margin: 0;
+  font: var(--weight-regular) var(--text-base) / 1.3 var(--font-sans);
+  color: var(--text-muted);
+}
+
+/* Search — the frosted SearchField pill. Centred in the `auto` row when idle;
+ * rides up to the top as the `.stage` searching pose collapses the top band.
+ * Rises in second (~280ms). */
+.search-row {
+  grid-row: 2;
+  width: min(560px, 86vw);
+  animation: rise var(--motion-base) var(--ease-emphasised) both;
+  animation-delay: 280ms;
+}
+
+/* Below the input (bottom 1fr row): the Tab-to-search hint stacked over the
+ * results card, growing downward from just under the input. Rises in last
+ * (~440ms). */
+.below {
+  grid-row: 3;
+  align-self: start;
+  width: min(560px, 86vw);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  animation: rise var(--motion-base) var(--ease-emphasised) both;
+  animation-delay: 440ms;
+}
+
+/* Results — a glass <Surface> over the aurora, filling the bottom band width. */
+.results {
+  width: 100%;
+}
+
+/* Tab-to-search affordance (launcher-tab-to-search) — a quiet line just under
+ * the input: the `⇥` Kbd glyph + dim engine text. Fades in over --motion-fast;
+ * never competes with the results. */
+.engine-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
+  padding: 0 var(--space-2);
+  font: var(--weight-regular) var(--text-sm) / 1.2 var(--font-sans);
+  color: var(--text-dim);
+  animation: fade-in var(--motion-fast) var(--ease-standard) both;
+}
+/* Each candidate engine — favicon + name — so the cycle hint reads as a menu. */
+.engine-hint-engine {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-muted);
+}
+.engine-hint-icon {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  object-fit: contain;
+}
+.engine-hint-sep {
+  color: var(--text-dim);
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Empty (query, no matches) — a quiet line inside the card, never a dead box. */
+.empty {
+  margin: 0;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  text-align: center;
+  font: var(--weight-regular) var(--text-base) / 1.2 var(--font-sans);
+  color: var(--text-muted);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Honour reduced-motion: skip the staggered rise-ins (the aurora drift is
+ * removed inside the primitive). End state is identical. */
+@media (prefers-reduced-motion: reduce) {
+  .identity-band,
+  .search-row,
+  .below {
+    animation: none;
+  }
+  /* The chip entrance + hint fade are removed; identical end state. */
+  .engine-hint {
+    animation: none;
+  }
+  /* Instant full↔chip swap AND instant idle↔searching pose change (the input
+   * snaps to its top pose), identical end state. */
+  .stage,
+  .identity,
+  .identity-chip {
+    transition: none;
+  }
+}

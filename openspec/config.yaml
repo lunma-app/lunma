@@ -1,0 +1,192 @@
+schema: spec-driven
+
+context: |
+  Project: Lunma — an Arc-style vertical-workspace Chrome MV3 extension.
+  Tech stack: TypeScript (strict), Svelte 5 (runes), Vite 8, Vitest 4,
+  Biome 2, Stylelint 17, Zod 4, @crxjs/vite-plugin, pnpm, devbox, Node 24.
+  Surfaces: SW (background), sidebar (side panel), launcher overlay
+  + new-tab page, options, onboarding. Stack pinned in
+  `docs/02-tech-stack.md` — do not introduce alternatives without
+  proposing a change.
+
+  The one-way import-layer DAG and the primitive→token CSS contract are
+  mechanically enforced and gated: Biome (`noRestrictedImports` per-layer
+  overrides + `noImportCycles`, run by `biome check`) for the layer
+  boundaries, and Stylelint (`pnpm lint:styles`) for `font-size`/`z-index`
+  tokens in `src/ui` primitives. `pnpm verify` runs the full gate. See the
+  `architecture-integrity` capability and `docs/03-architecture.md`.
+
+  Source of truth for the target architecture: `docs/01-vision.md`
+  through `docs/06-migration.md`. These docs and OpenSpec artifacts
+  must stay in lockstep — neither leads the other silently.
+
+  Policy on user value (binding for Phase 2 onward; Phase 1 archives
+  predate this rule and are not re-evaluated):
+
+  Every change MUST deliver user-visible value. Pure infrastructure
+  changes are not the default. Two acceptable shapes:
+
+  (a) The change delivers a visible improvement directly — a feature
+      the user sees, a fix they feel, an interaction that newly works.
+
+  (b) The change is the smallest plumbing required to enable a
+      specific upcoming user-visible change, AND it names that
+      upcoming change explicitly in the proposal. Infrastructure is
+      allowed but never stranded — there must always be a named
+      downstream change that consumes it.
+
+  When bundling plumbing with a user-visible feature would inflate
+  the change too far, prefer to split: a small plumbing change that
+  names its downstream consumer, followed by the consumer. Do NOT
+  use that escape to ship plumbing-with-no-future-consumer.
+
+  Phase 1 was appropriately infrastructure-heavy because the user
+  could not yet be reached. From Phase 2 onward, this rule binds.
+
+  Policy on visual quality (binding for every change that ships a
+  user-visible surface):
+
+  Lunma's user-visible surfaces (sidebar, launcher overlay, new-tab
+  page, options, onboarding) MUST land at a high visual bar from
+  the first time a user sees them — not as a Phase 7 polish layer.
+  The reference is Arc's vertical workspace, pushed toward an
+  immersive, colour-forward, editorial direction: soft rounded
+  corners, generous whitespace, an editorial serif (Instrument
+  Serif) for Space identity + the wordmark and a contemporary sans
+  (Mona Sans) for the body, the active Space's colour filling the
+  workspace as an aurora backdrop with frosted-glass panels and a
+  hue glow, subtle gradients, micro-interactions that feel alive
+  (150-250ms tweens are the sweet spot for state transitions). This
+  immersive look is the default (the `vivid` tint); a Colour
+  intensity setting (subtle | standard | vivid) calms it to a
+  near-neutral substrate, and reduced-motion + WCAG-AA contrast
+  hold at every level. Copy Arc's visual language where it nails
+  the problem; deliberately improve on it where Lunma has something
+  Arc doesn't (e.g. the same Space can be active in multiple
+  windows — that's a visual-design opportunity, not an awkward edge
+  case).
+
+  Every change that ships a user-visible surface MUST address
+  visual quality explicitly in its `design.md` under a `Visual
+  language` section: motion choices, colour usage, hierarchy,
+  interaction feedback. "Functional" is not the bar.
+
+  Policy on component library (binding):
+
+  Build primitives, compose features. UI primitives live in
+  `src/ui/` (cross-surface — reused by sidebar, launcher, options,
+  onboarding). Feature components (e.g. `SpaceSwitcher.svelte`,
+  `FaviconRow.svelte`) compose primitives; they do NOT re-roll
+  buttons, tooltips, tiles, spinners, etc. with their own styles
+  and hover states. Design tokens (colours, radii, motion timings,
+  the type scale + weights, z-index layers, focus-ring geometry,
+  the press scale, control sizes, and the immersive glass/glow/
+  aurora families) live at `src/ui/tokens.css` as CSS custom
+  properties and are referenced from primitives — primitives do
+  not hard-code design values (no raw font sizes, z-index, focus
+  rings, press transforms, or control heights).
+
+  A change that introduces a new feature component MUST either
+  (a) compose existing primitives, or (b) ship the new primitives
+  it needs as part of the same change, with their styling and
+  contract proven by use in this change's feature component. Pure
+  primitive-library expansion changes are allowed but must name
+  the downstream feature change that will consume them (shape b
+  of the user-value policy).
+
+  Policy on deviations and drift (binding for every artifact and
+  every implementation step):
+
+  1. Any deviation from the proposal, design, or specs found or
+     introduced during implementation — including additions of new
+     fields, methods, files, dependencies, behaviors, or renames of
+     anything the artifacts already name — MUST be explicitly raised
+     with the user and explicitly agreed before being committed.
+     "Reasonable defaults" do not override this. Apply-time agents
+     MUST pause and ask via AskUserQuestion when a deviation is
+     about to happen, not after.
+
+  2. If a deviation IS agreed, the corresponding documentation
+     (relevant files under `docs/`, the affected artifact under
+     `openspec/changes/<change>/`, and any spec under
+     `openspec/specs/`) MUST be updated in the same change. This is
+     not optional and not deferrable to a "later cleanup". A change
+     is not considered complete while docs and artifacts disagree
+     with the code.
+
+  3. File paths, type names, method names, and field names mentioned
+     in artifacts or docs are normative. If the implementation needs
+     a different name (e.g. `.svelte.ts` extension, additional state
+     field, additional helper method), update the artifact and the
+     docs as part of the same change rather than leaving the
+     codebase as the de-facto source of truth.
+
+  4. When a deviation is small enough that the user would obviously
+     approve it (e.g. forced by a strict TS rule, by Svelte's
+     compiler, or by the build toolchain), still surface it briefly
+     before committing — a one-line "I had to do X because Y, ok?"
+     is enough. Silence is not consent.
+
+rules:
+  proposal:
+    - State the user-visible value this change delivers, in one
+      paragraph at the top of the `## Why`. If the change is pure
+      plumbing (shape b in the user-value policy), name the
+      downstream change that will consume it and give that change's
+      tentative name. Do not propose pure plumbing with no named
+      consumer.
+    - State explicitly which `docs/` files this change updates and
+      which it leaves untouched. Treat `docs/` as part of the
+      proposal surface, not as separate cleanup.
+    - List every new public type, file, method, or field the change
+      introduces. If implementation later needs to add one not
+      listed here, that is a deviation requiring user agreement and
+      a proposal/design update before it lands.
+    - For changes shipping a new user-visible surface or feature
+      component, list the existing `src/ui/` primitives the change
+      will compose AND any new primitives it will add. If neither
+      column is listed, the proposal is incomplete — re-rolling a
+      primitive inline is not allowed by the component-library
+      policy.
+
+  design:
+    - Capture every decision that diverges from the docs or prior
+      capabilities in the Decisions log with the alternatives
+      considered. Implementation may not silently introduce a
+      decision that is not recorded here.
+    - When a decision implies a doc change, name the specific
+      `docs/` file(s) and section(s) that must be updated, and
+      include that update in the same change.
+    - For changes shipping a user-visible surface or feature
+      component, include a `Visual language` section in `design.md`
+      covering motion choices (specific timings + easings), colour
+      usage (which design tokens, in which states), interaction
+      feedback (hover, active, focus, disabled, loading), and
+      hierarchy. Reference Arc's behaviour where it informs a
+      decision; name the deliberate improvement where Lunma
+      diverges.
+
+  specs:
+    - Requirements must be normative. If implementation later needs
+      to relax, strengthen, or rename a requirement, update the
+      spec in the same change — never leave the code as the de-facto
+      authority.
+    - When a spec references a file path, type name, method, or
+      field, treat it as binding. Renames during implementation
+      require updating the spec.
+
+  tasks:
+    - Before starting implementation of a task that may deviate
+      from the proposal/design/specs (new field, new method, new
+      file not listed, different filename or extension, removed
+      step, additional dependency), STOP and confirm with the user
+      via AskUserQuestion. Do not assume agreement.
+    - When a deviation is agreed, add the doc and artifact updates
+      as explicit follow-up tasks in `tasks.md` before continuing,
+      and complete them within the same change. Marking tasks
+      `[x]` is only valid once the code AND the matching docs and
+      artifacts are updated.
+    - Apply-time scope changes (skipping tasks, reordering tasks,
+      adding tasks, splitting tasks) require user agreement and a
+      `tasks.md` edit. Do not silently work around the published
+      task list.

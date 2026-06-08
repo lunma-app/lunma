@@ -1,0 +1,126 @@
+<script lang="ts" module>
+import type { Component } from 'svelte';
+import { type IconName, isIconName } from '../shared/icon-names';
+
+type IconModule = { default: Component };
+type Loader = () => Promise<IconModule>;
+
+const loaders = import.meta.glob('/node_modules/@lucide/svelte/dist/icons/*.svelte') as Record<
+  string,
+  Loader
+>;
+const loaderByName: Map<string, Loader> = new Map();
+for (const [path, loader] of Object.entries(loaders)) {
+  const match = path.match(/\/([^/]+)\.svelte$/);
+  if (match?.[1]) loaderByName.set(match[1], loader);
+}
+
+const componentCache: Map<string, Component> = new Map();
+const inflight: Map<string, Promise<Component | null>> = new Map();
+const missingLogged: Set<string> = new Set();
+
+async function resolveIcon(name: string): Promise<Component | null> {
+  const cached = componentCache.get(name);
+  if (cached) return cached;
+  const pending = inflight.get(name);
+  if (pending) return pending;
+  const loader = loaderByName.get(name);
+  if (!loader) {
+    if (!missingLogged.has(name)) {
+      missingLogged.add(name);
+      console.warn(`[lunma] Icon: unknown icon name '${name}'`);
+    }
+    return null;
+  }
+  const p = (async () => {
+    try {
+      const mod = await loader();
+      componentCache.set(name, mod.default);
+      return mod.default;
+    } catch (err) {
+      if (!missingLogged.has(name)) {
+        missingLogged.add(name);
+        console.warn(`[lunma] Icon: failed to load '${name}'`, err);
+      }
+      return null;
+    } finally {
+      inflight.delete(name);
+    }
+  })();
+  inflight.set(name, p);
+  return p;
+}
+
+export type { IconName };
+export { isIconName };
+</script>
+
+<script lang="ts">
+interface Props {
+  /** Any lucide icon name. `Icon` is the generic renderer — it loads the icon
+   * dynamically and warns on an unknown name — so it accepts the full lucide set,
+   * NOT just the curated `IconName` Space-icon catalogue (the IconPicker's domain).
+   * Typing it to `IconName` was wrong: every UI icon (`x`, `chevron-right`, `plus`,
+   * …) lives outside that catalogue and had to be cast at each call site. */
+  name: string;
+  size?: number | undefined;
+  color?: string | undefined;
+  label?: string | undefined;
+}
+
+const { name, size = 16, color, label }: Props = $props();
+
+let Resolved: Component | null = $state(null);
+
+$effect(() => {
+  let cancelled = false;
+  Resolved = null;
+  resolveIcon(name).then((c) => {
+    if (!cancelled) Resolved = c;
+  });
+  return () => {
+    cancelled = true;
+  };
+});
+</script>
+
+{#if label !== undefined}
+  <span
+    class="icon"
+    style:--icon-size={`${size}px`}
+    style:color={color ?? 'currentColor'}
+    role="img"
+    aria-label={label}
+    data-icon-name={name}
+  >
+    {#if Resolved}<Resolved size={size} color={color ?? 'currentColor'} />{/if}
+  </span>
+{:else}
+  <span
+    class="icon"
+    style:--icon-size={`${size}px`}
+    style:color={color ?? 'currentColor'}
+    aria-hidden="true"
+    data-icon-name={name}
+  >
+    {#if Resolved}<Resolved size={size} color={color ?? 'currentColor'} />{/if}
+  </span>
+{/if}
+
+<style>
+  .icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+    width: var(--icon-size);
+    height: var(--icon-size);
+    line-height: 0;
+  }
+
+  .icon :global(svg) {
+    width: var(--icon-size);
+    height: var(--icon-size);
+    display: block;
+  }
+</style>

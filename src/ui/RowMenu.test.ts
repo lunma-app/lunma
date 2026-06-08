@@ -1,0 +1,60 @@
+import { fireEvent, render } from '@testing-library/svelte';
+import { describe, expect, test, vi } from 'vitest';
+import RowMenuHarness from './RowMenu.test.harness.svelte';
+
+const TRIGGER = '[data-testid="row-menu-trigger"]';
+const ITEM = '[data-testid="row-menu-item"]';
+
+function trigger(container: HTMLElement): HTMLButtonElement {
+  return container.querySelector(TRIGGER) as HTMLButtonElement;
+}
+
+describe('RowMenu', () => {
+  test('renders the header + a kebab trigger, closed by default', () => {
+    const { container } = render(RowMenuHarness);
+    expect(container.querySelector('[data-testid="row-header"]')).not.toBeNull();
+    const t = trigger(container);
+    expect(t.getAttribute('aria-haspopup')).toBe('menu');
+    expect(t.getAttribute('aria-expanded')).toBe('false');
+    expect(t.querySelector('[data-icon-name="ellipsis-vertical"]')).not.toBeNull();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(document.querySelectorAll(ITEM).length).toBe(0);
+  });
+
+  test('clicking the trigger opens the drawer and flips the glyph to ✕', async () => {
+    const { container } = render(RowMenuHarness);
+    await fireEvent.click(trigger(container));
+    expect(trigger(container).getAttribute('aria-expanded')).toBe('true');
+    expect(document.querySelector('[role="menu"]')).not.toBeNull();
+    expect(trigger(container).querySelector('[data-icon-name="x"]')).not.toBeNull();
+    expect(document.querySelectorAll(ITEM).length).toBe(3);
+    expect(document.querySelector('[data-menu-id="del"]')?.classList.contains('danger')).toBe(true);
+  });
+
+  test('a non-keepOpen action fires onSelect and closes', async () => {
+    const onA = vi.fn();
+    const { container } = render(RowMenuHarness, { props: { onA } });
+    await fireEvent.click(trigger(container));
+    await fireEvent.click(document.querySelector('[data-menu-id="a"]') as HTMLButtonElement);
+    expect(onA).toHaveBeenCalledTimes(1);
+    expect(trigger(container).getAttribute('aria-expanded')).toBe('false');
+  });
+
+  test('a keepOpen action stays open and can reveal the in-drawer panel', async () => {
+    const { container } = render(RowMenuHarness);
+    await fireEvent.click(trigger(container));
+    expect(document.querySelector('[data-testid="row-menu-panel"]')).toBeNull();
+    await fireEvent.click(document.querySelector('[data-menu-id="panel"]') as HTMLButtonElement);
+    expect(trigger(container).getAttribute('aria-expanded')).toBe('true'); // still open
+    expect(document.querySelector('[data-testid="row-menu-panel"]')).not.toBeNull();
+  });
+
+  test('Escape closes the drawer', async () => {
+    const { container } = render(RowMenuHarness);
+    await fireEvent.click(trigger(container));
+    await fireEvent.keyDown(document.querySelector('[role="menu"]') as HTMLElement, {
+      key: 'Escape',
+    });
+    expect(trigger(container).getAttribute('aria-expanded')).toBe('false');
+  });
+});
