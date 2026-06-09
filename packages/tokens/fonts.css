@@ -1,0 +1,31 @@
+/*
+ * Lunma brand faces — bundled locally as Latin-subset woff2 (this package's
+ * `fonts/` dir is the single source of truth). No CDN: the MV3 CSP forbids
+ * remote font loading and the product must work offline. `font-display: swap`
+ * paints the fallback stack immediately and swaps the brand face in on load.
+ *
+ *   - Mona Sans (body/UI): a variable face, weight axis 200–900.
+ *   - Instrument Serif (display): a single 400 weight (it has no variable axis);
+ *     used only for Space identity + the wordmark, so one weight is enough.
+ *
+ * The faces resolve from the absolute `/fonts/*` path, so each consumer serves
+ * the two woff2 files there: the extension copies them into its served root at
+ * build (`web_accessible_resources: ["fonts/*"]`); the site serves them from
+ * `static/fonts/`. The launcher overlay (a content script in arbitrary pages)
+ * cannot use these `@font-face` rules — it registers the faces itself via
+ * `document.fonts` + `chrome.runtime.getURL('fonts/...')`.
+ */
+@font-face {
+  font-family: 'Mona Sans';
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url('/fonts/MonaSans-Variable.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Instrument Serif';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/InstrumentSerif-Regular.woff2') format('woff2');
+}

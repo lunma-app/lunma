@@ -1,0 +1,161 @@
+/*
+ * Site-wide base styles. Everything visual composes the @lunma/tokens custom
+ * properties (imported in +layout.svelte) — no hand-mirrored token values live
+ * here, so the site stays in lockstep with the extension's design language.
+ * Site-local rules below are layout/composition only; colour, type, radii,
+ * motion, and shadow all resolve from tokens.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+/* The staged product window (StageWindow.svelte) recolours itself when you
+ * switch Spaces — exactly as the real sidebar/new-tab do — by re-binding the
+ * Space hue/lightness/chroma on the window's own root (NOT the whole page; the
+ * marketing chrome stays the resting ember). A bare custom property can't
+ * interpolate, so the colour would SNAP. Registering the three Space axes as
+ * animatable <number>s lets the window ease between Space colours in lockstep.
+ * The transition itself lives on the stage root (see StageWindow). */
+@property --space-h {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 62;
+}
+@property --space-l {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0.62;
+}
+@property --space-chroma {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0.15;
+}
+
+html {
+  scroll-behavior: smooth;
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 17px;
+  line-height: 1.65;
+  font-weight: var(--weight-regular);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+a {
+  color: inherit;
+}
+
+:focus-visible {
+  outline: var(--focus-width) solid var(--focus-color);
+  outline-offset: var(--focus-offset);
+  border-radius: var(--r-xs);
+}
+
+/* Display type carries the brand voice; body + UI ride Mona Sans. */
+h1,
+h2,
+h3,
+.font-display {
+  font-family: var(--font-display);
+  font-weight: var(--weight-regular);
+  letter-spacing: 0.005em;
+}
+
+/* ── Shared layout + editorial utilities, composed by every section ── */
+
+.wrap {
+  width: 100%;
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.wrap-narrow {
+  width: 100%;
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* Space-colour scope. A region that sets the three Space axes (--space-h /
+ * --space-l / --space-chroma, inline) and adds this class derives the Space
+ * colour family the product mocks read — the same formulas the extension's
+ * sidebar uses, in one place so the staged hero and the chapters can't drift. */
+.space-scope {
+  --space-c: oklch(var(--space-l) var(--space-chroma) var(--space-h));
+  --space-c-soft: oklch(var(--space-l) var(--space-chroma) var(--space-h) / 0.22);
+  --space-c-dim: oklch(var(--space-l) var(--space-chroma) var(--space-h) / 0.5);
+}
+
+/* The small upper-tracked kicker above a heading, in the active accent. */
+.kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 16px;
+}
+
+/* A tiny ember dot used inside kickers/labels — the brand mark, in miniature. */
+.kicker::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  box-shadow: var(--glow-space);
+}
+
+/* ── Scroll-reveal (driven by lib/reveal.ts) ──────────────────────────────────
+ * The faded/offset start state applies ONLY after the action arms the node on
+ * the client, so prerendered + no-JS visitors always see full content. Reduced
+ * motion never arms it (the action reveals immediately). */
+[data-reveal='armed'] {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity var(--motion-slow) var(--ease-emphasised),
+    transform var(--motion-slow) var(--ease-emphasised);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+
+[data-reveal='armed'][data-revealed='true'] {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}

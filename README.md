@@ -3,7 +3,7 @@
 A Chrome extension for vertical tab spaces. Spec-driven, TypeScript-strict, Svelte 5.
 
 - **Author:** The Lunma Authors
-- **Status:** Planning (pre-implementation)
+- **Status:** Active development — pre-release
 - **Inspired by:** Arcify v4 by Nisarg Kolhe — Lunma is a clean-room reimplementation that builds on Arcify's ideas with its own architecture and codebase. See `docs/01-vision.md` for the full picture.
 
 ## What Lunma delivers
@@ -14,20 +14,35 @@ A Chrome Manifest V3 extension with an Arc-style vertical workspace for tabs:
 - **Pinned tabs** — durable, bookmark-backed, sync across devices
 - **Temporary tabs** — ephemeral; archived automatically when idle
 - **Favicon row** — compact bar of bookmark-backed shortcuts with live-tab binding
-- **Spotlight** — keyboard search across tabs, bookmarks, history (overlay + new-tab page)
+- **Launcher** — keyboard search across tabs, bookmarks, history (overlay + new-tab page)
 - **Options** — schema-driven settings UI
 - **Onboarding** — install + update flows from a single source of content
 
 ## What Lunma emphasizes
 
 - **TypeScript strict** end to end — types are part of the design, not an afterthought.
-- **A single, serialized store.** Reducer pattern with a dispatch pipeline that drains all Chrome events and user actions in order. No interleaved mutations.
+- **A single, serialized store.** A class with synchronous, void-returning mutators and a coordinator drain loop that processes all Chrome events and user actions in order. No action union, no reducer, no interleaved mutations.
 - **Versioned storage.** Every persisted read flows through a Zod schema with an append-only migrations table.
 - **Honest layer boundaries.** Chrome APIs, business logic, persistence, and DOM each live in their own modules with one-way dependencies.
 - **Svelte 5 + scoped styles.** Tiny runtime, CSS isolated per component, byte budget honored for the `<all_urls>` overlay.
-- **Tests carry weight.** Vitest for reducers, migrations, and search; Playwright for sidebar smoke.
+- **Tests carry weight.** Vitest for store methods, migrations, and search; Playwright for sidebar smoke.
 - **Spec-driven development.** Each capability has an OpenSpec spec authored before code.
 - **MV3-native build.** `@crxjs/vite-plugin` does the heavy lifting; no custom build glue.
+
+## Repository layout
+
+A **pnpm workspace** with two apps and one shared package:
+
+```
+apps/extension/    # the Chrome MV3 extension (@lunma/extension)
+apps/site/         # the marketing landing page for lunma.app (@lunma/site) — SvelteKit + adapter-static
+packages/tokens/   # @lunma/tokens — CSS-only shared design language (tokens + brand fonts + aurora/glass/glow recipes)
+```
+
+Both apps consume `@lunma/tokens` via `workspace:*`, so the site renders the
+extension's exact design language with zero copy-drift. The two apps never import
+each other (gated both ways by Biome). The extension's internal one-way layer DAG
+lives under `apps/extension/src/` (see `docs/03-architecture.md`).
 
 ## Reading order
 
@@ -40,13 +55,21 @@ A Chrome Manifest V3 extension with an Arc-style vertical workspace for tabs:
 7. `the distribution notes` — distribution notes (non-normative)
 8. `docs/08-brand-identity.md` — Lunma brand & visual identity brief (non-normative)
 
-## How to pick this up
+## Develop
 
-1. `mkdir lunma && cd lunma && git init`
-2. Scaffold with Vite + `@crxjs/vite-plugin` + Svelte 5 + TypeScript strict (see `docs/02-tech-stack.md` for versions)
-3. Initialize OpenSpec: `mkdir -p openspec/{specs,changes}` and copy each section in `docs/04-capabilities.md` into `openspec/specs/<capability-name>/spec.md`
-4. Author the first change at `openspec/changes/v1-bootstrap/` with `proposal.md`, `design.md`, `tasks.md`
-5. Implement Phase 0 + Phase 1 from `docs/05-roadmap.md`
+```sh
+pnpm install                              # link the workspace
+pnpm --filter @lunma/extension dev        # extension: Vite + crxjs dev build (load apps/extension/dist unpacked)
+pnpm --filter @lunma/site dev             # site: SvelteKit dev server
+pnpm verify                               # pnpm -r verify — gates every package (extension + site)
+pnpm --filter @lunma/extension build      # extension: production build → apps/extension/dist
+pnpm --filter @lunma/site build           # site: static prerender → apps/site/build
+pnpm test:e2e                             # extension Playwright smoke (delegates to @lunma/extension)
+```
+
+Non-trivial work starts with an OpenSpec change under `openspec/changes/`
+(see the `openspec-*` skills); each capability has a living spec under
+`openspec/specs/`.
 
 ## License (TBD)
 

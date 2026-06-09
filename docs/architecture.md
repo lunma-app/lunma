@@ -8,73 +8,65 @@ The structural blueprint for Lunma. Three principles drive the design:
 
 ## Project layout
 
+The repo is a **pnpm workspace**: the extension, the marketing site, and one
+shared CSS-only design-token package. The extension's internal layer DAG is
+unchanged in shape — only its path prefix (`apps/extension/src/…`) and its token
+source (`@lunma/tokens` instead of a local `tokens.css`).
+
 ```
-lunma/
-├─ src/
-│  ├─ shared/                  # cross-surface: types, store, schemas
-│  │  ├─ types.ts              # Space, SpaceInstance, SavedTab, AppState
-│  │  ├─ schemas.ts            # Zod schemas + migrations[]
-│  │  ├─ store.svelte.ts       # LunmaStore class: $state + synchronous void mutators (thin store)
-│  │  ├─ messages.ts           # typed sendMessage/onMessage
-│  │  ├─ settings.ts           # declarative settings engine: read/write/watch chrome.storage.sync, broadcasts via onChanged
-│  │  ├─ logger.ts             # gated by debugLoggingEnabled
-│  │  └─ chrome/               # thin typed wrappers over chrome.* APIs
-│  ├─ ui/                      # cross-surface primitives + design tokens (build primitives, compose features)
-│  │  ├─ tokens.css            # design tokens (OKLCH, parameterised by --base-hue)
-│  │  ├─ Button.svelte         # …+ Icon · Tooltip · Stack · Kbd · SegmentedControl · TabRow · TabRowMenu
-│  │  └─ icon-catalogue.ts     # IconName union + lucide imports (+ favicon.ts · space-hue.ts · index.ts)
-│  ├─ background/
-│  │  ├─ index.ts              # SW entry
-│  │  ├─ coordinator.ts        # serialized chrome event queue
-│  │  ├─ bus-adapter.ts        # routes 'lunma/command' messages into the coordinator
-│  │  ├─ state-snapshot-handler.ts  # pure-read snapshot channel (never mutates)
-│  │  ├─ launcher-suggestions-handler.ts  # pure-read launcher query channel (never mutates)
-│  │  ├─ tab-bindings.ts       # restart recovery: rebind saved tabs by URL
-│  │  ├─ boundary-injection.ts # injects the boundary content script on demand, by filename (pinned-tab-domain-boundary)
-│  │  ├─ seed-existing-windows.ts  # + seed-existing-tabs · default-space · trash-purge · pin-active-tab
-│  │  └─ (planned) auto-archive.ts   # Phase 5
-│  ├─ sidebar/                 # flat — feature components compose src/ui primitives (TabRow lives in ui/)
-│  │  ├─ App.svelte · main.ts
-│  │  ├─ PinnedTabs.svelte · TempTabs.svelte · SpaceSwitcher.svelte
-│  │  ├─ SectionHeader.svelte · SearchTrigger.svelte · EmptyState.svelte · DragClone.svelte
-│  │  ├─ drag.svelte.ts        # custom pointer-drag controller (ADR 0006)
-│  │  └─ swipe.ts · store-context.svelte.ts · window-id.ts · space-navigation.ts
-│  ├─ launcher/                # wired (launcher-v1): overlay (content script) + newtab (chrome_url_overrides)
-│  │  ├─ overlay.ts            # IIFE entry — vanilla DOM, closed shadow + constructable stylesheet, no Svelte
-│  │  ├─ overlay.css           # constructable-stylesheet source (tokens-derived; component-lib exception)
-│  │  ├─ newtab/               # full Svelte page — empty-Space "home" (idle) + inline launcher search
-│  │  │  ├─ NewTab.svelte · newtab.css
-│  │  │  └─ main.ts
-│  │  └─ shared/               # SearchEngine, scoring, providers, result/query types
-│  ├─ content/                 # second declarative content script (pinned-tab-domain-boundary)
-│  │  └─ tab-boundary.ts        # IIFE — clicks-only domain-boundary enforcer, dormant until the SW pushes its allow-set (no Svelte)
-│  ├─ options/
-│  │  ├─ Options.svelte
-│  │  └─ main.ts
-│  └─ (planned) onboarding/    # Phase 5 — does not exist yet
-│     ├─ Onboarding.svelte     # mode: 'install' | 'update'
-│     ├─ changelog.ts          # single source of truth
-│     └─ main.ts
-├─ public/
-│  └─ manifest.json            # MV3 manifest — crxjs derives build entries from it
-├─ e2e/                        # Playwright specs + fixtures (playwright.config.ts at repo root)
-│                              # unit tests are co-located: src/**/*.test.ts (no top-level tests/)
-├─ openspec/
-│  ├─ config.yaml
-│  ├─ specs/                   # one folder per capability (see 04-capabilities.md)
-│  └─ changes/                 # in-flight changes
-├─ vite.config.ts
-├─ svelte.config.js
-├─ tsconfig.json
-├─ biome.json
-├─ package.json
+lunma/                              # pnpm workspace root (private)
+├─ apps/
+│  ├─ extension/                    # the Chrome MV3 extension — @lunma/extension
+│  │  ├─ src/
+│  │  │  ├─ shared/                 # cross-surface: types · schemas (+migrations) · store.svelte.ts · messages · settings · logger
+│  │  │  │  └─ chrome/              # thin typed wrappers over chrome.* APIs
+│  │  │  ├─ ui/                     # cross-surface primitives (build primitives, compose features)
+│  │  │  │  ├─ Button.svelte        # …+ Icon · Tooltip · Stack · Kbd · SegmentedControl · TabRow · TabRowMenu
+│  │  │  │  └─ favicon.ts · index.ts   # design TOKENS now come from @lunma/tokens (see packages/)
+│  │  │  ├─ background/             # SW: index · coordinator · bus-adapter · *-handler · seed-* · (planned) auto-archive
+│  │  │  ├─ sidebar/                # flat — feature components compose ui/ primitives
+│  │  │  │  ├─ App.svelte · main.ts · PinnedTabs.svelte · TempTabs.svelte · SpaceSwitcher.svelte
+│  │  │  │  └─ drag.svelte.ts       # custom pointer-drag controller (ADR 0006)
+│  │  │  ├─ launcher/               # overlay (content script) + newtab (chrome_url_overrides) + shared engine
+│  │  │  │  ├─ overlay.ts · overlay.css
+│  │  │  │  ├─ newtab/              # full Svelte page — empty-Space "home" (idle) + inline launcher search
+│  │  │  │  └─ shared/              # SearchEngine, scoring, providers, result/query types
+│  │  │  ├─ content/               # second declarative content script (tab-boundary.ts)
+│  │  │  └─ options/               # Options.svelte · main.ts   (+ planned onboarding/ — Phase 5)
+│  │  ├─ public/manifest.json       # MV3 manifest — crxjs derives build entries from it
+│  │  ├─ e2e/                       # Playwright specs + fixtures (playwright.config.ts in apps/extension)
+│  │  │                             # unit tests are co-located: src/**/*.test.ts (no top-level tests/)
+│  │  ├─ vite.config.ts · svelte.config.js · tsconfig.json · stylelint.config.js · vitest.setup.ts
+│  │  └─ package.json               # @lunma/extension (build/test/lint/verify scripts)
+│  └─ site/                         # the marketing site — @lunma/site (SvelteKit + adapter-static → lunma.app)
+│     ├─ src/
+│     │  ├─ routes/                 # +layout.svelte (imports @lunma/tokens) · +layout.ts (prerender) · +page.svelte
+│     │  ├─ lib/                    # Hero · InstallCta · Nav · Footer · … (compose @lunma/tokens)
+│     │  ├─ lib/contrast.test.ts    # automated WCAG-AA contrast gate over the site's pairings
+│     │  └─ app.html · app.css · app.d.ts
+│     ├─ static/                    # favicon + fonts (copied from @lunma/tokens at build)
+│     ├─ svelte.config.js · vite.config.ts · tsconfig.json
+│     └─ package.json               # @lunma/site (build/check/verify scripts)
+├─ packages/
+│  └─ tokens/                       # @lunma/tokens — CSS-ONLY shared design language (no JS/TS, outside the import DAG)
+│     ├─ tokens.css                 # design-token custom properties (OKLCH, parameterised by --base-hue)
+│     ├─ fonts.css                  # @font-face for the two brand woff2 (the single source of truth)
+│     ├─ recipes.css                # aurora / glass / glow recipes (pure CSS reading the tokens)
+│     ├─ fonts/                     # MonaSans-Variable.woff2 · InstrumentSerif-Regular.woff2
+│     └─ package.json               # exports: ./tokens.css · ./fonts.css · ./recipes.css
+├─ openspec/                        # config.yaml · specs/ (one per capability) · changes/ (in-flight)
+├─ docs/                            # this folder
+├─ tooling/                       # build and release tooling
+├─ pnpm-workspace.yaml              # apps/* · packages/*
+├─ biome.json                       # workspace-wide: the layer DAG + cross-app import guards
+├─ package.json                     # workspace root (private; `pnpm -r verify` fans out to every package)
 └─ README.md
 ```
 
 ## Why the overlay stays vanilla
 
 > **Status:** the launcher **overlay** is now **wired** (`launcher-v1`). It ships
-> a `content_scripts` entry injecting `src/launcher/overlay.ts` at
+> a `content_scripts` entry injecting `apps/extension/src/launcher/overlay.ts` at
 > `document_start` on `<all_urls>`, the `bookmarks` + `history` permissions, the
 > `<all_urls>` host permission, and a `toggle-launcher` command (`Alt+L`). The
 > broad host access lands *with* the feature, not before (see
@@ -86,18 +78,18 @@ lunma/
 > inert pill into the **live inline launcher**. The empty-Space identity home is
 > now the launcher's idle state.
 
-The overlay content script (`launcher/overlay.ts`) runs on **every page load on `<all_urls>`** at `document_start` and stays dormant until `Alt+L`. Byte budget is tight — even Svelte 5's small runtime is overhead it shouldn't pay while dormant — so it is **plain TS + a closed shadow DOM + a constructable stylesheet** derived from `src/ui/tokens.css`, and it speaks the wire protocols directly (`chrome.runtime.sendMessage`) rather than importing the `bus`/`messages` modules (which would pull in the logger). The shipped content-script chunk is ~3KB gzipped, well under the 15KB budget. Declarative content scripts inject only into tabs opened/reloaded after the extension starts, so the SW's `toggle-launcher` handler **injects the overlay on demand** (`chrome.scripting.executeScript`, behind the `scripting` permission) when the active tab has no receiver — `Alt+L` then works on already-open tabs without a reload; pages Chrome forbids injecting (`chrome://`, Web Store, extension pages) stay no-ops. That on-demand injection only fires on the command path, though, and Chrome routinely leaves the command unbound — so the SW ALSO **backfills the overlay into every already-open `http(s)` tab on `chrome.runtime.onInstalled`** (install/update/reload), registered synchronously in the first turn (`launcher-backfill-open-tabs`, `src/background/overlay-injection.ts` — `backfillOverlayIntoOpenTabs()` reusing `injectOverlay(tabId)`). This makes the page-level `Alt+L` keydown fallback live on existing tabs immediately, with per-tab failure isolation and idempotent re-injection (the overlay's `__lunmaLauncherInstalled` guard). The open path also carries the active Space's colour so the immersive overlay glows in it (`newtab-launcher-vivid-refresh`): the SW reads the focused window's active Space and attaches additive, optional `spaceHue` / `spaceChroma` (OKLCH, via `colourToHue` / `colourToChroma`) to the **typed `LauncherToggleMessage`** (`lunma/toggle-launcher`) and to the `lunma/current-window` response (the keydown path). Both fields are omitted when there is no active Space or it is neutral (`gray`), so the overlay falls back to its default accent — an older SW (sending neither) and a newer overlay interoperate with no version gate.
+The overlay content script (`launcher/overlay.ts`) runs on **every page load on `<all_urls>`** at `document_start` and stays dormant until `Alt+L`. Byte budget is tight — even Svelte 5's small runtime is overhead it shouldn't pay while dormant — so it is **plain TS + a closed shadow DOM + a constructable stylesheet** derived from `@lunma/tokens/tokens.css`, and it speaks the wire protocols directly (`chrome.runtime.sendMessage`) rather than importing the `bus`/`messages` modules (which would pull in the logger). The shipped content-script chunk is ~3KB gzipped, well under the 15KB budget. Declarative content scripts inject only into tabs opened/reloaded after the extension starts, so the SW's `toggle-launcher` handler **injects the overlay on demand** (`chrome.scripting.executeScript`, behind the `scripting` permission) when the active tab has no receiver — `Alt+L` then works on already-open tabs without a reload; pages Chrome forbids injecting (`chrome://`, Web Store, extension pages) stay no-ops. That on-demand injection only fires on the command path, though, and Chrome routinely leaves the command unbound — so the SW ALSO **backfills the overlay into every already-open `http(s)` tab on `chrome.runtime.onInstalled`** (install/update/reload), registered synchronously in the first turn (`launcher-backfill-open-tabs`, `apps/extension/src/background/overlay-injection.ts` — `backfillOverlayIntoOpenTabs()` reusing `injectOverlay(tabId)`). This makes the page-level `Alt+L` keydown fallback live on existing tabs immediately, with per-tab failure isolation and idempotent re-injection (the overlay's `__lunmaLauncherInstalled` guard). The open path also carries the active Space's colour so the immersive overlay glows in it (`newtab-launcher-vivid-refresh`): the SW reads the focused window's active Space and attaches additive, optional `spaceHue` / `spaceChroma` (OKLCH, via `colourToHue` / `colourToChroma`) to the **typed `LauncherToggleMessage`** (`lunma/toggle-launcher`) and to the `lunma/current-window` response (the keydown path). Both fields are omitted when there is no active Space or it is neutral (`gray`), so the overlay falls back to its default accent — an older SW (sending neither) and a newer overlay interoperate with no version gate.
 
 A **second declarative content script** (`content/tab-boundary.ts`, `pinned-tab-domain-boundary`, ADR 0008) follows the same vanilla discipline: it runs on `<all_urls>` at `document_start` and stays **dormant** (an install guard + one `runtime.onMessage` listener) until the SW pushes it an allow-set for a bound, enforced pinned tab (`lunma/boundary-config`). While armed it intercepts only same-tab, unmodified, `http(s)` link clicks to off-allow hosts — diverting them to the SW (`lunma/boundary-open-elsewhere` → the existing `openUrl`) so the pinned tab stays put. It imports only the pure `url-boundary` matcher (no Svelte, no logger), so the chunk stays tiny. Like the overlay it can't be reached by Chrome's post-load declarative injection on a pre-existing tab, so the SW injects it on demand via `background/boundary-injection.ts` (selected from the manifest **by filename**, not array index) when a saved tab becomes bound and enforced.
 
-The new-tab page (`launcher/newtab/`) is its own page and a full Svelte app. It is a **read-only state consumer** for its idle home, exactly like the sidebar: `main.ts` resolves its window (`chrome.windows.getCurrent`) and seeds from a `state-request` snapshot (with boot-retry backoff), then `NewTab.svelte` stays live by subscribing to `state-broadcast`. For search it queries the **launcher-suggestions channel** and dispatches result actions over the bus (`focusTab` / `focusSavedTab` / `openSavedTab` / `openUrl`). Both surfaces share the search engine via `src/launcher/shared/`.
+The new-tab page (`launcher/newtab/`) is its own page and a full Svelte app. It is a **read-only state consumer** for its idle home, exactly like the sidebar: `main.ts` resolves its window (`chrome.windows.getCurrent`) and seeds from a `state-request` snapshot (with boot-retry backoff), then `NewTab.svelte` stays live by subscribing to `state-broadcast`. For search it queries the **launcher-suggestions channel** and dispatches result actions over the bus (`focusTab` / `focusSavedTab` / `openSavedTab` / `openUrl`). Both surfaces share the search engine via `apps/extension/src/launcher/shared/`.
 
-**Home-tab orchestration.** A Chrome group cannot be empty and a window cannot be empty, so an empty Space always forces a tab into existence. With Lunma owning the new-tab page, that forced tab is the Space's **home**. The coordinator recognises a home tab by its live URL (`isNewTabUrl(url)` in `src/shared/new-tab.ts`, matching `chrome://newtab/` and the extension's resolved newtab URL) and treats it as a *transient* property of the live tab (never persisted): a home tab is grouped into the active Space (so the window shows it) but is **never** added to `tempTabIds` — so it is unlisted in the sidebar's Temporary list. On `tabs.onUpdated` to a non-newtab URL it ceases to be a home tab and is adopted as an ordinary temporary tab. Empty-Space activation **reuses** the window's focused tab when it is already a home tab (else opens one), and leaving a Space whose only window tab is its home **closes** that home tab (the instance returns to `groupId === -1`) — so visiting empty Spaces never accumulates blank tabs, and **Clear** lands cleanly on the home with no stray tab re-added to the list.
+**Home-tab orchestration.** A Chrome group cannot be empty and a window cannot be empty, so an empty Space always forces a tab into existence. With Lunma owning the new-tab page, that forced tab is the Space's **home**. The coordinator recognises a home tab by its live URL (`isNewTabUrl(url)` in `apps/extension/src/shared/new-tab.ts`, matching `chrome://newtab/` and the extension's resolved newtab URL) and treats it as a *transient* property of the live tab (never persisted): a home tab is grouped into the active Space (so the window shows it) but is **never** added to `tempTabIds` — so it is unlisted in the sidebar's Temporary list. On `tabs.onUpdated` to a non-newtab URL it ceases to be a home tab and is adopted as an ordinary temporary tab. Empty-Space activation **reuses** the window's focused tab when it is already a home tab (else opens one), and leaving a Space whose only window tab is its home **closes** that home tab (the instance returns to `groupId === -1`) — so visiting empty Spaces never accumulates blank tabs, and **Clear** lands cleanly on the home with no stray tab re-added to the list.
 
 ## The store pattern (thin store)
 
 ```ts
-// src/shared/store.svelte.ts
+// apps/extension/src/shared/store.svelte.ts
 import type { AppState, SpaceId, WindowId } from './types';
 
 const initial: AppState = {
@@ -142,7 +134,7 @@ The active instance for a window is
 `groupId` of `-1` means "no live Chrome group yet". Materializing a Space as a
 real Chrome tab group — activating expands its group and collapses the others,
 new tabs join the active group, rename/recolour/delete propagate to the group —
-is **coordinator** work (`src/background/tab-groups.ts` wraps every
+is **coordinator** work (`apps/extension/src/background/tab-groups.ts` wraps every
 `chrome.tabGroups.*` / `chrome.tabs.group|ungroup` call; `coordinator.ts`
 sequences them per ADR 0007). Store mutators stay synchronous and chrome-free
 (`recordSpaceGroup` is the only group-related state write).
@@ -162,7 +154,7 @@ Key properties:
 ## The event coordinator (single sequencer)
 
 ```ts
-// src/background/coordinator.ts (simplified)
+// apps/extension/src/background/coordinator.ts (simplified)
 import { store } from '../shared/store-singleton';
 import { persist } from '../shared/chrome/storage';
 import { broadcastState } from '../shared/messages';
@@ -225,7 +217,9 @@ SW boot order:
     → seedExistingWindows → seedExistingTabs + rebuildLiveTabs (one chrome.tabs.query({}))
     → reconcileTabGroupsOnBoot   (fresh install: convert groups→Spaces; then adopt restored groups + materialize the active Space's group)
     → persist(store.snapshot())
+    → reconcileTabOwnership           (prevent-space-group-collapse: ensures no temp tab is owned by two Spaces)
     → registerStateSnapshotHandler   (post-boot: answers with the loaded snapshot)
+    → registerLauncherSuggestionsHandler   (post-boot: pure-read suggestions channel)
     → broadcast({ method: 'boot' })   (refresh an already-open sidebar after a wake)
 ```
 
@@ -240,7 +234,7 @@ then `store.onTabCreated(...)` per open tab (skipping bound/duplicate tabs, and
 temporary tab), and shares the single `chrome.tabs.query({})` result with
 `rebuildLiveTabs`.
 
-`reconcileTabGroupsOnBoot(store, freshInstall)` (`src/background/tab-group-adoption.ts`,
+`reconcileTabGroupsOnBoot(store, freshInstall)` (`apps/extension/src/background/tab-group-adoption.ts`,
 added by `tab-group-adoption`) runs once **after** the tab seed and **before** the
 boot persist/broadcast, so the boot broadcast carries the reconciled `groupId`s.
 On a **fresh install** (`freshInstall` = no Spaces were loaded from storage,
@@ -269,8 +263,12 @@ adoption) and closes the "ungrouped until first `Cmd+T`" gap.
 
 The registered Chrome listeners are `tabs.onCreated`, `tabs.onRemoved`,
 `tabs.onUpdated`, `tabs.onActivated`, `tabGroups.onRemoved`,
-`tabGroups.onUpdated`, `windows.onCreated`, `windows.onRemoved`, and
-`commands.onCommand`. `tabs.onActivated` (added by
+`tabGroups.onUpdated`, `windows.onCreated`, `windows.onRemoved`,
+`commands.onCommand`, and `alarms.onAlarm` (auto-archive sweep). The `alarms.onAlarm`
+listener is always registered, but the sweep **alarm itself** is created only while
+`autoArchiveEnabled` is on — at a period derived from the idle threshold
+(`max(1, floor(autoArchiveIdleMinutes / 2))` min) — and cleared when disabled, so a
+disabled user pays no per-wake SW cost (auto-archive capability). `tabs.onActivated` (added by
 `sidebar-temp-tabs`) drives `setActiveTab` so the temp list can highlight the
 focused tab; `onCreated` / `onUpdated` also feed `syncLiveTab` and `onRemoved`
 feeds `removeLiveTab` to maintain the ephemeral `liveTabsById` slice. The two
@@ -326,13 +324,13 @@ The coordinator queue is for mutations. Pure reads — the sidebar's boot-time
 fetch of the current `AppState` — flow over a separate request/response
 channel: the sidebar sends `'lunma/state-request'`, the SW replies with
 `'lunma/state-snapshot'` carrying `store.snapshot()`. The handler
-(`src/background/state-snapshot-handler.ts`) never enqueues, never mutates,
+(`apps/extension/src/background/state-snapshot-handler.ts`) never enqueues, never mutates,
 never persists, and never broadcasts.
 
 The **launcher-suggestions channel** is the second instance of this pattern
 (`launcher-v1`). A surface sends `'lunma/launcher-suggestions-request'
 { requestId, query, windowId }`; the handler
-(`src/background/launcher-suggestions-handler.ts`,
+(`apps/extension/src/background/launcher-suggestions-handler.ts`,
 `registerLauncherSuggestionsHandler(store)`, registered post-boot beside the
 snapshot handler) sources the four launcher providers — saved tabs from
 `store.state`, open tabs / bookmarks / history via read-only chrome APIs — runs
@@ -349,98 +347,50 @@ fallback has no SW message payload to read its `windowId` from (content scripts
 can't call `chrome.windows`), so it sends `'lunma/current-window'` and the SW
 replies `'lunma/current-window-result' { windowId }` from
 `sender.tab?.windowId ?? -1`. The handler (`respondWithCurrentWindow()` in
-`src/shared/messages.ts`) is registered **synchronously at SW top-level** — it
+`apps/extension/src/shared/messages.ts`) is registered **synchronously at SW top-level** — it
 reads no store state (unlike the snapshot/suggestions handlers, which register
 post-boot), and an `Alt+L`-triggered request can be the very message that wakes
 a dormant SW, so the listener must be present in the first turn. Pure-read:
 never enqueues, mutates, persists, or broadcasts.
 
-### Component library (`src/ui/`)
+### Component library (`apps/extension/src/ui/`)
 
 Cross-surface UI primitives (e.g. `SpaceIcon`, `Tooltip`, `Stack`,
-`TabRowMenu`) and design tokens (`src/ui/tokens.css`) live in `src/ui/`.
-Feature components compose primitives; they do not re-roll buttons, tooltips,
-etc. inline. Neutral
-tokens are OKLCH expressions parameterised by a `--base-hue` custom property,
-laying the foundation for a future user-customisable base colour.
+`TabRowMenu`) live in `apps/extension/src/ui/`; the design tokens they reference
+live in the shared **`@lunma/tokens`** package (`packages/tokens/tokens.css`),
+imported at each surface's CSS entry. Feature components compose primitives; they
+do not re-roll buttons, tooltips, etc. inline. Neutral tokens are OKLCH
+expressions parameterised by a `--base-hue` custom property, laying the
+foundation for a future user-customisable base colour.
 
 ## Storage schema + migrations
 
+State is persisted to `chrome.storage.local` under the key `lunma.state` as a versioned envelope `{ schemaVersion, state }`. The current baseline is **schema v1** (`CURRENT_SCHEMA_VERSION = 1` in `apps/extension/src/shared/schemas.ts`). The placeholder-era v1–v11 migration chain was collapsed to a single schema at the pre-release rebrand; the migration list is **empty** today. The migration shape is `{ toVersion: number; migrate: (raw: unknown) => unknown }` (see `apps/extension/src/shared/migrations.ts`).
+
+`readPersistedState()` (`apps/extension/src/shared/chrome/storage.ts`) handles every read:
+
+1. Reads `lunma.state` with bounded retry (up to 3 attempts); a sustained read failure returns `{ kind: 'unavailable' }` — this path **never** overwrites on-disk state.
+2. An absent key returns `{ kind: 'empty' }` (first install).
+3. Validates the envelope's `schemaVersion`; an invalid version quarantines the raw bytes and returns `{ kind: 'corrupt' }`.
+4. Runs `runMigrations(persistedState, persistedVersion)` (a no-op today); a thrown migration quarantines and returns `{ kind: 'corrupt' }`.
+5. Runs `AppStateV1Schema.safeParse(migrated)`. On **success**, de-duplicates ids (`dedupePersistedState`) and self-heals: writes the cleaned envelope back when the version migrated up or duplicates were removed. Returns `{ kind: 'ok', state }`.
+6. On **parse failure**, attempts **per-slice salvage** (`salvagePersistedState`): `spaces` is salvaged element-wise (each individually-valid Space is kept; corrupt entries are dropped); every other top-level slice is salvaged slice-wise (kept when valid, defaulted otherwise). The raw bytes are **always** quarantined regardless of salvage outcome. If salvage succeeds, the salvaged state is de-duped, written back (self-heal), and returned as `{ kind: 'salvaged', state }`. If salvage returns null, returns `{ kind: 'corrupt' }`.
+
+### Quarantine contract
+
+A quarantine entry is written to `chrome.storage.local` under a key prefixed `__corrupt_backup_`. At most **10** quarantine entries are retained (oldest pruned on each new write). Each entry has the shape:
+
 ```ts
-// src/shared/schemas.ts
-import { z } from 'zod';
-
-const SpaceV1 = z.object({
-  id: z.string(),
-  name: z.string(),
-  color: z.string(),
-  temporaryTabIds: z.array(z.number()),
-  pinnedTabs: z.array(/* ... */),
-});
-
-export const StateV1 = z.object({
-  schemaVersion: z.literal(1),
-  spaces: z.array(SpaceV1),
-  // ...
-});
-
-export type AppState = z.infer<typeof StateV1>;
-
-export const migrations = [
-  { from: 0, to: 1, migrate: (raw: unknown) => migrateV0toV1(raw) },
-  // future migrations append here
-];
-
-export async function loadState(): Promise<AppState> {
-  const rawSnapshot = await chrome.storage.local.get('lunma.state');
-  const rawBytes = rawSnapshot['lunma.state'];   // capture once, never mutate
-
-  let current: unknown = rawBytes;
-  for (const m of migrations) {
-    if ((current as any)?.schemaVersion === m.from) {
-      current = await m.migrate(current);
-    }
-  }
-
-  try {
-    return StateV1.parse(current);
-  } catch (err) {
-    await quarantine(rawBytes, err);             // see below — quarantines the *original* bytes
-    return EMPTY_STATE;
-  }
+interface QuarantineRecord {
+  capturedAt: number;    // Date.now() at quarantine time
+  reason: string;        // human-readable failure reason
+  error?: string;        // error message when a migration threw
+  zodIssues?: unknown;   // Zod parse issues when schema validation failed
+  rawBytes: unknown;     // the EXACT envelope bytes read from chrome.storage.local — never the post-migration value
 }
 ```
 
-`migrateV0toV1` reads imported Arcify v4 user data and transforms it into Lunma's schema. See `06-migration.md`.
-
-### Corrupt-state quarantine contract
-
-When Zod validation fails on load, Lunma preserves evidence of what failed so it can be inspected and recovered. The contract is precise:
-
-```ts
-async function quarantine(rawBytes: unknown, err: unknown) {
-  const key = `__corrupt_backup_${new Date().toISOString()}`;
-  await chrome.storage.local.set({
-    [key]: {
-      capturedAt: Date.now(),
-      rawBytes,                                  // the EXACT bytes read from lunma.state
-      zodIssues: (err as z.ZodError)?.issues ?? String(err),
-    },
-  });
-  await chrome.storage.local.set({ 'lunma.state': EMPTY_STATE });
-  log.error('corrupt state quarantined', { key, err });
-}
-```
-
-Invariants the implementation MUST honor:
-
-1. **Only on actual failure.** `__corrupt_backup_*` is written *exclusively* in the catch branch of `StateV1.parse(...)`. A successful load never writes a backup.
-2. **The captured value is the original bytes**, taken from `chrome.storage.local.get('lunma.state')` before any migration ran — not the post-migration object, not `EMPTY_STATE`, not whatever ended up in the live `lunma.state` key after recovery.
-3. **The backup key is metadata-tagged**, not a bare state blob. The stored object is `{ capturedAt, rawBytes, zodIssues }` so a future inspector can distinguish a quarantine entry from a live state entry at a glance.
-4. **Live and backup never carry the same valid state.** If you ever observe `lunma.state` and a `__corrupt_backup_*` entry both containing identical valid-looking state, the implementation has a bug — either the quarantine fired on a non-corrupt load, or the live-state reset never ran.
-5. **Sidebar surfaces a "data recovery needed" banner** whenever any `__corrupt_backup_*` key is present.
-
-Test plan (Vitest): seed `chrome.storage.local['lunma.state']` with (a) valid V1 state, (b) malformed bytes, (c) V0 state missing required fields after migration. Assert: case (a) writes no backup; cases (b) and (c) write exactly one backup whose `rawBytes` deep-equals the seeded value and whose `zodIssues` is non-empty; the live `lunma.state` after recovery equals `EMPTY_STATE` in (b) and (c).
+The captured `rawBytes` is always the original envelope read from disk, before any migration ran. A quarantine entry is written **only** on actual failure (invalid schema version, thrown migration, or failed parse); a successful load never writes one.
 
 ## Surface boundaries
 
@@ -463,10 +413,10 @@ on any import that violates it — per-layer `noRestrictedImports` `overrides` p
 `noImportCycles` in `biome.json` (Biome 2.4 lints inside `.svelte` `<script>`, so the
 Svelte-heavy `ui` layer is covered, and no separate import-graph tool is needed).
 
-| Layer (`src/…`) | May import | Must NOT import |
+| Layer (`apps/extension/src/…`) | May import | Must NOT import |
 |---|---|---|
-| `shared` — foundation: `types`, `store`, `bus`, `messages`, `settings`, `schemas`, `migrations`, `logger`, `space-hue` (colour math), `icon-names`, `launcher-contract`, `window-id` | nothing else in `src/` | every other layer |
-| `ui` — primitives + `tokens.css` | `shared` | `background`, any surface |
+| `shared` — foundation: `types`, `store`, `bus`, `messages`, `settings`, `schemas`, `migrations`, `logger`, `space-hue` (colour math), `icon-names`, `launcher-contract`, `window-id` | nothing else in `apps/extension/src/` | every other layer |
+| `ui` — primitives (design tokens come from `@lunma/tokens`) | `shared` | `background`, any surface |
 | `background` — service worker | `shared`, **`launcher/shared`** (the launcher engine) | `ui`, any surface, a launcher *page* |
 | `sidebar`, `options` — feature surfaces | `ui`, `shared` | `background`, another surface |
 | `launcher` — overlay + newtab + its `shared` engine | `ui`, `shared` (+ launcher-internal) | `background`, another surface |
@@ -476,24 +426,42 @@ Svelte-heavy `ui` layer is covered, and no separate import-graph tool is needed)
 `launcher/shared` (the result providers + scoring + `search-engine`) because the
 launcher's result-ranking runs **server-side in the SW** — the overlay and newtab only
 request suggestions over a channel (see "Both surfaces share the search engine via
-`src/launcher/shared/`" above). So `launcher/shared` is a *service* consumed by both
+`apps/extension/src/launcher/shared/`" above). So `launcher/shared` is a *service* consumed by both
 the SW and the launcher surfaces — the one sanctioned exception to "background imports
 `shared` only", encoded as a `!**/launcher/shared/**` negation in the `background`
 rule. The pure launcher **result contract** (`ResultSource` / `LauncherResult` /
-`Suggestions*` + `sourceBadgeLabel`) lives in `src/shared/launcher-contract.ts` so
+`Suggestions*` + `sourceBadgeLabel`) lives in `apps/extension/src/shared/launcher-contract.ts` so
 `ui`, `shared`, and the SW reach it without depending on the launcher surface.
 
-**The token/primitive contract** (primitives reference `src/ui/tokens.css`, never raw
-values) is enforced for `font-size`/`z-index` by Stylelint (`pnpm lint:styles`); the
-press-scale / control-height / feature-side parts stay a review-time convention. See
-the `architecture-integrity` capability spec for the normative requirements.
+**The token/primitive contract** (primitives reference the `@lunma/tokens` custom
+properties, never raw values) is enforced for `font-size`/`z-index` by Stylelint
+(`pnpm lint:styles`, scoped to `apps/extension/src/ui`); the press-scale /
+control-height / feature-side parts stay a review-time convention. The gate
+also runs `svelte-check` (`pnpm check`) for `.svelte` type coverage that
+`tsc --noEmit` cannot observe — template bindings and component prop contracts.
+See the `architecture-integrity` capability spec for the normative requirements.
+
+### Workspace package boundaries
+
+Beyond the extension's internal DAG, the workspace adds one boundary: **`apps/site`
+and `apps/extension` MUST NOT import each other.** It holds for free — there is no
+dependency edge between the two app packages — and is additionally gated by a Biome
+`noRestrictedImports` rule both ways (`biome check` fails on a planted cross-app
+import, exactly like the intra-DAG planted violation). The single shared package,
+**`@lunma/tokens`** (`packages/tokens`), is **CSS-only** — design-token custom
+properties, the brand `@font-face` + woff2, and the aurora/glass/glow recipe classes,
+with **no JS/TS entry** — so it sits *outside* the import-layer DAG: a layer
+referencing `@lunma/tokens` via a stylesheet import is not a boundary violation. Both
+apps depend on it via `workspace:*`. The site composes the shared tokens/recipes
+directly and builds its own marketing components; it never reaches into the
+extension's `ui/` primitives (which are coupled to `shared`).
 
 ## Logging
 
 A `Logger` gated by a `debugLoggingEnabled` setting in `chrome.storage.sync`. Never use `console.*` directly in production paths.
 
 ```ts
-// src/shared/logger.ts
+// apps/extension/src/shared/logger.ts
 const log = {
   debug: (msg, ctx) => { if (debugEnabled) console.debug('[lunma]', msg, ctx); },
   info:  (msg, ctx) => console.info('[lunma]', msg, ctx),

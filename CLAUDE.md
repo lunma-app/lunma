@@ -4,7 +4,10 @@ Lunma is an Arc-style vertical-workspace Chrome MV3 extension.
 Stack (pinned in [docs/02-tech-stack.md](docs/02-tech-stack.md); don't add
 alternatives without proposing a change): TypeScript strict, Svelte 5 (runes),
 Vite 8, Vitest 4, Biome 2, Stylelint 17, Zod 4, @crxjs/vite-plugin, pnpm,
-devbox, Node 24.
+devbox, Node 24. The repo is a **pnpm workspace** — `apps/extension` (the
+extension), `apps/site` (the marketing landing page; SvelteKit +
+`adapter-static`, build-time only, nothing ships in the extension bundle), and
+`packages/tokens` (`@lunma/tokens`, the shared CSS-only design language).
 
 Target architecture lives in [docs/01-vision.md](docs/01-vision.md) through
 [docs/06-migration.md](docs/06-migration.md), the OpenSpec specs under
@@ -14,34 +17,46 @@ in lockstep — neither leads the other silently.
 
 ## Architecture (one-way import DAG)
 
-`src/` layers and who may import whom — enforced by Biome (`noRestrictedImports`
-+ `noImportCycles`), so a violation fails `biome check`:
+The extension's `apps/extension/src/` layers and who may import whom — enforced
+by Biome (`noRestrictedImports` + `noImportCycles`), so a violation fails
+`biome check`:
 
 - `shared/` — foundation (types, Zod schemas + migrations, store, message bus).
-  Imports nothing else in `src/`.
-- `ui/` — cross-surface primitives + design tokens (`src/ui/tokens.css`).
-  Imports `shared` only.
+  Imports nothing else in `apps/extension/src/`.
+- `ui/` — cross-surface primitives. Imports `shared` only; design tokens come
+  from the `@lunma/tokens` package (a CSS import, not a TS module edge).
 - `background/` — service worker / event coordinator. Imports `shared`
   (+ `launcher/shared` for the search engine). No DOM, no surfaces.
 - `sidebar/`, `options/`, `launcher/` — UI surfaces. Import `ui` + `shared`
   (launcher may use its own `launcher/shared`). Compose primitives.
 - `content/` — vanilla content scripts. Import `shared` only.
 
+**Workspace boundary:** `apps/site` and `apps/extension` must NOT import each
+other (gated both ways by Biome); `@lunma/tokens` (`packages/tokens`) is CSS-only
+(tokens + fonts + aurora/glass/glow recipes), with no JS/TS, so it sits outside
+the import DAG. Both apps depend on it via `workspace:*`.
+
 See [docs/03-architecture.md](docs/03-architecture.md) and the
 `architecture-integrity` capability.
 
 ## Quality gates
 
-Before marking a task `[x]` or proposing a commit — `pnpm verify` runs all:
+Before marking a task `[x]` or proposing a commit — `pnpm verify` at the
+workspace root runs `pnpm -r verify`, fanning out to every package:
 
-- `pnpm exec tsc --noEmit` — clean.
-- `pnpm exec biome check src tests` — clean (also enforces the layer DAG +
-  import-cycle rules).
-- `pnpm lint:styles` (`stylelint 'src/**/*.{svelte,css}'`) — clean (the
-  token/primitive CSS contract for `src/ui`).
-- `pnpm exec vitest run` — green.
+- **`apps/extension`** (`pnpm --filter @lunma/extension verify`): `tsc --noEmit`,
+  `biome check src` (also enforces the layer DAG + import-cycle rules + the
+  cross-app guard), `svelte-check` (`.svelte` type coverage `tsc --noEmit`
+  cannot see — template bindings, component prop contracts), `lint:styles`
+  (`stylelint 'src/**/*.{svelte,css}'`, the token/primitive contract for
+  `apps/extension/src/ui`), `vitest run`.
+- **`apps/site`** (`pnpm --filter @lunma/site verify`): `biome check src`,
+  `svelte-check`, the automated WCAG-AA contrast test (`vitest run`), and the
+  static prerender `build`.
 - Any roadmap exit criterion in the change's `tasks.md` for the current section
   (e.g. ≥90% branch coverage for the store).
+
+Run `pnpm test:e2e` (root, delegates to the extension) for the Playwright smoke.
 
 ## OpenSpec workflow
 
@@ -71,11 +86,13 @@ Before marking a task `[x]` or proposing a commit — `pnpm verify` runs all:
   Reduced-motion + WCAG-AA hold at every Colour-intensity level. Every change
   shipping a surface carries a `Visual language` section in its `design.md`.
 - **Component library.** Build primitives, compose features. Primitives live in
-  `src/ui/` and reference tokens in `src/ui/tokens.css`; they never hard-code
-  design values. Feature components compose primitives and never re-roll
-  buttons/tooltips/tiles or reach past primitives to tokens. A change adding a
-  feature component either composes existing primitives or ships the new ones it
-  needs, in the same change.
+  `apps/extension/src/ui/` and reference the `@lunma/tokens` design tokens; they
+  never hard-code design values. Feature components compose primitives and never
+  re-roll buttons/tooltips/tiles or reach past primitives to tokens. A change
+  adding a feature component either composes existing primitives or ships the new
+  ones it needs, in the same change. The marketing site (`apps/site`) composes
+  the shared `@lunma/tokens` tokens/recipes directly — it does not reach into the
+  extension's `ui/` primitives.
 
 ## Policy on deviations and drift (binding, every task/commit)
 

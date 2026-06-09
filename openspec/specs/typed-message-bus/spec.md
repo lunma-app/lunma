@@ -11,13 +11,13 @@ mutation results off the existing `state-broadcast` channel.
 ## Requirements
 ### Requirement: Sidebar-facing bus client
 
-A `bus` client SHALL be exported as a singleton from `src/shared/bus.ts` with the shape `bus.send(cmd: SidebarCommand): Promise<void>`. The same module SHALL export a `createBus(transport)` factory used by the singleton and by tests. The sidebar SHALL import `bus` from this module and SHALL NOT call `chrome.runtime.sendMessage` directly for command dispatch.
+A `bus` client SHALL be exported as a singleton from `apps/extension/src/shared/bus.ts` with the shape `bus.send(cmd: SidebarCommand): Promise<void>`. The same module SHALL export a `createBus(transport)` factory used by the singleton and by tests. The sidebar SHALL import `bus` from this module and SHALL NOT call `chrome.runtime.sendMessage` directly for command dispatch.
 
 The `SidebarCommand` discriminated union SHALL be exported from the same module and SHALL cover, in this release, exactly the following kinds: `createSpace`, `renameSpace`, `recolourSpace`, `changeSpaceIcon`, `deleteSpace`, `restoreSpaceFromTrash`, `activateSpace`, `openSavedTab`, `focusSavedTab`, `goHome`, `makeThisHome`, `deleteSavedTab`.
 
 Each `SidebarCommand` variant SHALL carry only plain-data fields — no functions, no Chrome objects, no Promises. Confirmation flows that previously took a callback (e.g. `deleteBookmark`) SHALL be resolved on the sidebar side before `bus.send` is called.
 
-The `SidebarCommand['createSpace']` payload SHALL have the shape `{ name: string; color: SpaceColor; icon: IconName; windowId: WindowId }`. The `IconName` type is the lucide-icon string-literal union exported from `src/ui/icon-catalogue.ts`. The SW handler creates the underlying bookmark folder, adopts it as a Space with the user-supplied colour and icon, and auto-activates it in the supplied window — all within a single coordinator drain cycle.
+The `SidebarCommand['createSpace']` payload SHALL have the shape `{ name: string; color: SpaceColor; icon: IconName; windowId: WindowId }`. The `IconName` type is the lucide-icon string-literal union exported from `apps/extension/src/shared/icon-names.ts`. The SW handler creates the underlying bookmark folder, adopts it as a Space with the user-supplied colour and icon, and auto-activates it in the supplied window — all within a single coordinator drain cycle.
 
 The `SidebarCommand['recolourSpace']` payload SHALL have the shape `{ spaceId: SpaceId; color: SpaceColor }`. The SW handler SHALL call `store.recolourSpace(spaceId, color)`. The handler SHALL throw a descriptive Error when `spaceId` is not present in `state.spaces`.
 
@@ -73,7 +73,7 @@ The `SIDEBAR_COMMAND_KINDS` set SHALL include `recolourSpace` and `changeSpaceIc
 
 The bus SHALL NOT expose result payloads. Sidebar callers SHALL read mutation results off the next `state-broadcast` message via the existing broadcast channel.
 
-The bus timeout SHALL default to 10000 milliseconds. The constant SHALL be configurable in `src/shared/bus.ts` but SHALL NOT accept per-call overrides.
+The bus timeout SHALL default to 10000 milliseconds. The constant SHALL be configurable in `apps/extension/src/shared/bus.ts` but SHALL NOT accept per-call overrides.
 
 Rejected promises SHALL carry an `Error` whose `message` is descriptive of the failure, and SHALL be enriched by the bus client with the failing command's `kind` (the bus client holds the correlation entry and knows the kind even when the SW's ack carries only `{ error: string }`).
 
@@ -128,7 +128,7 @@ The bus client SHALL listen for `'lunma/command-ack'` messages and SHALL resolve
 
 ### Requirement: SW adapter translates messages into coordinator enqueues
 
-`src/background/bus-adapter.ts` SHALL export an `installBusAdapter(coordinator)` function (or equivalent registration entry point) that registers exactly one `chrome.runtime.onMessage` listener. The listener SHALL filter for `msg.type === 'lunma/command'`, validate the embedded `cmd.kind`, and call `coordinator.enqueue` with a `PendingEvent` whose `source === 'sidebar'`, `kind` matches the command, `payload` matches the command's payload, and `correlationId` matches the message's `id`.
+`apps/extension/src/background/bus-adapter.ts` SHALL export an `installBusAdapter(coordinator)` function (or equivalent registration entry point) that registers exactly one `chrome.runtime.onMessage` listener. The listener SHALL filter for `msg.type === 'lunma/command'`, validate the embedded `cmd.kind`, and call `coordinator.enqueue` with a `PendingEvent` whose `source === 'sidebar'`, `kind` matches the command, `payload` matches the command's payload, and `correlationId` matches the message's `id`.
 
 The adapter SHALL NOT own any state. The coordinator owns correlation-to-ack bookkeeping.
 
@@ -177,7 +177,7 @@ When a coalesce policy causes a previously-enqueued command to be removed from t
 
 ### Requirement: Bookmark commands replace the bookmark-bindings.ts free functions
 
-The saved-tab flows `openSavedTab`, `focusSavedTab`, `goHome`, `makeThisHome`, and `deleteSavedTab` SHALL exist as coordinator handlers (named identically or inlined, at the implementer's discretion within the constraint that all `chrome.*` work and store mutation happen inside the handler). They SHALL NOT exist as free functions in `src/background/tab-bindings.ts`.
+The saved-tab flows `openSavedTab`, `focusSavedTab`, `goHome`, `makeThisHome`, and `deleteSavedTab` SHALL exist as coordinator handlers (named identically or inlined, at the implementer's discretion within the constraint that all `chrome.*` work and store mutation happen inside the handler). They SHALL NOT exist as free functions in `apps/extension/src/background/tab-bindings.ts`.
 
 The sidebar SHALL invoke these flows exclusively through `bus.send({ kind: 'openSavedTab' | 'focusSavedTab' | 'goHome' | 'makeThisHome' | 'deleteSavedTab', payload: { savedTabId, ... } })`. The command payload key SHALL be `savedTabId` (replacing the former `bookmarkId`).
 
@@ -386,7 +386,7 @@ Space). On failure the handler SHALL throw and the coordinator SHALL emit a
 `lunma/command-ack` carrying `{ error }`.
 
 The `openUrl` kind SHALL be added to the `SidebarCommand` discriminated union in
-`src/shared/bus.ts`, with matching `PendingEvent` union, handlers-map, and
+`apps/extension/src/shared/bus.ts`, with matching `PendingEvent` union, handlers-map, and
 `EventPolicy` entries in the coordinator (per the `chrome-event-coordination`
 capability's extension rule).
 
@@ -457,7 +457,7 @@ handler SHALL throw, and the error SHALL reach the sidebar caller's `.catch`.
 
 ### Requirement: restoreArchivedTab command
 
-The `SidebarCommand` union (`src/shared/bus.ts`) SHALL include a `restoreArchivedTab` kind with payload `{ archivedAt: number; tabId: number; windowId: WindowId }`, and `SIDEBAR_COMMAND_KINDS` SHALL include `'restoreArchivedTab'` so the SW adapter recognises and enqueues it as a sidebar event. The payload carries only plain data. The entry is identified by the composite `(archivedAt, tabId)` — `archivedAt` alone is NOT unique (a single sweep stamps every tab it archives with the same `now`), but a tab is archived at most once per sweep and sweeps carry distinct timestamps, so the pair is unique. The coordinator handler SHALL implement the restore contract defined by the `auto-archive` capability: locate the `archivedTabs` entry by the `(archivedAt, tabId)` pair, open its URL in `windowId` via `chrome.tabs.create` (adopted through the existing `tabs.onCreated` path, like `openUrl` — it SHALL NOT directly mutate `tempTabIds` or `liveTabsById`), and remove the entry via `store.removeArchivedTab(archivedAt, tabId)`. Per the throw-on-cannot-fulfill rule, if no entry matches the pair the handler SHALL throw and the sidebar's `bus.send` promise SHALL reject.
+The `SidebarCommand` union (`apps/extension/src/shared/bus.ts`) SHALL include a `restoreArchivedTab` kind with payload `{ archivedAt: number; tabId: number; windowId: WindowId }`, and `SIDEBAR_COMMAND_KINDS` SHALL include `'restoreArchivedTab'` so the SW adapter recognises and enqueues it as a sidebar event. The payload carries only plain data. The entry is identified by the composite `(archivedAt, tabId)` — `archivedAt` alone is NOT unique (a single sweep stamps every tab it archives with the same `now`), but a tab is archived at most once per sweep and sweeps carry distinct timestamps, so the pair is unique. The coordinator handler SHALL implement the restore contract defined by the `auto-archive` capability: locate the `archivedTabs` entry by the `(archivedAt, tabId)` pair, open its URL in `windowId` via `chrome.tabs.create` (adopted through the existing `tabs.onCreated` path, like `openUrl` — it SHALL NOT directly mutate `tempTabIds` or `liveTabsById`), and remove the entry via `store.removeArchivedTab(archivedAt, tabId)`. Per the throw-on-cannot-fulfill rule, if no entry matches the pair the handler SHALL throw and the sidebar's `bus.send` promise SHALL reject.
 
 The matching `PendingEvent` union, handlers-map, and `EventPolicy` entries SHALL be added in the coordinator (per the `chrome-event-coordination` extension rule). `restoreArchivedTab` SHALL NOT define coalescing (each restore is a distinct intent).
 
@@ -484,7 +484,7 @@ The matching `PendingEvent` union, handlers-map, and `EventPolicy` entries SHALL
 
 ### Requirement: setSpaceAutoArchive command
 
-The `SidebarCommand` union (`src/shared/bus.ts`) SHALL include a `setSpaceAutoArchive` kind with payload `{ spaceId: SpaceId; autoArchive: SpaceAutoArchive | null }`, and `SIDEBAR_COMMAND_KINDS` SHALL include `'setSpaceAutoArchive'`. A `null` payload SHALL clear the Space back to **inherit** (remove the `autoArchive` field); a `{ mode: 'off' }` or `{ mode: 'custom'; idleMinutes }` payload SHALL set it explicitly. The payload carries plain data only. The coordinator handler SHALL apply the change through the synchronous store mutator `store.setSpaceAutoArchive(spaceId, autoArchive)` (thin-store rule: plain data, no `chrome.*`); the next sweep reads the updated override (no live re-resolution push is required). Per the throw-on-cannot-fulfill rule, if `spaceId` names no Space the handler SHALL throw and the sidebar caller's `bus.send` promise SHALL reject. `setSpaceAutoArchive` SHALL NOT define coalescing.
+The `SidebarCommand` union (`apps/extension/src/shared/bus.ts`) SHALL include a `setSpaceAutoArchive` kind with payload `{ spaceId: SpaceId; autoArchive: SpaceAutoArchive | null }`, and `SIDEBAR_COMMAND_KINDS` SHALL include `'setSpaceAutoArchive'`. A `null` payload SHALL clear the Space back to **inherit** (remove the `autoArchive` field); a `{ mode: 'off' }` or `{ mode: 'custom'; idleMinutes }` payload SHALL set it explicitly. The payload carries plain data only. The coordinator handler SHALL apply the change through the synchronous store mutator `store.setSpaceAutoArchive(spaceId, autoArchive)` (thin-store rule: plain data, no `chrome.*`); the next sweep reads the updated override (no live re-resolution push is required). Per the throw-on-cannot-fulfill rule, if `spaceId` names no Space the handler SHALL throw and the sidebar caller's `bus.send` promise SHALL reject. `setSpaceAutoArchive` SHALL NOT define coalescing.
 
 #### Scenario: SIDEBAR_COMMAND_KINDS includes setSpaceAutoArchive
 
@@ -510,7 +510,7 @@ The `SidebarCommand` union (`src/shared/bus.ts`) SHALL include a `setSpaceAutoAr
 
 ### Requirement: clearArchivedTabs command
 
-The `SidebarCommand` union (`src/shared/bus.ts`) SHALL include a `clearArchivedTabs` kind with an empty payload (`Record<string, never>`), and `SIDEBAR_COMMAND_KINDS` SHALL include `'clearArchivedTabs'`. The coordinator handler SHALL discard EVERY archived-tab record via the synchronous store mutator `store.clearArchivedTabs()` (global — not scoped to a Space), emitting one persist and one `state-broadcast` when anything was cleared. When `archivedTabs` is already empty the handler SHALL be a no-op (no persist/broadcast) but SHALL still ack `ok`. `clearArchivedTabs` SHALL NOT define coalescing. It is dispatched from the options "Recently archived" subpage's "Clear all" affordance.
+The `SidebarCommand` union (`apps/extension/src/shared/bus.ts`) SHALL include a `clearArchivedTabs` kind with an empty payload (`Record<string, never>`), and `SIDEBAR_COMMAND_KINDS` SHALL include `'clearArchivedTabs'`. The coordinator handler SHALL discard EVERY archived-tab record via the synchronous store mutator `store.clearArchivedTabs()` (global — not scoped to a Space), emitting one persist and one `state-broadcast` when anything was cleared. When `archivedTabs` is already empty the handler SHALL be a no-op (no persist/broadcast) but SHALL still ack `ok`. `clearArchivedTabs` SHALL NOT define coalescing. It is dispatched from the options "Recently archived" subpage's "Clear all" affordance.
 
 #### Scenario: SIDEBAR_COMMAND_KINDS includes clearArchivedTabs
 
@@ -531,7 +531,7 @@ The `SidebarCommand` union (`src/shared/bus.ts`) SHALL include a `clearArchivedT
 
 ### Requirement: deleteArchivedTab command
 
-The `SidebarCommand` union (`src/shared/bus.ts`) SHALL include a `deleteArchivedTab` kind with payload `{ archivedAt: number; tabId: number }`, and `SIDEBAR_COMMAND_KINDS` SHALL include `'deleteArchivedTab'`. It permanently discards ONE archived record WITHOUT restoring it (the per-row delete in the options Recently-archived view), identified by the same unique `(archivedAt, tabId)` composite as `restoreArchivedTab`. The coordinator handler SHALL call `store.removeArchivedTab(archivedAt, tabId)` (the same mutator restore uses) and SHALL NOT open a tab; it is **idempotent** — a no-op (no persist/broadcast) when no entry matches, but it SHALL still ack `ok` (unlike `restoreArchivedTab`, which throws on a missing entry, since the user expects a tab to open). `deleteArchivedTab` SHALL NOT define coalescing.
+The `SidebarCommand` union (`apps/extension/src/shared/bus.ts`) SHALL include a `deleteArchivedTab` kind with payload `{ archivedAt: number; tabId: number }`, and `SIDEBAR_COMMAND_KINDS` SHALL include `'deleteArchivedTab'`. It permanently discards ONE archived record WITHOUT restoring it (the per-row delete in the options Recently-archived view), identified by the same unique `(archivedAt, tabId)` composite as `restoreArchivedTab`. The coordinator handler SHALL call `store.removeArchivedTab(archivedAt, tabId)` (the same mutator restore uses) and SHALL NOT open a tab; it is **idempotent** — a no-op (no persist/broadcast) when no entry matches, but it SHALL still ack `ok` (unlike `restoreArchivedTab`, which throws on a missing entry, since the user expects a tab to open). `deleteArchivedTab` SHALL NOT define coalescing.
 
 #### Scenario: deleteArchivedTab removes the record without reopening it
 

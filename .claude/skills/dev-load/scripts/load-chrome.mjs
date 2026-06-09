@@ -11,7 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { chromium } from '@playwright/test';
 
-const EXT = path.resolve(process.cwd(), 'dist');
+const EXT = path.resolve(process.cwd(), 'apps/extension/dist');
 const PROFILE = path.join(os.homedir(), '.lunma-dev-chrome');
 
 const context = await chromium.launchPersistentContext(PROFILE, {

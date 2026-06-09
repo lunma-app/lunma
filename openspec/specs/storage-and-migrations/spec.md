@@ -6,7 +6,7 @@ Defines the versioned local-storage envelope, the append-only migration pipeline
 ## Requirements
 ### Requirement: Versioned local-storage envelope
 
-The persisted `AppState` SHALL live in `chrome.storage.local` under the key `lunma.state` as an envelope of shape `{ schemaVersion: number; state: AppState }`. The envelope's `schemaVersion` SHALL equal the `CURRENT_SCHEMA_VERSION` constant exported from `src/shared/schemas.ts` at write time. The current version SHALL be `1`.
+The persisted `AppState` SHALL live in `chrome.storage.local` under the key `lunma.state` as an envelope of shape `{ schemaVersion: number; state: AppState }`. The envelope's `schemaVersion` SHALL equal the `CURRENT_SCHEMA_VERSION` constant exported from `apps/extension/src/shared/schemas.ts` at write time. The current version SHALL be `1`.
 
 The `state.schemaVersion` field on `AppState` itself SHALL match the envelope's `schemaVersion` whenever both are present. The envelope-level field is the value the migration runner reads; the in-state field is informational.
 
@@ -17,7 +17,7 @@ The `state.schemaVersion` field on `AppState` itself SHALL match the envelope's 
 
 ### Requirement: Append-only migrations list
 
-The `migrations: Migration[]` array exported from `src/shared/migrations.ts` SHALL be append-only **from the v1 baseline onward**. A `Migration` SHALL be `{ toVersion: number; migrate: (raw: unknown) => unknown }`. Each `migrate` function SHALL be synchronous and pure — it SHALL NOT call any `chrome.*` API and SHALL NOT perform I/O.
+The `migrations: Migration[]` array exported from `apps/extension/src/shared/migrations.ts` SHALL be append-only **from the v1 baseline onward**. A `Migration` SHALL be `{ toVersion: number; migrate: (raw: unknown) => unknown }`. Each `migrate` function SHALL be synchronous and pure — it SHALL NOT call any `chrome.*` API and SHALL NOT perform I/O.
 
 A new entry MAY only be added at the end of the array, and its `toVersion` SHALL equal `CURRENT_SCHEMA_VERSION` after it is added. **Once the product has shipped**, existing entries SHALL NOT be modified, reordered, or removed in any subsequent change.
 
@@ -139,7 +139,7 @@ The `QuarantineRecord` shape is shape-distinguishable from a live envelope (it h
 
 ### Requirement: loadState surface
 
-The function `loadState()` exported from `src/shared/store-singleton.ts` SHALL return `Promise<{ state: AppState; outcome: LoadOutcome }>`, where `LoadOutcome` is the exported union `'clean' | 'recovered' | 'salvaged' | 'unavailable'`. The returned `state` SHALL be assigned into the singleton store via `Object.assign(store.state, state)` exactly as today.
+The function `loadState()` exported from `apps/extension/src/shared/store-singleton.ts` SHALL return `Promise<{ state: AppState; outcome: LoadOutcome }>`, where `LoadOutcome` is the exported union `'clean' | 'recovered' | 'salvaged' | 'unavailable'`. The returned `state` SHALL be assigned into the singleton store via `Object.assign(store.state, state)` exactly as today.
 
 The `outcome` SHALL be derived from `readPersistedState`'s result:
 
@@ -245,7 +245,7 @@ A salvaged state SHALL flow through the existing `dedupePersistedState` step and
 
 ### Requirement: ArchivedTab record shape on AppState
 
-`AppState.archivedTabs` SHALL be typed as `ArchivedTab[]` in [src/shared/types.ts](../../../src/shared/types.ts) and validated by `ArchivedTabSchema` (a `z.strictObject`) inside `AppStateV1Schema` in [src/shared/schemas.ts](../../../src/shared/schemas.ts).
+`AppState.archivedTabs` SHALL be typed as `ArchivedTab[]` in [apps/extension/src/shared/types.ts](../../../apps/extension/src/shared/types.ts) and validated by `ArchivedTabSchema` (a `z.strictObject`) inside `AppStateV1Schema` in [apps/extension/src/shared/schemas.ts](../../../apps/extension/src/shared/schemas.ts).
 
 The `ArchivedTab` type SHALL be:
 
@@ -267,7 +267,7 @@ The **behavior** of populating, pruning, and consuming `archivedTabs` is owned b
 
 #### Scenario: ArchivedTab type is exported from types.ts
 
-- **WHEN** a consumer imports `ArchivedTab` from [src/shared/types.ts](../../../src/shared/types.ts)
+- **WHEN** a consumer imports `ArchivedTab` from [apps/extension/src/shared/types.ts](../../../apps/extension/src/shared/types.ts)
 - **THEN** the type SHALL be defined with exactly the five fields above
 - **AND** no additional optional or required fields SHALL be present
 
@@ -284,12 +284,12 @@ The **behavior** of populating, pruning, and consuming `archivedTabs` is owned b
 
 ### Requirement: Schema-to-type coherence
 
-`src/shared/schemas.ts` SHALL include a compile-time assertion that `z.infer<typeof AppStateV1Schema>` and `AppState` (from `src/shared/types.ts`) are structurally equivalent. A drift between the two SHALL cause `pnpm exec tsc --noEmit` to fail.
+`apps/extension/src/shared/schemas.ts` SHALL include a compile-time assertion that `z.infer<typeof AppStateV1Schema>` and `AppState` (from `apps/extension/src/shared/types.ts`) are structurally equivalent. A drift between the two SHALL cause `pnpm exec tsc --noEmit` to fail.
 
 #### Scenario: Type drift fails the build
 
 - **WHEN** a developer adds a field to `AppState` without updating `AppStateV1Schema`
-- **THEN** `pnpm exec tsc --noEmit` SHALL fail with a type-equivalence error in `src/shared/schemas.ts`
+- **THEN** `pnpm exec tsc --noEmit` SHALL fail with a type-equivalence error in `apps/extension/src/shared/schemas.ts`
 
 ### Requirement: liveTabsById is ephemeral and excluded from persistence
 

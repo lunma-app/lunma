@@ -1,6 +1,13 @@
 .DS_Store
 node_modules/
 dist/
+apps/site/build/
+
+# Brand fonts are sourced once from packages/tokens/fonts and copied into each
+# app's served root at build — never committed a second time.
+apps/extension/public/fonts/
+apps/site/static/fonts/
+
 .devbox/
 .svelte-kit/
 .vite/
@@ -15,6 +22,8 @@ test-results/
 
 # Transient Claude Code harness artifact (runtime scheduler lock)
 .claude/scheduled_tasks.lock
+# Per-machine agent memory state
+.claude/memory/
 
 # Release artifacts (root-level output of the /release skill)
 /release/

@@ -1,0 +1,136 @@
+/*
+ * Lunma atmosphere recipes — the aurora backdrop, frosted glass, and hue glow
+ * expressed once as pure-CSS classes so the extension and the marketing site
+ * render the SAME atmosphere from one source. The recipes read the design-token
+ * custom properties (`--aurora-opacity`, the scoped `--space-l/-chroma/-h`, the
+ * `--glass-*` / `--glow-*` families); WHO sets those vars differs per app (the
+ * extension drives them at runtime via its `Aurora.svelte` + tint settings, the
+ * site sets static values), so the recipe is shared while the var values are
+ * per-app. No JS lives here — the per-blob colour the extension computes in
+ * `Aurora.svelte` is inlined into the gradients below with the same formula.
+ *
+ * Classes are `lunma-`-prefixed so a global recipe never clobbers the
+ * extension's component-scoped `.aurora` / `.surface` styles.
+ */
+
+/* ── Aurora backdrop ─────────────────────────────────────────────────────────
+ * An ambient, behind-everything field of three slow-drifting hue blobs over a
+ * faint grain. Each blob's colour reads the scoped Space lightness/chroma/hue
+ * (a small +0.04 lightness lift keeps the blob a touch brighter than the wash);
+ * a `gray` Space washes neutral. Mirror the markup with three blob children:
+ *   <div class="lunma-aurora">
+ *     <span class="lunma-aurora__blob lunma-aurora__blob--1"></span>
+ *     <span class="lunma-aurora__blob lunma-aurora__blob--2"></span>
+ *     <span class="lunma-aurora__blob lunma-aurora__blob--3"></span>
+ *     <span class="lunma-aurora__grain"></span>
+ *   </div>
+ */
+.lunma-aurora {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-base);
+  overflow: hidden;
+  pointer-events: none;
+  opacity: var(--aurora-opacity, 0.9);
+  transition: opacity var(--motion-slow) var(--ease-emphasised);
+}
+
+.lunma-aurora__blob {
+  position: absolute;
+  width: 75%;
+  height: 75%;
+  border-radius: var(--r-pill);
+  filter: blur(8px);
+  will-change: transform;
+}
+
+.lunma-aurora__blob--1 {
+  top: -20%;
+  left: -10%;
+  background: radial-gradient(
+    closest-side,
+    oklch(clamp(0, calc(var(--space-l, 0.62) + 0.04), 1) var(--space-chroma, 0.15) var(--space-h, 62) / 0.55),
+    transparent 72%
+  );
+  animation: lunma-aurora-drift-1 30s var(--ease-standard) infinite alternate;
+}
+
+.lunma-aurora__blob--2 {
+  top: 10%;
+  right: -20%;
+  background: radial-gradient(
+    closest-side,
+    oklch(clamp(0, calc(var(--space-l, 0.62) + 0.04), 1) var(--space-chroma, 0.15) var(--space-h, 62) / 0.42),
+    transparent 72%
+  );
+  animation: lunma-aurora-drift-2 34s var(--ease-standard) infinite alternate;
+}
+
+.lunma-aurora__blob--3 {
+  bottom: -25%;
+  left: 20%;
+  background: radial-gradient(
+    closest-side,
+    oklch(clamp(0, calc(var(--space-l, 0.62) + 0.04), 1) var(--space-chroma, 0.15) var(--space-h, 62) / 0.5),
+    transparent 72%
+  );
+  animation: lunma-aurora-drift-3 38s var(--ease-standard) infinite alternate;
+}
+
+/* Faint film grain so the gradients don't band on large flat fills. */
+.lunma-aurora__grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 120px 120px;
+}
+
+@keyframes lunma-aurora-drift-1 {
+  to {
+    transform: translate3d(8%, 10%, 0) scale(1.1);
+  }
+}
+@keyframes lunma-aurora-drift-2 {
+  to {
+    transform: translate3d(-10%, 8%, 0) scale(1.08);
+  }
+}
+@keyframes lunma-aurora-drift-3 {
+  to {
+    transform: translate3d(6%, -8%, 0) scale(1.12);
+  }
+}
+
+/* Reduced motion: the blobs sit at their base positions, no drift. The end
+ * state is identical to the animated start frame. */
+@media (prefers-reduced-motion: reduce) {
+  .lunma-aurora__blob {
+    animation: none;
+  }
+}
+
+/* ── Frosted glass ───────────────────────────────────────────────────────────
+ * The immersive panel treatment — a hue-tinted translucent fill, backdrop blur,
+ * hairline border, and inset highlight. Mirrors the extension's `Surface`
+ * `glass` variant so cards/panels read identically across product and site.
+ */
+.lunma-glass {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-highlight), var(--shadow-md);
+  border-radius: var(--r-lg);
+}
+
+/* ── Hue glow ────────────────────────────────────────────────────────────────
+ * The active-Space coloured glow used on the highest-emphasis surfaces. `--soft`
+ * is the larger, lower-opacity drop used behind panels.
+ */
+.lunma-glow {
+  box-shadow: var(--glow-space);
+}
+.lunma-glow--soft {
+  box-shadow: var(--glow-space-soft);
+}

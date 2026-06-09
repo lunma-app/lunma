@@ -1,0 +1,35 @@
+{
+  "name": "@lunma/site",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "description": "Lunma marketing site — the static landing page at lunma.app",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "prepare": "svelte-kit sync",
+    "sync": "svelte-kit sync",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "test:run": "vitest run",
+    "verify": "svelte-kit sync && biome check src && svelte-check --tsconfig ./tsconfig.json && vitest run && vite build"
+  },
+  "dependencies": {
+    "@lunma/tokens": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "@sveltejs/adapter-static": "^3.0.10",
+    "@sveltejs/kit": "^2.63.1",
+    "@sveltejs/vite-plugin-svelte": "^7.1.2",
+    "@types/culori": "^4.0.1",
+    "culori": "^4.0.2",
+    "svelte": "^5.55.9",
+    "svelte-check": "^4.4.8",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.14",
+    "vitest": "^4.1.7",
+    "jsdom": "^29.1.1"
+  }
+}

@@ -58,6 +58,8 @@ future capability will be shaped a certain way, write an ADR.
 | 0008 | [Pinned-tab domain boundary](0008-pinned-tab-domain-boundary.md) | Accepted | — |
 | 0009 | [Per-window tab bindings](0009-per-window-tab-bindings.md) | Accepted | — |
 | 0010 | [Favicon row v1 shape](0010-favicon-row-v1-shape.md) | Accepted | 0009 |
+| 0011 | [Auto-archive restore + full loop](0011-auto-archive-restore-and-full-loop.md) | Accepted | 0002 (in part) |
+| 0012 | [pnpm workspace + the marketing site](0012-workspace-and-marketing-site.md) | Accepted | — |
 
 ## Format
 

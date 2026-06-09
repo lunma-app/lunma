@@ -1,0 +1,45 @@
+/*
+ * Drop-line insertion indicator — canonical keyframes and animation rule.
+ *
+ * Imported by every component that renders a `.drop-line` (horizontal, tab-list
+ * rows) or `.drop-line-x` (vertical, space-switcher chip row) element.
+ * Using `var(--motion-fast)` keeps the entrance duration in sync with the
+ * `@lunma/tokens` token rather than hard-coding 120ms.
+ */
+
+@keyframes drop-line-in {
+  from {
+    opacity: 0;
+    transform: scaleX(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes drop-line-in-x {
+  from {
+    opacity: 0;
+    transform: scaleY(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+.drop-line {
+  animation: drop-line-in var(--motion-fast) var(--ease-emphasised);
+}
+
+.drop-line-x {
+  animation: drop-line-in-x var(--motion-fast) var(--ease-emphasised);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drop-line,
+  .drop-line-x {
+    animation: none;
+  }
+}

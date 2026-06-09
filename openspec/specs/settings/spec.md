@@ -6,7 +6,7 @@ Defines Lunma's declarative user-settings layer: a single registry from which th
 ## Requirements
 ### Requirement: Settings are declared once in a registry
 
-User settings SHALL be declared in a `SETTINGS` array in `src/shared/settings.ts`, each declaration carrying at least `{ key, type, default, label, group }`; `enum` settings SHALL additionally carry an `options` array of `{ value, label }`, `text` settings MAY carry an optional `placeholder`, and `number` settings MAY carry optional `min` / `max` / `step` and `placeholder` hints. The declaration `default` field SHALL accept `string | boolean | number` so non-`enum`/`text` variants carry a correctly-typed default. The Zod validation schema and the `DEFAULTS` object SHALL be derived from `SETTINGS` at module load — not maintained separately. A compile-time assertion SHALL guarantee the derived schema's output type matches the exported `Settings` interface.
+User settings SHALL be declared in a `SETTINGS` array in `apps/extension/src/shared/settings.ts`, each declaration carrying at least `{ key, type, default, label, group }`; `enum` settings SHALL additionally carry an `options` array of `{ value, label }`, `text` settings MAY carry an optional `placeholder`, and `number` settings MAY carry optional `min` / `max` / `step` and `placeholder` hints. The declaration `default` field SHALL accept `string | boolean | number` so non-`enum`/`text` variants carry a correctly-typed default. The Zod validation schema and the `DEFAULTS` object SHALL be derived from `SETTINGS` at module load — not maintained separately. A compile-time assertion SHALL guarantee the derived schema's output type matches the exported `Settings` interface.
 
 The declaration union SHALL support these control `type`s: `enum`, `text`, `toggle` (a boolean), and `number` (an integer). Their derived Zod SHALL be: `enum → z.enum(values).catch(default)`, `text → z.string().catch(default)`, `toggle → z.boolean().catch(default)`, `number → z.number().int().catch(default)` (with the declared `min` applied as a floor where present). Additional variants arrive with their first consumer.
 
@@ -39,7 +39,7 @@ The declaration union SHALL support these control `type`s: `enum`, `text`, `togg
 
 ### Requirement: Settings persist to chrome.storage.sync via settings.ts
 
-All reads and writes of settings SHALL go through `src/shared/settings.ts`, which stores a single object under the key `'lunma.settings'` in `chrome.storage.sync`. No other module SHALL access that key directly. The module SHALL export exactly `readSettings`, `writeSetting`, and `watchSettings` (plus the `SETTINGS`, `DEFAULTS`, and type declarations).
+All reads and writes of settings SHALL go through `apps/extension/src/shared/settings.ts`, which stores a single object under the key `'lunma.settings'` in `chrome.storage.sync`. No other module SHALL access that key directly. The module SHALL export exactly `readSettings`, `writeSetting`, and `watchSettings` (plus the `SETTINGS`, `DEFAULTS`, and type declarations).
 
 #### Scenario: writeSetting persists a single field and preserves others
 
@@ -86,7 +86,7 @@ All reads and writes of settings SHALL go through `src/shared/settings.ts`, whic
 
 ### Requirement: Options page is rendered from the settings declarations
 
-`src/options/Options.svelte` SHALL render its controls by iterating `SETTINGS`, grouping by `group`, and dispatching on `type`. For `type: 'enum'` it SHALL render a `SegmentedControl` when the option set is small (≤ 4 options) and a `Select` dropdown otherwise (so a many-option enum such as the search-engine picker stays usable rather than overflowing a single row); either reflects the current saved value. For `type: 'text'` it SHALL render the `TextInput` primitive bound to the current saved value, persisting via `writeSetting(key, value)` as the user edits. For `type: 'toggle'` it SHALL render a two-option `SegmentedControl` (`Off` | `On`) mapping to the boolean value. For `type: 'number'` it SHALL render a numeric `TextInput` (`inputmode="numeric"`), persisting the parsed integer (applying the declared `min` floor) and ignoring non-numeric input. A wide control (the `Select` dropdown or any text/number field) SHALL stack beneath its label, not share the row with it. Any control change SHALL call `writeSetting(key, value)` immediately, with no save button. The page SHALL render a branded header (version from `chrome.runtime.getManifest().version`) and a dark substrate.
+`apps/extension/src/options/Options.svelte` SHALL render its controls by iterating `SETTINGS`, grouping by `group`, and dispatching on `type`. For `type: 'enum'` it SHALL render a `SegmentedControl` when the option set is small (≤ 4 options) and a `Select` dropdown otherwise (so a many-option enum such as the search-engine picker stays usable rather than overflowing a single row); either reflects the current saved value. For `type: 'text'` it SHALL render the `TextInput` primitive bound to the current saved value, persisting via `writeSetting(key, value)` as the user edits. For `type: 'toggle'` it SHALL render a two-option `SegmentedControl` (`Off` | `On`) mapping to the boolean value. For `type: 'number'` it SHALL render a numeric `TextInput` (`inputmode="numeric"`), persisting the parsed integer (applying the declared `min` floor) and ignoring non-numeric input. A wide control (the `Select` dropdown or any text/number field) SHALL stack beneath its label, not share the row with it. Any control change SHALL call `writeSetting(key, value)` immediately, with no save button. The page SHALL render a branded header (version from `chrome.runtime.getManifest().version`) and a dark substrate.
 
 #### Scenario: Current value pre-selected on load
 
@@ -127,7 +127,7 @@ All reads and writes of settings SHALL go through `src/shared/settings.ts`, whic
 
 ### Requirement: SegmentedControl is a reusable token-only primitive
 
-`SegmentedControl.svelte` SHALL live in `src/ui/`, be exported from `src/ui/index.ts`, accept a typed `options` array plus the current `value` and an `onchange` callback, and use only design tokens from `tokens.css` (no hard-coded colours or pixel design values). It SHALL be implemented with `<input type="radio">` elements for native keyboard and accessibility semantics.
+`SegmentedControl.svelte` SHALL live in `apps/extension/src/ui/`, be exported from `apps/extension/src/ui/index.ts`, accept a typed `options` array plus the current `value` and an `onchange` callback, and use only design tokens from `@lunma/tokens` (no hard-coded colours or pixel design values). It SHALL be implemented with `<input type="radio">` elements for native keyboard and accessibility semantics.
 
 #### Scenario: Native radio keyboard navigation
 
@@ -223,7 +223,7 @@ The settings registry SHALL own the launcher's web-search engine configuration:
   `defaultSearchEngine === 'custom'`.
 
 The built-in engines SHALL be defined as code constants `BUILT_IN_ENGINES`
-(`SearchEngine = { id, name, urlTemplate }`) in `src/shared/search-engines.ts`,
+(`SearchEngine = { id, name, urlTemplate }`) in `apps/extension/src/shared/search-engines.ts`,
 imported by both the settings registry (for the enum options) and the launcher's
 `web-actions` module (for URL building), so `settings.ts` carries no launcher
 dependency. `resolveDefaultEngine(settings)` SHALL return the selected built-in
@@ -260,7 +260,7 @@ and fall back to their declared defaults when absent or invalid (the engine's
 
 ### Requirement: Per-engine keyword and the assembled engine registry
 
-`SearchEngine` (`src/shared/search-engines.ts`) SHALL gain a `keyword: string`;
+`SearchEngine` (`apps/extension/src/shared/search-engines.ts`) SHALL gain a `keyword: string`;
 each entry in `BUILT_IN_ENGINES` SHALL carry a fixed keyword (`google → g`,
 `duckduckgo → ddg`, `bing → bing`, `brave → brave`, `perplexity → p`,
 `youtube → yt`, `wikipedia → w`). The settings registry SHALL own a

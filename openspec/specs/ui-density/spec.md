@@ -38,7 +38,7 @@ Font size SHALL NOT change between modes. The bottom `SpaceSwitcher` bar SHALL N
 
 ### Requirement: Density tokens are CSS custom properties on `:root`
 
-`--row-h`, `--row-gap`, and `--list-pad` SHALL be declared on `:root` in `src/ui/tokens.css` with `normal`-mode values as defaults, and `compact`/`comfort` overrides as `:root[data-density="compact"]` / `:root[data-density="comfort"]` selectors in the same file. No component SHALL hard-code a pixel value for row height, row gap, or list padding.
+`--row-h`, `--row-gap`, and `--list-pad` SHALL be declared on `:root` in `@lunma/tokens` with `normal`-mode values as defaults, and `compact`/`comfort` overrides as `:root[data-density="compact"]` / `:root[data-density="comfort"]` selectors in the same file. No component SHALL hard-code a pixel value for row height, row gap, or list padding.
 
 #### Scenario: TabRow inherits row height by token
 
@@ -71,7 +71,7 @@ Switching density SHALL animate the row-height change using `transition: height 
 
 ### Requirement: Sidebar applies density before first render and on change
 
-`src/sidebar/main.ts` SHALL read settings during `boot()` and set `document.documentElement.dataset.density` **before** `mount(App, …)`, and SHALL subscribe via `watchSettings` to update the attribute when the user changes density. When density is `normal`, the attribute MAY be omitted (normal is the token default). `App.svelte` SHALL NOT read settings storage (so existing `App` render tests need no `chrome.storage` mock).
+`apps/extension/src/sidebar/main.ts` SHALL read settings during `boot()` and set `document.documentElement.dataset.density` **before** `mount(App, …)`, and SHALL subscribe via `watchSettings` to update the attribute when the user changes density. When density is `normal`, the attribute MAY be omitted (normal is the token default). `App.svelte` SHALL NOT read settings storage (so existing `App` render tests need no `chrome.storage` mock).
 
 #### Scenario: No flash of the wrong density on boot
 
@@ -85,7 +85,7 @@ Switching density SHALL animate the row-height change using `transition: height 
 
 ### Requirement: Options page shows a live density preview
 
-The options page SHALL render a preview panel of mock `TabRow`s (composed from the `src/ui/TabRow` primitive). On density selection it SHALL apply `data-density` to its own `document.documentElement` so the preview rows reflow live, in addition to persisting the setting.
+The options page SHALL render a preview panel of mock `TabRow`s (composed from the `apps/extension/src/ui/TabRow` primitive). On density selection it SHALL apply `data-density` to its own `document.documentElement` so the preview rows reflow live, in addition to persisting the setting.
 
 #### Scenario: Preview reflows as the user picks
 
@@ -98,7 +98,7 @@ The launcher SHALL honour the `density` setting on **both** delivery surfaces (t
 new-tab page and the `Alt+L` overlay), the same way the sidebar tab list does — not
 only the sidebar.
 
-- `src/launcher/newtab/main.ts` SHALL read settings during boot and set
+- `apps/extension/src/launcher/newtab/main.ts` SHALL read settings during boot and set
   `document.documentElement.dataset.density` **before** mounting `NewTab` (omitting
   the attribute when density is `normal`, the token default), and SHALL subscribe
   via `watchSettings` to update the attribute when the user changes density.

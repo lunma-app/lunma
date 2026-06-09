@@ -150,24 +150,6 @@ menu with it).
   that tab no longer exists
 - **THEN** the menu closes and the sidebar returns to its normal state
 
-### Requirement: The morph menu is a token-only src/ui primitive and replaces Menu
-
-The menu SHALL ship as `src/ui/TabRowMenu.svelte`, with the `TabRowMenu` component
-exported from `src/ui/index.ts`, composing the existing `TabRow` and `Icon`
-primitives and using only design tokens from `tokens.css` (no hard-coded colours or
-pixel design values). `TabRowMenu` SHALL render the row via `TabRow`, keeping it
-unchanged while the drawer grows behind it; `TabRow` SHALL expose a `trailingVisible`
-prop so the trigger stays visible while the menu is open. The previous
-floating-dropdown primitive `src/ui/Menu.svelte` (and its `MenuItem` type, tests,
-and export) SHALL be removed, since `PinnedTabs` — its only consumer — migrates to
-`TabRowMenu` in this change.
-
-#### Scenario: Pinned tabs use the new primitive
-
-- **WHEN** the sidebar renders pinned tabs
-- **THEN** their actions menu is provided by `TabRowMenu`, and `Menu.svelte` no
-  longer exists in the codebase or `src/ui/index.ts`
-
 ### Requirement: Pinned rows expose a "Lock to its site" boundary editor
 
 A pinned tab's overflow menu SHALL offer a **"Lock to its site…"** entry that opens
@@ -210,4 +192,22 @@ the menu primitive stays generic.
 
 - **WHEN** the editor is open in Default mode
 - **THEN** the Default control SHALL reflect whether the global default is currently off or lock-to-domain
+
+### Requirement: The morph menu is a token-only apps/extension/src/ui primitive and replaces Menu
+
+The menu SHALL ship as `apps/extension/src/ui/TabRowMenu.svelte`, with the `TabRowMenu` component
+exported from `apps/extension/src/ui/index.ts`, composing the existing `TabRow` and `Icon`
+primitives and using only design tokens from `@lunma/tokens` (no hard-coded colours or
+pixel design values). `TabRowMenu` SHALL render the row via `TabRow`, keeping it
+unchanged while the drawer grows behind it; `TabRow` SHALL expose a `trailingVisible`
+prop so the trigger stays visible while the menu is open. The previous
+floating-dropdown primitive `apps/extension/src/ui/Menu.svelte` (and its `MenuItem` type, tests,
+and export) SHALL be removed, since `PinnedTabs` — its only consumer — migrates to
+`TabRowMenu` in this change.
+
+#### Scenario: Pinned tabs use the new primitive
+
+- **WHEN** the sidebar renders pinned tabs
+- **THEN** their actions menu is provided by `TabRowMenu`, and `Menu.svelte` no
+  longer exists in the codebase or `apps/extension/src/ui/index.ts`
 

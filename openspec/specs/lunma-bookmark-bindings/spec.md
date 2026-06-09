@@ -140,7 +140,7 @@ When the user deletes a saved tab bound in one or more windows, Lunma SHALL prom
 
 ### Requirement: Restart recovery rebinds by URL on SW boot
 
-On SW boot, for each persisted **window slot** in `tabBindings` whose tab id no longer resolves to a live tab in that window, Lunma SHALL rebind by URL **within that window**: query that window's live tabs via `chrome.tabs.query({ windowId })`; match the record's `currentURL` (tiebreak: most recent `tabLastActivity`), else `originalURL`; on a match set `tabBindings[savedTabId][windowId] = matchingTabId` without modifying `currentURL`; on no match remove that window's slot. A tab already claimed earlier in the pass SHALL NOT be reclaimed (first-claim-wins, evaluated per window). `runRestartRecovery` SHALL be exported from `src/background/tab-bindings.ts` and operate per window.
+On SW boot, for each persisted **window slot** in `tabBindings` whose tab id no longer resolves to a live tab in that window, Lunma SHALL rebind by URL **within that window**: query that window's live tabs via `chrome.tabs.query({ windowId })`; match the record's `currentURL` (tiebreak: most recent `tabLastActivity`), else `originalURL`; on a match set `tabBindings[savedTabId][windowId] = matchingTabId` without modifying `currentURL`; on no match remove that window's slot. A tab already claimed earlier in the pass SHALL NOT be reclaimed (first-claim-wins, evaluated per window). `runRestartRecovery` SHALL be exported from `apps/extension/src/background/tab-bindings.ts` and operate per window.
 
 #### Scenario: Restart recovers a window slot by currentURL
 
@@ -462,7 +462,7 @@ grows vertically (it SHALL NOT scroll horizontally). Each tile is a soft rounded
 derived via the same staged resolution used by tab and pinned rows (see
 Requirement: Favicons derive at render via the Chrome favicon endpoint) — the bound
 tab's `favIconUrl`, then the Chrome `_favicon` endpoint, then a globe glyph — when the
-favicon is missing or fails to load. `FaviconTile` SHALL be a `src/ui/` primitive
+favicon is missing or fails to load. `FaviconTile` SHALL be a `apps/extension/src/ui/` primitive
 composed by the feature component `FaviconRow.svelte`, and SHALL itself compose the
 shared `Favicon` primitive (visual-system) for its image/globe slot; none SHALL re-roll
 a tile or favicon `<img>` inline. A favorite's title SHALL be reachable on hover
@@ -625,7 +625,7 @@ offer:
 - **Delete** — a destructive `deleteSavedTab` that removes the record entirely and
   closes its bound live tab.
 
-The menu SHALL be the shared `src/ui/ContextMenu.svelte` primitive composed by the
+The menu SHALL be the shared `apps/extension/src/ui/ContextMenu.svelte` primitive composed by the
 feature component `FaviconRow.svelte` (one instance, opened at the right-clicked tile's
 cursor position); neither SHALL re-roll a menu inline. Right-click removal exists because
 drag-out alone proved undiscoverable.

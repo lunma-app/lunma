@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="56%" r="50%">
+      <stop offset="0%" stop-color="#f2b65e" stop-opacity="0.7" />
+      <stop offset="58%" stop-color="#f2b65e" stop-opacity="0.16" />
+      <stop offset="100%" stop-color="#f2b65e" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="ember" x1="16" y1="12" x2="16" y2="22" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffce7a" />
+      <stop offset="100%" stop-color="#e09a3f" />
+    </linearGradient>
+  </defs>
+  <!-- Dark warm substrate, matching the brand --bg. -->
+  <rect width="32" height="32" rx="8.5" fill="#201b15" />
+  <!-- The alcove arch — a lit recess cradling the ember. -->
+  <path
+    d="M8.5 25.5 V14.5 a7.5 7.5 0 0 1 15 0 V25.5"
+    fill="none"
+    stroke="#e0a24f"
+    stroke-opacity="0.45"
+    stroke-width="1.8"
+    stroke-linecap="round"
+  />
+  <!-- The ember and its hue-glow halo — the central brand motif. -->
+  <circle cx="16" cy="17" r="10" fill="url(#glow)" />
+  <circle cx="16" cy="17" r="4.6" fill="url(#ember)" />
+</svg>

@@ -11,13 +11,14 @@
 | Schema / validation | **Zod** | Versioned schemas + runtime validation at storage boundaries |
 | Tests | **Vitest** + **@testing-library/svelte** + **Playwright** | Unit for store methods/search; E2E for sidebar happy paths |
 | Lint / format | **Biome** | One binary, fast, minimal config. Also the **architecture-integrity boundary enforcer** — per-layer `noRestrictedImports` + `noImportCycles` in `biome.json` lock the one-way layer DAG (see [03-architecture](03-architecture.md)) |
-| CSS linting | **Stylelint** (`+ postcss-html + stylelint-declaration-strict-value`) | The one thing Biome can't do: enforce CSS *values*. Guards the primitive→token contract — `font-size`/`z-index` in `src/ui` primitives must reference design tokens |
-| CSS | Svelte scoped styles + CSS variables | Per-component isolation; theming via variables; a design-token contract in `src/ui/tokens.css` (type scale, weights, z-index, focus, press, control sizes, glass/glow/aurora) |
-| Brand fonts | **Instrument Serif** (display) + **Mona Sans** (body), bundled woff2 | Editorial serif + contemporary sans for the immersive identity. SIL OFL, Latin-subset, served locally (no CDN — the MV3 CSP forbids remote font loading and the extension must work offline) |
+| CSS linting | **Stylelint** (`+ postcss-html + stylelint-declaration-strict-value`) | The one thing Biome can't do: enforce CSS *values*. Guards the primitive→token contract — `font-size`/`z-index` in `apps/extension/src/ui` primitives must reference design tokens |
+| CSS | Svelte scoped styles + CSS variables | Per-component isolation; theming via variables; a design-token contract in the shared **`@lunma/tokens`** package (`packages/tokens` — type scale, weights, z-index, focus, press, control sizes, glass/glow/aurora) |
+| Brand fonts | **Instrument Serif** (display) + **Mona Sans** (body), bundled woff2 | Editorial serif + contemporary sans for the immersive identity. SIL OFL, Latin-subset, served locally (no CDN — the MV3 CSP forbids remote font loading and the extension must work offline). Sourced once from `@lunma/tokens`, shared by the extension and the site |
+| Marketing site | **SvelteKit** + `@sveltejs/adapter-static` (the SvelteKit Vite plugin) | The `apps/site` landing page only — prerendered to fully static output for `lunma.app`. **Build-time, scoped to `apps/site`; nothing new ships in the extension bundle.** See [ADR 0012](adr/0012-workspace-and-marketing-site.md). |
 | Chrome API types | `@types/chrome` | Official, Chrome-only (no Firefox polyfill unless needed later) |
 | Icon library | **`@lucide/svelte`** | Per-icon tree-shaken imports; broad coverage; official Svelte 5 wrapper. See [ADR 0004](adr/0004-lucide-svelte-icons.md). |
 | Headless UI primitives | **`bits-ui`** | Svelte 5 port of Radix Primitives. We use it sparingly — only the primitives where getting accessibility right by hand is hard (Tooltip, and later Popover / Menu / Dialog / Combobox when the create-edit-space and launcher slices land). Our scoped styles + CSS tokens stay; Bits provides only behaviour. Crucially **not** shadcn-svelte — we keep our own design system and skip Tailwind. |
-| Drag and drop | **Custom pointer-drag** (`src/sidebar/drag.svelte.ts`) | First-party pointer-drag controller for the sidebar lists: source row stays put (dimmed), a floating clone follows the cursor, an insertion line marks the landing slot, nothing reorders until drop. Cross-zone pin/unpin (temp→pinned drag, reorder pinned) via a single module-level controller. SW state stays authoritative — no optimistic updates. Replaced `svelte-dnd-action` during implementation; see [ADR 0006](adr/0006-custom-sidebar-drag.md) (supersedes [ADR 0003](adr/0003-sidebar-dnd-library.md)). |
+| Drag and drop | **Custom pointer-drag** (`apps/extension/src/sidebar/drag.svelte.ts`) | First-party pointer-drag controller for the sidebar lists: source row stays put (dimmed), a floating clone follows the cursor, an insertion line marks the landing slot, nothing reorders until drop. Cross-zone pin/unpin (temp→pinned drag, reorder pinned) via a single module-level controller. SW state stays authoritative — no optimistic updates. Replaced `svelte-dnd-action` during implementation; see [ADR 0006](adr/0006-custom-sidebar-drag.md) (supersedes [ADR 0003](adr/0003-sidebar-dnd-library.md)). |
 
 ## Non-obvious choices, with rationale
 
@@ -40,7 +41,7 @@ Reach for **Lit** instead only if you want zero compile step / maximum web-stand
 The discipline matters more than the library. Svelte 5's runes give per-property reactivity natively, so the store is a class with `$state` and mutation methods — no action union, no reducer, no `Object.assign` reconciliation:
 
 ```ts
-// src/shared/store.ts
+// apps/extension/src/shared/store.svelte.ts
 class LunmaStore {
   state = $state<AppState>(initial);
 
@@ -68,12 +69,14 @@ Every read from `chrome.storage.local` goes through `SpacesSchema.parse(raw)`. C
 
 ### Bundled brand fonts (Instrument Serif + Mona Sans)
 
-Lunma ships its own type. `--font-display: 'Instrument Serif'` carries Space identity (Space names, the wordmark, large headings); `--font-sans: 'Mona Sans'` carries body and UI text. Both are bundled locally as **Latin-subset woff2** under `public/fonts/` and declared with `@font-face` + `font-display: swap` (the system stack remains the swap fallback). No Google Fonts / CDN — the MV3 CSP forbids remote font loading and the extension must render offline.
+Lunma ships its own type. `--font-display: 'Instrument Serif'` carries Space identity (Space names, the wordmark, large headings); `--font-sans: 'Mona Sans'` carries body and UI text. Both are bundled locally as **Latin-subset woff2** and declared with `@font-face` + `font-display: swap` (the system stack remains the swap fallback). No Google Fonts / CDN — the MV3 CSP forbids remote font loading and the extension must render offline.
 
-- `public/fonts/MonaSans-Variable.woff2` — variable face, weight axis `200..900` (~40KB).
-- `public/fonts/InstrumentSerif-Regular.woff2` — single 400 weight (~15KB); Instrument Serif has no variable axis, which is fine for a display-only role.
+The two faces live **once** in the shared `@lunma/tokens` package (`packages/tokens/fonts/`), so the extension and the marketing site render the same type from one source — no second copy of the woff2 in git:
 
-Both are pinned bundled assets (checked in, not resolved by pnpm). The extension pages (sidebar, new-tab, options) load them by URL; the launcher overlay — a content script in an arbitrary page — registers the same faces on `document.fonts` via `chrome.runtime.getURL`, which is why `fonts/*` is listed in the manifest's `web_accessible_resources`.
+- `packages/tokens/fonts/MonaSans-Variable.woff2` — variable face, weight axis `200..900` (~40KB).
+- `packages/tokens/fonts/InstrumentSerif-Regular.woff2` — single 400 weight (~15KB); Instrument Serif has no variable axis, which is fine for a display-only role.
+
+Each consumer serves them at the stable `/fonts/*` path (`@lunma/tokens/fonts.css`'s `@font-face` urls): the extension's Vite config copies them into its served root at build (the generated `apps/extension/public/fonts/` is gitignored), so `fonts/*` stays valid in the manifest's `web_accessible_resources`; the site copies them into `static/fonts/`. The extension pages (sidebar, new-tab, options) load them by URL; the launcher overlay — a content script in an arbitrary page — registers the same faces on `document.fonts` via `chrome.runtime.getURL('fonts/...')`.
 
 ### Biome over ESLint + Prettier
 
@@ -92,7 +95,7 @@ Biome can lint CSS structure but cannot require a *value* (e.g. "`font-size` mus
 - **Redux Toolkit / Zustand / Jotai** — Svelte runes already give you signals. Adding a state library on top is duplication.
 - **webextension-polyfill** — only worth it for a Firefox build. Chrome-only? Use `chrome.*` with `@types/chrome` directly.
 - **tRPC / message libraries** — for SW ↔ sidebar messaging, a 30-line typed `sendMessage<T>` wrapper is enough.
-- **Monorepo tooling** (pnpm workspaces, Nx, Turbo) — everything fits in one package.
+- **Nx / Turborepo** — the repo is a **pnpm workspace** (`apps/extension`, `apps/site`, `packages/tokens`) but stops there. Nx's headline feature — enforced module boundaries — is an ESLint rule, which would fight the deliberate Biome-only enforcement; Turborepo's task-graph caching only pays off at a scale (many packages, slow CI) this repo isn't at, and bolts onto pnpm workspaces later with zero lock-in. So: **pnpm workspaces yes (extension + site); Nx/Turbo deferred.** See [ADR 0012](adr/0012-workspace-and-marketing-site.md).
 
 ## Versions pinned (as of May 2026)
 
@@ -114,6 +117,8 @@ Resolved at project start; the `pnpm-lock.yaml` is the source of truth from here
 | Zod | 4.x | |
 | `@types/chrome` | 0.1.x | |
 | `bits-ui` | 2.18.x | |
+| `@sveltejs/kit` | 2.x | **`apps/site` only** — build-time, nothing ships in the extension |
+| `@sveltejs/adapter-static` | 3.x | **`apps/site` only** — prerender to static output for `lunma.app` |
 
 When bumping: run `pnpm view <pkg> version` for each, prefer current minors, update `pnpm-lock.yaml`.
 

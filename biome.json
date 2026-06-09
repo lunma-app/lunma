@@ -7,9 +7,16 @@
   },
   "files": {
     "includes": [
-      "src/**/*.{ts,js,svelte}",
+      "apps/extension/src/**/*.{ts,js,svelte}",
+      "apps/extension/e2e/**/*.{ts,js}",
+      "apps/extension/*.{ts,js}",
+      "apps/site/src/**/*.{ts,js,svelte}",
+      "apps/*/*.{ts,js}",
+      "packages/*/*.{ts,js}",
       "*.{ts,js,json}",
       "!**/dist",
+      "!**/build",
+      "!**/.svelte-kit",
       "!**/.devbox",
       "!**/node_modules"
     ]
@@ -46,7 +53,7 @@
     },
     {
       "includes": [
-        "src/shared/**"
+        "apps/extension/src/shared/**"
       ],
       "linter": {
         "rules": {
@@ -57,12 +64,25 @@
                 "patterns": [
                   {
                     "group": [
+                      "**/ui",
                       "**/ui/**",
+                      "**/background",
                       "**/background/**",
+                      "**/sidebar",
                       "**/sidebar/**",
+                      "**/launcher",
                       "**/launcher/**",
+                      "**/options",
                       "**/options/**",
+                      "**/content",
                       "**/content/**"
+                    ]
+                  },
+                  {
+                    "group": [
+                      "@lunma/site",
+                      "@lunma/site/**",
+                      "**/apps/site/**"
                     ]
                   }
                 ]
@@ -74,7 +94,7 @@
     },
     {
       "includes": [
-        "src/ui/**"
+        "apps/extension/src/ui/**"
       ],
       "linter": {
         "rules": {
@@ -85,11 +105,23 @@
                 "patterns": [
                   {
                     "group": [
+                      "**/background",
                       "**/background/**",
+                      "**/sidebar",
                       "**/sidebar/**",
+                      "**/launcher",
                       "**/launcher/**",
+                      "**/options",
                       "**/options/**",
+                      "**/content",
                       "**/content/**"
+                    ]
+                  },
+                  {
+                    "group": [
+                      "@lunma/site",
+                      "@lunma/site/**",
+                      "**/apps/site/**"
                     ]
                   }
                 ]
@@ -101,7 +133,7 @@
     },
     {
       "includes": [
-        "src/background/**"
+        "apps/extension/src/background/**"
       ],
       "linter": {
         "rules": {
@@ -112,13 +144,26 @@
                 "patterns": [
                   {
                     "group": [
+                      "**/ui",
                       "**/ui/**",
+                      "**/sidebar",
                       "**/sidebar/**",
+                      "**/options",
                       "**/options/**",
+                      "**/content",
                       "**/content/**",
+                      "**/launcher",
                       "**/launcher/**",
+                      "!**/launcher/shared",
                       "!**/launcher/shared/**"
                     ]
+                  },
+                  {
+                    "group": [
+                      "@lunma/site",
+                      "@lunma/site/**",
+                      "**/apps/site/**"
+                    ]
                   }
                 ]
               }
@@ -129,7 +174,7 @@
     },
     {
       "includes": [
-        "src/sidebar/**"
+        "apps/extension/src/sidebar/**"
       ],
       "linter": {
         "rules": {
@@ -140,10 +185,21 @@
                 "patterns": [
                   {
                     "group": [
+                      "**/background",
                       "**/background/**",
+                      "**/launcher",
                       "**/launcher/**",
+                      "**/options",
                       "**/options/**",
+                      "**/content",
                       "**/content/**"
+                    ]
+                  },
+                  {
+                    "group": [
+                      "@lunma/site",
+                      "@lunma/site/**",
+                      "**/apps/site/**"
                     ]
                   }
                 ]
@@ -155,7 +211,7 @@
     },
     {
       "includes": [
-        "src/options/**"
+        "apps/extension/src/options/**"
       ],
       "linter": {
         "rules": {
@@ -166,10 +222,21 @@
                 "patterns": [
                   {
                     "group": [
+                      "**/background",
                       "**/background/**",
+                      "**/sidebar",
                       "**/sidebar/**",
+                      "**/launcher",
                       "**/launcher/**",
+                      "**/content",
                       "**/content/**"
+                    ]
+                  },
+                  {
+                    "group": [
+                      "@lunma/site",
+                      "@lunma/site/**",
+                      "**/apps/site/**"
                     ]
                   }
                 ]
@@ -181,7 +248,7 @@
     },
     {
       "includes": [
-        "src/launcher/**"
+        "apps/extension/src/launcher/**"
       ],
       "linter": {
         "rules": {
@@ -192,10 +259,21 @@
                 "patterns": [
                   {
                     "group": [
+                      "**/background",
                       "**/background/**",
+                      "**/sidebar",
                       "**/sidebar/**",
+                      "**/options",
                       "**/options/**",
+                      "**/content",
                       "**/content/**"
+                    ]
+                  },
+                  {
+                    "group": [
+                      "@lunma/site",
+                      "@lunma/site/**",
+                      "**/apps/site/**"
                     ]
                   }
                 ]
@@ -207,7 +285,7 @@
     },
     {
       "includes": [
-        "src/content/**"
+        "apps/extension/src/content/**"
       ],
       "linter": {
         "rules": {
@@ -218,11 +296,48 @@
                 "patterns": [
                   {
                     "group": [
+                      "**/ui",
                       "**/ui/**",
+                      "**/background",
                       "**/background/**",
+                      "**/sidebar",
                       "**/sidebar/**",
+                      "**/launcher",
                       "**/launcher/**",
+                      "**/options",
                       "**/options/**"
+                    ]
+                  },
+                  {
+                    "group": [
+                      "@lunma/site",
+                      "@lunma/site/**",
+                      "**/apps/site/**"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/site/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@lunma/extension",
+                      "@lunma/extension/**",
+                      "**/apps/extension/**"
                     ]
                   }
                 ]

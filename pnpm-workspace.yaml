@@ -1,0 +1,5 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+minimumReleaseAgeExclude:
+  - '@sveltejs/kit@2.63.1'

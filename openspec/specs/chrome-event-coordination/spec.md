@@ -17,7 +17,7 @@ For `source: 'chrome'`, the union SHALL cover exactly:
 - `tabGroups.onRemoved`, `tabGroups.onUpdated`,
 - `windows.onCreated`, `windows.onRemoved`.
 
-The `tabGroups.onRemoved` payload SHALL carry the removed group's id (`{ groupId: number }`); the `tabGroups.onUpdated` payload SHALL carry the updated group descriptor (`{ group: chrome.tabGroups.TabGroup }`). These are the lifecycle-hint events Lunma observes so a user's manual ungroup/close or Chrome-side rename of a Lunma-tracked group reconciles (see the `spaces-and-tabs` "Chrome tab-group lifecycle reconciliation" requirement). Lunma SHALL register the corresponding `chrome.tabGroups.onRemoved` / `chrome.tabGroups.onUpdated` listeners in `src/background/index.ts`, deferring their enqueue until boot completes like the other chrome listeners.
+The `tabGroups.onRemoved` payload SHALL carry the removed group's id (`{ groupId: number }`); the `tabGroups.onUpdated` payload SHALL carry the updated group descriptor (`{ group: chrome.tabGroups.TabGroup }`). These are the lifecycle-hint events Lunma observes so a user's manual ungroup/close or Chrome-side rename of a Lunma-tracked group reconciles (see the `spaces-and-tabs` "Chrome tab-group lifecycle reconciliation" requirement). Lunma SHALL register the corresponding `chrome.tabGroups.onRemoved` / `chrome.tabGroups.onUpdated` listeners in `apps/extension/src/background/index.ts`, deferring their enqueue until boot completes like the other chrome listeners.
 
 The `bookmarks.onCreated` and `bookmarks.onRemoved` kinds SHALL NOT exist — Lunma no longer observes the Chrome bookmark tree (Spaces and saved tabs are Lunma-owned; see ADR 0005). Their `EventPolicy` entries and coordinator handlers SHALL be removed.
 
@@ -68,12 +68,12 @@ Self-vs-chrome filtering (e.g. `isSelfCreatedFolder`, `isSelfTaggedBookmarkUpdat
 
 #### Scenario: Mutations only flow through the coordinator
 
-- **WHEN** code outside `src/background/coordinator.ts` and the SW boot path attempts to mutate `store.state`
+- **WHEN** code outside `apps/extension/src/background/coordinator.ts` and the SW boot path attempts to mutate `store.state`
 - **THEN** that path SHALL be considered a layering violation (caught by review)
 
 #### Scenario: Chrome listener enqueues rather than mutating directly
 
-- **WHEN** a `chrome.tabs.onCreated` listener registered in `src/background/index.ts` fires
+- **WHEN** a `chrome.tabs.onCreated` listener registered in `apps/extension/src/background/index.ts` fires
 - **THEN** the listener SHALL call `coordinator.enqueue({ source: 'chrome', kind: 'tabs.onCreated', payload: { tab } })`
 - **AND** the listener SHALL NOT call any `LunmaStore` mutator method
 
@@ -202,7 +202,7 @@ The pending-event queue SHALL be in-memory only and SHALL NOT be persisted acros
 
 ### Requirement: Pure-read state-snapshot channel
 
-The service worker SHALL respond to `'lunma/state-request'` messages received via `chrome.runtime.onMessage` by emitting a `'lunma/state-snapshot'` message carrying a snapshot of the current `LunmaStore.state`. The handler module `src/background/state-snapshot-handler.ts` SHALL register this listener during SW boot via `registerStateSnapshotHandler(store)` invoked from [src/background/index.ts](../../../src/background/index.ts), before chrome event listeners are registered.
+The service worker SHALL respond to `'lunma/state-request'` messages received via `chrome.runtime.onMessage` by emitting a `'lunma/state-snapshot'` message carrying a snapshot of the current `LunmaStore.state`. The handler module `apps/extension/src/background/state-snapshot-handler.ts` SHALL register this listener during SW boot via `registerStateSnapshotHandler(store)` invoked from [apps/extension/src/background/index.ts](../../../apps/extension/src/background/index.ts), before chrome event listeners are registered.
 
 The handler SHALL be pure-read:
 
@@ -235,10 +235,10 @@ This channel is independent of the coordinator queue. The queue invariants state
 
 #### Scenario: Handler does not call any store mutator
 
-- **WHEN** [src/background/state-snapshot-handler.ts](../../../src/background/state-snapshot-handler.ts) is statically analyzed
+- **WHEN** [apps/extension/src/background/state-snapshot-handler.ts](../../../apps/extension/src/background/state-snapshot-handler.ts) is statically analyzed
 - **THEN** it SHALL NOT contain references to any `LunmaStore` mutator method (`createSpace`, `renameSpace`, `deleteSpace`, `activateSpace`, `onTabCreated`, `onTabRemoved`, `onTabUpdated`, `bindBookmark`, `unbindBookmark`, `makeBookmarkHomeCurrent`, `applyRestartRecovery`, `registerBookmark`, `setLunmaRootFolderId`, `removeTrashedSpace`, `adoptBookmarkFolder`, `removeAdoptedBookmarkFolder`, `restoreSpaceFromTrash`, `onWindowOpened`, `onWindowClosed`)
 - **AND** it SHALL NOT import the `Coordinator` class
-- **AND** it SHALL NOT import `persist` or `broadcast` from [src/shared/messages.ts](../../../src/shared/messages.ts)
+- **AND** it SHALL NOT import `persist` or `broadcast` from [apps/extension/src/shared/messages.ts](../../../apps/extension/src/shared/messages.ts)
 
 #### Scenario: Concurrent mutation does not block the snapshot response
 
@@ -379,9 +379,9 @@ requestId: string; query: string; windowId: WindowId }` and the response SHALL c
 `{ type: 'lunma/launcher-suggestions-response'; requestId: string; results:
 LauncherResult[] }`, echoing the request's `requestId` so a client can drop stale
 (out-of-order) responses (latest-wins). The handler module
-`src/background/launcher-suggestions-handler.ts` SHALL register this listener during
+`apps/extension/src/background/launcher-suggestions-handler.ts` SHALL register this listener during
 SW boot via `registerLauncherSuggestionsHandler(store)` invoked from
-`src/background/index.ts`.
+`apps/extension/src/background/index.ts`.
 
 The handler SHALL be **pure-read**, exactly like the state-snapshot channel:
 
@@ -408,9 +408,9 @@ not interact with the queue at all.
 
 #### Scenario: The suggestions handler is pure-read
 
-- **WHEN** `src/background/launcher-suggestions-handler.ts` is statically analyzed
+- **WHEN** `apps/extension/src/background/launcher-suggestions-handler.ts` is statically analyzed
 - **THEN** it SHALL NOT call `coordinator.enqueue`, any `LunmaStore` mutator, `persist`, or `broadcast`
-- **AND** it SHALL NOT import `persist` or `broadcast` from `src/shared/messages.ts`
+- **AND** it SHALL NOT import `persist` or `broadcast` from `apps/extension/src/shared/messages.ts`
 
 #### Scenario: A concurrent mutation does not block a suggestions response
 

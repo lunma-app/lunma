@@ -5,7 +5,7 @@ TBD - created by archiving change launcher-v1. Update Purpose after archive.
 ## Requirements
 ### Requirement: Shared search engine and data providers
 
-The launcher SHALL provide a single search engine in `src/launcher/shared/` that
+The launcher SHALL provide a single search engine in `apps/extension/src/launcher/shared/` that
 runs **in the service worker** and merges results from four data providers. The
 engine SHALL be a pure function of its inputs (query string + injected data
 sources) with no surface-specific state. The four providers SHALL be:
@@ -127,7 +127,7 @@ mutating Lunma state directly:
 
 ### Requirement: New-tab page inline launcher surface
 
-The new-tab page (`src/launcher/newtab/NewTab.svelte`) SHALL host a live
+The new-tab page (`apps/extension/src/launcher/newtab/NewTab.svelte`) SHALL host a live
 search input in place of the inert placeholder shipped by
 `lunma-new-tab-home`. The search input SHALL have **two stable poses**: a
 **centred idle pose** (empty query) and a **raised search pose** near the
@@ -140,7 +140,7 @@ state). On a non-empty query the page SHALL collapse the full identity
 into a compact identity **chip** (the Space icon + name) above the raised
 input, query the suggestions channel, and render a results list **below**
 the input. The full identity SHALL NOT be unmounted on the first
-keystroke; it SHALL crossfade to the chip. It SHALL compose the `src/ui`
+keystroke; it SHALL crossfade to the chip. It SHALL compose the `apps/extension/src/ui`
 primitives `ResultRow` and `ResultList` (and the existing `Icon` / `Kbd` /
 `Surface`); it SHALL NOT re-roll row/list styling inline.
 
@@ -188,10 +188,10 @@ query) SHALL NOT have its focus overridden on reactivation.
 ### Requirement: Alt+L overlay surface
 
 The launcher SHALL provide an overlay delivered by a content script
-(`src/launcher/overlay.ts`) injected at `document_start` on `<all_urls>`, dormant
+(`apps/extension/src/launcher/overlay.ts`) injected at `document_start` on `<all_urls>`, dormant
 until toggled by `Alt+L`. When toggled open it SHALL render a centered
 command-palette card inside a **shadow DOM** styled by a **constructable
-stylesheet** derived from `src/ui/tokens.css` (so host-page CSS neither bleeds in
+stylesheet** derived from `@lunma/tokens` (so host-page CSS neither bleeds in
 nor leaks out). The overlay SHALL carry **no Svelte runtime**; it mirrors the
 `ResultRow`/`ResultList` visual contract in vanilla TypeScript against the design
 tokens (the documented component-library exception in this change's `design.md`).
@@ -558,7 +558,7 @@ visible on the more-opaque card.
 For a **non-empty** query the launcher-suggestions response SHALL include
 **synthesized action results** alongside the four-provider results, built
 service-worker-side from the user's configured default search engine (see the
-`settings` capability). Synthesis SHALL live in `src/launcher/shared/web-actions.ts`
+`settings` capability). Synthesis SHALL live in `apps/extension/src/launcher/shared/web-actions.ts`
 (`classifyInput`, `buildSearchUrl`, `resolveDefaultEngine`, `buildWebActionResults`)
 as a pure module; the SW suggestions handler SHALL invoke it and compose the final
 list as `[ websearch, navigate?, ...providerResults ]`.
@@ -653,7 +653,7 @@ capture-phase `Alt+L` toggle, which still closes the open overlay.)
 The launcher SHALL let the user switch into a specific search engine by keyword.
 
 The engine registry SHALL be assembled by `buildEngineRegistry(settings)`
-(`src/shared/search-engines.ts`): the `BUILT_IN_ENGINES` (each now carrying a
+(`apps/extension/src/shared/search-engines.ts`): the `BUILT_IN_ENGINES` (each now carrying a
 `keyword`) plus the custom engine when it is valid — its `customSearchUrl` contains
 `%s`, its `customSearchKeyword` is non-empty, and that keyword does not collide
 with a built-in keyword. The new-tab page SHALL build the registry from settings
@@ -666,7 +666,7 @@ overlay can build the active engine's search URL via `buildSearchUrl` (including
 custom engine, whose template is not a code constant). The default engine id SHALL
 NOT be added to those messages.
 
-`resolveEngine(raw, registry)` (`src/launcher/shared/web-actions.ts`) SHALL match
+`resolveEngine(raw, registry)` (`apps/extension/src/launcher/shared/web-actions.ts`) SHALL match
 the leading whitespace-delimited token **case-insensitively** as a prefix of each
 engine's **keyword OR its name**, and return — without consuming — every matching
 registry engine in registry order (the `candidates`), plus the remaining query.
@@ -876,8 +876,8 @@ The layout SHALL be **CSS-driven** — the row reads the ambient `:root[data-den
 (new-tab) or the host `data-density` (overlay), with **no per-row density prop** —
 and SHALL change no result data, no ordering, and not the set of rendered elements
 (the same favicon / title / type / url simply reflow). Both surfaces SHALL render
-the same layout: `src/ui/ResultRow.svelte` for the new-tab page and the vanilla
-mirror in `src/launcher/overlay.css` for the overlay (the documented
+the same layout: `apps/extension/src/ui/ResultRow.svelte` for the new-tab page and the vanilla
+mirror in `apps/extension/src/launcher/overlay.css` for the overlay (the documented
 component-library exception).
 
 #### Scenario: Comfort renders the title and URL on separate lines

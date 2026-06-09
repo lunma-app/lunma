@@ -1,6 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.17.2/.schema/devbox.schema.json",
-  "packages": ["nodejs@24"],
+  "packages": [
+    "nodejs@24"
+  ],
   "env": {
     "DEVBOX_COREPACK_ENABLED": "true"
   },
@@ -10,8 +12,8 @@
     ],
     "scripts": {
       "install": "pnpm install",
-      "dev": "pnpm dev",
-      "build": "pnpm build",
+      "dev": "pnpm --filter @lunma/extension dev",
+      "build": "pnpm --filter @lunma/extension build",
       "test": "pnpm test",
       "test:e2e": "pnpm test:e2e",
       "lint": "pnpm biome check .",

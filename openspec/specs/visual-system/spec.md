@@ -2,12 +2,12 @@
 
 ## Purpose
 
-Defines Lunma's immersive, colour-forward visual system: design values defined once as tokens in `src/ui/tokens.css` and consumed by primitives; locally bundled brand fonts applied by role; the default vivid aurora/glass/glow aesthetic; a tint dial controlling colour intensity down to a calm neutral substrate; the shared immersive primitives (`Surface`, `Aurora`, `SearchField`); and the reduced-motion and contrast guarantees the aesthetic preserves.
+Defines Lunma's immersive, colour-forward visual system: design values defined once as tokens in `@lunma/tokens` and consumed by primitives; locally bundled brand fonts applied by role; the default vivid aurora/glass/glow aesthetic; a tint dial controlling colour intensity down to a calm neutral substrate; the shared immersive primitives (`Surface`, `Aurora`, `SearchField`); and the reduced-motion and contrast guarantees the aesthetic preserves.
 ## Requirements
 ### Requirement: Design values are defined as tokens and consumed by primitives
 
 All design values SHALL be defined once as CSS custom properties in
-`src/ui/tokens.css` and consumed by the UI primitives in `src/ui/`. This SHALL
+`@lunma/tokens` and consumed by the UI primitives in `apps/extension/src/ui/`. This SHALL
 cover colours, radii, spacing, motion timings/easings, font families, a type
 scale, font weights, z-index layers, focus-ring geometry, a press scale, and
 control heights. Primitives SHALL NOT hard-code raw design values (e.g. a literal
@@ -33,7 +33,7 @@ The token set SHALL include at minimum: `--font-display`, `--font-sans`,
 
 ### Requirement: A shared Favicon primitive renders an icon with staged fallback
 
-Lunma SHALL provide a cross-surface `Favicon` primitive in `src/ui/Favicon.svelte`
+Lunma SHALL provide a cross-surface `Favicon` primitive in `apps/extension/src/ui/Favicon.svelte`
 that renders a favicon image with a staged fallback, so feature primitives compose
 it rather than re-rolling the favicon `<img>` + load-error + globe machine. Its
 contract SHALL be:
@@ -153,8 +153,8 @@ Selecting a calmer level SHALL NOT change layout, only colour intensity.
 
 ### Requirement: Shared immersive primitives exist with defined contracts
 
-Lunma SHALL provide three cross-surface primitives in `src/ui/`, exported from
-`src/ui/index.ts`, that encapsulate the immersive chrome so feature components
+Lunma SHALL provide three cross-surface primitives in `apps/extension/src/ui/`, exported from
+`apps/extension/src/ui/index.ts`, that encapsulate the immersive chrome so feature components
 compose rather than re-roll it:
 
 - `Surface.svelte` — a panel with `variant: 'glass' | 'elevated' | 'flat'`, a
@@ -305,10 +305,10 @@ band (OKLCH hue ≈ 62), deliberately distinct from the `--warning` (≈75) and 
 new-tab home before a Space exists, the options page, the launcher overlay before a
 Space is active, and the sidebar's no-Space state.
 
-It SHALL be defined once as `--base-hue` in `src/ui/tokens.css` and mirrored by
-`DEFAULT_HUE` in `src/ui/space-hue.ts`, with the **same value** as the fallback hue in
-every `var(--space-h, …)` glow/accent token (`src/ui/tokens.css`,
-`src/ui/Aurora.svelte`, `src/launcher/overlay.css`).
+It SHALL be defined once as `--base-hue` in `@lunma/tokens` and mirrored by
+`DEFAULT_HUE` in `apps/extension/src/shared/space-hue.ts`, with the **same value** as the fallback hue in
+every `var(--space-h, …)` glow/accent token (`@lunma/tokens`,
+`apps/extension/src/ui/Aurora.svelte`, `apps/extension/src/launcher/overlay.css`).
 
 The accent, glass, glow, and aurora token *formulas* SHALL remain **parametric** on
 `--base-hue` (an `oklch(… var(--base-hue) …)` form, not a hardcoded literal hue), so
@@ -340,7 +340,7 @@ requirement.
 ### Requirement: Per-Space identity renders each colour at its canonical OKLCH
 
 Each `SpaceColor` SHALL have a canonical OKLCH lightness, chroma, and hue (from
-`colourToOklch` in `src/ui/space-hue.ts`), chosen so the colour reads **true to its
+`colourToOklch` in `apps/extension/src/shared/space-hue.ts`), chosen so the colour reads **true to its
 name** (e.g. `yellow` light, `blue` deep) rather than a single flat lightness across
 hues. The active Space's canonical lightness, chroma, and hue SHALL be exposed as the
 scoped custom properties `--space-l`, `--space-chroma`, and `--space-h`, and every
