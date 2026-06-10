@@ -3,7 +3,6 @@
   "name": "Lunma",
   "short_name": "Lunma",
   "version": "0.0.0",
-  "default_locale": "en",
   "description": "Spatial tab and bookmark management for Chrome.",
   "minimum_chrome_version": "123",
   "permissions": [
