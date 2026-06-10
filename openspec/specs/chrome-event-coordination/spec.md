@@ -23,7 +23,7 @@ The `bookmarks.onCreated` and `bookmarks.onRemoved` kinds SHALL NOT exist — Lu
 
 For `source: 'sidebar'`, the union SHALL cover the kinds enumerated by the `typed-message-bus` capability spec. Variants with `source: 'sidebar'` SHALL additionally carry a `correlationId: string` field (the sessionId-prefixed wire id allocated by the bus client); chrome variants SHALL NOT.
 
-Every coordinator handler SHALL be looked up by `kind`. The handlers map SHALL be typed such that omitting any `kind` causes `pnpm exec tsc --noEmit` to fail. The `EventPolicy` record SHALL have one entry per `kind` regardless of `source`. `tabGroups.onUpdated` SHALL coalesce by `groupId` (last-write-wins within a drain), like `tabs.onUpdated`.
+Every coordinator handler SHALL be looked up by `kind`. The handlers map SHALL be typed such that omitting any `kind` causes `pnpm exec tsc --noEmit` to fail. The `HandlersMap` MAY be assembled at runtime from one typed fragment per handler-slice file (each fragment typed `Pick<HandlersMap, …>` for the kinds it owns); the assembled object SHALL be annotated `HandlersMap` at its single assembly site in the coordinator module, so exhaustiveness over `PendingEventKind` is enforced at that site (omitting any `kind` from the union of fragments fails `tsc --noEmit`). The `EventPolicy` record SHALL have one entry per `kind` regardless of `source`. `tabGroups.onUpdated` SHALL coalesce by `groupId` (last-write-wins within a drain), like `tabs.onUpdated`.
 
 Future capabilities (e.g. an options-page command channel, the Arcify importer) extend the `PendingEvent` union with additional `source` values and `kind` entries in their own spec deltas, and SHALL add matching handlers map entries and `EventPolicy` entries in the same change.
 
@@ -31,6 +31,11 @@ Future capabilities (e.g. an options-page command channel, the Arcify importer) 
 
 - **WHEN** a developer adds a new `kind` to the `PendingEvent` union without adding a matching entry to the handlers map
 - **THEN** `pnpm exec tsc --noEmit` SHALL fail with a missing-key error on the handlers record
+
+#### Scenario: Exhaustiveness holds across sliced fragments
+
+- **WHEN** the handlers map is assembled from per-slice `Pick<HandlersMap, …>` fragments and one slice omits a `kind` it should own (so no fragment provides it)
+- **THEN** the `HandlersMap`-annotated assembly site SHALL fail `pnpm exec tsc --noEmit` with a missing-key error
 
 #### Scenario: Tab-group lifecycle kinds are present
 
@@ -52,7 +57,7 @@ Future capabilities (e.g. an options-page command channel, the Arcify importer) 
 
 ### Requirement: Single sequencer and thin store
 
-The `Coordinator` SHALL be the only path that mutates `LunmaStore.state`. Chrome listeners and the bus adapter enqueue events; the drain loop runs handlers one at a time in FIFO order. Two coordinator handlers SHALL never interleave.
+The `Coordinator` SHALL be the only path that mutates `LunmaStore.state`. "The Coordinator" denotes the **coordinator module**: `apps/extension/src/background/coordinator.ts`, the handler-slice files under `apps/extension/src/background/handlers/**`, and the orchestration collaborators it constructs and owns (`apps/extension/src/background/group-orchestrator.ts`, `apps/extension/src/background/boundary-controller.ts`). The drain loop runs handlers one at a time in FIFO order, invoking each kind's slice handler with a `HandlerContext`; two coordinator handlers SHALL never interleave. Chrome listeners and the bus adapter enqueue events; they SHALL NOT mutate `store.state` directly.
 
 `LunmaStore` mutator methods SHALL be synchronous and SHALL return `void`. Each mutator SHALL accept only plain-data arguments — values containing no `Promise`, no function, no `chrome.*` object (e.g. `chrome.tabs.Tab`, `chrome.bookmarks.BookmarkTreeNode`, `chrome.windows.Window`), and no other runtime handle. Each mutator SHALL mutate the `$state` tree and return. Each mutator SHALL NOT:
 
@@ -64,11 +69,11 @@ The `Coordinator` SHALL be the only path that mutates `LunmaStore.state`. Chrome
 
 The `LunmaStore` constructor SHALL NOT accept `persist` or `broadcast` options. Ownership of `persist` and `broadcast` SHALL live in `Coordinator`.
 
-Self-vs-chrome filtering (e.g. `isSelfCreatedFolder`, `isSelfTaggedBookmarkUpdate`) lives in the coordinator handler, not on the store.
+Self-vs-chrome filtering (e.g. `isSelfCreatedFolder`, `isSelfTaggedBookmarkUpdate`) lives in a coordinator-module handler slice or collaborator, not on the store.
 
-#### Scenario: Mutations only flow through the coordinator
+#### Scenario: Mutations only flow through the coordinator module
 
-- **WHEN** code outside `apps/extension/src/background/coordinator.ts` and the SW boot path attempts to mutate `store.state`
+- **WHEN** code outside the coordinator module (i.e. outside `apps/extension/src/background/coordinator.ts`, `apps/extension/src/background/handlers/**`, and the collaborators `group-orchestrator.ts` / `boundary-controller.ts`) and outside the SW boot path attempts to mutate `store.state`
 - **THEN** that path SHALL be considered a layering violation (caught by review)
 
 #### Scenario: Chrome listener enqueues rather than mutating directly
@@ -160,7 +165,7 @@ All other kinds have empty policy entries (no coalescing).
 
 `Coordinator` SHALL own all I/O performed in response to mutations. Specifically:
 
-- All `chrome.*` API calls required to resolve a `PendingEvent` into plain data SHALL be performed inside a coordinator handler, never inside a `LunmaStore` mutator.
+- All `chrome.*` API calls required to resolve a `PendingEvent` into plain data SHALL be performed inside a coordinator-module handler slice or one of its orchestration collaborators, never inside a `LunmaStore` mutator.
 - `persist(state)` SHALL be called by the coordinator at most once per drain cycle, after the queue becomes empty and at least one mutator ran during the cycle. The state passed to `persist` SHALL be a non-reactive snapshot (via `LunmaStore.snapshot()`), not the raw `$state` proxy, so it round-trips cleanly through `chrome.storage.local.set`'s structured-clone serializer.
 - `broadcast({ method, state })` SHALL be called by the coordinator at most once per drain cycle with `method` set to a stable string identifying the batched cycle and `state` set to the same snapshot used for persist.
 - For every `PendingEvent` with `source: 'sidebar'` processed during the drain cycle, the coordinator SHALL emit exactly one `'lunma/command-ack'` message via `chrome.runtime.sendMessage` carrying the event's `correlationId` and a `result` of `'ok'` (handler returned successfully or the event was coalesced out) or `{ error: <message> }` (handler threw). Ack emission SHALL occur as part of the drain cycle's tail, after persist and broadcast.
@@ -169,11 +174,23 @@ All other kinds have empty policy entries (no coalescing).
 
 A "drain cycle" SHALL begin when `enqueue` is called against an empty queue and no drain is in progress, and SHALL end when the queue becomes empty and the current handler has returned.
 
-The coordinator SHALL NOT expose `flush()` or `markDirty()` methods. Mutation sources outside the coordinator (e.g. SW boot-time recovery) SHALL either mutate `$state` directly during boot before any enqueued event is processed, or SHALL ride the coordinator queue via `enqueue`.
+The `Coordinator` class SHALL NOT expose public `flush()` or `markDirty()` methods to mutation sources outside the coordinator module. The drain's per-cycle persist/broadcast SHALL instead be triggered by handler slices via an internal `HandlerContext.markDirty()` that the drain hands only to the in-module slices it invokes; `HandlerContext.markDirty()` is the sanctioned mechanism by which a slice signals that its mutation must be persisted and broadcast this cycle, and SHALL be set imperatively (set-as-you-go) rather than returned, so a handler that mutates state and then awaits I/O that throws still has its mutation persisted. Mutation sources outside the coordinator module (e.g. SW boot-time recovery) SHALL either mutate `$state` directly during boot before any enqueued event is processed, or SHALL ride the coordinator queue via `enqueue`.
 
 **Synchronous listener registration (MV3 wake-up delivery).** The wake-critical listeners — the bus adapter's `chrome.runtime.onMessage` listener AND the `chrome.*` event listeners (`tabs.*`, `windows.*`, `commands.onCommand`) — SHALL be registered **synchronously in the service worker's first top-level turn**, i.e. NOT inside the asynchronous boot chain. This is required because MV3 routes the message or event that spun a dormant SW back up only to listeners that already exist in that first turn; a listener added after an `await` misses the wake-up, and the sender observes "Could not establish connection. Receiving end does not exist" (commands) or the event is silently dropped (chrome events). To preserve the boot-ordering guarantee, each synchronously-registered listener SHALL defer its `coordinator.enqueue` until a boot-readiness promise (`bootReady`) resolves; message validation and error-acks for unknown command kinds MAY occur synchronously. Deferred enqueues SHALL preserve arrival order. Because enqueue is deferred (not the registration), `chrome.*` events that fire during boot are no longer dropped — they are queued and run after boot mutations, on top of the reconciled state; the relevant handlers are idempotent against the boot-time seed (`onTabCreated` de-dupes by tab id, etc.). The pure-read state-snapshot handler is the exception: it registers post-boot (inside the boot chain), because it answers synchronously with `store.snapshot()` and must not reply with the empty pre-`loadState` default; a cold-start request is covered by the sidebar's retry loop plus the boot broadcast.
 
 **Boot broadcast.** After boot mutations complete and `persist` runs, the SW SHALL emit exactly one `broadcast({ method: 'boot', state })` carrying the post-boot snapshot. This is required because boot mutations bypass the coordinator's per-drain broadcast, so a sidebar that is ALREADY open when the SW wakes (e.g. the user opens a tab after the SW idled out) would otherwise never learn about boot-time reconciliation and would keep rendering stale state.
+
+#### Scenario: No public markDirty/flush on the Coordinator surface
+
+- **WHEN** a mutation source outside the coordinator module references `coordinator.markDirty` or `coordinator.flush`
+- **THEN** `pnpm exec tsc --noEmit` SHALL fail because the `Coordinator` class SHALL NOT declare those public methods
+- **AND** the dirty signal SHALL be reachable only via `HandlerContext.markDirty()` handed to in-module handler slices
+
+#### Scenario: A mutate-then-await-throw handler still persists its mutation
+
+- **GIVEN** a handler slice mutates `store.state`, calls `ctx.markDirty()`, then awaits a `chrome.*` call that rejects
+- **WHEN** the drain processes that event
+- **THEN** the drain SHALL still persist + broadcast the mutation that ran before the rejection (the imperative `markDirty` is not undone by the later throw)
 
 #### Scenario: Listeners are registered synchronously and defer enqueue until boot completes
 

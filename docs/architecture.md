@@ -23,7 +23,7 @@ lunma/                              # pnpm workspace root (private)
 │  │  │  ├─ ui/                     # cross-surface primitives (build primitives, compose features)
 │  │  │  │  ├─ Button.svelte        # …+ Icon · Tooltip · Stack · Kbd · SegmentedControl · TabRow · TabRowMenu
 │  │  │  │  └─ favicon.ts · index.ts   # design TOKENS now come from @lunma/tokens (see packages/)
-│  │  │  ├─ background/             # SW: index · coordinator · bus-adapter · *-handler · seed-* · (planned) auto-archive
+│  │  │  ├─ background/             # SW: index · coordinator (+ handlers/ slices · group-orchestrator · boundary-controller) · bus-adapter · *-handler · seed-* · (planned) auto-archive
 │  │  │  ├─ sidebar/                # flat — feature components compose ui/ primitives
 │  │  │  │  ├─ App.svelte · main.ts · PinnedTabs.svelte · TempTabs.svelte · SpaceSwitcher.svelte
 │  │  │  │  └─ drag.svelte.ts       # custom pointer-drag controller (ADR 0006)
@@ -171,6 +171,9 @@ class Coordinator {
   private events: PendingEvent[] = [];
   private draining = false;
   private dirty = false;
+  // The seam each slice handler receives. markDirty() sets `dirty`; groups/
+  // boundary are the GroupOrchestrator / BoundaryController collaborators.
+  private ctx: HandlerContext; // { store, markDirty, runSideEffect, groups, boundary }
 
   enqueue(ev: PendingEvent): void {
     // coalesce-by-key (e.g. tabs.onUpdated for the same tabId) — merging the
@@ -185,7 +188,7 @@ class Coordinator {
     while (this.events.length > 0) {
       const event = this.events.shift()!;
       try {
-        await this.handlers[event.kind](event); // mutates $state via sync store calls
+        await this.handlers[event.kind](ctx, event); // slice handler mutates $state via sync store calls
         this.dirty = true;
       } catch (err) {
         log.error('HANDLER_THREW', { kind: event.kind, err });
@@ -202,12 +205,13 @@ class Coordinator {
 
 Key properties:
 
-- **Single sequencer.** The coordinator is the only path that mutates `$state`. Chrome listeners enqueue; the drain loop runs handlers one at a time.
+- **Single sequencer.** The **coordinator module** — `coordinator.ts` plus its handler slices under `background/handlers/**` and the orchestration collaborators `group-orchestrator.ts` / `boundary-controller.ts` it owns — is the only path that mutates `$state`. Chrome listeners enqueue; the drain loop runs handlers one at a time.
+- **Sliced handlers, slim core.** `coordinator.ts` is the queue core (enqueue/coalesce/drain/persist/broadcast/ack). The 48 handlers live in nine capability-grouped slices under `background/handlers/`, each a factory returning a typed `Pick<HandlersMap, …>` fragment; the core assembles them into one `HandlersMap`-typed object, so omitting any `kind` fails `tsc`. Every handler receives a small `HandlerContext` (`{ store, markDirty, runSideEffect, groups, boundary }`) — the cross-cutting `chrome.tabGroups`/home-tab orchestration lives in `GroupOrchestrator`, the boundary I/O in `BoundaryController`, and the pure read predicates are free functions in `handlers/queries.ts`. A Biome `noRestrictedImports` rule keeps anything outside the coordinator module from importing the slices.
 - **Coordinator owns I/O.** All `chrome.*` API calls required to resolve an event into plain data happen inside the handler. After the drain cycle empties, `persist` and `broadcast` fire **at most once each** — they are batched, not per-mutator.
 - **Bounded queue, in-memory only.** Depth cap is 1000 with per-kind coalescing. Coalescing is either **replace** or **merge**, declared per kind via `EventPolicy`. `tabs.onUpdated` and `tabGroups.onUpdated` **merge**: their queued payloads are combined field-wise (incoming wins per field) rather than replaced, because Chrome's `changeInfo` is a partial delta — a `{ status: 'complete' }` event followed by a `{ favIconUrl }` event must coalesce into `{ status: 'complete', favIconUrl }`, never dropping the earlier `status` (otherwise a finished tab keeps showing its loading spinner). Sidebar keyed kinds (`renameSpace`, `activateSpace`) stay **replace**/last-write-wins — their payload is a complete intent. The queue is not persisted across SW termination; reconciliation runs via `runRestartRecovery` + `chrome.tabs.query()` on next wake.
 - **`PendingEvent.source` spans `'chrome' | 'sidebar'`.** Sidebar commands (from `bus.send`) carry a `correlationId: string` and ride the same FIFO. The drain tail emits one `'lunma/command-ack'` per sidebar command, separate from the state broadcast (different concerns, different fan-out). Future capabilities (options page, Arcify importer) extend the union with their own `source` values.
 - **Saved tabs are Lunma-owned (ADR 0005), so the coordinator observes no `chrome.bookmarks.*` events.** `makeThisHome` updates `originalURL` in state only — no Chrome write, so no self-tagging/echo-suppression registry is needed. `createSpace` mints a Lunma record (`store.createSpace`) rather than creating a bookmark folder.
-- **No `flush()` / `markDirty()`.** The `typed-message-bus` change removed both escape hatches. SW-internal mutations either ride the bus (sidebar-shaped) or run during boot before listeners are registered.
+- **No public `flush()` / `markDirty()`.** The `typed-message-bus` change removed both escape hatches from the `Coordinator` surface; SW-internal mutations either ride the bus (sidebar-shaped) or run during boot before listeners are registered. The slice dirty signal is the internal `HandlerContext.markDirty()` (handed only to in-module slices, set imperatively so a mutate-then-await-throw handler still persists) — never a public method.
 
 ```
 SW boot order:
