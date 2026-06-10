@@ -42,6 +42,17 @@ interface Props {
   testid?: string | undefined;
   /** Autofocus the input on mount (`input` mode). */
   autofocus?: boolean | undefined;
+  /** Wire the input as an ARIA combobox over a results listbox (`input` mode) —
+   * the launcher surfaces set this so screen readers announce the field as a
+   * combobox with `aria-autocomplete="list"`. Pair with `controls`, `expanded`,
+   * and `activeDescendant`. */
+  combobox?: boolean | undefined;
+  /** id of the controlled listbox (combobox `aria-controls`). */
+  controls?: string | undefined;
+  /** Is the results popup currently shown (combobox `aria-expanded`)? */
+  expanded?: boolean | undefined;
+  /** id of the active option in the listbox (combobox `aria-activedescendant`). */
+  activeDescendant?: string | undefined;
 }
 
 let {
@@ -58,6 +69,10 @@ let {
   ariaLabel,
   testid = 'search-field',
   autofocus = false,
+  combobox = false,
+  controls,
+  expanded,
+  activeDescendant,
 }: Props = $props();
 
 // Bound to the live input (input mode) so a consumer can imperatively refocus —
@@ -109,6 +124,11 @@ function handleKeydown(event: KeyboardEvent): void {
       {value}
       {autofocus}
       aria-label={ariaLabel}
+      role={combobox ? 'combobox' : undefined}
+      aria-autocomplete={combobox ? 'list' : undefined}
+      aria-expanded={combobox ? (expanded ?? false) : undefined}
+      aria-controls={combobox ? controls : undefined}
+      aria-activedescendant={combobox ? activeDescendant : undefined}
       data-testid={testid}
       autocomplete="off"
       oninput={handleInput}

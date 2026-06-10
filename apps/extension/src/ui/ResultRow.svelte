@@ -16,19 +16,23 @@ interface Props {
   faviconSrc?: string | undefined;
   /** Roving keyboard selection: soft accent wash + leading accent marker. */
   selected?: boolean | undefined;
+  /** Stable DOM id for the option — the combobox input points its
+   * `aria-activedescendant` here when this row is the roving selection. */
+  id?: string | undefined;
   /** Whole-row click (acts on the result). */
   onclick?: (() => void) | undefined;
   /** Pointer entered the row — surfaces use it to move the roving selection here. */
   onhover?: (() => void) | undefined;
 }
 
-const { title, url, source, faviconSrc, selected = false, onclick, onhover }: Props = $props();
+const { title, url, source, faviconSrc, selected = false, id, onclick, onhover }: Props = $props();
 </script>
 
 <button
   type="button"
   class="result-row"
   class:selected
+  {id}
   role="option"
   aria-selected={selected}
   data-testid="result-row"

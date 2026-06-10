@@ -130,6 +130,10 @@ const DEBOUNCE_MS = 120;
 let query = $state('');
 let suggestResults = $state<LauncherResult[]>([]);
 let list = $state<ResultListApi | undefined>();
+// id of the result the roving selection currently highlights — mirrored onto the
+// search input's `aria-activedescendant` so the combobox announces it (a11y).
+const LISTBOX_ID = 'newtab-launcher-results';
+let activeOptionId = $state<string | null>(null);
 // The SearchField instance, bound so we can restore focus after popping the
 // engine chip (its × lives in the leading slot, which unmounts on pop).
 let searchField = $state<{ focus: () => void } | undefined>();
@@ -393,6 +397,10 @@ const faviconSrc = (result: LauncherResult): string => faviconFor(result.url);
         oninput={onInput}
         onkeydown={onKeydown}
         leading={activeEngine ? engineChip : undefined}
+        combobox
+        controls={LISTBOX_ID}
+        expanded={showCard && results.length > 0}
+        activeDescendant={activeOptionId ?? undefined}
       />
     </div>
 
@@ -422,10 +430,14 @@ const faviconSrc = (result: LauncherResult): string => faviconFor(result.url);
               <ResultList
                 {results}
                 {faviconSrc}
+                listboxId={LISTBOX_ID}
                 onact={(result) => act(result)}
                 onescape={resetToIdle}
                 onready={(api) => {
                   list = api;
+                }}
+                onactivedescendant={(id) => {
+                  activeOptionId = id;
                 }}
               />
               {#if results.length === 0}
@@ -433,6 +445,13 @@ const faviconSrc = (result: LauncherResult): string => faviconFor(result.url);
               {/if}
             </Surface>
           </div>
+          <!-- Polite count announcement for screen readers (the visible list is a
+               listbox the combobox input controls). Off-screen, never focusable. -->
+          <span class="sr-only" role="status" aria-live="polite" data-testid="newtab-results-status">
+            {results.length === 0
+              ? 'No matches'
+              : `${results.length} result${results.length === 1 ? '' : 's'}`}
+          </span>
         {/if}
       </div>
     {/if}

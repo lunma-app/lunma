@@ -71,5 +71,33 @@ describe('SearchField', () => {
       expect(slot).not.toBeNull();
       expect(slot.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
+
+    test('carries no combobox ARIA by default', () => {
+      const { container } = render(SearchField, { props: { mode: 'input', testid: 'sf' } });
+      const input = container.querySelector('[data-testid="sf"]') as HTMLInputElement;
+      expect(input.getAttribute('role')).toBeNull();
+      expect(input.getAttribute('aria-autocomplete')).toBeNull();
+      expect(input.getAttribute('aria-expanded')).toBeNull();
+      expect(input.getAttribute('aria-controls')).toBeNull();
+    });
+
+    test('combobox mode wires role + aria-controls/expanded/activedescendant', () => {
+      const { container } = render(SearchField, {
+        props: {
+          mode: 'input',
+          testid: 'sf',
+          combobox: true,
+          controls: 'results-list',
+          expanded: true,
+          activeDescendant: 'results-list-opt-2',
+        },
+      });
+      const input = container.querySelector('[data-testid="sf"]') as HTMLInputElement;
+      expect(input.getAttribute('role')).toBe('combobox');
+      expect(input.getAttribute('aria-autocomplete')).toBe('list');
+      expect(input.getAttribute('aria-expanded')).toBe('true');
+      expect(input.getAttribute('aria-controls')).toBe('results-list');
+      expect(input.getAttribute('aria-activedescendant')).toBe('results-list-opt-2');
+    });
   });
 });

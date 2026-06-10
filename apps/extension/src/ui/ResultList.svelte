@@ -13,6 +13,10 @@ import ResultRow from './ResultRow.svelte';
 interface Props {
   /** The scored, ordered results to render. */
   results: LauncherResult[];
+  /** id for the listbox container — the combobox input's `aria-controls` points
+   * here, and each option's id is derived from it (`<listboxId>-opt-<index>`) so
+   * the input can carry `aria-activedescendant`. */
+  listboxId?: string;
   /** Act on a result (Enter or click) — the surface maps it to a bus command. */
   onact?: ((result: LauncherResult, index: number) => void) | undefined;
   /** Escape pressed — the surface closes (overlay) or clears to idle (new-tab). */
@@ -22,9 +26,23 @@ interface Props {
   /** Hands the surface this list's keyboard model so a focused `<input>` can
    * forward its keydown without stealing focus (the new-tab page). */
   onready?: ((api: ResultListApi) => void) | undefined;
+  /** Reports the active option's DOM id (or `null` when empty) whenever the
+   * roving selection moves — the surface mirrors it onto the input's
+   * `aria-activedescendant` so screen readers track the highlighted result. */
+  onactivedescendant?: ((id: string | null) => void) | undefined;
 }
 
-const { results, onact, onescape, faviconSrc, onready }: Props = $props();
+const {
+  results,
+  listboxId = 'launcher-results',
+  onact,
+  onescape,
+  faviconSrc,
+  onready,
+  onactivedescendant,
+}: Props = $props();
+
+const optionId = (index: number): string => `${listboxId}-opt-${index}`;
 
 onMount(() => {
   onready?.({ handleKeydown });
@@ -36,6 +54,12 @@ let selected = $state(0);
 $effect(() => {
   results;
   selected = 0;
+});
+
+// Surface the active option id so the owning input can carry
+// `aria-activedescendant` (combobox a11y). Null when there is nothing to point at.
+$effect(() => {
+  onactivedescendant?.(results.length > 0 ? optionId(selected) : null);
 });
 
 function move(delta: number): void {
@@ -72,6 +96,7 @@ export function handleKeydown(e: KeyboardEvent): void {
 
 <div
   class="result-list"
+  id={listboxId}
   role="listbox"
   tabindex="-1"
   data-testid="result-list"
@@ -83,6 +108,7 @@ export function handleKeydown(e: KeyboardEvent): void {
       url={result.url}
       source={result.source}
       faviconSrc={faviconSrc?.(result)}
+      id={optionId(i)}
       selected={i === selected}
       onhover={() => {
         selected = i;

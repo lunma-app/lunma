@@ -57,4 +57,32 @@ describe('ResultList', () => {
     await fireEvent.keyDown(list(container), { key: 'Escape' });
     expect(onescape).toHaveBeenCalledTimes(1);
   });
+
+  test('is a listbox with id-bearing option rows (combobox a11y)', () => {
+    const { container } = render(ResultListHarness);
+    expect(list(container).getAttribute('role')).toBe('listbox');
+    expect(list(container).id).toBe('launcher-results');
+    const ids = rows(container).map((r) => r.id);
+    expect(ids).toEqual([
+      'launcher-results-opt-0',
+      'launcher-results-opt-1',
+      'launcher-results-opt-2',
+    ]);
+    for (const r of rows(container)) expect(r.getAttribute('role')).toBe('option');
+  });
+
+  test('reports the active option id as the roving selection moves', async () => {
+    const onactivedescendant = vi.fn();
+    const { container } = render(ResultListHarness, { props: { onactivedescendant } });
+    // Fired on mount with the default (first) selection.
+    expect(onactivedescendant).toHaveBeenLastCalledWith('launcher-results-opt-0');
+    await fireEvent.keyDown(list(container), { key: 'ArrowDown' });
+    expect(onactivedescendant).toHaveBeenLastCalledWith('launcher-results-opt-1');
+  });
+
+  test('reports null active descendant when there are no results', () => {
+    const onactivedescendant = vi.fn();
+    render(ResultListHarness, { props: { results: [], onactivedescendant } });
+    expect(onactivedescendant).toHaveBeenLastCalledWith(null);
+  });
 });
