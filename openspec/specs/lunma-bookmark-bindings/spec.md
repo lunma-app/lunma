@@ -284,81 +284,119 @@ Lunma SHALL provide an unpin action distinct from delete. Unpinning a saved tab 
 ### Requirement: A bound saved tab MAY be confined to a domain boundary
 
 A bound `SavedTab` MAY carry an optional `boundary` that SHALL confine the tab's
-**user-initiated, in-tab link navigations** to an **allow-set** of hosts while the
-tab is bound to a live Chrome tab. When the user activates an anchor that would
-navigate the bound tab (same tab) to a host **outside** the allow-set, Lunma SHALL
-leave the bound tab on its current page and SHALL instead open the off-allow URL in
-a **new temporary tab** in the tab's window.
+**user-initiated, in-tab link navigations** to an **allow-set** of **URL globs**
+while the tab is bound to a live Chrome tab. When the user activates an anchor
+that would navigate the bound tab (same tab) to a URL **not matched** by the
+allow-set, Lunma SHALL leave the bound tab on its current page and SHALL instead
+open the off-allow URL in a **new temporary tab** in the tab's window.
+
+Each allow-set entry SHALL be matched against the target's **full `http(s)`
+href** (scheme + host + `pathname` + `search`; fragment ignored), not against the
+hostname alone, by the pure matcher `isNavigationAllowed(targetURL, allow)`. An
+entry SHALL be interpreted as one of:
+
+- a **bare host** (no path component — e.g. `gitlab.com`, `*.google.com`),
+  treated as the whole-host glob `*://<host>/*`. The host segment SHALL match by
+  the existing host-glob rule (an exact host, or a leading-wildcard `*.example.com`
+  matching the apex and any subdomain). This preserves the prior host-level
+  behaviour for every existing entry.
+- a **URL pattern** with a path (e.g.
+  `https://gitlab.com/dashboard/merge_requests*`), split into an optional scheme
+  (`*` ⇒ `http`|`https`), a host glob, and a **`*`-glob path**. The host glob MAY
+  carry a `:port` (a page glob derives from `origin`, which includes a non-default
+  port such as `http://localhost:5173`): an explicit port SHALL be matched
+  **exactly** against the target's port, while a **port-less** host SHALL stay
+  **port-agnostic** (and still honour the `*.` host wildcard). A trailing `*`
+  makes the entry a **path-prefix** (its sub-paths and query strings stay
+  in-tab); a path with no `*` is an **exact URL**. `*` SHALL match any run of
+  characters (including `/`); there SHALL be no regex and no single-character
+  wildcard. An unparseable or non-`http(s)` entry SHALL simply never match (it
+  SHALL NOT throw), so a malformed pattern cannot brick a tab.
 
 The boundary SHALL be enforced **clicks-only and redirect-blind**: Lunma SHALL NOT
 intercept server redirects, client (JS) redirects, or programmatic
-`location`-style navigations. A navigation the click interceptor does not catch
-(a programmatic off-domain navigation, a redirect chain, or a click on a page the
-interceptor cannot run on) SHALL fall through to the existing drift behaviour
+`location`-style navigations (including SPA route changes). A navigation the click
+interceptor does not catch SHALL fall through to the existing drift behaviour
 (`currentURL ≠ originalURL` with the "Go home" / "Make this home" affordances) and
 SHALL NOT produce a broken state.
 
-The effective allow-set SHALL be resolved as: `locked` → the boundary's `allow`
-list; `off` → no enforcement; **absent** (`undefined`) → a per-record **effective
-default**. A **global favorite** (`spaceId === null`) SHALL default to `'domain'`
-(the registrable domain of `originalURL`) **regardless** of the global
-`pinnedTabBoundaryDefault` setting — favorites are **locked to their own site by
-default**, so a favorite stays anchored to its site without any per-record
-configuration. A Space-**pinned** tab (`spaceId !== null`) with an absent boundary
-SHALL inherit the global `pinnedTabBoundaryDefault` setting (`'domain'` → the
-registrable domain of `originalURL`; `'off'` → no enforcement). An explicit
+The effective allow-set SHALL be resolved (`resolveBoundaryAllow`) as: `locked` →
+the boundary's `allow` list; `off` → no enforcement; **absent** (`undefined`) → a
+per-record **effective default** (`effectiveBoundaryDefault`) over the ordered
+scope ladder `off < domain < page`:
+
+- A Space-**pinned** tab (`spaceId !== null`) with an absent boundary SHALL
+  inherit the global `pinnedTabBoundaryDefault` setting directly (`'off'` → no
+  enforcement; `'domain'` → `[registrableDomain(originalURL)]`, a bare host;
+  `'page'` → `[pageGlob(originalURL)]`).
+- A **global favorite** (`spaceId === null`) with an absent boundary SHALL default
+  to `max(pinnedTabBoundaryDefault, 'domain')` — **never weaker than
+  domain-locked** (favorites stay anchored to their own site without per-record
+  configuration), but a global default of `'page'` SHALL make a favorite
+  **page-lock by default** too.
+
+`pageGlob(url)` SHALL return `origin + pathname + '*'` of an `http(s)` URL (e.g.
+`https://gitlab.com/dashboard/merge_requests*`), or `null` for a non-`http(s)` or
+unparseable URL (collapsing to no enforcement, mirroring `registrableDomain`). The
+registrable domain is computed by a heuristic (not a bundled Public Suffix List);
+the glob list is the user's escape hatch when a default is wrong. An explicit
 per-record `{ mode: 'off' }` is NOT absent and still wins, so a user MAY unlock a
-specific favorite via the boundary editor (the favorite menu's "Lock to its site…"
-drill-in). Allow entries are **host globs** — an exact host, or a leading-wildcard
-host (`*.example.com`) matching the apex and any subdomain. The registrable domain
-is computed by a heuristic (not a bundled Public Suffix List); the glob list is the
-user's escape hatch when the heuristic is wrong.
+specific favorite via the boundary editor.
 
 Enforcement applies only to a **same-tab**, **unmodified**, **`http(s)`** anchor
 activation. Modified clicks (Cmd/Ctrl/Shift/middle), `target="_blank"` links, and
-non-`http(s)` schemes SHALL be left to Chrome. A boundary on a **dormant** (unbound)
-saved tab SHALL have no live effect until the tab is next opened/bound. The bound
-tab SHALL NOT be navigated by enforcement (the click is prevented before it
-starts), so no flash or snap-back occurs.
+non-`http(s)` schemes SHALL be left to Chrome. A boundary on a **dormant**
+(unbound) saved tab SHALL have no live effect until the tab is next opened/bound.
+The bound tab SHALL NOT be navigated by enforcement (the click is prevented before
+it starts), so no flash or snap-back occurs.
 
 #### Scenario: Off-allow link click diverts to a new temporary tab
 
-- **WHEN** the user clicks a same-tab `http(s)` link in a bound tab whose boundary is enforced and whose target host is not in the allow-set
+- **WHEN** the user clicks a same-tab `http(s)` link in a bound tab whose boundary is enforced and whose target URL is not matched by the allow-set
 - **THEN** the bound tab SHALL remain on its current page
 - **AND** Lunma SHALL open the target URL in a new temporary tab in that window
 
-#### Scenario: In-allow link navigates normally
+#### Scenario: A same-host link off the locked path diverts
 
-- **WHEN** the user clicks a link whose target host is in the allow-set
-- **THEN** the bound tab SHALL navigate normally and no new tab SHALL be opened
+- **GIVEN** a bound tab whose allow-set is `['https://gitlab.com/dashboard/merge_requests*']`
+- **WHEN** the user clicks a same-tab link to `https://gitlab.com/acme/web/-/merge_requests/42` (same host, different path)
+- **THEN** the bound tab SHALL remain on `…/dashboard/merge_requests`
+- **AND** Lunma SHALL open the merge-request URL in a new temporary tab
+
+#### Scenario: A sub-path or filter of the locked view stays in-tab
+
+- **GIVEN** a bound tab whose allow-set is `['https://gitlab.com/dashboard/merge_requests*']`
+- **WHEN** the user clicks a same-tab link to `https://gitlab.com/dashboard/merge_requests?state=opened`
+- **THEN** the bound tab SHALL navigate normally (the trailing `*` matches the query) and no new tab SHALL be opened
+
+#### Scenario: A bare-host entry still allows anywhere on that host
+
+- **GIVEN** a bound tab whose allow-set is `['gitlab.com']` (a bare host)
+- **WHEN** the user clicks a same-tab link to `https://gitlab.com/acme/web/-/merge_requests/42`
+- **THEN** the bound tab SHALL navigate normally (bare host ≡ `*://gitlab.com/*`) and no new tab SHALL be opened
 
 #### Scenario: OAuth/redirect chains are not intercepted
 
-- **WHEN** the bound tab is navigated off its allowed domains by a server or client redirect (e.g. an SSO sign-in flow)
+- **WHEN** the bound tab is navigated off its allowed URLs by a server or client redirect (e.g. an SSO sign-in flow)
 - **THEN** Lunma SHALL NOT divert the navigation
 - **AND** the navigation SHALL proceed, with drift handled by the existing "Go home" indicator if it lands off-home
 
-#### Scenario: A pinned tab inherits the global default
+#### Scenario: A pinned tab inherits the global default at page scope
 
-- **WHEN** a Space-pinned saved tab (`spaceId !== null`) has no explicit `boundary` and the global `pinnedTabBoundaryDefault` is `'domain'`
-- **THEN** the effective allow-set SHALL be the registrable domain of the tab's `originalURL`
-- **AND** when the global default is `'off'`, the tab SHALL have no boundary enforcement
+- **WHEN** a Space-pinned saved tab (`spaceId !== null`) has no explicit `boundary` and the global `pinnedTabBoundaryDefault` is `'page'`
+- **THEN** the effective allow-set SHALL be `[pageGlob(originalURL)]` (the tab's origin + path + `*`)
+- **AND** when the global default is `'domain'` the allow-set SHALL be `[registrableDomain(originalURL)]`, and when `'off'` the tab SHALL have no enforcement
 
-#### Scenario: A global favorite is locked to its site by default
+#### Scenario: A global favorite follows the global scope, floored at domain
 
-- **GIVEN** a global favorite (`spaceId === null`) with no explicit `boundary` (`undefined`)
-- **THEN** its effective allow-set SHALL be the registrable domain of its `originalURL`, regardless of the global `pinnedTabBoundaryDefault`
-- **AND** an off-domain in-tab link click SHALL divert to a new temporary tab
+- **GIVEN** a global favorite (`spaceId === null`) with no explicit `boundary`
+- **THEN** when `pinnedTabBoundaryDefault` is `'off'` or `'domain'` its effective allow-set SHALL be `[registrableDomain(originalURL)]` (floored at domain)
+- **AND** when `pinnedTabBoundaryDefault` is `'page'` its effective allow-set SHALL be `[pageGlob(originalURL)]`
 
 #### Scenario: A favorite can be explicitly unlocked
 
 - **GIVEN** a global favorite whose `boundary` is explicitly `{ mode: 'off' }`
 - **THEN** the favorite SHALL have no boundary enforcement (the explicit off overrides the favorites-locked default)
-
-#### Scenario: Modified and new-tab clicks are left to Chrome
-
-- **WHEN** the user Cmd/Ctrl/Shift/middle-clicks an off-allow link, or the link has `target="_blank"`
-- **THEN** Lunma SHALL NOT intercept it (Chrome opens it in a new tab, which is the desired outcome)
 
 ### Requirement: Saved tabs may be global favorites
 

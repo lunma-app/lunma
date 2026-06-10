@@ -12,22 +12,22 @@ import { injectBoundary } from './boundary-injection';
 
 export class BoundaryController {
   /**
-   * The live global `pinnedTabBoundaryDefault` (pinned-tab-domain-boundary). An
+   * The live global `pinnedTabBoundaryDefault` (pinned-tab-url-boundary). An
    * inheriting saved tab (no explicit `boundary`) resolves its allow-set against
    * this. Seeded from settings at SW boot and updated by the SW's settings
    * watcher via {@link setBoundaryDefault}; defaults to `'off'` until seeded.
    */
-  private boundaryDefault: 'off' | 'domain' = 'off';
+  private boundaryDefault: 'off' | 'domain' | 'page' = 'off';
 
   constructor(private readonly store: LunmaStore) {}
 
   /**
-   * Update the cached global `pinnedTabBoundaryDefault` (pinned-tab-domain-
+   * Update the cached global `pinnedTabBoundaryDefault` (pinned-tab-url-
    * boundary). The SW seeds this from `readSettings()` at boot and calls it again
    * from its settings watcher when the user flips the default. Does not itself
    * re-push config — the caller follows with {@link refreshBoundTabBoundaries}.
    */
-  setBoundaryDefault(value: 'off' | 'domain'): void {
+  setBoundaryDefault(value: 'off' | 'domain' | 'page'): void {
     this.boundaryDefault = value;
   }
 
@@ -59,15 +59,20 @@ export class BoundaryController {
   }
 
   /**
-   * Effective boundary default for a saved tab. Global FAVORITES (`spaceId === null`)
-   * are **locked to their site by default** (domain-level) — a favorite's `undefined`
-   * boundary resolves to `'domain'` regardless of the global `pinnedTabBoundaryDefault`
-   * (sidebar-favicon-row, user request). Space-PINNED tabs inherit the global default.
-   * An explicit per-tab `{ mode: 'off' }` still wins (it is not `undefined`), so a user
-   * can unlock a specific favorite via the boundary editor.
+   * Effective boundary default for a saved tab on the ordered scope ladder
+   * `off < domain < page` (pinned-tab-url-boundary). A Space-PINNED tab
+   * (`spaceId !== null`) inherits the global `pinnedTabBoundaryDefault` directly.
+   * A global FAVORITE (`spaceId === null`) is **never weaker than domain-locked** —
+   * it resolves to `max(boundaryDefault, 'domain')`, so it stays anchored to its
+   * own site with no per-record config (sidebar-favicon-row invariant), but a
+   * global default of `'page'` makes favorites page-lock by default too. An
+   * explicit per-tab `{ mode: 'off' }` still wins (it is not `undefined`), so a
+   * user can unlock a specific favorite via the boundary editor.
    */
-  effectiveBoundaryDefault(saved: SavedTab): 'off' | 'domain' {
-    return saved.spaceId === null ? 'domain' : this.boundaryDefault;
+  effectiveBoundaryDefault(saved: SavedTab): 'off' | 'domain' | 'page' {
+    if (saved.spaceId !== null) return this.boundaryDefault;
+    // Global favorite: floor at 'domain' on the off < domain < page ladder.
+    return this.boundaryDefault === 'page' ? 'page' : 'domain';
   }
 
   /**

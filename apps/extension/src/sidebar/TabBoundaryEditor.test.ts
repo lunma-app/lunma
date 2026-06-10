@@ -64,6 +64,13 @@ describe('TabBoundaryEditor', () => {
     expect(getByTestId('boundary-inherit-caption').textContent).toContain('locked');
   });
 
+  test('inherit mode reflects a page global default', () => {
+    const { getByTestId } = render(Harness, {
+      props: { boundary: undefined, globalDefault: 'page' },
+    });
+    expect(getByTestId('boundary-inherit-caption').textContent).toContain('page');
+  });
+
   test('the Settings link opens the options page from Default mode', async () => {
     const { getByTestId } = render(Harness, { props: { boundary: undefined } });
     await fireEvent.click(getByTestId('boundary-options-link'));
@@ -77,13 +84,25 @@ describe('TabBoundaryEditor', () => {
     expect(lastBoundary()).toEqual({ mode: 'off' });
   });
 
-  test('selecting Locked from inherit seeds the registrable domain', async () => {
+  test('selecting Locked from inherit seeds the current view (page glob)', async () => {
     const { container } = render(Harness, {
-      props: { boundary: undefined, originalURL: 'https://mail.google.com/' },
+      props: { boundary: undefined, originalURL: 'https://gitlab.com/dashboard/merge_requests' },
     });
     const locked = container.querySelector('input[value="locked"]') as HTMLInputElement;
     await fireEvent.click(locked);
-    expect(lastBoundary()).toEqual({ mode: 'locked', allow: ['google.com'] });
+    expect(lastBoundary()).toEqual({
+      mode: 'locked',
+      allow: ['https://gitlab.com/dashboard/merge_requests*'],
+    });
+  });
+
+  test('a non-http(s) home seeds an empty allow list when switching to Locked', async () => {
+    const { container } = render(Harness, {
+      props: { boundary: undefined, originalURL: 'chrome://newtab' },
+    });
+    const locked = container.querySelector('input[value="locked"]') as HTMLInputElement;
+    await fireEvent.click(locked);
+    expect(lastBoundary()).toEqual({ mode: 'locked', allow: [] });
   });
 
   test('selecting Inherit dispatches null (back to inherit)', async () => {
@@ -93,7 +112,7 @@ describe('TabBoundaryEditor', () => {
     expect(lastBoundary()).toBeNull();
   });
 
-  test('adding a host glob dispatches the updated allow list', async () => {
+  test('adding a bare host is still accepted (means the whole host)', async () => {
     const { container } = render(Harness, {
       props: { boundary: { mode: 'locked', allow: ['google.com'] } },
     });
@@ -105,6 +124,36 @@ describe('TabBoundaryEditor', () => {
     expect(add.disabled).toBe(false);
     await fireEvent.click(add);
     expect(lastBoundary()).toEqual({ mode: 'locked', allow: ['google.com', '*.example.com'] });
+  });
+
+  test('adding a URL pattern dispatches the updated allow list (path case preserved)', async () => {
+    const { container } = render(Harness, {
+      props: { boundary: { mode: 'locked', allow: [] } },
+    });
+    const input = container.querySelector(
+      '[data-testid="boundary-pattern-input"]',
+    ) as HTMLInputElement;
+    await fireEvent.input(input, { target: { value: 'https://example.com/Inbox*' } });
+    const add = container.querySelector('button.btn') as HTMLButtonElement;
+    expect(add.disabled).toBe(false);
+    await fireEvent.click(add);
+    // Host lower-cased, path case preserved (path matching is case-sensitive).
+    expect(lastBoundary()).toEqual({ mode: 'locked', allow: ['https://example.com/Inbox*'] });
+  });
+
+  test('an invalid entry tints the field and is not added', async () => {
+    const { container } = render(Harness, {
+      props: { boundary: { mode: 'locked', allow: [] } },
+    });
+    const input = container.querySelector(
+      '[data-testid="boundary-pattern-input"]',
+    ) as HTMLInputElement;
+    await fireEvent.input(input, { target: { value: 'has spaces' } });
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    const add = container.querySelector('button.btn') as HTMLButtonElement;
+    expect(add.disabled).toBe(true);
+    await fireEvent.click(add);
+    expect(boundaryPayloads()).toHaveLength(0);
   });
 
   test('removing a chip dispatches the allow list without it', async () => {

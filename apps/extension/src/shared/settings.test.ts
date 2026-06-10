@@ -267,6 +267,11 @@ describe('pinnedTabBoundaryDefault setting', () => {
     expect((await readSettings()).pinnedTabBoundaryDefault).toBe('domain');
   });
 
+  test("round-trips the 'page' value", async () => {
+    chromeMock.data['lunma.settings'] = { pinnedTabBoundaryDefault: 'page' };
+    expect((await readSettings()).pinnedTabBoundaryDefault).toBe('page');
+  });
+
   test('an unknown stored value falls back to off', async () => {
     chromeMock.data['lunma.settings'] = { pinnedTabBoundaryDefault: 'bogus' };
     expect((await readSettings()).pinnedTabBoundaryDefault).toBe('off');

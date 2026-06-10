@@ -367,7 +367,7 @@ export class Coordinator {
    * boundary). Delegates to {@link BoundaryController}; preserved on this class so
    * the SW's settings watcher (`index.ts`) keeps calling the same method.
    */
-  setBoundaryDefault(value: 'off' | 'domain'): void {
+  setBoundaryDefault(value: 'off' | 'domain' | 'page'): void {
     this.boundary.setBoundaryDefault(value);
   }
 

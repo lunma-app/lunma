@@ -179,32 +179,44 @@ changes via `watchSettings`.
 
 ### Requirement: Global default for keeping pinned tabs on their site
 
-Settings SHALL declare `pinnedTabBoundaryDefault: 'off' | 'domain'` (default
-`'off'`) as an enum setting in a `Pinned tabs` group, rendered by the existing
-declarative settings engine and persisted to `chrome.storage.sync`. The setting
-SHALL be the **baseline** that an individual pinned tab's `boundary` overrides:
+Settings SHALL declare `pinnedTabBoundaryDefault: 'off' | 'domain' | 'page'`
+(default `'off'`) as an enum setting in a `Pinned tabs` group, rendered by the
+existing declarative settings engine and persisted to `chrome.storage.sync`. The
+setting SHALL be the **baseline** that an individual pinned tab's `boundary`
+overrides:
 
 - `'off'` (default) — a pinned tab with no explicit `boundary` is **not** confined
   (today's free-drift behaviour).
 - `'domain'` — a pinned tab with no explicit `boundary` is confined to the
-  registrable domain of its `originalURL`.
+  registrable domain of its `originalURL` (a whole-host lock).
+- `'page'` — a pinned tab with no explicit `boundary` is confined to its current
+  **view**, the URL glob `pageGlob(originalURL)` = `origin + pathname + '*'`, so
+  links off that page (including same-host links) open in a new temporary tab.
 
-A per-tab `boundary` of `{ mode: 'off' }` or `{ mode: 'locked' }` SHALL override the
-global default for that tab. Changing the setting SHALL re-resolve the effective
-allow-set for every currently bound, **inheriting** tab (via the SW's settings
-watcher) without requiring a re-pin. The setting SHALL NOT alter tabs whose
-`boundary` is explicitly set.
+The rendered control SHALL present three options with legible labels (e.g.
+**Off** · **Lock to domain** · **Lock to this page**) and one-line descriptions.
+A per-tab `boundary` of `{ mode: 'off' }` or `{ mode: 'locked' }` SHALL override
+the global default for that tab. Changing the setting SHALL re-resolve the
+effective allow-set for every currently bound, **inheriting** tab (via the SW's
+settings watcher) without requiring a re-pin. The setting SHALL NOT alter tabs
+whose `boundary` is explicitly set.
 
 #### Scenario: Default keeps current behaviour
 
 - **WHEN** `pinnedTabBoundaryDefault` is `'off'` (the default) and a pinned tab has no explicit boundary
 - **THEN** the tab SHALL navigate freely (no enforcement), exactly as before this change
 
-#### Scenario: Flipping the default locks inheriting pins live
+#### Scenario: Flipping the default to domain locks inheriting pins live
 
 - **WHEN** the user changes `pinnedTabBoundaryDefault` to `'domain'`
 - **THEN** every bound pinned tab with no explicit boundary SHALL become confined to its registrable domain without re-pinning
 - **AND** a pinned tab whose boundary is explicitly `{ mode: 'off' }` SHALL remain free
+
+#### Scenario: Flipping the default to page locks inheriting tabs to their view
+
+- **WHEN** the user changes `pinnedTabBoundaryDefault` to `'page'`
+- **THEN** every bound inheriting pinned tab SHALL become confined to `pageGlob(originalURL)` (origin + path + `*`) without re-pinning
+- **AND** every inheriting global favorite SHALL likewise resolve to `'page'` scope (the favorite floor is domain, which `'page'` exceeds)
 
 #### Scenario: An unknown stored value falls back to the default
 

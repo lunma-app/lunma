@@ -18,11 +18,13 @@ const SETTINGS_KEY = 'lunma.settings';
 
 export type DensityMode = 'compact' | 'normal' | 'comfort';
 export type Tint = 'subtle' | 'standard' | 'vivid';
-/** Global baseline for keeping pinned tabs on their site (pinned-tab-domain-
+/** Global baseline for keeping pinned tabs on their site (pinned-tab-url-
  * boundary). `'off'` = pins drift freely (today's behaviour); `'domain'` = a pin
- * with no explicit boundary is confined to its registrable domain. A per-tab
- * `boundary` overrides this either way. */
-export type PinnedTabBoundaryDefault = 'off' | 'domain';
+ * with no explicit boundary is confined to its registrable domain (a whole-host
+ * lock); `'page'` = it is confined to its current view, the URL glob
+ * `pageGlob(originalURL)` (`origin + pathname + '*'`), so even same-host links off
+ * that page open in a new tab. A per-tab `boundary` overrides this either way. */
+export type PinnedTabBoundaryDefault = 'off' | 'domain' | 'page';
 /** The launcher's default web-search engine: a built-in engine id (from
  * `search-engines.ts`) or `'custom'` (use `customSearchUrl`). */
 export type DefaultSearchEngine = BuiltInEngineId | 'custom';
@@ -189,11 +191,12 @@ export const SETTINGS: readonly SettingDeclaration[] = [
     type: 'enum',
     default: 'off',
     label: 'Lock pinned tabs to their site',
-    description: 'New pins stay on their own domain; off-site links open in a new tab',
+    description: 'Keep new pins on their own site or page; off-bounds links open in a new tab',
     group: 'Pinned tabs',
     options: [
       { value: 'off', label: 'Off' },
       { value: 'domain', label: 'Lock to domain' },
+      { value: 'page', label: 'Lock to this page' },
     ],
   },
   // Auto-archive (auto-archive): the master switch + the global idle threshold.

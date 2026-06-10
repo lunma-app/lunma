@@ -483,11 +483,15 @@ The `SidebarCommand` union SHALL gain
 `setTabBoundary { savedTabId: SavedTabId; boundary: TabBoundary | null }`. A `null`
 payload SHALL clear the tab back to **inherit** (remove the `boundary` field); a
 `{ mode: 'off' }` or `{ mode: 'locked'; allow }` payload SHALL set it explicitly.
-The coordinator handler SHALL apply the change through a synchronous store mutator
-`store.setTabBoundary(savedTabId, boundary)` (thin-store rule: plain data, no
-`chrome.*`), then — if the saved tab is currently bound — re-resolve the effective
-allow-set and push the updated configuration to that tab's content script. The
-payload SHALL carry plain data only (no functions, Chrome objects, or Promises).
+The `locked` `allow` list SHALL remain a `string[]` on the wire (shape unchanged);
+its entries are **URL globs** (a bare host meaning the whole host, or a URL pattern
+with a path), resolved and matched by the boundary subsystem — the bus carries them
+as opaque strings. The coordinator handler SHALL apply the change through a
+synchronous store mutator `store.setTabBoundary(savedTabId, boundary)` (thin-store
+rule: plain data, no `chrome.*`), then — if the saved tab is currently bound —
+re-resolve the effective allow-set and push the updated configuration to that tab's
+content script. The payload SHALL carry plain data only (no functions, Chrome
+objects, or Promises).
 
 Per the throw-on-cannot-fulfill rule, if `savedTabId` names no saved tab the
 handler SHALL throw, and the error SHALL reach the sidebar caller's `.catch`.
@@ -497,6 +501,12 @@ handler SHALL throw, and the error SHALL reach the sidebar caller's `.catch`.
 - **WHEN** `setTabBoundary { savedTabId, boundary: { mode: 'locked', allow: ['*.example.com'] } }` is dispatched for a bound saved tab
 - **THEN** the store SHALL record the boundary
 - **AND** the coordinator SHALL push the resolved allow-set to that tab's content script so enforcement takes effect without re-opening the tab
+
+#### Scenario: A URL-pattern allow-set is carried and pushed unchanged
+
+- **WHEN** `setTabBoundary { savedTabId, boundary: { mode: 'locked', allow: ['https://gitlab.com/dashboard/merge_requests*'] } }` is dispatched for a bound saved tab
+- **THEN** the store SHALL record the URL-pattern allow-set verbatim
+- **AND** the coordinator SHALL push that allow-set to the tab's content script (the bus does not reject or rewrite path-bearing entries)
 
 #### Scenario: Clearing a boundary returns the tab to inherit
 

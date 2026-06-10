@@ -275,6 +275,31 @@ describe('openSavedTab boundary configuration', () => {
     });
   });
 
+  test("a global FAVORITE follows the global 'page' default to its page glob", async () => {
+    const chromeStub = installChrome();
+    const { coordinator, store } = makeCoordinator();
+    coordinator.setBoundaryDefault('page');
+    // A favorite: spaceId null, NO explicit boundary.
+    store.state.savedTabs['fav-3'] = {
+      id: 'fav-3',
+      spaceId: null,
+      title: 'fav-3',
+      originalURL: 'https://gitlab.com/dashboard/merge_requests',
+      currentURL: null,
+    };
+
+    coordinator.enqueue(
+      sidebar({ kind: 'openSavedTab', payload: { savedTabId: 'fav-3', windowId: 100 } }, 'sess:1'),
+    );
+    await coordinator.idle();
+
+    // The favorite floors at domain, but a global 'page' default exceeds it → page glob.
+    expect(chromeStub.tabs.sendMessage).toHaveBeenCalledWith(999, {
+      type: 'lunma/boundary-config',
+      allow: ['https://gitlab.com/dashboard/merge_requests*'],
+    });
+  });
+
   // Regression (dormant-pin selection latency): boundary injection awaits
   // chrome.scripting.executeScript against the still-loading tab, which can block
   // for seconds. That MUST NOT gate the broadcast that shows the opened pin as
@@ -394,6 +419,26 @@ describe('global default flip (refreshBoundTabBoundaries)', () => {
     expect(chromeStub.tabs.sendMessage).toHaveBeenCalledWith(200, {
       type: 'lunma/boundary-config',
       allow: null,
+    });
+  });
+
+  test("'page' arms an inheriting bound tab with its page glob", async () => {
+    const chromeStub = installChrome();
+    const { coordinator, store } = makeCoordinator();
+    // Inheriting (no explicit boundary) Space-pinned tab bound to tab 100.
+    store.state.savedTabs.inherit = saved('inherit', 'https://gitlab.com/dashboard/merge_requests');
+    store.state.tabBindings.inherit = { 100: 100 };
+
+    coordinator.setBoundaryDefault('page');
+    await coordinator.refreshBoundTabBoundaries();
+
+    expect(chromeStub.scripting.executeScript).toHaveBeenCalledWith({
+      target: { tabId: 100 },
+      files: BOUNDARY_FILES,
+    });
+    expect(chromeStub.tabs.sendMessage).toHaveBeenCalledWith(100, {
+      type: 'lunma/boundary-config',
+      allow: ['https://gitlab.com/dashboard/merge_requests*'],
     });
   });
 });

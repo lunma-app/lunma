@@ -2,8 +2,10 @@ import { describe, expect, test } from 'vitest';
 import {
   hostGlobMatches,
   isNavigationAllowed,
+  pageGlob,
   registrableDomain,
   resolveBoundaryAllow,
+  urlGlobMatches,
 } from './url-boundary';
 
 describe('registrableDomain', () => {
@@ -68,6 +70,95 @@ describe('hostGlobMatches', () => {
   });
 });
 
+describe('pageGlob', () => {
+  test('returns origin + pathname + a trailing *', () => {
+    expect(pageGlob('https://gitlab.com/dashboard/merge_requests')).toBe(
+      'https://gitlab.com/dashboard/merge_requests*',
+    );
+  });
+
+  test('drops the query and fragment (path only)', () => {
+    expect(pageGlob('https://gitlab.com/dashboard/merge_requests?state=opened#x')).toBe(
+      'https://gitlab.com/dashboard/merge_requests*',
+    );
+  });
+
+  test('a bare origin yields `<origin>/*`', () => {
+    expect(pageGlob('https://example.com')).toBe('https://example.com/*');
+  });
+
+  test('returns null for a non-http(s) scheme or an unparseable URL', () => {
+    expect(pageGlob('chrome://newtab')).toBeNull();
+    expect(pageGlob('mailto:a@b.com')).toBeNull();
+    expect(pageGlob('not a url')).toBeNull();
+  });
+});
+
+describe('urlGlobMatches', () => {
+  test('a bare host matches anywhere on that host (≡ whole host)', () => {
+    expect(urlGlobMatches('https://gitlab.com/acme/web/-/merge_requests/42', 'gitlab.com')).toBe(
+      true,
+    );
+    expect(urlGlobMatches('https://mail.google.com/u/0', '*.google.com')).toBe(true);
+    expect(urlGlobMatches('https://example.com/', 'gitlab.com')).toBe(false);
+  });
+
+  test('a trailing-* path pattern is a prefix that keeps sub-paths and query', () => {
+    const pat = 'https://gitlab.com/dashboard/merge_requests*';
+    expect(urlGlobMatches('https://gitlab.com/dashboard/merge_requests', pat)).toBe(true);
+    expect(urlGlobMatches('https://gitlab.com/dashboard/merge_requests?state=opened', pat)).toBe(
+      true,
+    );
+    expect(urlGlobMatches('https://gitlab.com/dashboard/merge_requests/extra', pat)).toBe(true);
+  });
+
+  test('an exact URL pattern (no *) matches only that exact path', () => {
+    const pat = 'https://gitlab.com/dashboard/merge_requests';
+    expect(urlGlobMatches('https://gitlab.com/dashboard/merge_requests', pat)).toBe(true);
+    expect(urlGlobMatches('https://gitlab.com/dashboard/merge_requests?state=opened', pat)).toBe(
+      false,
+    );
+    expect(urlGlobMatches('https://gitlab.com/dashboard/merge_requests/42', pat)).toBe(false);
+  });
+
+  test('a same-host link off the locked path diverts (GitLab case)', () => {
+    const pat = 'https://gitlab.com/dashboard/merge_requests*';
+    expect(urlGlobMatches('https://gitlab.com/acme/web/-/merge_requests/42', pat)).toBe(false);
+  });
+
+  test('scheme defaults to either http(s); an explicit scheme is enforced', () => {
+    expect(urlGlobMatches('http://example.com/a', 'example.com/a')).toBe(true);
+    expect(urlGlobMatches('https://example.com/a', '*://example.com/a')).toBe(true);
+    expect(urlGlobMatches('http://example.com/a', 'https://example.com/a')).toBe(false);
+    expect(urlGlobMatches('https://example.com/a', 'https://example.com/a')).toBe(true);
+  });
+
+  test('a page glob with a non-default port matches that origin (port honoured)', () => {
+    // A page lock derived from `origin` carries the port (`pageGlob` → `*` path).
+    const pat = 'http://localhost:5173/*';
+    expect(urlGlobMatches('http://localhost:5173/', pat)).toBe(true);
+    expect(urlGlobMatches('http://localhost:5173/inner', pat)).toBe(true);
+    // A different port on the same host is a different origin → no match.
+    expect(urlGlobMatches('http://localhost:8080/inner', pat)).toBe(false);
+    // A different host (same machine) never matches.
+    expect(urlGlobMatches('http://127.0.0.1:5173/inner', pat)).toBe(false);
+  });
+
+  test('a port-less host pattern stays port-agnostic', () => {
+    expect(urlGlobMatches('https://example.com:8443/a', 'example.com/a')).toBe(true);
+    expect(urlGlobMatches('https://example.com:8443/a', 'https://example.com/a')).toBe(true);
+  });
+
+  test('a malformed pattern or non-http(s) target never matches and never throws', () => {
+    expect(() => urlGlobMatches('https://example.com/a', '')).not.toThrow();
+    expect(urlGlobMatches('https://example.com/a', '')).toBe(false);
+    expect(urlGlobMatches('https://example.com/a', '   ')).toBe(false);
+    expect(urlGlobMatches('https://example.com/a', 'https://')).toBe(false);
+    expect(urlGlobMatches('mailto:a@example.com', 'example.com')).toBe(false);
+    expect(urlGlobMatches('not a url', 'example.com')).toBe(false);
+  });
+});
+
 describe('isNavigationAllowed', () => {
   const allow = ['*.google.com', 'linear.app'];
 
@@ -80,6 +171,16 @@ describe('isNavigationAllowed', () => {
   test('rejects an off-allow host', () => {
     expect(isNavigationAllowed('https://example.com/', allow)).toBe(false);
     expect(isNavigationAllowed('https://notgoogle.com/', allow)).toBe(false);
+  });
+
+  test('matches against the full href, not just the host', () => {
+    const pathAllow = ['https://gitlab.com/dashboard/merge_requests*'];
+    expect(isNavigationAllowed('https://gitlab.com/dashboard/merge_requests', pathAllow)).toBe(
+      true,
+    );
+    expect(isNavigationAllowed('https://gitlab.com/acme/web/-/merge_requests/42', pathAllow)).toBe(
+      false,
+    );
   });
 
   test('rejects non-http(s) and malformed targets', () => {
@@ -104,6 +205,7 @@ describe('resolveBoundaryAllow', () => {
 
   test('off → null regardless of the global default', () => {
     expect(resolveBoundaryAllow({ mode: 'off' }, home, 'domain')).toBeNull();
+    expect(resolveBoundaryAllow({ mode: 'off' }, home, 'page')).toBeNull();
     expect(resolveBoundaryAllow({ mode: 'off' }, home, 'off')).toBeNull();
   });
 
@@ -111,11 +213,18 @@ describe('resolveBoundaryAllow', () => {
     expect(resolveBoundaryAllow(undefined, home, 'domain')).toEqual(['google.com']);
   });
 
+  test('inherit + page default → the page glob of originalURL', () => {
+    expect(resolveBoundaryAllow(undefined, home, 'page')).toEqual([
+      'https://mail.google.com/inbox*',
+    ]);
+  });
+
   test('inherit + off default → null', () => {
     expect(resolveBoundaryAllow(undefined, home, 'off')).toBeNull();
   });
 
-  test('inherit + domain default with an unparseable originalURL → null', () => {
+  test('inherit default with an unparseable originalURL → null', () => {
     expect(resolveBoundaryAllow(undefined, 'chrome://newtab', 'domain')).toBeNull();
+    expect(resolveBoundaryAllow(undefined, 'chrome://newtab', 'page')).toBeNull();
   });
 });

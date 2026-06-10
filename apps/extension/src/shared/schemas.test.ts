@@ -63,6 +63,14 @@ describe('saved-tab boundary', () => {
     expect(EnvelopeSchema.safeParse(env).success).toBe(true);
   });
 
+  test('accepts a locked boundary with URL-pattern globs', () => {
+    const env = envelopeWithSavedTab({
+      mode: 'locked',
+      allow: ['https://gitlab.com/dashboard/merge_requests*', 'gitlab.com'],
+    });
+    expect(EnvelopeSchema.safeParse(env).success).toBe(true);
+  });
+
   test('accepts an explicit off boundary', () => {
     expect(EnvelopeSchema.safeParse(envelopeWithSavedTab({ mode: 'off' })).success).toBe(true);
   });

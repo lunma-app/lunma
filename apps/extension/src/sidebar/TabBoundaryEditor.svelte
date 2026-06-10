@@ -3,7 +3,7 @@ import { bus } from '../shared/bus';
 import { log } from '../shared/logger';
 import type { PinnedTabBoundaryDefault } from '../shared/settings';
 import type { SavedTabId, TabBoundary } from '../shared/types';
-import { registrableDomain } from '../shared/url-boundary';
+import { pageGlob } from '../shared/url-boundary';
 import Button from '../ui/Button.svelte';
 import Chip from '../ui/Chip.svelte';
 import SegmentedControl from '../ui/SegmentedControl.svelte';
@@ -14,9 +14,9 @@ interface Props {
   savedTabId: SavedTabId;
   /** The tab's current boundary (undefined ⇒ inheriting the global default). */
   boundary: TabBoundary | undefined;
-  /** The tab's home URL — seeds the registrable domain when switching to Locked. */
+  /** The tab's home URL — seeds the page glob when switching to Locked. */
   originalURL: string;
-  /** The live global default, for the Inherit caption (pinned-tab-domain-boundary). */
+  /** The live global default, for the Inherit caption (pinned-tab-url-boundary). */
   globalDefault: PinnedTabBoundaryDefault;
 }
 
@@ -40,18 +40,47 @@ const OPTIONS = [
 const HOST_GLOB_RE =
   /^(\*\.)?[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$/;
 
+/** Lower-case only the host portion of a URL glob (host matching is
+ * case-insensitive; path matching is not), for validation + dedup — the design's
+ * `lower-cased-host` normalized form. */
+function normalizeUrlGlob(entry: string): string {
+  const e = entry.trim();
+  if (!e.includes('/')) return e.toLowerCase(); // bare host
+  const scheme = e.match(/^(\*|https?):\/\//)?.[0] ?? '';
+  const rest = e.slice(scheme.length);
+  const slash = rest.indexOf('/');
+  if (slash === -1) return e.toLowerCase();
+  return `${scheme.toLowerCase()}${rest.slice(0, slash).toLowerCase()}${rest.slice(slash)}`;
+}
+
+/** A URL glob is valid when it is either a bare host glob or a URL pattern
+ * (`(*://|https?://)?<host-glob>/<path-glob>`, the path may contain `*`). Kept
+ * permissive — enough to reject whitespace and obviously-malformed input; the
+ * matcher tolerates a bad entry by simply not matching, so no chip can brick a
+ * tab. Operates on the normalized (host-lower-cased) form. */
+function isValidUrlGlob(entry: string): boolean {
+  if (entry === '' || /\s/.test(entry)) return false;
+  if (!entry.includes('/')) return HOST_GLOB_RE.test(entry); // bare host
+  const rest = entry.replace(/^(\*|https?):\/\//, '');
+  const slash = rest.indexOf('/');
+  if (slash <= 0) return false; // a non-empty host must precede the path
+  return HOST_GLOB_RE.test(rest.slice(0, slash));
+}
+
 let draft = $state('');
-const trimmed = $derived(draft.trim().toLowerCase());
-const wellFormed = $derived(trimmed !== '' && HOST_GLOB_RE.test(trimmed));
-const isDuplicate = $derived(wellFormed && allow.includes(trimmed));
+const normalized = $derived(normalizeUrlGlob(draft));
+const wellFormed = $derived(isValidUrlGlob(normalized));
+const isDuplicate = $derived(wellFormed && allow.some((p) => normalizeUrlGlob(p) === normalized));
 const canAdd = $derived(wellFormed && !isDuplicate);
 // Tint the field invalid once the user has typed something that can't be added.
-const showInvalid = $derived(trimmed !== '' && !canAdd);
+const showInvalid = $derived(draft.trim() !== '' && !canAdd);
 
 const inheritCaption = $derived(
   globalDefault === 'domain'
     ? 'Following the global default — locked to its site.'
-    : 'Following the global default — off (this tab navigates freely).',
+    : globalDefault === 'page'
+      ? 'Following the global default — locked to this page.'
+      : 'Following the global default — off (this tab navigates freely).',
 );
 
 function send(next: TabBoundary | null): void {
@@ -66,18 +95,19 @@ function selectMode(next: string): void {
   } else if (next === 'off') {
     send({ mode: 'off' });
   } else if (next === 'locked') {
-    // Already locked → keep its list. Freshly locked → seed the registrable
-    // domain so the tab works with zero config (an empty list would divert
-    // everything). A non-http(s) home yields no domain → an empty list.
+    // Already locked → keep its list. Freshly locked → seed the current view's
+    // page glob (`origin + pathname + '*'`) so the tab works with zero config (an
+    // empty list would divert everything). A non-http(s) home yields no glob → an
+    // empty list.
     if (boundary?.mode === 'locked') return;
-    const domain = registrableDomain(originalURL);
-    send({ mode: 'locked', allow: domain ? [domain] : [] });
+    const glob = pageGlob(originalURL);
+    send({ mode: 'locked', allow: glob ? [glob] : [] });
   }
 }
 
 function addPattern(): void {
   if (!canAdd) return;
-  send({ mode: 'locked', allow: [...allow, trimmed] });
+  send({ mode: 'locked', allow: [...allow, normalized] });
   draft = '';
 }
 
@@ -114,8 +144,8 @@ function openOptions(): void {
   {:else if mode === 'off'}
     <p class="caption">This tab navigates freely.</p>
   {:else}
-    <p class="caption">Links to other sites open in a new tab.</p>
-    <span class="list-label">Sites this tab stays on</span>
+    <p class="caption">Links off this page open in a new tab.</p>
+    <span class="list-label">Pages this tab stays on</span>
     {#if allow.length > 0}
       <div class="chips" data-testid="boundary-allow-list">
         {#each allow as pattern (pattern)}
@@ -125,8 +155,8 @@ function openOptions(): void {
     {/if}
     <div class="add-row">
       <TextInput
-        ariaLabel="Add a site pattern"
-        placeholder="*.example.com"
+        ariaLabel="Add a URL pattern"
+        placeholder="https://example.com/inbox*"
         bind:value={draft}
         invalid={showInvalid}
         onenter={addPattern}

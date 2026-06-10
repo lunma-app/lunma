@@ -55,13 +55,14 @@ future capability will be shaped a certain way, write an ADR.
 | 0005 | [Drop bookmark backing](0005-drop-bookmark-backing.md) | Accepted | — |
 | 0006 | [Custom sidebar pointer-drag](0006-custom-sidebar-drag.md) | Accepted | 0003 |
 | 0007 | [Tab-group materialization of Spaces](0007-tab-group-materialization.md) | Accepted | — |
-| 0008 | [Pinned-tab domain boundary](0008-pinned-tab-domain-boundary.md) | Accepted | — |
+| 0008 | [Pinned-tab domain boundary](0008-pinned-tab-domain-boundary.md) | Accepted (D4 + D3 enum superseded by 0015) | — |
 | 0009 | [Per-window tab bindings](0009-per-window-tab-bindings.md) | Accepted | — |
 | 0010 | [Favicon row v1 shape](0010-favicon-row-v1-shape.md) | Accepted | 0009 |
 | 0011 | [Auto-archive restore + full loop](0011-auto-archive-restore-and-full-loop.md) | Accepted | 0002 (in part) |
 | 0012 | [pnpm workspace + the marketing site](0012-workspace-and-marketing-site.md) | Accepted | — |
 | 0013 | [English-only for v1; i18n deferred](0013-english-only-v1.md) | Accepted | — |
 | 0014 | [Restrict the lucide loader to a generated allowlist](0014-icon-loader-allowlist.md) | Accepted | 0004 (in part) |
+| 0015 | [Pinned-tab URL boundary](0015-pinned-tab-url-boundary.md) | Accepted | 0008 (D4 + D3 enum) |
 
 ## Format
 

@@ -175,10 +175,16 @@ affordance (`‹ Lock to its site`) above the editor, and the back affordance (o
 `panel`/`panelTitle` drill-in (the same drill-in the favicon menu uses). The
 editor SHALL present a tri-state mode control (**Default** · **Off** · **On** —
 the user-facing labels for the inherit/off/locked modes) and, when **On**, an
-editable list of host-glob patterns (each removable) with a field to add a new
-pattern. Selecting a mode or editing the list SHALL dispatch `setTabBoundary`
-over the bus (`null` for **Default**). The **Default** option SHALL surface the
-live global default (e.g. "Default: off — this tab navigates freely.") so
+editable list of **URL-glob patterns** (each removable) with a field to add a new
+pattern. A pattern MAY be a **bare host** (`gitlab.com`, `*.example.com` — the
+whole host) or a **URL pattern** with a path (`https://example.com/inbox*` — a
+path-prefix when it ends in `*`, an exact URL otherwise). Selecting a mode or
+editing the list SHALL dispatch `setTabBoundary` over the bus (`null` for
+**Default**). When the user switches the mode to **On** (locked) from Default or
+Off, the editor SHALL **seed** the allow-set with `pageGlob(originalURL)` (the
+tab's current view, `origin + pathname + '*'`) so the lock works with no typing; a
+non-`http(s)` home SHALL seed an empty list. The **Default** option SHALL surface
+the live global default (e.g. "Default: off — this tab navigates freely.") so
 inheritance is legible, not hidden.
 
 The "Lock to its site…" entry SHALL carry a **submenu affordance** — a trailing
@@ -186,19 +192,33 @@ chevron plus `aria-haspopup` — signalling that it drills into a sub-view rathe
 than firing an immediate action. (There is no separate per-row locked-state
 badge; the lock state is surfaced through the menu/editor.) The editor SHALL
 compose existing primitives (`SegmentedControl`, `TextInput`, `Button`, `Chip`);
-it SHALL NOT re-roll any primitive inline. The "Lock to its site…" entry SHALL be
-a data-driven `ContextMenu` action (a `MenuItem`), so the menu primitive stays
+it SHALL NOT re-roll any primitive inline. The add field SHALL validate input
+against a **URL-glob validator** (accepting a host glob OR a URL pattern), tinting
+the field invalid for whitespace or obviously-malformed input, and SHALL reject
+duplicates of an already-listed pattern. The "Lock to its site…" entry SHALL be a
+data-driven `ContextMenu` action (a `MenuItem`), so the menu primitive stays
 generic.
 
 #### Scenario: Opening the editor from the row menu
 
 - **WHEN** the user opens a pinned row's right-click menu and chooses "Lock to its site…"
-- **THEN** the menu SHALL drill into the boundary editor (replacing the actions, with a back affordance) showing the tab's current mode (Default / Off / On) and, when On, its host-glob list
+- **THEN** the menu SHALL drill into the boundary editor (replacing the actions, with a back affordance) showing the tab's current mode (Default / Off / On) and, when On, its URL-glob list
 
-#### Scenario: Adding a host glob dispatches setTabBoundary
+#### Scenario: Switching to On seeds the current view
+
+- **GIVEN** a pinned tab whose `originalURL` is `https://gitlab.com/dashboard/merge_requests`
+- **WHEN** the user switches the boundary mode to **On** from Default
+- **THEN** a `setTabBoundary` command SHALL be dispatched with `{ mode: 'locked', allow: ['https://gitlab.com/dashboard/merge_requests*'] }`
+
+#### Scenario: Adding a URL pattern dispatches setTabBoundary
+
+- **WHEN** the user is in On (locked) mode and adds the pattern `https://example.com/inbox*`
+- **THEN** a `setTabBoundary` command SHALL be dispatched with the updated `allow` list
+
+#### Scenario: Adding a bare host is still accepted
 
 - **WHEN** the user is in On (locked) mode and adds the pattern `*.example.com`
-- **THEN** a `setTabBoundary` command SHALL be dispatched with the updated `allow` list
+- **THEN** the validator SHALL accept it and a `setTabBoundary` command SHALL be dispatched with it appended (it means the whole host)
 
 #### Scenario: The lock entry advertises its submenu
 
@@ -208,5 +228,5 @@ generic.
 #### Scenario: Default shows the live default
 
 - **WHEN** the editor is open in Default mode
-- **THEN** the Default control SHALL reflect whether the global default is currently off or lock-to-domain
+- **THEN** the Default control SHALL reflect whether the global default is currently off, lock-to-domain, or lock-to-this-page
 

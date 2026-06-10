@@ -45,8 +45,11 @@ const TrashedSpaceSchema = z.strictObject({
   autoArchive: SpaceAutoArchiveSchema.optional(),
 });
 
-// Per-pinned-tab domain boundary (pinned-tab-domain-boundary). An ABSENT
-// `boundary` on a saved tab means "inherit the global default".
+// Per-pinned-tab URL boundary (pinned-tab-url-boundary). An ABSENT `boundary` on
+// a saved tab means "inherit the global default". The `locked` `allow` list is a
+// `z.array(z.string())` of **URL globs** (a bare host meaning the whole host, or
+// a URL pattern with a path); validation stays permissive — the matcher tolerates
+// a malformed entry by simply not matching, so a bad pattern cannot brick a tab.
 const TabBoundarySchema = z.discriminatedUnion('mode', [
   z.strictObject({ mode: z.literal('off') }),
   z.strictObject({ mode: z.literal('locked'), allow: z.array(z.string()) }),
