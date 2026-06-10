@@ -63,6 +63,28 @@ describe('Aurora', () => {
     expect(el.style.getPropertyValue('--aurora-opacity')).toBe('');
   });
 
+  test('pauses drift when the window is unfocused and resumes on focus', async () => {
+    const setFocus = (focused: boolean): void => {
+      Object.defineProperty(document, 'hasFocus', {
+        writable: true,
+        configurable: true,
+        value: () => focused,
+      });
+    };
+    setFocus(true);
+    const { container } = render(Aurora, { props: {} });
+    expect(aurora(container).getAttribute('data-drift')).toBe('on');
+
+    setFocus(false);
+    window.dispatchEvent(new Event('blur'));
+    await waitFor(() => expect(aurora(container).getAttribute('data-drift')).toBe('paused'));
+
+    setFocus(true);
+    window.dispatchEvent(new Event('focus'));
+    await waitFor(() => expect(aurora(container).getAttribute('data-drift')).toBe('on'));
+    setFocus(true);
+  });
+
   test('reflects the reduced-motion preference onto data-motion', async () => {
     setReducedMotion(true);
     const reduced = render(Aurora, { props: { intensity: 'vivid' } });

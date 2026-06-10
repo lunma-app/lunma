@@ -4,6 +4,39 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+catalogs:
+  default:
+    '@sveltejs/vite-plugin-svelte':
+      specifier: ^7.1.2
+      version: 7.1.2
+    '@types/culori':
+      specifier: ^4.0.1
+      version: 4.0.1
+    '@types/node':
+      specifier: ^24
+      version: 24.13.1
+    culori:
+      specifier: ^4.0.2
+      version: 4.0.2
+    jsdom:
+      specifier: ^29.1.1
+      version: 29.1.1
+    svelte:
+      specifier: ^5.55.9
+      version: 5.55.9
+    svelte-check:
+      specifier: ^4.4.8
+      version: 4.4.8
+    typescript:
+      specifier: ^6.0.3
+      version: 6.0.3
+    vite:
+      specifier: ^8.0.14
+      version: 8.0.14
+    vitest:
+      specifier: ^4.1.7
+      version: 4.1.7
+
 importers:
 
   .:
@@ -34,7 +67,7 @@ importers:
         specifier: ^1.60.0
         version: 1.60.0
       '@sveltejs/vite-plugin-svelte':
-        specifier: ^7.1.2
+        specifier: 'catalog:'
         version: 7.1.2(svelte@5.55.9)(vite@8.0.14(@types/node@24.13.1))
       '@testing-library/svelte':
         specifier: ^5.3.1
@@ -43,19 +76,19 @@ importers:
         specifier: ^0.1.42
         version: 0.1.42
       '@types/culori':
-        specifier: ^4.0.1
+        specifier: 'catalog:'
         version: 4.0.1
       '@types/node':
-        specifier: ^24
+        specifier: 'catalog:'
         version: 24.13.1
       '@vitest/coverage-v8':
         specifier: ^4.1.7
         version: 4.1.7(vitest@4.1.7)
       culori:
-        specifier: ^4.0.2
+        specifier: 'catalog:'
         version: 4.0.2
       jsdom:
-        specifier: ^29.1.1
+        specifier: 'catalog:'
         version: 29.1.1
       postcss-html:
         specifier: ^1.8.1
@@ -67,19 +100,19 @@ importers:
         specifier: ^1.11.1
         version: 1.11.1(stylelint@17.12.0(typescript@6.0.3))
       svelte:
-        specifier: ^5.55.9
+        specifier: 'catalog:'
         version: 5.55.9
       svelte-check:
-        specifier: ^4.4.8
+        specifier: 'catalog:'
         version: 4.4.8(picomatch@4.0.4)(svelte@5.55.9)(typescript@6.0.3)
       typescript:
-        specifier: ^6.0.3
+        specifier: 'catalog:'
         version: 6.0.3
       vite:
-        specifier: ^8.0.14
+        specifier: 'catalog:'
         version: 8.0.14(@types/node@24.13.1)
       vitest:
-        specifier: ^4.1.7
+        specifier: 'catalog:'
         version: 4.1.7(@types/node@24.13.1)(@vitest/coverage-v8@4.1.7)(jsdom@29.1.1)(vite@8.0.14(@types/node@24.13.1))
 
   apps/site:
@@ -95,34 +128,34 @@ importers:
         specifier: ^2.63.1
         version: 2.63.1(@sveltejs/vite-plugin-svelte@7.1.2(svelte@5.55.9)(vite@8.0.14(@types/node@24.13.1)))(svelte@5.55.9)(typescript@6.0.3)(vite@8.0.14(@types/node@24.13.1))
       '@sveltejs/vite-plugin-svelte':
-        specifier: ^7.1.2
+        specifier: 'catalog:'
         version: 7.1.2(svelte@5.55.9)(vite@8.0.14(@types/node@24.13.1))
       '@types/culori':
-        specifier: ^4.0.1
+        specifier: 'catalog:'
         version: 4.0.1
       '@types/node':
-        specifier: ^24
+        specifier: 'catalog:'
         version: 24.13.1
       culori:
-        specifier: ^4.0.2
+        specifier: 'catalog:'
         version: 4.0.2
       jsdom:
-        specifier: ^29.1.1
+        specifier: 'catalog:'
         version: 29.1.1
       svelte:
-        specifier: ^5.55.9
+        specifier: 'catalog:'
         version: 5.55.9
       svelte-check:
-        specifier: ^4.4.8
+        specifier: 'catalog:'
         version: 4.4.8(picomatch@4.0.4)(svelte@5.55.9)(typescript@6.0.3)
       typescript:
-        specifier: ^6.0.3
+        specifier: 'catalog:'
         version: 6.0.3
       vite:
-        specifier: ^8.0.14
+        specifier: 'catalog:'
         version: 8.0.14(@types/node@24.13.1)
       vitest:
-        specifier: ^4.1.7
+        specifier: 'catalog:'
         version: 4.1.7(@types/node@24.13.1)(@vitest/coverage-v8@4.1.7)(jsdom@29.1.1)(vite@8.0.14(@types/node@24.13.1))
 
   packages/tokens: {}

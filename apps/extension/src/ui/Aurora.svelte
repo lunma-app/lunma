@@ -46,6 +46,30 @@ onMount(() => {
   return () => mq.removeEventListener('change', onChange);
 });
 
+// Pause the three infinite drift animations whenever this surface isn't being
+// looked at — the document is hidden (Chromium throttles rAF but CSS keyframes
+// keep compositing) or the browser window is unfocused (the always-visible side
+// panel and visible-but-unfocused windows are the real cost; hidden tabs are
+// already cheap). `data-drift` gates `animation-play-state` in CSS and makes the
+// pause assertable. Idle-while-focused is intentionally left running — the user
+// is looking at it.
+let drifting = $state(true);
+onMount(() => {
+  if (typeof document === 'undefined' || typeof window === 'undefined') return;
+  const sync = (): void => {
+    drifting = document.visibilityState === 'visible' && document.hasFocus();
+  };
+  sync();
+  window.addEventListener('focus', sync);
+  window.addEventListener('blur', sync);
+  document.addEventListener('visibilitychange', sync);
+  return () => {
+    window.removeEventListener('focus', sync);
+    window.removeEventListener('blur', sync);
+    document.removeEventListener('visibilitychange', sync);
+  };
+});
+
 // Each blob's colour reads the scoped `--space-l` / `--space-chroma` / `--space-h`,
 // so the whole backdrop recolours with the active Space's TRUE colour (a small
 // `+0.04` lightness lift over `--space-l` keeps the blob a touch brighter than
@@ -63,6 +87,7 @@ function blob(alpha: number): string {
   data-testid="aurora"
   data-intensity={intensity ?? 'inherit'}
   data-motion={reduced ? 'reduced' : 'full'}
+  data-drift={drifting ? 'on' : 'paused'}
   style:--aurora-opacity={opacity !== undefined ? String(opacity) : null}
 >
   <span class="blob blob-1" style:--blob-c={blob(0.55)}></span>
@@ -145,5 +170,11 @@ function blob(alpha: number): string {
   }
   .aurora[data-motion='reduced'] .blob {
     animation: none;
+  }
+
+  /* Surface isn't being looked at (hidden tab or unfocused window): freeze the
+   * drift in place to stop needless compositing. Resumes from the same frame. */
+  .aurora[data-drift='paused'] .blob {
+    animation-play-state: paused;
   }
 </style>

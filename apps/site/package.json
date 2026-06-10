@@ -19,17 +19,17 @@
     "@lunma/tokens": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^24",
+    "@types/node": "catalog:",
     "@sveltejs/adapter-static": "^3.0.10",
     "@sveltejs/kit": "^2.63.1",
-    "@sveltejs/vite-plugin-svelte": "^7.1.2",
-    "@types/culori": "^4.0.1",
-    "culori": "^4.0.2",
-    "svelte": "^5.55.9",
-    "svelte-check": "^4.4.8",
-    "typescript": "^6.0.3",
-    "vite": "^8.0.14",
-    "vitest": "^4.1.7",
-    "jsdom": "^29.1.1"
+    "@sveltejs/vite-plugin-svelte": "catalog:",
+    "@types/culori": "catalog:",
+    "culori": "catalog:",
+    "svelte": "catalog:",
+    "svelte-check": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "jsdom": "catalog:"
   }
 }
