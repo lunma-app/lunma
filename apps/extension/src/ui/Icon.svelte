@@ -73,6 +73,14 @@ const { name, size = 16, color, label }: Props = $props();
 let Resolved: Component | null = $state(null);
 
 $effect(() => {
+  // Cache hit: swap synchronously, no null-then-set double render (which flashed
+  // an empty box) for the common case of a repeated/already-loaded icon. Effects
+  // flush before paint, so the cached component is in place for the first frame.
+  const cached = componentCache.get(name);
+  if (cached) {
+    Resolved = cached;
+    return;
+  }
   let cancelled = false;
   Resolved = null;
   resolveIcon(name).then((c) => {

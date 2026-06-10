@@ -9,6 +9,7 @@ import type {
   PinNode,
   SavedTab,
   SavedTabId,
+  SidebarLocalState,
   Space,
   SpaceAutoArchive,
   SpaceId,
@@ -909,9 +910,7 @@ export class LunmaStore {
    * polluting `AppState` with sidebar-only fields.
    */
   setPinnedExpanded(windowId: WindowId, expanded: boolean): void {
-    const augmented = this.state as unknown as {
-      pinnedExpandedByWindow?: { [windowId: WindowId]: boolean };
-    };
+    const augmented = this.state as unknown as SidebarLocalState;
     if (!augmented.pinnedExpandedByWindow) augmented.pinnedExpandedByWindow = {};
     augmented.pinnedExpandedByWindow[windowId] = expanded;
   }
@@ -924,9 +923,7 @@ export class LunmaStore {
    * folder can be open in one window and collapsed in another.
    */
   setFolderExpanded(windowId: WindowId, folderId: FolderId, expanded: boolean): void {
-    const augmented = this.state as unknown as {
-      expandedFoldersByWindow?: { [windowId: WindowId]: { [folderId: FolderId]: boolean } };
-    };
+    const augmented = this.state as unknown as SidebarLocalState;
     if (!augmented.expandedFoldersByWindow) augmented.expandedFoldersByWindow = {};
     if (!augmented.expandedFoldersByWindow[windowId]) {
       augmented.expandedFoldersByWindow[windowId] = {};
@@ -948,9 +945,7 @@ export class LunmaStore {
    * its own flag, and the broadcast carries only `AppState`).
    */
   setAutoRenameNextFolder(windowId: WindowId, armed: boolean): void {
-    const augmented = this.state as unknown as {
-      autoRenameNextFolderByWindow?: { [windowId: WindowId]: boolean };
-    };
+    const augmented = this.state as unknown as SidebarLocalState;
     if (!augmented.autoRenameNextFolderByWindow) augmented.autoRenameNextFolderByWindow = {};
     augmented.autoRenameNextFolderByWindow[windowId] = armed;
   }

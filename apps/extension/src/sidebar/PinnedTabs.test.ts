@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render } from '@testing-library/svelte';
 import { flushSync } from 'svelte';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { LunmaStore } from '../shared/store.svelte';
-import type { LiveTab, SavedTab } from '../shared/types';
+import type { LiveTab, SavedTab, SidebarLocalState } from '../shared/types';
 import { drag } from './drag.svelte';
 import PinnedTabsHarness from './PinnedTabs.test.harness.svelte';
 
@@ -727,10 +727,9 @@ describe('PinnedTabs folders', () => {
     store.setAutoRenameNextFolder(100, true);
     await Promise.resolve();
     // Arming alone (no folder yet) must NOT prematurely consume the flag.
-    expect(
-      (store.state as unknown as { autoRenameNextFolderByWindow?: Record<number, boolean> })
-        .autoRenameNextFolderByWindow?.[100],
-    ).toBe(true);
+    expect((store.state as unknown as SidebarLocalState).autoRenameNextFolderByWindow?.[100]).toBe(
+      true,
+    );
 
     // The SW broadcast mints the folder of the two.
     store.state.savedTabs['st-1'] = savedTab({ id: 'st-1', currentURL: null });
@@ -750,10 +749,9 @@ describe('PinnedTabs folders', () => {
     await Promise.resolve();
     expect(container.querySelector('[data-testid="folder-rename-input"]')).not.toBeNull();
     // The one-shot flag is consumed once the rename opens.
-    expect(
-      (store.state as unknown as { autoRenameNextFolderByWindow?: Record<number, boolean> })
-        .autoRenameNextFolderByWindow?.[100],
-    ).toBe(false);
+    expect((store.state as unknown as SidebarLocalState).autoRenameNextFolderByWindow?.[100]).toBe(
+      false,
+    );
   });
 
   test('an armed fold flag is ignored on a non-active slide (no rename, flag retained)', async () => {
@@ -779,10 +777,9 @@ describe('PinnedTabs folders', () => {
     await Promise.resolve();
     // Off-screen slide must not steal the rename, and must not consume the flag.
     expect(container.querySelector('[data-testid="folder-rename-input"]')).toBeNull();
-    expect(
-      (store.state as unknown as { autoRenameNextFolderByWindow?: Record<number, boolean> })
-        .autoRenameNextFolderByWindow?.[100],
-    ).toBe(true);
+    expect((store.state as unknown as SidebarLocalState).autoRenameNextFolderByWindow?.[100]).toBe(
+      true,
+    );
   });
 
   test('dragging a folder onto the temporary zone bounces (no dispatch)', async () => {

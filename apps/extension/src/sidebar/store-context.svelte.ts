@@ -1,34 +1,17 @@
 import { getContext, setContext } from 'svelte';
 import { LunmaStore } from '../shared/store.svelte';
-import type { AppState, WindowId } from '../shared/types';
+import type { AppState, SidebarLocalState } from '../shared/types';
 
 const STORE_CONTEXT_KEY = Symbol('lunma.store');
 
 /**
- * Sidebar projection state. Currently identical to AppState — no sidebar-only
- * fields land in this slice. Downstream slices (e.g. sidebar-pinned-tabs) may
- * augment the type with surface-local UI state.
+ * Sidebar projection state: the broadcast `AppState` plus the sidebar-local,
+ * per-window UI fields the store augments onto `state`. The augmented shape is
+ * owned by `SidebarLocalState` in `shared/types.ts` — the single source the
+ * store's sidebar-only mutators and the `PinnedTabs` readers also reference, so
+ * the shape can never drift across the cast sites.
  */
-export type SidebarState = AppState & {
-  pinnedExpandedByWindow?: { [windowId: WindowId]: boolean };
-  /**
-   * Per-window folder expand/collapse state (pinned-tab-folders, design D2).
-   * Ephemeral and sidebar-local — written by `LunmaStore.setFolderExpanded`,
-   * never persisted to `AppState`, so the same Space's folder can be open in
-   * one window and collapsed in another.
-   */
-  expandedFoldersByWindow?: {
-    [windowId: WindowId]: { [folderId: string]: boolean };
-  };
-  /**
-   * Per-window one-shot "open inline rename on the next new folder" flag
-   * (pin-temp-tab-into-folder). Written by `LunmaStore.setAutoRenameNextFolder`
-   * when two tabs fold into a new folder (a temp tab dropped onto a pinned tab,
-   * armed from `TempTabs`); consumed by the active `PinnedTabs`. Sidebar-local
-   * and ephemeral — never part of `AppState`, never persisted or broadcast.
-   */
-  autoRenameNextFolderByWindow?: { [windowId: WindowId]: boolean };
-};
+export type SidebarState = AppState & SidebarLocalState;
 
 /**
  * Construct a sidebar-side LunmaStore seeded with the SW's snapshot. The

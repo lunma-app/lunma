@@ -2,7 +2,7 @@ import { fireEvent, render } from '@testing-library/svelte';
 import { flushSync } from 'svelte';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { LunmaStore } from '../shared/store.svelte';
-import type { LiveTab } from '../shared/types';
+import type { LiveTab, SidebarLocalState } from '../shared/types';
 import { drag } from './drag.svelte';
 import TempTabsHarness from './TempTabs.test.harness.svelte';
 
@@ -50,8 +50,7 @@ afterEach(() => {
 
 /** Read the per-window auto-rename-next-folder arm flag (sidebar-local). */
 function armedFor(store: LunmaStore, windowId: number): boolean | undefined {
-  return (store.state as unknown as { autoRenameNextFolderByWindow?: Record<number, boolean> })
-    .autoRenameNextFolderByWindow?.[windowId];
+  return (store.state as unknown as SidebarLocalState).autoRenameNextFolderByWindow?.[windowId];
 }
 
 function liveTab(partial: Partial<LiveTab> & { tabId: number }): LiveTab {

@@ -10,6 +10,7 @@ import type {
   FolderId,
   PinNode,
   SavedTabId,
+  SidebarLocalState,
   SpaceColor,
   SpaceId,
   TabBoundary,
@@ -151,9 +152,7 @@ function projectTab(id: SavedTabId): TabView | null {
 /** Per-window, ephemeral folder expand state (design D2) — augmented onto the
  * store by `setFolderExpanded`, never part of `AppState`. Read reactively. */
 function isExpanded(folderId: FolderId): boolean {
-  const augmented = store.state as unknown as {
-    expandedFoldersByWindow?: { [w: WindowId]: { [f: FolderId]: boolean } };
-  };
+  const augmented = store.state as unknown as SidebarLocalState;
   return augmented.expandedFoldersByWindow?.[windowId]?.[folderId] ?? false;
 }
 
@@ -467,9 +466,7 @@ $effect(() => {
   // flag is gated on `active` so only the centre carousel slide reacts to and
   // consumes it (off-screen slides share the store but must never steal the
   // rename).
-  const augmented = store.state as unknown as {
-    autoRenameNextFolderByWindow?: { [w: WindowId]: boolean };
-  };
+  const augmented = store.state as unknown as SidebarLocalState;
   const armedFromFold = active && (augmented.autoRenameNextFolderByWindow?.[windowId] ?? false);
   if (pendingCreate || armedFromFold) {
     const fresh = [...ids].find((id) => !knownFolderIds.has(id));

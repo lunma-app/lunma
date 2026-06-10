@@ -242,3 +242,31 @@ export interface AppState {
    */
   liveTabsById: { [tabId: TabId]: LiveTab };
 }
+
+/**
+ * Sidebar-local, per-window UI state augmented onto the `LunmaStore`'s `state`
+ * by the sidebar (`createSidebarStore`) — NEVER part of `AppState`, never
+ * persisted, never broadcast. The single source of truth for the shape of these
+ * ephemeral fields: the store's sidebar-only mutators (`setPinnedExpanded`,
+ * `setFolderExpanded`, `setAutoRenameNextFolder`), the `SidebarState` projection
+ * (`sidebar/store-context.svelte.ts`), and the `PinnedTabs` readers all reference
+ * THIS interface rather than re-declaring the shape inline. Each field is
+ * optional because it is lazily created on first write.
+ */
+export interface SidebarLocalState {
+  /** Per-window pinned-section expand/collapse (sidebar-pinned-tabs). */
+  pinnedExpandedByWindow?: { [windowId: WindowId]: boolean };
+  /**
+   * Per-window folder expand/collapse (pinned-tab-folders, design D2). The same
+   * Space's folder can be open in one window and collapsed in another.
+   */
+  expandedFoldersByWindow?: {
+    [windowId: WindowId]: { [folderId: FolderId]: boolean };
+  };
+  /**
+   * Per-window one-shot "open inline rename on the next new folder" flag
+   * (pin-temp-tab-into-folder). Armed when two tabs fold into a new folder;
+   * consumed by the active `PinnedTabs` the moment it opens the editor.
+   */
+  autoRenameNextFolderByWindow?: { [windowId: WindowId]: boolean };
+}

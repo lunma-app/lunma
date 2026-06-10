@@ -2,6 +2,7 @@ import { fireEvent, render } from '@testing-library/svelte';
 import { flushSync } from 'svelte';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { LunmaStore } from '../shared/store.svelte';
+import type { SidebarLocalState } from '../shared/types';
 import AppHarness from './App.test.harness.svelte';
 
 function makeTouch(clientX: number, clientY: number, identifier = 0): Touch {
@@ -192,10 +193,9 @@ describe('App', () => {
     // App arms the active PinnedTabs (the cross-surface bridge) so the freshly
     // created folder opens straight into inline rename — the "create → name it"
     // flow is preserved even though the trigger moved out of PinnedTabs.
-    expect(
-      (store.state as unknown as { autoRenameNextFolderByWindow?: Record<number, boolean> })
-        .autoRenameNextFolderByWindow?.[1],
-    ).toBe(true);
+    expect((store.state as unknown as SidebarLocalState).autoRenameNextFolderByWindow?.[1]).toBe(
+      true,
+    );
   });
 
   test('Clear shows only with temp tabs and dispatches clearTempTabs carrying the panel Space', async () => {
