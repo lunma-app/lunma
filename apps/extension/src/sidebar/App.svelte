@@ -560,17 +560,6 @@ function onCancel(): void {
        track — it stays put through a Space swipe and re-hues with the centred Space
        in lockstep with the wash (D3 / D8). -->
   <FaviconRow {windowId} />
-  <!-- First-run auto-archive disclosure notice (auto-archive). A SIBLING of the
-       carousel (never rides the track), gated on `autoArchiveEnabled &&
-       !autoArchiveNoticeDismissed`. Disclosure-only — its actions just dismiss
-       (persist the flag) or open the options Auto-archive group. -->
-  {#if showFirstRunNotice}
-    <FirstRunNotice
-      {autoArchiveIdleMinutes}
-      onDismiss={dismissFirstRunNotice}
-      onManage={openAutoArchiveSettings}
-    />
-  {/if}
   <div class="content-stage" data-testid="sidebar-content" bind:this={stageEl}>
     {#if panels.length > 0}
       <!-- Single composited track: all Space panels in a flex row; the active one
@@ -636,6 +625,18 @@ function onCancel(): void {
       </div>
     {/if}
   </div>
+  <!-- First-run auto-archive disclosure notice (auto-archive). A SIBLING of the
+       carousel (never rides the track), placed just above the Space switcher so it
+       reads as a quiet bottom banner rather than pushing the tab lists down. Gated
+       on `autoArchiveEnabled && !autoArchiveNoticeDismissed`. Disclosure-only — its
+       actions just dismiss (persist the flag) or open the options Auto-archive group. -->
+  {#if showFirstRunNotice}
+    <FirstRunNotice
+      {autoArchiveIdleMinutes}
+      onDismiss={dismissFirstRunNotice}
+      onManage={openAutoArchiveSettings}
+    />
+  {/if}
   <SpaceSwitcher {windowId} />
   <!-- Floating drag clone, rendered at the sidebar root (outside the transformed
        track) so its position:fixed is viewport-relative, not clipped. -->
