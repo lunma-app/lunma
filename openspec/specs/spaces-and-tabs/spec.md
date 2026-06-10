@@ -1205,7 +1205,15 @@ The sidebar SHALL expose two temporary-tab actions, each acting on **its own car
 
 **New Tab.** Activating a panel's New Tab row SHALL dispatch `bus.send({ kind: 'newTab', payload: { windowId, spaceId } })` carrying that panel's `spaceId`. The coordinator's `newTab` handler SHALL, when `spaceId` is present and is NOT the window's active Space, **activate that Space first** (the same sequence as `activateSpace`) so the newly created — and focused — tab is visible in it; when `spaceId` is absent or already the active Space, no activation occurs and behaviour is unchanged. The handler SHALL then, when the window already has a **home tab** (a tab whose live URL is the new-tab page, recognised by `isNewTabUrl`), **focus that existing home tab** (activate it + bring its window forward) rather than create a second one — so repeated New Tab activations never accumulate home tabs (at most one home tab per window). Only when the window has no home tab SHALL the handler create one (active in the window), which joins the (now-)active Space's group via the existing tab-creation path.
 
-**Clear.** Activating a panel's Clear action SHALL dispatch `bus.send({ kind: 'clearTempTabs', payload: { windowId, spaceId } })` carrying that panel's `spaceId`, which closes that Space's temporary tabs (pinned/bound tabs are untouched). Clear SHALL be rendered on any panel whose Space has ≥1 temporary tab open in the window, and hidden otherwise; clearing a background Space's temps SHALL NOT switch the active Space. When the temporary tabs being cleared are the window's **only** tabs, the coordinator SHALL open the Space home (a new home tab) BEFORE closing them, so the window survives on its home — Clear empties the Temporary list but SHALL NOT close the window (and therefore SHALL NOT quit the browser when it is the last window).
+**Clear.** Activating a panel's Clear action SHALL dispatch `bus.send({ kind: 'clearTempTabs', payload: { windowId, spaceId } })` carrying that panel's `spaceId`. The coordinator's `clearTempTabs` handler SHALL:
+
+1. Insert each tab being closed into `archivedTabs` (same schema as a sweep-archived entry, with `archivedAt` set to the time of the Clear) BEFORE calling `chrome.tabs.remove`, so records are never lost if the remove partially fails.
+2. Close the temporary tabs (pinned/bound tabs are untouched). When the temporary tabs being cleared are the window's **only** tabs, the coordinator SHALL open the Space home (a new home tab) BEFORE closing them, so the window survives on its home — Clear empties the Temporary list but SHALL NOT close the window (and therefore SHALL NOT quit the browser when it is the last window).
+3. After insertion, broadcast a state update so the sidebar reflects both the empty temporary list and the updated `archivedTabs`.
+
+The sidebar SHALL mount a `Toast` primitive (`apps/extension/src/ui/Toast.svelte`) that displays a transient "Cleared N tabs — Undo" message for 5 seconds after `clearTempTabs` completes, where N is the count of tabs cleared (known locally by the sidebar from its own temporary-tab list — no value flows back through the bus, whose ack carries no data). Activating the Undo action SHALL dispatch `bus.send({ kind: 'undoClearTempTabs', payload: { windowId, tabIds } })` carrying the originating window and the `tabId`s of the batch just cleared. The coordinator's `undoClearTempTabs` handler SHALL, for each `tabId` in order, restore the most-recent surviving archived entry bearing that `tabId` into `windowId`, skipping any `tabId` whose archived entry no longer survives; the sidebar dismisses the toast on Undo.
+
+Clear SHALL be rendered on any panel whose Space has ≥1 temporary tab open in the window, and hidden otherwise; clearing a background Space's temps SHALL NOT switch the active Space.
 
 **Every panel fully live.** On the single-track carousel every Space panel is pre-rendered with its own Space's content, and its actions are live — a switch is a pure transform with no per-panel mount or interactivity toggle at commit (the spike model). New Tab SHALL be enabled on every slide and target its own Space; Clear SHALL render on any slide whose Space has temporary tabs and target its own Space. This supersedes the former "active-slide only" rule, under which a non-centre slide's New Tab was disabled and its Clear was not rendered.
 
@@ -1233,11 +1241,30 @@ The sidebar SHALL expose two temporary-tab actions, each acting on **its own car
 - **THEN** the coordinator SHALL activate "side" (expand its group, collapse the outgoing) BEFORE opening the tab
 - **AND** the freshly created tab SHALL be visible in "side"
 
+#### Scenario: Clear archives tabs before closing them
+
+- **GIVEN** Space "work" has 3 temporary tabs in window 100
+- **WHEN** the coordinator processes `clearTempTabs` for window 100 / Space "work"
+- **THEN** all 3 tabs SHALL be inserted into `archivedTabs` with `archivedAt` set to the current time BEFORE `chrome.tabs.remove` is called
+
 #### Scenario: Clear dispatches clearTempTabs carrying the panel's Space
 
 - **GIVEN** the panel's Space has at least one temporary tab
 - **WHEN** the user clicks that panel's Clear action in window 100 for Space "work"
 - **THEN** the sidebar SHALL call `bus.send({ kind: 'clearTempTabs', payload: { windowId: 100, spaceId: 'work' } })`
+
+#### Scenario: Clear shows a Toast with Undo
+
+- **GIVEN** the user has just cleared N temporary tabs in Space "work"
+- **WHEN** the `clearTempTabs` command completes
+- **THEN** the sidebar SHALL mount the `Toast` showing "Cleared N tabs — Undo" for 5 seconds
+
+#### Scenario: Undo restores the cleared batch
+
+- **GIVEN** the Toast is visible after a Clear of 3 tabs with ids `[10, 11, 12]` in window 100
+- **WHEN** the user activates the Undo action within 5 seconds
+- **THEN** the sidebar SHALL call `bus.send({ kind: 'undoClearTempTabs', payload: { windowId: 100, tabIds: [10, 11, 12] } })`
+- **AND** the coordinator SHALL restore each tab in order into window 100
 
 #### Scenario: Clear keeps the window alive on the home when temps are the only tabs
 
@@ -1252,6 +1279,24 @@ The sidebar SHALL expose two temporary-tab actions, each acting on **its own car
 - **THEN** its New Tab row SHALL be enabled (NOT disabled)
 - **AND** activating it SHALL dispatch `newTab` carrying that slide's `spaceId`
 - **AND** its Clear action SHALL be rendered when that Space has temporary tabs (targeting that Space)
+
+### Requirement: undoClearTempTabs restores a batch of archived tabs
+
+The `undoClearTempTabs` command SHALL be a member of the `SidebarCommand` union (added to `SIDEBAR_COMMAND_KINDS`). Its payload is `{ windowId: WindowId; tabIds: TabId[] }` — the originating window and the ordered list of `tabId`s from a preceding `clearTempTabs` batch. The `tabId` identity is used (rather than the SW-generated `archivedAt`) because the sidebar knows the cleared `tabId`s at clear time, whereas the batch's `archivedAt` is generated in the service worker and never returns through the bus ack.
+
+The coordinator's `undoClearTempTabs` handler SHALL, for each `tabId` in array order, select the **most-recent** surviving archived entry bearing that `tabId` (the just-cleared batch shares one `archivedAt`, so the latest entry for a `tabId` is its batch entry within the undo window) and restore it into `windowId` via the `restoreArchivedTab` logic, removing its record. It SHALL skip any `tabId` with no surviving archived entry (evicted by the 100-entry cap or TTL, or already restored). After processing all entries it SHALL broadcast the updated state.
+
+#### Scenario: undoClearTempTabs restores all surviving entries
+
+- **GIVEN** a `clearTempTabs` batch archived tabs with ids `[10, 11, 12]` and all three are still in `archivedTabs`
+- **WHEN** the coordinator processes `undoClearTempTabs` with `windowId: 100, tabIds: [10, 11, 12]`
+- **THEN** all three tabs SHALL be reopened (in order) into window 100 and their `archivedTabs` entries SHALL be removed
+
+#### Scenario: undoClearTempTabs skips evicted entries without error
+
+- **GIVEN** a `clearTempTabs` batch archived tabs with ids `[10, 11, 12]` but the entry for `11` has since been evicted by the 100-entry cap
+- **WHEN** the coordinator processes `undoClearTempTabs` with `windowId: 100, tabIds: [10, 11, 12]`
+- **THEN** tabs `10` and `12` SHALL be restored and `11` SHALL be silently skipped
 
 ### Requirement: Home tabs are not listed as temporary tabs
 

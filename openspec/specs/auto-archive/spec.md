@@ -14,28 +14,40 @@ quiet sidebar chip that opens an options "Recently archived" subpage.
 ## Requirements
 ### Requirement: Alarm-driven sweep trigger
 
-The auto-archive capability SHALL be driven by a `chrome.alarms` alarm named `lunma/auto-archive-sweep`, registered by the background service worker at startup via `registerAutoArchiveAlarm()` calling `chrome.alarms.create('lunma/auto-archive-sweep', { periodInMinutes: 1 })`.
+The auto-archive capability SHALL be driven by a `chrome.alarms` alarm named `lunma/auto-archive-sweep`. The alarm SHALL be registered — via `registerAutoArchiveAlarm(settings)` — only when `autoArchiveEnabled` is `true`; when `autoArchiveEnabled` is `false`, no alarm SHALL exist and `unregisterAutoArchiveAlarm()` SHALL call `chrome.alarms.clear('lunma/auto-archive-sweep')`.
 
-The alarm period (1 minute) SHALL be fixed and distinct from the user-tunable idle threshold (`autoArchiveIdleMinutes`).
+The alarm period SHALL be derived from the user-tunable idle threshold: `max(1, Math.floor(autoArchiveIdleMinutes / 2))` minutes. This replaces the former fixed 1-minute period. The period SHALL be recomputed whenever `autoArchiveIdleMinutes` or `autoArchiveEnabled` changes (settings-change handler re-registers the alarm with the new period).
 
-When the alarm fires, the alarm handler SHALL:
-
-1. Read `autoArchiveEnabled` from `chrome.storage.sync` (via `readSettings()`). If `false`, the handler SHALL return without enqueueing any work.
-2. Otherwise, the handler SHALL call `coordinator.enqueue({ source: 'alarm', kind: 'autoArchiveSweep' })` exactly once per fire.
+When the alarm fires, the alarm handler SHALL call `coordinator.enqueue({ source: 'alarm', kind: 'autoArchiveSweep' })` exactly once per fire. The enabled check is now structural (no alarm exists when disabled) rather than a runtime guard, but the handler SHALL still verify `autoArchiveEnabled` as defence-in-depth and return without enqueueing if `false`.
 
 The alarm handler SHALL NOT call `chrome.tabs.remove`, SHALL NOT write to `LunmaStore`, and SHALL NOT perform mutation work directly — the entire sweep happens inside the `autoArchiveSweep` command handler.
 
-#### Scenario: Alarm registered at fixed one-minute period
+#### Scenario: Alarm registered only when enabled
 
-- **WHEN** the SW starts and `registerAutoArchiveAlarm()` runs
-- **THEN** `chrome.alarms.create` SHALL be called with name `'lunma/auto-archive-sweep'` and `periodInMinutes: 1`
-- **AND** the registration SHALL be independent of the value of `autoArchiveIdleMinutes`
+- **WHEN** the SW starts and `autoArchiveEnabled` is `true`
+- **THEN** `chrome.alarms.create` SHALL be called with name `'lunma/auto-archive-sweep'` and `periodInMinutes: max(1, floor(idleMinutes / 2))`
 
-#### Scenario: Disabled setting skips enqueue
+#### Scenario: No alarm registered when disabled
+
+- **WHEN** the SW starts and `autoArchiveEnabled` is `false`
+- **THEN** `chrome.alarms.create` SHALL NOT be called for `'lunma/auto-archive-sweep'`
+
+#### Scenario: Alarm cleared on disable
+
+- **WHEN** `autoArchiveEnabled` changes from `true` to `false`
+- **THEN** `chrome.alarms.clear('lunma/auto-archive-sweep')` SHALL be called
+- **AND** the alarm SHALL NOT fire again until re-enabled
+
+#### Scenario: Alarm re-registered with new period on threshold change
+
+- **WHEN** `autoArchiveIdleMinutes` changes (and `autoArchiveEnabled` is `true`)
+- **THEN** `chrome.alarms.clear` SHALL be called followed by `chrome.alarms.create` with the recomputed period
+- **AND** `periodInMinutes` SHALL equal `max(1, floor(newIdleMinutes / 2))`
+
+#### Scenario: Handler skips enqueue when disabled (defence-in-depth)
 
 - **WHEN** the alarm fires and `autoArchiveEnabled` is `false`
 - **THEN** the handler SHALL NOT call `coordinator.enqueue`
-- **AND** no `autoArchiveSweep` command SHALL be created
 
 #### Scenario: Enabled setting enqueues one sweep
 
@@ -243,7 +255,7 @@ The drain SHALL emit one persist and one `state-broadcast` so the restored tab l
 
 Archived tabs are a secondary, browse-occasionally surface and SHALL NOT take inline space in the sidebar. The sidebar SHALL present only a quiet **chip** on the New Tab row (`apps/extension/src/sidebar/ArchivedChip.svelte`) showing the active Space's archived count, rendered ONLY when that Space has at least one archived tab (so it is absent, zero-footprint, when there are none). Activating the chip SHALL open the options page's **"Recently archived" subpage** (deep-linked via the `#recently-archived` hash; an already-open options tab is reused and re-focused rather than duplicated).
 
-The options subpage (`apps/extension/src/options/RecentlyArchived.svelte`) SHALL list **all** archived tabs (across every Space — the options page has no Space/window context), ordered most-recent-first by `archivedAt`, reading them from the persisted `chrome.storage.local['lunma.state'].archivedTabs` and staying live via a `chrome.storage.onChanged` watcher. Each row SHALL show the tab's favicon, title, a compact **relative archived-age** (e.g. `now` / `5m` / `2h` / `3d`, derived from `archivedAt`), and a **permanent-delete countdown** (e.g. `deletes in 27d`, derived from `archivedAt + autoArchiveRetentionDays` and updating live as the setting changes; the ≤100-entry cap may evict sooner). Each row SHALL offer TWO actions: a **restore** dispatching `bus.send({ kind: 'restoreArchivedTab', payload: { archivedAt, tabId, windowId } })` where `windowId` is the **last-focused normal window** (resolved via `chrome.windows.getLastFocused`), and a **delete** dispatching `bus.send({ kind: 'deleteArchivedTab', payload: { archivedAt, tabId } })` that discards the record without reopening it. The `(archivedAt, tabId)` composite identifies each entry uniquely; the keyed list SHALL key on that composite, since `archivedAt` alone collides for a batch sweep. The subpage SHALL also offer a **"Clear all"** action dispatching `bus.send({ kind: 'clearArchivedTabs', payload: {} })`, and an empty state when there are none. It SHALL compose existing `apps/extension/src/ui` primitives (`Surface`, `TabRow`, `IconButton`, `Button`, `Icon`, `Favicon`) and SHALL NOT re-roll primitives; contrast SHALL hold WCAG-AA. The row's at-rest age/countdown (`TabRow`'s `meta` slot) and its restore + delete actions (`TabRow`'s `trailing` slot) SHALL share one right-edge region and **hover-swap in place** — the muted metadata shows at rest and cross-fades to the action pair on row hover or action focus — so the actions claim no reserved gutter; the cross-fade SHALL be opacity-only and reduced-motion-safe.
+The options subpage (`apps/extension/src/options/RecentlyArchived.svelte`) SHALL list **all** archived tabs (across every Space — the options page has no Space/window context), ordered most-recent-first by `archivedAt`, reading them from the persisted `chrome.storage.local['lunma.state'].archivedTabs` and staying live via a `chrome.storage.onChanged` watcher. Each row SHALL show the tab's favicon, title, a compact **relative archived-age** (e.g. `now` / `5m` / `2h` / `3d`, derived from `archivedAt`), and a **permanent-delete countdown** (e.g. `deletes in 27d`, derived from `archivedAt + autoArchiveRetentionDays` and updating live as the setting changes; the ≤100-entry cap may evict sooner). Each row SHALL offer TWO actions: a **restore** dispatching `bus.send({ kind: 'restoreArchivedTab', payload: { archivedAt, tabId, windowId } })` where `windowId` is the **last-focused normal window** (resolved via `chrome.windows.getLastFocused`), and a **delete** dispatching `bus.send({ kind: 'deleteArchivedTab', payload: { archivedAt, tabId } })` that discards the record without reopening it. The `(archivedAt, tabId)` composite identifies each entry uniquely; the keyed list SHALL key on that composite, since `archivedAt` alone collides for a batch sweep. The subpage SHALL also offer a **"Clear all"** trigger; activating it SHALL reveal an inline confirm row ("Delete all archived records? This cannot be undone." + Cancel / Delete) rather than immediately dispatching — only confirming SHALL dispatch `bus.send({ kind: 'clearArchivedTabs', payload: {} })`. The subpage SHALL show an empty state when there are none. It SHALL compose existing `apps/extension/src/ui` primitives (`Surface`, `TabRow`, `IconButton`, `Button`, `Icon`, `Favicon`) and SHALL NOT re-roll primitives; contrast SHALL hold WCAG-AA. The row's at-rest age/countdown (`TabRow`'s `meta` slot) and its restore + delete actions (`TabRow`'s `trailing` slot) SHALL share one right-edge region and **hover-swap in place** — the muted metadata shows at rest and cross-fades to the action pair on row hover or action focus — so the actions claim no reserved gutter; the cross-fade SHALL be opacity-only and reduced-motion-safe.
 
 #### Scenario: No archived tabs shows no chip
 
@@ -275,8 +287,19 @@ The options subpage (`apps/extension/src/options/RecentlyArchived.svelte`) SHALL
 - **WHEN** the user activates a row's delete action for an entry with `archivedAt: A` and `tabId: T`
 - **THEN** the subpage SHALL call `bus.send({ kind: 'deleteArchivedTab', payload: { archivedAt: A, tabId: T } })` (no tab is reopened)
 
-#### Scenario: Clear all discards every archived record
+#### Scenario: Clear all requires a second confirmation
 
-- **WHEN** the user activates "Clear all"
+- **WHEN** the user activates the "Clear all" trigger
+- **THEN** an inline confirm row SHALL appear ("Delete all archived records? This cannot be undone." + Cancel / Delete)
+- **AND** `clearArchivedTabs` SHALL NOT be dispatched until the user activates the Delete button
+
+#### Scenario: Clear all confirm dispatches clearArchivedTabs
+
+- **WHEN** the user activates the Delete button in the inline confirm row
 - **THEN** the subpage SHALL call `bus.send({ kind: 'clearArchivedTabs', payload: {} })`, after which `archivedTabs` is emptied and the chip disappears
+
+#### Scenario: Clear all cancel restores the trigger
+
+- **WHEN** the user activates the Cancel button in the inline confirm row
+- **THEN** the confirm row SHALL be dismissed and the "Clear all" trigger SHALL be visible again
 
