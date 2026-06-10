@@ -60,6 +60,7 @@ future capability will be shaped a certain way, write an ADR.
 | 0010 | [Favicon row v1 shape](0010-favicon-row-v1-shape.md) | Accepted | 0009 |
 | 0011 | [Auto-archive restore + full loop](0011-auto-archive-restore-and-full-loop.md) | Accepted | 0002 (in part) |
 | 0012 | [pnpm workspace + the marketing site](0012-workspace-and-marketing-site.md) | Accepted | — |
+| 0013 | [English-only for v1; i18n deferred](0013-english-only-v1.md) | Accepted | — |
 
 ## Format
 
