@@ -3,6 +3,11 @@ import { backfillOverlayIntoOpenTabs, injectOverlay } from './overlay-injection'
 
 const FILES = ['src/launcher/overlay.ts'];
 
+// The overlay is selected from the manifest BY FILENAME, never by array index, so
+// the default stub deliberately places a sibling boundary script FIRST and the
+// overlay SECOND — proving selection is position-independent.
+const BOUNDARY_FILES = ['src/background/tab-boundary.ts'];
+
 interface ChromeStub {
   runtime: { getManifest: ReturnType<typeof vi.fn> };
   tabs: { query: ReturnType<typeof vi.fn> };
@@ -11,10 +16,13 @@ interface ChromeStub {
 
 function installChrome(opts: {
   tabs?: Array<Partial<chrome.tabs.Tab>>;
-  files?: string[] | undefined;
+  contentScripts?: Array<{ js?: string[] }>;
   reject?: (tabId: number) => boolean;
 }): ChromeStub {
-  const files = opts.files === undefined ? FILES : opts.files;
+  const contentScripts =
+    opts.contentScripts === undefined
+      ? [{ js: BOUNDARY_FILES }, { js: FILES }]
+      : opts.contentScripts;
   const executeScript = vi.fn((arg: { target: { tabId: number } }) =>
     opts.reject?.(arg.target.tabId)
       ? Promise.reject(new Error('Cannot access contents of the page'))
@@ -22,7 +30,7 @@ function installChrome(opts: {
   );
   const stub: ChromeStub = {
     runtime: {
-      getManifest: vi.fn(() => ({ content_scripts: files ? [{ js: files }] : [{}] })),
+      getManifest: vi.fn(() => ({ content_scripts: contentScripts })),
     },
     tabs: { query: vi.fn(() => Promise.resolve(opts.tabs ?? [])) },
     scripting: { executeScript },
@@ -42,17 +50,22 @@ afterEach(() => {
 });
 
 describe('injectOverlay', () => {
-  test('injects the manifest content-script files into the tab', async () => {
-    const stub = installChrome({});
+  test('selects the overlay entry by filename regardless of array position', async () => {
+    const stub = installChrome({}); // boundary first, overlay second
     await injectOverlay(7);
     expect(stub.scripting.executeScript).toHaveBeenCalledWith({
       target: { tabId: 7 },
-      files: FILES,
+      files: FILES, // the overlay-named entry, not content_scripts[0] (the boundary)
     });
   });
 
-  test('throws when the manifest declares no overlay content script', async () => {
-    installChrome({ files: [] }); // manifest entry with an empty js list
+  test('throws when no content script filename matches the overlay', async () => {
+    installChrome({ contentScripts: [{ js: BOUNDARY_FILES }] }); // only the boundary is declared
+    await expect(injectOverlay(7)).rejects.toThrow(/no overlay content script/);
+  });
+
+  test('throws when the matching overlay entry has an empty js list', async () => {
+    installChrome({ contentScripts: [{ js: [] }] });
     await expect(injectOverlay(7)).rejects.toThrow(/no overlay content script/);
   });
 

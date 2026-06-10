@@ -8,9 +8,8 @@ import { log } from '../shared/logger';
  * before pushing the allow-set.
  *
  * The boundary entry is selected from the manifest **by filename**, NOT by array
- * index (unlike {@link injectOverlay}, which is pinned to `content_scripts[0]`),
- * so it never binds to the wrong entry if the content-scripts order changes
- * (design D6).
+ * index (as {@link injectOverlay} also does), so it never binds to the wrong
+ * entry if the content-scripts order changes (design D6).
  *
  * Re-injection is idempotent: the boundary IIFE early-returns on its
  * `window.__lunmaBoundaryInstalled` guard. A forbidden page (`chrome://`, the

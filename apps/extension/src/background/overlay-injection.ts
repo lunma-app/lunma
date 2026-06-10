@@ -6,14 +6,22 @@ import { log } from '../shared/logger';
  * both the `toggle-launcher` command path (when the active tab has no overlay
  * yet) and the install-time backfill below.
  *
+ * The overlay entry is selected from the manifest **by filename**, NOT by array
+ * index (mirroring {@link injectBoundary}), so it never binds to the wrong entry
+ * if the content-scripts order changes.
+ *
  * Re-injection is idempotent: the overlay IIFE early-returns on its
  * `window.__lunmaLauncherInstalled` guard, so a tab that already runs the
  * overlay is a no-op. Throws on failure (no files declared, or Chrome forbids
  * injecting the target page — `chrome://`, the Web Store, extension pages) so
  * callers decide how to handle it.
  */
+const OVERLAY_SCRIPT_FILE = 'overlay';
+
 export async function injectOverlay(tabId: number): Promise<void> {
-  const files = chrome.runtime.getManifest().content_scripts?.[0]?.js;
+  const files = chrome.runtime
+    .getManifest()
+    .content_scripts?.find((cs) => cs.js?.some((file) => file.includes(OVERLAY_SCRIPT_FILE)))?.js;
   if (!files || files.length === 0) {
     throw new Error('injectOverlay: no overlay content script declared in manifest');
   }

@@ -254,8 +254,8 @@ was already open when the extension started, since declarative content scripts
 inject only into tabs opened/reloaded afterwards. The service worker's command
 handler SHALL first attempt `chrome.tabs.sendMessage`; when that finds no
 receiver, it SHALL inject the overlay via `chrome.scripting.executeScript`
-(targeting the active tab, using the files from
-`chrome.runtime.getManifest().content_scripts[0].js`) and then re-send the
+(targeting the active tab, using the overlay content script the manifest
+declares — selected **by filename**, not by array index) and then re-send the
 toggle. Re-injection SHALL be idempotent (the overlay's install guard prevents a
 second initialization). The `scripting` permission SHALL be present in the
 manifest for this.
@@ -405,11 +405,12 @@ injection never fires for it either.
 
 The service worker SHALL register a `chrome.runtime.onInstalled` listener
 synchronously at top-level (so it is present for the install event) and
-SHALL inject via `chrome.scripting.executeScript` using the manifest's
-`content_scripts[0].js`. The backfill SHALL target only `http`/`https`
-tabs, SHALL isolate per-tab failures so one tab Chrome forbids injecting
-into does not abort the rest, and SHALL be idempotent — a tab that already
-runs the overlay is a no-op via the overlay's install guard.
+SHALL inject via `chrome.scripting.executeScript` using the overlay content
+script the manifest declares, selected **by filename** (not by array index).
+The backfill SHALL target only `http`/`https` tabs, SHALL isolate per-tab
+failures so one tab Chrome forbids injecting into does not abort the rest,
+and SHALL be idempotent — a tab that already runs the overlay is a no-op via
+the overlay's install guard.
 
 #### Scenario: Alt+L works on a tab that was open before install
 
@@ -896,4 +897,27 @@ component-library exception).
 - **WHEN** the overlay renders results under Comfort density
 - **THEN** its rows render two-line (title + type, then a dimmed URL), matching the
   new-tab `ResultRow`
+
+### Requirement: The overlay bundle budget is enforced by a verify-time guard
+
+The dormant overlay content-script bundle SHALL be held to its "no Svelte runtime" and "<15KB gzipped" constraints (see the *Alt+L overlay surface* requirement) mechanically, by an automated guard test run under `pnpm verify` rather than by code comment alone. The guard SHALL bundle the overlay entry
+(`apps/extension/src/launcher/overlay.ts`) in isolation and SHALL fail when
+either (a) the bundle's dependency graph includes any Svelte runtime module, or
+(b) the gzipped bundle size is at or above 15KB (15 × 1024 bytes).
+
+#### Scenario: A Svelte runtime import fails the guard
+
+- **WHEN** the overlay entry's bundled dependency graph includes a module under `node_modules/svelte/`
+- **THEN** the guard test SHALL fail, naming the offending input(s)
+
+#### Scenario: An over-budget bundle fails the guard
+
+- **WHEN** the overlay bundle's gzipped size is at or above 15 × 1024 bytes
+- **THEN** the guard test SHALL fail, reporting the measured gzipped size
+
+#### Scenario: The current overlay passes the guard
+
+- **WHEN** the overlay is bundled as shipped (vanilla TypeScript + a closed shadow DOM + a constructable stylesheet, no Svelte runtime)
+- **THEN** the guard test SHALL pass with the gzipped size below 15 × 1024 bytes
+- **AND** no `node_modules/svelte/` input SHALL appear in the bundle's dependency graph
 

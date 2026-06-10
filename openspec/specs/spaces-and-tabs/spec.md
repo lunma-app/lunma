@@ -193,7 +193,7 @@ When `chrome.windows.onRemoved` fires for `windowId`, Lunma SHALL delete `spaceI
 - **AND** the Space records for "Work" and "Side" SHALL remain unchanged
 - **AND** the saved tabs pinned in those Spaces SHALL remain unchanged
 
-### Requirement: Renaming a Space is atomic across bookmark folder and live tab groups
+### Requirement: Renaming a Space is atomic across the Space record and live tab groups
 
 Renaming a Space SHALL apply the new name to the Space record in `state.spaces`
 AND to every **live** tab group in every window where that Space is instantiated,
@@ -225,7 +225,7 @@ NEVER trigger a revert.
 - **THEN** the Space record's `name` SHALL change to "Day Job" and SHALL NOT be reverted
 - **AND** no `chrome.tabGroups.update` SHALL be attempted against the stale group
 
-### Requirement: Soft-delete via __trash__ folder with auto-purge
+### Requirement: Soft-delete via the trash store with auto-purge
 
 Deleting a Space SHALL move the Space record into `state.trash[spaceId]` with a `deletedAt: ISO-8601 timestamp` and remove it from `state.spaces`. All live tab groups for that Space in all windows SHALL be closed. A purge routine SHALL run at SW boot and SHALL remove any `state.trash` entry whose `deletedAt` is older than 30 days, including the saved-tab records that belonged to it. The sidebar SHALL show an undo affordance that restores the record to `state.spaces` and clears `deletedAt`. No separate "Trash" UI SHALL ship in v1 beyond the undo affordance.
 

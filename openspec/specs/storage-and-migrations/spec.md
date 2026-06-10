@@ -214,10 +214,10 @@ The storage layer SHALL export a pure function `salvagePersistedState(migrated: 
 1. Return `null` when `migrated` is not a non-null object.
 2. Start from a valid empty base equal in shape to `createInitialState()` at `CURRENT_SCHEMA_VERSION`.
 3. Salvage the `spaces` array **element-wise**: when the input's `spaces` value is an array, keep each element that individually validates against the Space element schema (`AppStateV1Schema.shape.spaces.element`), preserving array order and dropping only the invalid elements; otherwise keep `[]`. A single malformed Space SHALL NOT cost the other Spaces.
-4. Salvage every other top-level slice (`schemaVersion`, `activeSpaceByWindow`, `spaceInstancesByWindow`, `tabBindings`, `savedTabs`, `lastActivatedSpaceId`, `tabLastActivity`, `archivedTabs`, `trash`, `pinnedBySpace`) **slice-wise**: validate the input's value against that slice's own schema (`AppStateV1Schema.shape.<field>`); on success the validated value SHALL be kept, on failure the empty-base default SHALL be kept.
+4. Salvage every other top-level slice (`schemaVersion`, `activeSpaceByWindow`, `spaceInstancesByWindow`, `tabBindings`, `savedTabs`, `lastActivatedSpaceId`, `tabLastActivity`, `archivedTabs`, `trash`, `pinnedBySpace`, `faviconRow`) **slice-wise**: validate the input's value against that slice's own schema (`AppStateV1Schema.shape.<field>`); on success the validated value SHALL be kept, on failure the empty-base default SHALL be kept.
 5. Validate the assembled object against `AppStateV1Schema` and return it on success, or `null` on failure.
 
-Because the `spaces` array is salvaged element-wise, a payload SHALL preserve every individually-valid Space's `id`, `name`, `color`, and `icon`, even when other Spaces in the same array are malformed and even when unrelated slices (e.g. `savedTabs`) are malformed. Dangling references that result from a dropped Space or slice (e.g. a `pinnedBySpace` entry pointing at a reset `savedTabs`, or `activeSpaceByWindow` referencing a dropped Space) are tolerated by the existing load-path de-duplication and the sidebar projections (see Requirement: Loaded state has unique ids per keyed collection).
+Because the `spaces` array is salvaged element-wise, a payload SHALL preserve every individually-valid Space's `id`, `name`, `color`, and `icon`, even when other Spaces in the same array are malformed and even when unrelated slices (e.g. `savedTabs`) are malformed. Because `faviconRow` is salvaged slice-wise, a valid `faviconRow` SHALL be preserved rather than reset whenever it individually validates. Dangling references that result from a dropped Space or slice (e.g. a `pinnedBySpace` entry pointing at a reset `savedTabs`, or `activeSpaceByWindow` referencing a dropped Space) are tolerated by the existing load-path de-duplication and the sidebar projections (see the *Loaded state has unique ids per keyed collection* requirement).
 
 A salvaged state SHALL flow through the existing `dedupePersistedState` step and SHALL be eligible for the existing write-back self-heal, exactly as a migrated/de-duplicated `ok` state is.
 
@@ -235,6 +235,13 @@ A salvaged state SHALL flow through the existing `dedupePersistedState` step and
 - **WHEN** `salvagePersistedState` runs
 - **THEN** the element-wise `spaces` salvage SHALL keep `{ id: 'a', name: 'Work', color: 'blue', icon: 'star' }` and drop the nameless element
 - **AND** the assembled object SHALL validate against `AppStateV1Schema` with `spaces` equal to `[{ id: 'a', name: 'Work', color: 'blue', icon: 'star' }]`
+- **AND** `readPersistedState` SHALL return `{ kind: 'salvaged', state }`
+
+#### Scenario: A valid faviconRow survives an unrelated slice failure
+
+- **GIVEN** a migrated payload whose `faviconRow` slice is a valid `SavedTabId[]` but whose `savedTabs` slice is malformed
+- **WHEN** whole-state validation fails and `salvagePersistedState` runs
+- **THEN** the assembled object's `faviconRow` SHALL equal the input `faviconRow` (favourites are not reset)
 - **AND** `readPersistedState` SHALL return `{ kind: 'salvaged', state }`
 
 #### Scenario: A non-object payload is unsalvageable
@@ -328,7 +335,6 @@ the persisted envelope, the state SHALL be passed through a pure
 
 De-duplication SHALL preserve ordering (first occurrence wins) and SHALL NOT drop
 ids that are merely unbound or unknown — it only removes exact-id duplicates. The
-`v4 → v5` migration SHALL likewise emit no duplicate pinned nodes, and the
 `deleteFolder` mutator SHALL NOT create a top-level duplicate when spilling a
 folder's children. Consuming sidebar projections (the pinned list, folder
 children, the temporary-tab list, and the Space list) SHALL additionally
@@ -348,13 +354,6 @@ keyed render.
 - **THEN** the cleaned state SHALL be the value returned to the caller
 - **AND** the next persist SHALL write the de-duplicated state, so a subsequent
   load finds no duplicates
-
-#### Scenario: V4 → V5 migration of a duplicated array yields unique nodes
-
-- **WHEN** a V4 `pinnedBySpace[spaceId]` array contains the same id string more
-  than once
-- **THEN** the `v4 → v5` migration SHALL produce a `PinNode[]` in which that id
-  appears exactly once
 
 #### Scenario: Deleting a folder never creates a top-level duplicate
 
