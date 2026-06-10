@@ -423,7 +423,8 @@ Svelte-heavy `ui` layer is covered, and no separate import-graph tool is needed)
 | `ui` — primitives (design tokens come from `@lunma/tokens`) | `shared` | `background`, any surface |
 | `background` — service worker | `shared`, **`launcher/shared`** (the launcher engine) | `ui`, any surface, a launcher *page* |
 | `sidebar`, `options` — feature surfaces | `ui`, `shared` | `background`, another surface |
-| `launcher` — overlay + newtab + its `shared` engine | `ui`, `shared` (+ launcher-internal) | `background`, another surface |
+| `launcher` — overlay + newtab surface | `ui`, `shared` (+ launcher-internal) | `background`, another surface |
+| `launcher/shared` — the launcher search **engine** (SW-imported), **shared-grade** | `shared` (+ intra-`launcher/shared`) | `ui`, any surface — keeps the SW's transitive graph DOM-free |
 | `content` — vanilla content scripts | `shared` | every other layer |
 
 **The launcher-engine service edge.** `background` legitimately imports
@@ -433,7 +434,15 @@ request suggestions over a channel (see "Both surfaces share the search engine v
 `apps/extension/src/launcher/shared/`" above). So `launcher/shared` is a *service* consumed by both
 the SW and the launcher surfaces — the one sanctioned exception to "background imports
 `shared` only", encoded as a `!**/launcher/shared/**` negation in the `background`
-rule. The pure launcher **result contract** (`ResultSource` / `LauncherResult` /
+rule. Because the SW transitively depends on this engine, `launcher/shared` is itself
+held to **shared-grade** imports by a dedicated `apps/extension/src/launcher/shared/**`
+override: it may import `shared` (+ its own internals) but **not** `ui` or another
+surface, so no DOM-coupled component code can reach the SW bundle through it. (That
+override re-states the cross-surface bans rather than only adding `ui`, since Biome's
+per-rule override options *replace* — not union — for the overlapping `launcher/**`
+glob. The gate catches module **imports**; direct `document`/`window` use inside the
+engine is not an import and stays a review-time concern.) The pure launcher
+**result contract** (`ResultSource` / `LauncherResult` /
 `Suggestions*` + `sourceBadgeLabel`) lives in `apps/extension/src/shared/launcher-contract.ts` so
 `ui`, `shared`, and the SW reach it without depending on the launcher surface.
 

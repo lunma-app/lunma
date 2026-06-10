@@ -335,6 +335,45 @@
     },
     {
       "includes": [
+        "apps/extension/src/launcher/shared/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/ui",
+                      "**/ui/**",
+                      "**/background",
+                      "**/background/**",
+                      "**/sidebar",
+                      "**/sidebar/**",
+                      "**/options",
+                      "**/options/**",
+                      "**/content",
+                      "**/content/**"
+                    ]
+                  },
+                  {
+                    "group": [
+                      "@lunma/site",
+                      "@lunma/site/**",
+                      "**/apps/site/**"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
         "apps/extension/src/content/**"
       ],
       "linter": {

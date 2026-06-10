@@ -16,11 +16,12 @@ The source tree SHALL respect a single-direction dependency DAG between its laye
 - `apps/extension/src/shared` (foundation) — depends on **nothing** else in `apps/extension/src/`.
 - `apps/extension/src/ui` (primitives) — may import `apps/extension/src/shared` **only**. It consumes design tokens from the CSS-only `@lunma/tokens` package (a stylesheet import, not a TS module edge — see "Workspace package boundaries").
 - `apps/extension/src/background` (service worker) — may import `apps/extension/src/shared` and the launcher-engine service `apps/extension/src/launcher/shared` **only** (never `apps/extension/src/ui` or another feature surface).
+- `apps/extension/src/launcher/shared` (the launcher search **engine**, imported by the service worker) — is **shared-grade**: it may import `apps/extension/src/shared` and other `apps/extension/src/launcher/shared` internals **only**, and SHALL NOT import `apps/extension/src/ui` (a primitive) or another feature surface. This keeps the service worker's transitive graph free of DOM-coupled component code even though it imports this engine. (The gate enforces this for module **imports**; direct DOM access — `document`/`window` — is not an import and is not caught by `noRestrictedImports`, so it remains a review-time concern.)
+- `apps/extension/src/launcher` (surface: overlay + new-tab) — may import `apps/extension/src/ui` and `apps/extension/src/shared`; within-`launcher` imports are internal. This `ui` allowance does **not** extend to the `launcher/shared` engine above.
 - `apps/extension/src/sidebar`, `apps/extension/src/options` (feature surfaces) — may import `apps/extension/src/ui` and `apps/extension/src/shared`.
-- `apps/extension/src/launcher` (surface: overlay + new-tab + its `shared` engine) — may import `apps/extension/src/ui` and `apps/extension/src/shared`; within-`launcher` imports are internal.
 - `apps/extension/src/content` — may import `apps/extension/src/shared` **only**.
 
-No layer SHALL import a feature surface's internals across a surface boundary. The DAG is **unchanged in shape** from the pre-restructure `src/…` layout — only the path prefix changes — and remains enforced by Biome `noRestrictedImports` per-layer overrides (re-pathed in `biome.json`).
+No layer SHALL import a feature surface's internals across a surface boundary. The DAG is **unchanged in shape** from the pre-restructure `src/…` layout — only the path prefix changes — and remains enforced by Biome `noRestrictedImports` per-layer overrides (re-pathed in `biome.json`), including a dedicated override for `apps/extension/src/launcher/shared/**`.
 
 #### Scenario: A forbidden cross-layer import fails the gate
 
@@ -32,6 +33,18 @@ No layer SHALL import a feature surface's internals across a surface boundary. T
 - **WHEN** a feature surface imports another surface's internals (e.g. `apps/extension/src/launcher/newtab` importing `apps/extension/src/sidebar`)
 - **THEN** the boundary check SHALL report an error
 - **AND** the documented fix is to relocate the shared helper into `apps/extension/src/shared`
+
+#### Scenario: The launcher engine cannot import UI/another surface into the service worker
+
+- **WHEN** a file under `apps/extension/src/launcher/shared/**` imports `apps/extension/src/ui` (a primitive) or another feature surface (`sidebar`/`options`/`background`/`content`)
+- **THEN** the boundary check SHALL report an error and `pnpm verify` SHALL exit non-zero
+- **AND** the documented fix is to relocate the needed helper into `apps/extension/src/shared` (shared-grade), keeping the service worker's transitive graph free of DOM-coupled component code
+
+#### Scenario: The engine's cross-surface bans survive the added override
+
+- **WHEN** the dedicated `apps/extension/src/launcher/shared/**` override is added to `biome.json`
+- **THEN** a `launcher/shared` import of another surface (e.g. `apps/extension/src/sidebar`) SHALL still fail the gate
+- **AND** the new override SHALL re-state those cross-surface bans (Biome per-rule override options replace rather than union for an overlapping glob), so adding the `ui` ban does not drop the inherited surface bans
 
 ### Requirement: No import cycles
 
