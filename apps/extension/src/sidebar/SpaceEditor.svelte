@@ -27,8 +27,7 @@ const COLORS: readonly SpaceColor[] = [
 
 <script lang="ts">
 import { tick } from 'svelte';
-import { bus } from '../shared/bus';
-import { log } from '../shared/logger';
+import { dispatch } from '../shared/bus';
 import { normalizeSpaceName } from '../shared/space-names';
 import type { IconName, SpaceAutoArchive, SpaceId } from '../shared/types';
 import Button from '../ui/Button.svelte';
@@ -176,7 +175,7 @@ function clampMinutes(n: number): number {
 }
 
 function sendAutoArchive(spaceId: SpaceId, autoArchive: SpaceAutoArchive | null): void {
-  send({ kind: 'setSpaceAutoArchive', payload: { spaceId, autoArchive } });
+  dispatch({ kind: 'setSpaceAutoArchive', payload: { spaceId, autoArchive } });
 }
 
 /** Switch the override mode. `Inherit` clears it (null), `Off` disables this
@@ -293,34 +292,31 @@ function cancelDelete(): void {
 
 function executeDelete(): void {
   if (mode.kind !== 'edit') return;
-  send({ kind: 'deleteSpace', payload: { spaceId: mode.space.id } });
+  dispatch({ kind: 'deleteSpace', payload: { spaceId: mode.space.id } });
   onClose();
 }
 
 function submit(): void {
   if (!canSubmit) return;
   if (mode.kind === 'create') {
-    send({ kind: 'createSpace', payload: { name: name.trim(), color, icon, windowId: mode.windowId } });
+    dispatch({
+      kind: 'createSpace',
+      payload: { name: name.trim(), color, icon, windowId: mode.windowId },
+    });
   } else {
     const original = mode.space;
     const trimmed = name.trim();
     if (trimmed !== original.name) {
-      send({ kind: 'renameSpace', payload: { spaceId: original.id, newName: trimmed } });
+      dispatch({ kind: 'renameSpace', payload: { spaceId: original.id, newName: trimmed } });
     }
     if (color !== original.color) {
-      send({ kind: 'recolourSpace', payload: { spaceId: original.id, color } });
+      dispatch({ kind: 'recolourSpace', payload: { spaceId: original.id, color } });
     }
     if (icon !== original.icon) {
-      send({ kind: 'changeSpaceIcon', payload: { spaceId: original.id, icon } });
+      dispatch({ kind: 'changeSpaceIcon', payload: { spaceId: original.id, icon } });
     }
   }
   onClose();
-}
-
-// Fire-and-forget, but surface a failed dispatch instead of letting it become an
-// unhandled rejection (the SW wake-up path can reject — see the bus-adapter fix).
-function send(cmd: Parameters<typeof bus.send>[0]): void {
-  bus.send(cmd).catch((err: unknown) => log.error('SPACE_EDITOR_DISPATCH_FAILED', { err }));
 }
 </script>
 

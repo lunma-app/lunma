@@ -3,6 +3,7 @@ import {
   SIDEBAR_COMMAND_KINDS,
   type SidebarCommand,
   type SidebarCommandKind,
+  SidebarCommandSchema,
 } from '../shared/bus';
 import { log } from '../shared/logger';
 import { type Coordinator, defaultEmitAck, type PendingEvent } from './coordinator';
@@ -59,7 +60,24 @@ export function installBusAdapter(
       return;
     }
 
-    const event = toPendingEvent(cmd as SidebarCommand, id);
+    // Full-payload validation (Task 2.x): the `kind` is recognised, but the
+    // payload is page-influenced and untrusted (the boundary content script
+    // forwards anchor hrefs into `openUrl`, etc.). Parse the whole command
+    // against the schema; a schema-invalid payload is rejected with a descriptive
+    // ack and never enqueued — symmetric with the fully-Zod-validated storage
+    // boundary, and so a handler never receives malformed data.
+    const parsed = SidebarCommandSchema.safeParse(cmd);
+    if (!parsed.success) {
+      const message = parsed.error.issues[0]?.message ?? 'invalid command payload';
+      log.error('BUS_INVALID_PAYLOAD', { id, kind, issues: parsed.error.issues });
+      defaultEmitAck({ type: 'lunma/command-ack', id, result: { error: message } });
+      return;
+    }
+
+    // `parsed.data` is the validated command; its inferred type differs from
+    // `SidebarCommand` only in Zod's `| undefined` on optional fields, so cast to
+    // the canonical contract type for the coordinator event.
+    const event = toPendingEvent(parsed.data as SidebarCommand, id);
     void whenReady.then(() => coordinator.enqueue(event));
   };
 

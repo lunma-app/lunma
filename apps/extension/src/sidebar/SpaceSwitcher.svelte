@@ -1,6 +1,6 @@
 <script lang="ts">
 import '../ui/drop-line.css';
-import { bus } from '../shared/bus';
+import { dispatch } from '../shared/bus';
 import type { IconName } from '../shared/icon-names';
 import { log } from '../shared/logger';
 import { colourToOklch, colourToOn } from '../shared/space-hue';
@@ -48,7 +48,7 @@ let editorMode = $state<SpaceEditorMode>(createMode());
 let triggerEl: HTMLElement | null = null;
 
 function activate(spaceId: string): void {
-  void bus.send({ kind: 'activateSpace', payload: { windowId, spaceId } });
+  dispatch({ kind: 'activateSpace', payload: { windowId, spaceId } });
 }
 
 function openCreate(event: MouseEvent): void {
@@ -140,7 +140,7 @@ function handleDrop(r: DropResult): void {
   // The dragged id was removed, so a target past the source shifts left by one.
   const insertAt = r.targetIndex > from ? r.targetIndex - 1 : r.targetIndex;
   ids.splice(insertAt, 0, r.data.id);
-  void bus.send({ kind: 'reorderSpaces', payload: { spaceIds: ids } });
+  dispatch({ kind: 'reorderSpaces', payload: { spaceIds: ids } });
 }
 
 // Right-click: edit any chip's Space without switching to it; suppress the

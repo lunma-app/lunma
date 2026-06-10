@@ -27,7 +27,10 @@ function parseTx(el: HTMLElement): number {
 }
 
 const { sendMock } = vi.hoisted(() => ({ sendMock: vi.fn(() => Promise.resolve()) }));
-vi.mock('../shared/bus', () => ({ bus: { send: sendMock } }));
+// Both the awaited `bus.send` (clearTempTabs confirmation flow) and the
+// fire-and-forget `dispatch` route to the same spy, so existing call assertions
+// hold whichever path the surface uses.
+vi.mock('../shared/bus', () => ({ bus: { send: sendMock }, dispatch: sendMock }));
 
 function installChrome(): void {
   (globalThis as unknown as { chrome: unknown }).chrome = {

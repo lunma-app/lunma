@@ -1,7 +1,7 @@
 <script lang="ts">
 import '../ui/drop-line.css';
 import { SvelteSet } from 'svelte/reactivity';
-import { bus, type SidebarCommand } from '../shared/bus';
+import { dispatch } from '../shared/bus';
 import { labelFor } from '../shared/label-for';
 import { log } from '../shared/logger';
 import type { SavedTabId, TabBoundary, WindowId } from '../shared/types';
@@ -130,12 +130,6 @@ $effect(() => {
 });
 
 // --- click → open / focus the favorite's bound tab ---------------------------
-function dispatch(cmd: SidebarCommand): void {
-  bus.send(cmd).catch((err: unknown) => {
-    log.debug('FaviconRow: bus dispatch failed', { kind: cmd.kind, err });
-  });
-}
-
 function onTileClick(fav: FavView): void {
   if (drag.consumeJustDragged()) return; // a drag just ended — not a click
   if (fav.unbound) {

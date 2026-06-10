@@ -128,13 +128,15 @@ The bus client SHALL listen for `'lunma/command-ack'` messages and SHALL resolve
 
 ### Requirement: SW adapter translates messages into coordinator enqueues
 
-`apps/extension/src/background/bus-adapter.ts` SHALL export an `installBusAdapter(coordinator)` function (or equivalent registration entry point) that registers exactly one `chrome.runtime.onMessage` listener. The listener SHALL filter for `msg.type === 'lunma/command'`, validate the embedded `cmd.kind`, and call `coordinator.enqueue` with a `PendingEvent` whose `source === 'sidebar'`, `kind` matches the command, `payload` matches the command's payload, and `correlationId` matches the message's `id`.
+`apps/extension/src/background/bus-adapter.ts` SHALL export an `installBusAdapter(coordinator, whenReady?)` function that registers exactly one `chrome.runtime.onMessage` listener **synchronously** in the SW's first top-level turn (so an MV3 wake-up command is not missed), and defers each command's `coordinator.enqueue` until `whenReady` resolves — the existing boot-order contract, **unchanged** by this change. The listener SHALL verify `sender.id === chrome.runtime.id`, filter for `msg.type === 'lunma/command'`, and validate the embedded `cmd` against the `SidebarCommand` **schema** — a Zod discriminated union keyed on `kind`, exhaustive against the `SidebarCommand` union by a compile-time `satisfies` check. Only a command whose `kind` is recognised AND whose full `payload` validates SHALL be forwarded: the adapter enqueues (after readiness) a `PendingEvent` whose `source === 'sidebar'`, `kind` matches the command, `payload` matches the validated payload, and `correlationId` matches the message's `id`. Validation and error-acks happen **synchronously** (not deferred), as today.
+
+A command whose `kind` is unknown OR whose payload fails schema validation SHALL NOT be enqueued; the adapter SHALL emit a `{ type: 'lunma/command-ack', id, result: { error } }` (via the existing ack emitter) so the sidebar's promise rejects rather than timing out, and SHALL log the rejection.
 
 The adapter SHALL NOT own any state. The coordinator owns correlation-to-ack bookkeeping.
 
 #### Scenario: Adapter forwards a valid command
 
-- **WHEN** the SW receives `{ type: 'lunma/command', id: 'abc:7', cmd: { kind: 'createSpace', payload: { ... } } }`
+- **WHEN** the SW receives `{ type: 'lunma/command', id: 'abc:7', cmd: { kind: 'createSpace', payload: { ... } } }` whose payload validates against the schema
 - **THEN** the adapter SHALL call `coordinator.enqueue({ source: 'sidebar', kind: 'createSpace', payload: { ... }, correlationId: 'abc:7' })`
 
 #### Scenario: Adapter rejects messages with unknown kind
@@ -143,6 +145,39 @@ The adapter SHALL NOT own any state. The coordinator owns correlation-to-ack boo
 - **THEN** the adapter SHALL NOT call `coordinator.enqueue`
 - **AND** the adapter SHALL log at `error` with code `BUS_UNKNOWN_KIND`
 - **AND** the adapter SHALL emit `{ type: 'lunma/command-ack', id, result: { error: 'unknown command kind' } }` so the sidebar's promise rejects rather than timing out
+
+#### Scenario: Adapter rejects a command whose payload fails schema validation
+
+- **WHEN** the SW receives `{ type: 'lunma/command', id: 'abc:8', cmd: { kind: 'createSpace', payload: { /* missing or wrong-typed fields */ } } }`
+- **THEN** the adapter SHALL NOT call `coordinator.enqueue`
+- **AND** the adapter SHALL log the validation failure at `error` (e.g. code `BUS_INVALID_PAYLOAD`)
+- **AND** the adapter SHALL emit `{ type: 'lunma/command-ack', id: 'abc:8', result: { error: <validation message> } }` so the sidebar's promise rejects with a descriptive error
+
+#### Scenario: The command schema is exhaustive against the union at compile time
+
+- **WHEN** a new variant is added to the `SidebarCommand` union without a matching schema variant
+- **THEN** the `satisfies` guard SHALL fail `tsc`, so the schema can never silently fall behind the vocabulary
+
+### Requirement: Fire-and-forget dispatch helper
+
+The bus module SHALL export a `dispatch(cmd: SidebarCommand): void` helper alongside the `bus` singleton. `dispatch` SHALL call `bus.send(cmd)` and route any rejection through the shared logger (never an unhandled rejection). It is the single sanctioned path for sidebar UI actions that do not await the ack; confirmation flows that need the ack SHALL continue to `await bus.send(...)` directly.
+
+No **sidebar** surface SHALL re-implement its own `bus.send(...).catch(...)` wrapper or call `chrome.runtime.sendMessage` directly for command dispatch; sidebar surfaces SHALL use `dispatch` (fire-and-forget) or `bus.send` (awaited).
+
+The **launcher overlay** (`launcher/overlay.ts`) is a documented exception: as a `<all_urls>` content script under a `<15KB`-gzip byte budget it MUST NOT import the `bus` singleton (which bundles the logger) and wires no bus ack listener (so a `bus.send` there would only ever time out). It SHALL therefore dispatch commands by sending the `lunma/command` wire envelope directly via `chrome.runtime.sendMessage`, fire-and-forget. This is the ONLY sanctioned raw-`sendMessage` command path; the SW adapter validates the overlay's payloads identically, so the security boundary is unchanged.
+
+#### Scenario: A failed fire-and-forget dispatch is logged, not unhandled
+
+- **WHEN** a surface calls `dispatch(cmd)` and the resulting `bus.send` promise rejects (timeout, transport error, or an `{ error }` ack)
+- **THEN** the rejection SHALL be caught and logged via the shared logger
+- **AND** no unhandled promise rejection SHALL surface
+
+#### Scenario: Surfaces do not re-roll the catch-wrapper
+
+- **WHEN** the codebase is checked for command dispatch
+- **THEN** sidebar surfaces SHALL dispatch via `dispatch` or `bus.send`
+- **AND** no sidebar surface SHALL carry its own duplicated `bus.send(...).catch(...)` wrapper or a raw `chrome.runtime.sendMessage` command send
+- **AND** the launcher overlay SHALL be the sole documented exception, sending the `lunma/command` envelope directly (byte-budget + no-ack-listener rationale), with its payloads still validated by the SW adapter
 
 ### Requirement: Coalescing resolves dropped promises
 

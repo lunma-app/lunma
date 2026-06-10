@@ -2,10 +2,9 @@
 import '../ui/drop-line.css';
 import type { AnimationConfig } from 'svelte/animate';
 import { cubicOut } from 'svelte/easing';
-import { bus, type SidebarCommand } from '../shared/bus';
+import { dispatch } from '../shared/bus';
 import type { IconName } from '../shared/icon-names';
 import { labelFor } from '../shared/label-for';
-import { log } from '../shared/logger';
 import type {
   FolderId,
   PinNode,
@@ -524,12 +523,6 @@ function chooseIcon(folderId: FolderId, icon: IconName): void {
 }
 
 // --- dispatch + tab interactions ---------------------------------------------
-function dispatch(cmd: SidebarCommand): void {
-  bus.send(cmd).catch((err: unknown) => {
-    log.debug('PinnedTabs: bus dispatch failed', { kind: cmd.kind, err });
-  });
-}
-
 let confirmingDeleteId = $state<SavedTabId | null>(null);
 // Which row's boundary editor is open in its menu drawer (pinned-tab-domain-boundary).
 let editingBoundaryId = $state<SavedTabId | null>(null);

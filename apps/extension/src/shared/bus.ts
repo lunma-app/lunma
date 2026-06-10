@@ -1,3 +1,5 @@
+import { z } from 'zod';
+import { ICON_NAMES } from './icon-names';
 import { log } from './logger';
 import type {
   FolderId,
@@ -208,6 +210,324 @@ const _kindExhaustiveness = {
   clearArchivedTabs: true,
 } satisfies Record<SidebarCommandKind, true>;
 
+// ── Runtime payload schema (Task 1.x) ──────────────────────────────────────────
+//
+// The SW bus adapter validates the FULL command payload against this Zod
+// discriminated union (not just `kind`), closing the asymmetry with the
+// fully-Zod-validated storage boundary. The schemas below mirror the
+// `SidebarCommand` union's field types exactly; the narrow `SpaceColor` /
+// `IconName` unions are applied here (the bus boundary) where Zod can express
+// them, while folder `icon`/`color` on a `PinNode` stay plain strings (as on the
+// persisted record). The leaf shapes (`PinNode`, `TabBoundary`, `SpaceAutoArchive`)
+// mirror the persisted schemas in `schemas.ts`; they are re-stated locally so
+// `bus.ts` stays the self-contained bus contract and never couples to the storage
+// envelope's coercion/default quirks.
+
+const SPACE_COLORS = [
+  'red',
+  'orange',
+  'yellow',
+  'green',
+  'cyan',
+  'blue',
+  'purple',
+  'pink',
+  'gray',
+] as const satisfies readonly SpaceColor[];
+
+// Exhaustiveness: every `SpaceColor` is present above (a new colour added to the
+// union without a string here fails this check) — the mirror of the `satisfies`
+// above, which guards against an invalid colour.
+type _SpaceColorExhaustive = [SpaceColor] extends [(typeof SPACE_COLORS)[number]] ? true : never;
+const _spaceColorExhaustive: _SpaceColorExhaustive = true;
+void _spaceColorExhaustive;
+
+const SpaceColorSchema = z.enum(SPACE_COLORS);
+const IconNameSchema = z.enum(ICON_NAMES);
+
+// Per-pinned-tab domain boundary — mirrors `TabBoundary` in `types.ts`.
+const TabBoundarySchema = z.discriminatedUnion('mode', [
+  z.strictObject({ mode: z.literal('off') }),
+  z.strictObject({ mode: z.literal('locked'), allow: z.array(z.string()) }),
+]);
+
+// Per-Space auto-archive override — mirrors `SpaceAutoArchive` in `types.ts`.
+const SpaceAutoArchiveSchema = z.discriminatedUnion('mode', [
+  z.strictObject({ mode: z.literal('off') }),
+  z.strictObject({ mode: z.literal('custom'), idleMinutes: z.number().int().positive() }),
+]);
+
+// A pinned-tab placement node — mirrors `PinNode` in `types.ts`. Folder
+// `icon`/`color` are plain strings on the record (the narrow unions live only on
+// the dedicated `setFolderIcon`/`setFolderColor` commands).
+const PinNodeSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('tab'), id: z.string() }),
+  z.strictObject({
+    kind: z.literal('folder'),
+    id: z.string(),
+    name: z.string(),
+    icon: z.string(),
+    color: z.string(),
+    children: z.array(z.string()),
+  }),
+]);
+
+// Per-kind command schemas, keyed by `kind`. The `satisfies Record<…>` guard is
+// the exhaustiveness mechanism (Decision 1): a kind added to the `SidebarCommand`
+// union without an entry here — or a stray extra key — fails `tsc`, the same way
+// `SIDEBAR_COMMAND_KINDS` is guarded. Per-payload *shape* correctness is covered
+// by the schema's unit tests (the `Record<…, z.ZodType>` value type is broad on
+// purpose, because Zod's `.optional()` adds `| undefined` that `exactOptional`-
+// typed union fields do not, so a parameterised guard would mis-fire).
+const COMMAND_SCHEMAS = {
+  createSpace: z.strictObject({
+    kind: z.literal('createSpace'),
+    payload: z.strictObject({
+      name: z.string(),
+      color: SpaceColorSchema,
+      icon: IconNameSchema,
+      windowId: z.number(),
+    }),
+  }),
+  renameSpace: z.strictObject({
+    kind: z.literal('renameSpace'),
+    payload: z.strictObject({ spaceId: z.string(), newName: z.string() }),
+  }),
+  recolourSpace: z.strictObject({
+    kind: z.literal('recolourSpace'),
+    payload: z.strictObject({ spaceId: z.string(), color: SpaceColorSchema }),
+  }),
+  changeSpaceIcon: z.strictObject({
+    kind: z.literal('changeSpaceIcon'),
+    payload: z.strictObject({ spaceId: z.string(), icon: IconNameSchema }),
+  }),
+  deleteSpace: z.strictObject({
+    kind: z.literal('deleteSpace'),
+    payload: z.strictObject({ spaceId: z.string() }),
+  }),
+  restoreSpaceFromTrash: z.strictObject({
+    kind: z.literal('restoreSpaceFromTrash'),
+    payload: z.strictObject({ spaceId: z.string() }),
+  }),
+  activateSpace: z.strictObject({
+    kind: z.literal('activateSpace'),
+    payload: z.strictObject({ windowId: z.number(), spaceId: z.string() }),
+  }),
+  openSavedTab: z.strictObject({
+    kind: z.literal('openSavedTab'),
+    payload: z.strictObject({ savedTabId: z.string(), windowId: z.number() }),
+  }),
+  focusSavedTab: z.strictObject({
+    kind: z.literal('focusSavedTab'),
+    payload: z.strictObject({ savedTabId: z.string(), windowId: z.number() }),
+  }),
+  goHome: z.strictObject({
+    kind: z.literal('goHome'),
+    payload: z.strictObject({ savedTabId: z.string(), windowId: z.number() }),
+  }),
+  makeThisHome: z.strictObject({
+    kind: z.literal('makeThisHome'),
+    payload: z.strictObject({ savedTabId: z.string() }),
+  }),
+  deleteSavedTab: z.strictObject({
+    kind: z.literal('deleteSavedTab'),
+    payload: z.strictObject({ savedTabId: z.string() }),
+  }),
+  pinTab: z.strictObject({
+    kind: z.literal('pinTab'),
+    payload: z.strictObject({
+      tabId: z.number(),
+      windowId: z.number(),
+      spaceId: z.string(),
+      targetIndex: z.number(),
+      placement: z
+        .union([
+          z.strictObject({ into: z.string() }),
+          z.strictObject({ withSavedTabId: z.string() }),
+        ])
+        .optional(),
+    }),
+  }),
+  unpinTab: z.strictObject({
+    kind: z.literal('unpinTab'),
+    payload: z.strictObject({ savedTabId: z.string(), windowId: z.number() }),
+  }),
+  reorderPinned: z.strictObject({
+    kind: z.literal('reorderPinned'),
+    payload: z.strictObject({ spaceId: z.string(), nodes: z.array(PinNodeSchema) }),
+  }),
+  favoriteTab: z.strictObject({
+    kind: z.literal('favoriteTab'),
+    payload: z.strictObject({
+      tabId: z.number(),
+      windowId: z.number(),
+      targetIndex: z.number().optional(),
+    }),
+  }),
+  favoriteSavedTab: z.strictObject({
+    kind: z.literal('favoriteSavedTab'),
+    payload: z.strictObject({ savedTabId: z.string() }),
+  }),
+  pinSavedTab: z.strictObject({
+    kind: z.literal('pinSavedTab'),
+    payload: z.strictObject({
+      savedTabId: z.string(),
+      spaceId: z.string(),
+      index: z.number().optional(),
+    }),
+  }),
+  reorderFavorites: z.strictObject({
+    kind: z.literal('reorderFavorites'),
+    payload: z.strictObject({ ids: z.array(z.string()) }),
+  }),
+  createFolder: z.strictObject({
+    kind: z.literal('createFolder'),
+    payload: z.strictObject({ spaceId: z.string() }),
+  }),
+  createFolderFromTabs: z.strictObject({
+    kind: z.literal('createFolderFromTabs'),
+    payload: z.strictObject({
+      spaceId: z.string(),
+      tabIdA: z.string(),
+      tabIdB: z.string(),
+      index: z.number(),
+    }),
+  }),
+  renameFolder: z.strictObject({
+    kind: z.literal('renameFolder'),
+    payload: z.strictObject({ spaceId: z.string(), folderId: z.string(), name: z.string() }),
+  }),
+  setFolderIcon: z.strictObject({
+    kind: z.literal('setFolderIcon'),
+    payload: z.strictObject({ spaceId: z.string(), folderId: z.string(), icon: IconNameSchema }),
+  }),
+  setFolderColor: z.strictObject({
+    kind: z.literal('setFolderColor'),
+    payload: z.strictObject({ spaceId: z.string(), folderId: z.string(), color: SpaceColorSchema }),
+  }),
+  deleteFolder: z.strictObject({
+    kind: z.literal('deleteFolder'),
+    payload: z.strictObject({ spaceId: z.string(), folderId: z.string() }),
+  }),
+  reorderTemp: z.strictObject({
+    kind: z.literal('reorderTemp'),
+    payload: z.strictObject({ windowId: z.number(), tabIds: z.array(z.number()) }),
+  }),
+  reorderSpaces: z.strictObject({
+    kind: z.literal('reorderSpaces'),
+    payload: z.strictObject({ spaceIds: z.array(z.string()) }),
+  }),
+  renameTab: z.strictObject({
+    kind: z.literal('renameTab'),
+    payload: z.strictObject({ savedTabId: z.string(), newName: z.string() }),
+  }),
+  renameTempTab: z.strictObject({
+    kind: z.literal('renameTempTab'),
+    payload: z.strictObject({
+      tabId: z.number(),
+      spaceId: z.string(),
+      windowId: z.number(),
+      newName: z.string(),
+    }),
+  }),
+  focusTab: z.strictObject({
+    kind: z.literal('focusTab'),
+    payload: z.strictObject({ tabId: z.number() }),
+  }),
+  closeTab: z.strictObject({
+    kind: z.literal('closeTab'),
+    payload: z.strictObject({ tabId: z.number() }),
+  }),
+  newTab: z.strictObject({
+    kind: z.literal('newTab'),
+    payload: z.strictObject({ windowId: z.number(), spaceId: z.string().optional() }),
+  }),
+  clearTempTabs: z.strictObject({
+    kind: z.literal('clearTempTabs'),
+    payload: z.strictObject({ windowId: z.number(), spaceId: z.string().optional() }),
+  }),
+  undoClearTempTabs: z.strictObject({
+    kind: z.literal('undoClearTempTabs'),
+    payload: z.strictObject({ windowId: z.number(), tabIds: z.array(z.number()) }),
+  }),
+  openUrl: z.strictObject({
+    kind: z.literal('openUrl'),
+    payload: z.strictObject({ url: z.string(), windowId: z.number() }),
+  }),
+  setTabBoundary: z.strictObject({
+    kind: z.literal('setTabBoundary'),
+    payload: z.strictObject({ savedTabId: z.string(), boundary: TabBoundarySchema.nullable() }),
+  }),
+  restoreArchivedTab: z.strictObject({
+    kind: z.literal('restoreArchivedTab'),
+    payload: z.strictObject({ archivedAt: z.number(), tabId: z.number(), windowId: z.number() }),
+  }),
+  setSpaceAutoArchive: z.strictObject({
+    kind: z.literal('setSpaceAutoArchive'),
+    payload: z.strictObject({
+      spaceId: z.string(),
+      autoArchive: SpaceAutoArchiveSchema.nullable(),
+    }),
+  }),
+  deleteArchivedTab: z.strictObject({
+    kind: z.literal('deleteArchivedTab'),
+    payload: z.strictObject({ archivedAt: z.number(), tabId: z.number() }),
+  }),
+  clearArchivedTabs: z.strictObject({
+    kind: z.literal('clearArchivedTabs'),
+    payload: z.strictObject({}),
+  }),
+} satisfies Record<SidebarCommandKind, z.ZodType>;
+
+/**
+ * The runtime schema for a `SidebarCommand` — a Zod discriminated union keyed on
+ * `kind`, exhaustive against the `SidebarCommand` union by the `satisfies` guard
+ * on `COMMAND_SCHEMAS` above. The SW bus adapter parses every incoming command's
+ * full payload against this before enqueuing (Task 2.x).
+ */
+export const SidebarCommandSchema = z.discriminatedUnion('kind', [
+  COMMAND_SCHEMAS.createSpace,
+  COMMAND_SCHEMAS.renameSpace,
+  COMMAND_SCHEMAS.recolourSpace,
+  COMMAND_SCHEMAS.changeSpaceIcon,
+  COMMAND_SCHEMAS.deleteSpace,
+  COMMAND_SCHEMAS.restoreSpaceFromTrash,
+  COMMAND_SCHEMAS.activateSpace,
+  COMMAND_SCHEMAS.openSavedTab,
+  COMMAND_SCHEMAS.focusSavedTab,
+  COMMAND_SCHEMAS.goHome,
+  COMMAND_SCHEMAS.makeThisHome,
+  COMMAND_SCHEMAS.deleteSavedTab,
+  COMMAND_SCHEMAS.pinTab,
+  COMMAND_SCHEMAS.unpinTab,
+  COMMAND_SCHEMAS.reorderPinned,
+  COMMAND_SCHEMAS.favoriteTab,
+  COMMAND_SCHEMAS.favoriteSavedTab,
+  COMMAND_SCHEMAS.pinSavedTab,
+  COMMAND_SCHEMAS.reorderFavorites,
+  COMMAND_SCHEMAS.createFolder,
+  COMMAND_SCHEMAS.createFolderFromTabs,
+  COMMAND_SCHEMAS.renameFolder,
+  COMMAND_SCHEMAS.setFolderIcon,
+  COMMAND_SCHEMAS.setFolderColor,
+  COMMAND_SCHEMAS.deleteFolder,
+  COMMAND_SCHEMAS.reorderTemp,
+  COMMAND_SCHEMAS.reorderSpaces,
+  COMMAND_SCHEMAS.renameTab,
+  COMMAND_SCHEMAS.renameTempTab,
+  COMMAND_SCHEMAS.focusTab,
+  COMMAND_SCHEMAS.closeTab,
+  COMMAND_SCHEMAS.newTab,
+  COMMAND_SCHEMAS.clearTempTabs,
+  COMMAND_SCHEMAS.undoClearTempTabs,
+  COMMAND_SCHEMAS.openUrl,
+  COMMAND_SCHEMAS.setTabBoundary,
+  COMMAND_SCHEMAS.restoreArchivedTab,
+  COMMAND_SCHEMAS.setSpaceAutoArchive,
+  COMMAND_SCHEMAS.deleteArchivedTab,
+  COMMAND_SCHEMAS.clearArchivedTabs,
+]);
+
 export interface CommandMessage {
   type: 'lunma/command';
   id: string;
@@ -405,3 +725,18 @@ export const bus: Bus = new Proxy({} as Bus, {
     return Reflect.get(_bus, prop);
   },
 });
+
+/**
+ * Fire-and-forget command dispatch (Task 3.x). The single sanctioned path for
+ * sidebar UI actions that do not await the ack: it calls `bus.send` and routes
+ * any rejection (timeout, transport error, or an `{ error }` ack) through the
+ * shared logger, so a failed command can never become an unhandled rejection.
+ * Confirmation flows that need the ack keep awaiting `bus.send(...)` directly.
+ *
+ * The typed logger shape (`log.error(message, context)`) is required here — a
+ * bare `.catch(log.error)` would pass the rejection as the `message` arg and
+ * mis-log it.
+ */
+export function dispatch(cmd: SidebarCommand): void {
+  bus.send(cmd).catch((err: unknown) => log.error('BUS_DISPATCH_FAILED', { err, kind: cmd.kind }));
+}

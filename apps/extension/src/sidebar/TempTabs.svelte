@@ -1,9 +1,8 @@
 <script lang="ts">
 import '../ui/drop-line.css';
 import { flip } from 'svelte/animate';
-import { bus, type SidebarCommand } from '../shared/bus';
+import { dispatch } from '../shared/bus';
 import { labelFor } from '../shared/label-for';
-import { log } from '../shared/logger';
 import type { IconName, LiveTab, SpaceId, TabId, WindowId } from '../shared/types';
 import { faviconCacheKey, faviconFor, faviconUrl } from '../ui/favicon';
 import TabRowMenu, { type TabRowMenuItem } from '../ui/TabRowMenu.svelte';
@@ -174,14 +173,6 @@ function handleDrop(r: DropResult): void {
     ids.splice(insertAt, 0, draggedTabId);
     dispatch({ kind: 'reorderTemp', payload: { windowId, tabIds: ids } });
   }
-}
-
-// Fire-and-forget dispatch (results arrive via the state broadcast). Catch
-// transport failures so they log instead of throwing an uncaught rejection.
-function dispatch(cmd: SidebarCommand): void {
-  bus.send(cmd).catch((err: unknown) => {
-    log.debug('TempTabs: bus dispatch failed', { kind: cmd.kind, err });
-  });
 }
 
 function focusTab(item: TempItem): void {

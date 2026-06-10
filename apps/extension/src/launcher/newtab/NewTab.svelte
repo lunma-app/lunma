@@ -1,6 +1,6 @@
 <script lang="ts">
 import { onMount, tick } from 'svelte';
-import { bus } from '../../shared/bus';
+import { dispatch } from '../../shared/bus';
 import { onStateBroadcast, requestLauncherSuggestions } from '../../shared/messages';
 import { modifierLabel } from '../../shared/platform';
 import type { SearchEngine } from '../../shared/search-engines';
@@ -306,7 +306,7 @@ function act(result: LauncherResult): void {
   switch (result.source) {
     case 'tab':
       if (result.tabId !== undefined) {
-        void bus.send({ kind: 'focusTab', payload: { tabId: result.tabId } });
+        dispatch({ kind: 'focusTab', payload: { tabId: result.tabId } });
       }
       break;
     case 'saved': {
@@ -315,14 +315,14 @@ function act(result: LauncherResult): void {
       // A bound saved result carries the live `tabId` (set by the provider);
       // focus it. A dormant one has no `tabId` — open it.
       if (result.tabId !== undefined) {
-        void bus.send({ kind: 'focusSavedTab', payload: { savedTabId, windowId } });
+        dispatch({ kind: 'focusSavedTab', payload: { savedTabId, windowId } });
       } else {
-        void bus.send({ kind: 'openSavedTab', payload: { savedTabId, windowId } });
+        dispatch({ kind: 'openSavedTab', payload: { savedTabId, windowId } });
       }
       break;
     }
     default: // 'bookmark' | 'history' | 'websearch' | 'navigate' — open the carried url.
-      void bus.send({ kind: 'openUrl', payload: { url: result.url, windowId } });
+      dispatch({ kind: 'openUrl', payload: { url: result.url, windowId } });
       break;
   }
 }

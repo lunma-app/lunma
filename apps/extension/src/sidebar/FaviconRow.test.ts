@@ -27,7 +27,9 @@ function pointer(type: string, clientX: number, clientY: number): MouseEvent {
 }
 
 const { sendMock } = vi.hoisted(() => ({ sendMock: vi.fn(() => Promise.resolve()) }));
-vi.mock('../shared/bus', () => ({ bus: { send: sendMock } }));
+// The surface dispatches fire-and-forget via `dispatch`; route it to the same
+// spy as `bus.send` so call assertions hold.
+vi.mock('../shared/bus', () => ({ bus: { send: sendMock }, dispatch: sendMock }));
 
 function installChrome(): void {
   (globalThis as unknown as { chrome: unknown }).chrome = {

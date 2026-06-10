@@ -742,8 +742,20 @@ export function shouldDismissOnFocusOut(
     rows[selected]?.scrollIntoView({ block: 'nearest' });
   }
 
-  /** Dispatch a command over the bus protocol (the SW's bus-adapter handles the
-   * `lunma/command` envelope). Fire-and-forget — the overlay ignores the ack. */
+  /**
+   * Dispatch a command over the bus protocol (the SW's bus-adapter handles the
+   * `lunma/command` envelope). Fire-and-forget — the overlay ignores the ack.
+   *
+   * Documented raw-send exception (typed-message-bus / `validate-bus-payloads`):
+   * the shared `dispatch`/`bus.send` helpers are the sanctioned path for every
+   * sidebar surface, but the overlay is the standing exception. It deliberately
+   * does NOT import the `bus` singleton (that bundles the logger and blows the
+   * <15KB-gzip content-script budget — see the file header) and wires no bus ack
+   * listener, so a `bus.send` here would sit in the correlation map and time out
+   * after 10s rather than resolve. It therefore speaks the `lunma/command` wire
+   * envelope directly, fire-and-forget. The SW adapter still validates the
+   * payload, so the security boundary is unchanged.
+   */
   function dispatch(cmd: SidebarCommand): void {
     void chrome.runtime
       .sendMessage({ type: 'lunma/command', id: `ov:${crypto.randomUUID()}`, cmd })

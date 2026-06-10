@@ -175,6 +175,58 @@ describe('installBusAdapter', () => {
     expect(ack.result).toEqual({ error: 'unknown command kind' });
   });
 
+  test('rejects a known kind with an invalid payload: logs BUS_INVALID_PAYLOAD, emits error ack, no enqueue', () => {
+    const { chrome, deliver } = installChromeStub();
+    const { coordinator, enqueue } = makeFakeCoordinator();
+    const errSpy = vi.spyOn(log, 'error').mockImplementation(() => undefined);
+    installBusAdapter(coordinator);
+
+    // `createSpace` is a recognised kind, but the payload is malformed: `windowId`
+    // is missing and `color` is out of the SpaceColor vocabulary.
+    deliver({
+      type: 'lunma/command',
+      id: 'bad:1',
+      cmd: { kind: 'createSpace', payload: { name: 'Work', color: 'chartreuse', icon: 'star' } },
+    });
+
+    expect(enqueue).not.toHaveBeenCalled();
+    // The unknown-kind path is NOT taken — this is the payload-validation path.
+    expect(errSpy).not.toHaveBeenCalledWith('BUS_UNKNOWN_KIND', expect.anything());
+    const invalidCall = errSpy.mock.calls.find((c) => c[0] === 'BUS_INVALID_PAYLOAD');
+    expect(invalidCall).toBeDefined();
+    expect(invalidCall?.[1]).toMatchObject({ id: 'bad:1', kind: 'createSpace' });
+
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledTimes(1);
+    const ack = chrome.runtime.sendMessage.mock.calls[0]?.[0] as CommandAck;
+    expect(ack.type).toBe('lunma/command-ack');
+    expect(ack.id).toBe('bad:1');
+    expect(ack.result).toMatchObject({ error: expect.any(String) });
+    errSpy.mockRestore();
+  });
+
+  test('a valid payload still enqueues after full-payload validation is added', async () => {
+    const { deliver } = installChromeStub();
+    const { coordinator, enqueue } = makeFakeCoordinator();
+    installBusAdapter(coordinator);
+
+    // A fully-valid `openUrl` (the page-influenced command the validation targets).
+    deliver({
+      type: 'lunma/command',
+      id: 'ok:1',
+      cmd: { kind: 'openUrl', payload: { url: 'https://example.com', windowId: 3 } },
+    } satisfies CommandMessage);
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(enqueue).toHaveBeenCalledWith({
+      source: 'sidebar',
+      kind: 'openUrl',
+      payload: { url: 'https://example.com', windowId: 3 },
+      correlationId: 'ok:1',
+    });
+  });
+
   test('ignores non-lunma/command messages', () => {
     const { deliver } = installChromeStub();
     const { coordinator, enqueue } = makeFakeCoordinator();

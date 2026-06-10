@@ -8,6 +8,9 @@ import {
   type CommandMessage,
   createBus,
   SIDEBAR_COMMAND_KINDS,
+  type SidebarCommand,
+  type SidebarCommandKind,
+  SidebarCommandSchema,
 } from './bus';
 import { log } from './logger';
 
@@ -237,6 +240,233 @@ describe('createBus ack listener', () => {
       send({ type: 'lunma/command-ack', id: 7 });
       send({ type: 'lunma/command-ack', id: 'abc:1' });
     }).not.toThrow();
+  });
+});
+
+// One representative valid command per kind. Typed as the exact-per-key mapped
+// type so the example for a key must actually be that kind's command — and so a
+// new `SidebarCommand` variant without an entry here fails `tsc` (a third guard,
+// alongside the schema's `satisfies` and `SIDEBAR_COMMAND_KINDS`).
+const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kind: K }> } = {
+  createSpace: {
+    kind: 'createSpace',
+    payload: { name: 'Work', color: 'blue', icon: 'star', windowId: 1 },
+  },
+  renameSpace: { kind: 'renameSpace', payload: { spaceId: 'sp', newName: 'New' } },
+  recolourSpace: { kind: 'recolourSpace', payload: { spaceId: 'sp', color: 'green' } },
+  changeSpaceIcon: { kind: 'changeSpaceIcon', payload: { spaceId: 'sp', icon: 'rocket' } },
+  deleteSpace: { kind: 'deleteSpace', payload: { spaceId: 'sp' } },
+  restoreSpaceFromTrash: { kind: 'restoreSpaceFromTrash', payload: { spaceId: 'sp' } },
+  activateSpace: { kind: 'activateSpace', payload: { windowId: 1, spaceId: 'sp' } },
+  openSavedTab: { kind: 'openSavedTab', payload: { savedTabId: 'st', windowId: 1 } },
+  focusSavedTab: { kind: 'focusSavedTab', payload: { savedTabId: 'st', windowId: 1 } },
+  goHome: { kind: 'goHome', payload: { savedTabId: 'st', windowId: 1 } },
+  makeThisHome: { kind: 'makeThisHome', payload: { savedTabId: 'st' } },
+  deleteSavedTab: { kind: 'deleteSavedTab', payload: { savedTabId: 'st' } },
+  pinTab: {
+    kind: 'pinTab',
+    payload: { tabId: 42, windowId: 1, spaceId: 'sp', targetIndex: 0 },
+  },
+  unpinTab: { kind: 'unpinTab', payload: { savedTabId: 'st', windowId: 1 } },
+  reorderPinned: {
+    kind: 'reorderPinned',
+    payload: {
+      spaceId: 'sp',
+      nodes: [
+        { kind: 'tab', id: 't1' },
+        { kind: 'folder', id: 'f1', name: 'F', icon: 'folder', color: 'gray', children: ['t2'] },
+      ],
+    },
+  },
+  favoriteTab: { kind: 'favoriteTab', payload: { tabId: 42, windowId: 1 } },
+  favoriteSavedTab: { kind: 'favoriteSavedTab', payload: { savedTabId: 'st' } },
+  pinSavedTab: { kind: 'pinSavedTab', payload: { savedTabId: 'st', spaceId: 'sp' } },
+  reorderFavorites: { kind: 'reorderFavorites', payload: { ids: ['a', 'b'] } },
+  createFolder: { kind: 'createFolder', payload: { spaceId: 'sp' } },
+  createFolderFromTabs: {
+    kind: 'createFolderFromTabs',
+    payload: { spaceId: 'sp', tabIdA: 'a', tabIdB: 'b', index: 0 },
+  },
+  renameFolder: { kind: 'renameFolder', payload: { spaceId: 'sp', folderId: 'f', name: 'N' } },
+  setFolderIcon: { kind: 'setFolderIcon', payload: { spaceId: 'sp', folderId: 'f', icon: 'star' } },
+  setFolderColor: {
+    kind: 'setFolderColor',
+    payload: { spaceId: 'sp', folderId: 'f', color: 'red' },
+  },
+  deleteFolder: { kind: 'deleteFolder', payload: { spaceId: 'sp', folderId: 'f' } },
+  reorderTemp: { kind: 'reorderTemp', payload: { windowId: 1, tabIds: [1, 2, 3] } },
+  reorderSpaces: { kind: 'reorderSpaces', payload: { spaceIds: ['a', 'b'] } },
+  renameTab: { kind: 'renameTab', payload: { savedTabId: 'st', newName: 'N' } },
+  renameTempTab: {
+    kind: 'renameTempTab',
+    payload: { tabId: 42, spaceId: 'sp', windowId: 1, newName: 'N' },
+  },
+  focusTab: { kind: 'focusTab', payload: { tabId: 42 } },
+  closeTab: { kind: 'closeTab', payload: { tabId: 42 } },
+  newTab: { kind: 'newTab', payload: { windowId: 1 } },
+  clearTempTabs: { kind: 'clearTempTabs', payload: { windowId: 1 } },
+  undoClearTempTabs: { kind: 'undoClearTempTabs', payload: { windowId: 1, tabIds: [1, 2] } },
+  openUrl: { kind: 'openUrl', payload: { url: 'https://example.com', windowId: 1 } },
+  setTabBoundary: {
+    kind: 'setTabBoundary',
+    payload: { savedTabId: 'st', boundary: { mode: 'locked', allow: ['*.example.com'] } },
+  },
+  restoreArchivedTab: {
+    kind: 'restoreArchivedTab',
+    payload: { archivedAt: 123, tabId: 5, windowId: 1 },
+  },
+  setSpaceAutoArchive: {
+    kind: 'setSpaceAutoArchive',
+    payload: { spaceId: 'sp', autoArchive: { mode: 'custom', idleMinutes: 30 } },
+  },
+  deleteArchivedTab: { kind: 'deleteArchivedTab', payload: { archivedAt: 123, tabId: 5 } },
+  clearArchivedTabs: { kind: 'clearArchivedTabs', payload: {} },
+};
+
+describe('SidebarCommandSchema (full-payload validation)', () => {
+  test('every command kind has a valid representative that parses', () => {
+    for (const kind of SIDEBAR_COMMAND_KINDS) {
+      const cmd = VALID_COMMANDS[kind];
+      const parsed = SidebarCommandSchema.safeParse(cmd);
+      expect(parsed.success, `expected ${kind} to parse`).toBe(true);
+      if (parsed.success) expect(parsed.data).toEqual(cmd);
+    }
+  });
+
+  test('the optional/nullable payload variants parse', () => {
+    // Optional fields present.
+    expect(
+      SidebarCommandSchema.safeParse({
+        kind: 'pinTab',
+        payload: {
+          tabId: 1,
+          windowId: 1,
+          spaceId: 'sp',
+          targetIndex: 0,
+          placement: { into: 'f1' },
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      SidebarCommandSchema.safeParse({
+        kind: 'pinSavedTab',
+        payload: { savedTabId: 'st', spaceId: 'sp', index: 3 },
+      }).success,
+    ).toBe(true);
+    expect(
+      SidebarCommandSchema.safeParse({
+        kind: 'newTab',
+        payload: { windowId: 1, spaceId: 'sp' },
+      }).success,
+    ).toBe(true);
+    // Nullable boundary / autoArchive.
+    expect(
+      SidebarCommandSchema.safeParse({
+        kind: 'setTabBoundary',
+        payload: { savedTabId: 'st', boundary: null },
+      }).success,
+    ).toBe(true);
+    expect(
+      SidebarCommandSchema.safeParse({
+        kind: 'setSpaceAutoArchive',
+        payload: { spaceId: 'sp', autoArchive: null },
+      }).success,
+    ).toBe(true);
+  });
+
+  test('rejects a missing required field', () => {
+    const parsed = SidebarCommandSchema.safeParse({
+      kind: 'createSpace',
+      payload: { name: 'Work', color: 'blue', icon: 'star' }, // windowId missing
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  test('rejects a wrong-typed field', () => {
+    const parsed = SidebarCommandSchema.safeParse({
+      kind: 'focusTab',
+      payload: { tabId: 'not-a-number' },
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  test('rejects an out-of-vocabulary SpaceColor / IconName', () => {
+    expect(
+      SidebarCommandSchema.safeParse({
+        kind: 'recolourSpace',
+        payload: { spaceId: 'sp', color: 'chartreuse' },
+      }).success,
+    ).toBe(false);
+    expect(
+      SidebarCommandSchema.safeParse({
+        kind: 'changeSpaceIcon',
+        payload: { spaceId: 'sp', icon: 'not-an-icon' },
+      }).success,
+    ).toBe(false);
+  });
+
+  test('rejects an extra key (strict payload)', () => {
+    const parsed = SidebarCommandSchema.safeParse({
+      kind: 'deleteSpace',
+      payload: { spaceId: 'sp', sneaky: true },
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  test('rejects a malformed nested PinNode', () => {
+    const parsed = SidebarCommandSchema.safeParse({
+      kind: 'reorderPinned',
+      payload: { spaceId: 'sp', nodes: [{ kind: 'tab' }] }, // missing id
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  test('rejects a non-positive custom idleMinutes', () => {
+    const parsed = SidebarCommandSchema.safeParse({
+      kind: 'setSpaceAutoArchive',
+      payload: { spaceId: 'sp', autoArchive: { mode: 'custom', idleMinutes: 0 } },
+    });
+    expect(parsed.success).toBe(false);
+  });
+});
+
+describe('dispatch (fire-and-forget helper)', () => {
+  test('a rejecting send is caught and logged via the typed logger, no unhandled rejection', async () => {
+    interface ChromeStub {
+      runtime: {
+        id: string;
+        sendMessage: ReturnType<typeof vi.fn>;
+        onMessage: {
+          addListener: ReturnType<typeof vi.fn>;
+          removeListener: ReturnType<typeof vi.fn>;
+        };
+      };
+    }
+    const stub: ChromeStub = {
+      runtime: {
+        id: 'ext',
+        sendMessage: vi.fn(() => Promise.reject(new Error('Receiving end does not exist'))),
+        onMessage: { addListener: vi.fn(), removeListener: vi.fn() },
+      },
+    };
+    (globalThis as unknown as { chrome: ChromeStub }).chrome = stub;
+    vi.resetModules();
+    const { dispatch } = await import('./bus');
+    const { log: freshLog } = await import('./logger');
+    const errSpy = vi.spyOn(freshLog, 'error').mockImplementation(() => undefined);
+
+    dispatch({ kind: 'focusTab', payload: { tabId: 7 } });
+
+    // Flush the transport rejection → bus reject → dispatch catch → log chain.
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(errSpy).toHaveBeenCalledWith(
+      'BUS_DISPATCH_FAILED',
+      expect.objectContaining({ kind: 'focusTab' }),
+    );
+    errSpy.mockRestore();
   });
 });
 

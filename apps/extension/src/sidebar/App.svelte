@@ -1,6 +1,6 @@
 <script lang="ts">
 import { onDestroy, onMount, untrack } from 'svelte';
-import { bus, type SidebarCommand } from '../shared/bus';
+import { bus, dispatch } from '../shared/bus';
 import { log } from '../shared/logger';
 import { requestNewTabLauncher } from '../shared/messages';
 import { modifierLabel } from '../shared/platform';
@@ -338,15 +338,10 @@ function tempCountFor(space: Space): number {
   return store.state.spaceInstancesByWindow[windowId]?.[space.id]?.tempTabIds.length ?? 0;
 }
 
-// Fire-and-forget dispatch (results arrive via the state broadcast), mirroring
-// TempTabs/PinnedTabs. New Tab / Clear act on the PANEL's OWN Space (carrying
+// Fire-and-forget dispatch (results arrive via the state broadcast) via the
+// shared `dispatch`. New Tab / Clear act on the PANEL's OWN Space (carrying
 // spaceId): every carousel panel is fully live (§9), so nothing toggles
 // enabled/disabled at commit and the switch stays a pure transform.
-function dispatch(cmd: SidebarCommand): void {
-  bus.send(cmd).catch((err: unknown) => {
-    log.debug('App: bus dispatch failed', { kind: cmd.kind, err });
-  });
-}
 function onNewTab(spaceId: SpaceId): void {
   dispatch({ kind: 'newTab', payload: { windowId, spaceId } });
 }
@@ -460,7 +455,7 @@ function onCommit(direction: 'next' | 'prev'): void {
     centredId = newId;
     easeTo(baseX(destIdx));
   }
-  void bus.send({ kind: 'activateSpace', payload: { windowId, spaceId: newId } });
+  dispatch({ kind: 'activateSpace', payload: { windowId, spaceId: newId } });
 }
 
 function onCancel(): void {
