@@ -30,10 +30,13 @@ import StageWindow from '$lib/StageWindow.svelte';
 
 <style>
   /* The hero owns the first screen: fill the viewport below the sticky nav (82px),
-     content centred. min-height (not height) so short laptops grow and never clip
-     the mock; svh keeps mobile browser chrome from over-tallening it. */
+     content centred. The clamp CAPS the height (~900px) so on tall monitors the
+     content doesn't float in a sea of space under the nav — there it holds a
+     comfortable height and lets beat 01 peek below to invite the scroll. min-height
+     (not height) so short laptops grow and never clip the mock; svh so mobile
+     browser chrome doesn't over-tallen it. */
   .hero {
-    min-height: calc(100svh - 82px);
+    min-height: clamp(560px, calc(100svh - 82px), 900px);
     display: flex;
     flex-direction: column;
     justify-content: center;
