@@ -15,7 +15,7 @@ interface Props {
 
 let { fav, live = false, active = false, size }: Props = $props();
 
-const favPx = size ? Math.round(size * 0.55) : 24;
+const favPx = $derived(size ? Math.round(size * 0.55) : 24);
 </script>
 
 <div
