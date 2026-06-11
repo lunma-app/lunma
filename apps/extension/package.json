@@ -6,8 +6,9 @@
   "description": "Lunma — spatial tab and bookmark management for Chrome (MV3 extension)",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "pnpm gen:icons && vite",
+    "build": "pnpm gen:icons && vite build",
+    "gen:icons": "node scripts/gen-icon-loaders.mjs",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-check --tsconfig ./tsconfig.json --watch",

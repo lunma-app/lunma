@@ -61,6 +61,7 @@ future capability will be shaped a certain way, write an ADR.
 | 0011 | [Auto-archive restore + full loop](0011-auto-archive-restore-and-full-loop.md) | Accepted | 0002 (in part) |
 | 0012 | [pnpm workspace + the marketing site](0012-workspace-and-marketing-site.md) | Accepted | — |
 | 0013 | [English-only for v1; i18n deferred](0013-english-only-v1.md) | Accepted | — |
+| 0014 | [Restrict the lucide loader to a generated allowlist](0014-icon-loader-allowlist.md) | Accepted | 0004 (in part) |
 
 ## Format
 

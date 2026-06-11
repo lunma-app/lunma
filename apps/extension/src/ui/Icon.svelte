@@ -1,19 +1,10 @@
 <script lang="ts" module>
 import type { Component } from 'svelte';
 import { type IconName, isIconName } from '../shared/icon-names';
-
-type IconModule = { default: Component };
-type Loader = () => Promise<IconModule>;
-
-const loaders = import.meta.glob('/node_modules/@lucide/svelte/dist/icons/*.svelte') as Record<
-  string,
-  Loader
->;
-const loaderByName: Map<string, Loader> = new Map();
-for (const [path, loader] of Object.entries(loaders)) {
-  const match = path.match(/\/([^/]+)\.svelte$/);
-  if (match?.[1]) loaderByName.set(match[1], loader);
-}
+// Allowlisted lazy loaders (generated from ICON_NAMES + source literals by
+// scripts/gen-icon-loaders.mjs) — replaces a wildcard glob that emitted a chunk
+// for all ~1,711 lucide icons at build time. See ADR 0014.
+import { iconLoaders } from './icon-loaders.generated';
 
 const componentCache: Map<string, Component> = new Map();
 const inflight: Map<string, Promise<Component | null>> = new Map();
@@ -24,7 +15,7 @@ async function resolveIcon(name: string): Promise<Component | null> {
   if (cached) return cached;
   const pending = inflight.get(name);
   if (pending) return pending;
-  const loader = loaderByName.get(name);
+  const loader = iconLoaders[name];
   if (!loader) {
     if (!missingLogged.has(name)) {
       missingLogged.add(name);
