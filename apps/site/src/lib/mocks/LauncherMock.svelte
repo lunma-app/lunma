@@ -1,4 +1,5 @@
 <script lang="ts">
+import { launcherChord } from '$lib/platform.svelte';
 import type { FaviconSpec } from './apps';
 import Favicon from './Favicon.svelte';
 
@@ -30,7 +31,7 @@ let { query, placeholder, caret = false, results }: Props = $props();
     {:else}
       <span class="ph">{placeholder}</span>
     {/if}
-    <span class="shortcut">Alt+L</span>
+    <span class="shortcut">{launcherChord()}</span>
   </div>
   {#each results as r (r.title)}
     <div class="row" class:sel={r.selected}>

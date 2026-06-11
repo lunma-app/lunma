@@ -1,6 +1,7 @@
 <script lang="ts">
 import InstallCta from '$lib/InstallCta.svelte';
 import { CHROME_WEB_STORE_URL, EDGE_ADDONS_URL } from '$lib/links';
+import { altKeySymbol } from '$lib/platform.svelte';
 import StageWindow from '$lib/StageWindow.svelte';
 </script>
 
@@ -11,7 +12,7 @@ import StageWindow from '$lib/StageWindow.svelte';
       <h1 class="kindle k1">Your tabs, organised into Spaces.</h1>
       <p class="lede kindle k2">
         Lunma is a vertical sidebar for Chrome and Edge. Every project gets its own
-        colour-coded Space, and the launcher on <kbd class="key">Alt</kbd>
+        colour-coded Space, and the launcher on <kbd class="key">{altKeySymbol()}</kbd>
         <kbd class="key">L</kbd> jumps you to any tab.
       </p>
       <div class="ctas kindle k3">

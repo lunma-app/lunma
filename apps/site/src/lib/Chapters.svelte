@@ -5,6 +5,7 @@ import FaviconGrid from '$lib/mocks/FaviconGrid.svelte';
 import LauncherMock from '$lib/mocks/LauncherMock.svelte';
 import SpaceHeader from '$lib/mocks/SpaceHeader.svelte';
 import TabRowMock from '$lib/mocks/TabRowMock.svelte';
+import { altKeyLabel } from '$lib/platform.svelte';
 
 // The feature beats use token-faithful mocks (composed from @lunma/tokens, so they
 // re-hue with the brand and can show states a static screenshot can't — an
@@ -36,7 +37,7 @@ import TabRowMock from '$lib/mocks/TabRowMock.svelte';
   {/snippet}
 </Chapter>
 
-<Chapter index={2} id="launcher" kicker="Launcher" title="Search everything from Alt+L." layout="right" color="cyan">
+<Chapter index={2} id="launcher" kicker="Launcher" title={`Search everything from ${altKeyLabel()}+L.`} layout="right" color="cyan">
   {#snippet copy()}
     <p>
       One overlay searches your open tabs, your bookmarks, and your history, from

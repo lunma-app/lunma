@@ -2,12 +2,18 @@
 // The site's entire visual identity comes from the shared package — tokens,
 // the self-hosted brand faces, and the aurora/glass/glow recipes — NOT a
 // hand-mirrored copy. Brand stays in lockstep with the extension by import.
+import { onMount } from 'svelte';
+import { initPlatform } from '$lib/platform.svelte';
 import '@lunma/tokens/tokens.css';
 import '@lunma/tokens/fonts.css';
 import '@lunma/tokens/recipes.css';
 import '../app.css';
 
 let { children } = $props();
+
+// Sample the OS once on the client so the launcher shortcut reads "Option" on a
+// Mac and "Alt" elsewhere (same key, different label — see platform.svelte.ts).
+onMount(initPlatform);
 </script>
 
 <!-- Preload the two brand faces the FIRST PAINT uses — the Instrument Serif regular
