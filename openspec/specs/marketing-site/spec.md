@@ -91,3 +91,76 @@ All motion on the page SHALL be gated behind `prefers-reduced-motion: reduce` (n
 - **WHEN** the site is built for deployment
 - **THEN** it produces prerendered static output deployable to a static host (no server-side runtime), bound to `lunma.app`
 
+### Requirement: The auto-rotating Space demo is pausable and viewport-gated
+
+The staged preview's automatic Space rotation SHALL run only while the stage
+window is in the viewport (an `IntersectionObserver` gate — no rotation work
+off-screen), SHALL pause while the pointer is over the stage or focus is
+within it, SHALL stop permanently once the user manually picks a Space (the
+existing behaviour), and SHALL never auto-rotate when
+`prefers-reduced-motion: reduce` is active. Manual Space switching remains
+available in all of these states.
+
+#### Scenario: Hover pauses the rotation
+
+- **WHEN** the visitor rests the pointer on the staged preview
+- **THEN** automatic Space rotation pauses until the pointer leaves
+
+#### Scenario: Off-screen stage does no rotation work
+
+- **WHEN** the visitor scrolls past the hero so the stage leaves the viewport
+- **THEN** the rotation timer is stopped (no recolour repaints occur) until the
+  stage re-enters the viewport
+
+#### Scenario: Reduced motion never auto-rotates
+
+- **WHEN** `prefers-reduced-motion: reduce` is active
+- **THEN** the demo does not auto-rotate, and switching Spaces manually still
+  recolours the preview
+
+### Requirement: Keyboard and platform accessibility affordances
+
+The landing page SHALL provide: (a) a skip-to-content link as the first
+focusable element, visually hidden until focused, targeting the main content;
+(b) the hero — including the `<h1>` and primary CTAs — inside the `<main>`
+landmark; (c) `scroll-margin-top` on every nav anchor target so sections do
+not land beneath the sticky nav; (d) `<link rel="preload">` hints for the
+brand font files used at first paint (the display serif the `<h1>` renders
+and the body sans), eliminating the first-paint serif reflow; (e) nav links
+that remain reachable at viewport widths ≤720px (a compact link row — links
+are never `display: none` without a replacement); (f) a
+`<meta name="theme-color">` matching the dark substrate; and (g) the "Spaces"
+nav anchor targeting the Spaces chapter (the chapter owns `id="spaces"`),
+with the hero demo keeping a distinct id. The decorative mock content inside
+the staged preview SHALL be hidden from assistive technology (the caption and
+the functional Space switcher stay exposed), and ARIA labels SHALL NOT be
+placed on generic elements without a role.
+
+#### Scenario: Skip link bypasses the nav
+
+- **WHEN** a keyboard user presses Tab on a fresh page load
+- **THEN** the first focused element is a visible "Skip to content" link
+- **AND** activating it moves focus/scroll to the main content
+
+#### Scenario: Anchored sections clear the sticky nav
+
+- **WHEN** the visitor clicks a nav anchor (e.g. "Launcher")
+- **THEN** the target section's heading lands fully below the sticky nav bar
+
+#### Scenario: Nav links survive mobile widths
+
+- **WHEN** the page renders at a 390px-wide viewport
+- **THEN** every nav destination remains reachable from the nav (no link is
+  hidden without a replacement)
+
+#### Scenario: The Spaces anchor reaches the Spaces chapter
+
+- **WHEN** the visitor clicks "Spaces" in the nav from the bottom of the page
+- **THEN** the page scrolls to the Spaces chapter, not the hero demo
+
+#### Scenario: Mock content is not read as page content
+
+- **WHEN** a screen reader traverses the staged preview
+- **THEN** the mock sidebar's tab titles and labels are not announced; the
+  caption and the functional Space switcher are
+

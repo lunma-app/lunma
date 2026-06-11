@@ -78,22 +78,71 @@ describe('TabRow', () => {
     expect(row.getAttribute('data-active')).toBe('true');
   });
 
-  test('drifted renders the drift indicator dot', () => {
-    const { container } = render(TabRowHarness, { props: { drifted: true } });
-    expect(container.querySelector('[data-testid="drift-dot"]')).not.toBeNull();
-  });
-
-  test('no drift dot by default', () => {
-    const { container } = render(TabRowHarness, { props: {} });
+  test('a drifted row grows a home-host subtitle, not a corner dot', () => {
+    const { container } = render(TabRowHarness, {
+      props: { drifted: true, homeHost: 'figma.com' },
+    });
+    const subtitle = container.querySelector('[data-testid="drift-subtitle"]') as HTMLElement;
+    expect(subtitle).not.toBeNull();
+    expect(subtitle.textContent).toContain('figma.com');
+    // The former corner dot is gone — the subtitle carries the at-rest signal.
     expect(container.querySelector('[data-testid="drift-dot"]')).toBeNull();
   });
 
-  test('clicking the row body invokes onclick', async () => {
+  test('a non-drifted row renders no subtitle (single-line) and no dot', () => {
+    const { container } = render(TabRowHarness, { props: { homeHost: 'figma.com' } });
+    expect(container.querySelector('[data-testid="drift-subtitle"]')).toBeNull();
+    expect(container.querySelector('[data-testid="drift-dot"]')).toBeNull();
+    expect(container.querySelector('.subtitle-wrap.open')).toBeNull();
+  });
+
+  test('a drifted row with no resolvable home host shows no subtitle/affordance', () => {
+    const { container } = render(TabRowHarness, { props: { drifted: true, homeHost: '' } });
+    expect(container.querySelector('[data-testid="drift-subtitle"]')).toBeNull();
+    const favBtn = container.querySelector('[data-testid="tab-favicon-btn"]') as HTMLElement;
+    expect(favBtn.classList.contains('returnable')).toBe(false);
+  });
+
+  test('clicking the title focuses the tab (onclick)', async () => {
     const onclick = vi.fn();
     const { container } = render(TabRowHarness, { props: { onclick } });
-    const hit = container.querySelector('button.hit') as HTMLButtonElement;
-    await fireEvent.click(hit);
+    const title = container.querySelector('button.title-btn') as HTMLButtonElement;
+    await fireEvent.click(title);
     expect(onclick).toHaveBeenCalledTimes(1);
+  });
+
+  test('clicking the favicon of a NON-drifted row falls through to onclick (focus)', async () => {
+    const onclick = vi.fn();
+    const onGoHome = vi.fn();
+    const { container } = render(TabRowHarness, { props: { onclick, onGoHome } });
+    const favBtn = container.querySelector('[data-testid="tab-favicon-btn"]') as HTMLButtonElement;
+    await fireEvent.click(favBtn);
+    expect(onclick).toHaveBeenCalledTimes(1);
+    expect(onGoHome).not.toHaveBeenCalled();
+  });
+
+  test('clicking the favicon of a drifted row returns home (onGoHome), not focus', async () => {
+    const onclick = vi.fn();
+    const onGoHome = vi.fn();
+    const { container } = render(TabRowHarness, {
+      props: { drifted: true, homeHost: 'figma.com', onclick, onGoHome },
+    });
+    const favBtn = container.querySelector('[data-testid="tab-favicon-btn"]') as HTMLButtonElement;
+    // The favicon button reads "Return to <host>" — its message + accessible name.
+    expect(favBtn.getAttribute('aria-label')).toBe('Return to figma.com');
+    await fireEvent.click(favBtn);
+    expect(onGoHome).toHaveBeenCalledTimes(1);
+    expect(onclick).not.toHaveBeenCalled();
+  });
+
+  test('editing mode is unaffected by drift (no buttons, no subtitle, shows the rename input)', () => {
+    const { container } = render(TabRowHarness, {
+      props: { editing: true, drifted: true, homeHost: 'figma.com' },
+    });
+    expect(container.querySelector('[data-testid="tab-rename-input"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="tab-favicon-btn"]')).toBeNull();
+    expect(container.querySelector('[data-testid="drift-subtitle"]')).toBeNull();
+    expect(container.querySelector('[data-testid="drift-dot"]')).toBeNull();
   });
 
   test('clicking the trailing action does not invoke the row onclick', async () => {

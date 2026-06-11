@@ -794,7 +794,7 @@ When the active Space has one or more temporary tabs, the sidebar SHALL render t
 
 A **home tab** SHALL NEVER appear in this list — home tabs are not added to `tempTabIds` (see "Home tabs are not listed as temporary tabs"), so an empty Space showing only its home renders no temporary rows (the divider + New Tab affordance from the sidebar shell remain).
 
-Clicking a row SHALL dispatch `bus.send({ kind: 'focusTab', payload: { tabId } })`. The hover-revealed `✕` SHALL close the tab directly — dispatching `bus.send({ kind: 'closeTab', payload: { tabId } })` — and SHALL NOT also trigger the row's focus or start a drag (it stops pointer/click propagation); this restores the one-click inline close (reversing the favicon-row change that had folded close into the overflow menu). Right-clicking a row SHALL open the action menu at the cursor, suppressing the browser's native context menu, and SHALL NOT focus or switch to the tab. The right-click menu SHALL carry, top to bottom: a non-destructive **Favorite** action that dispatches `bus.send({ kind: 'favoriteTab', payload: { tabId, windowId } })` and leaves the tab open (see the `lunma-bookmark-bindings` capability, Requirement: Couple and decouple favorites by direct manipulation); a **Rename** action that opens the row's inline rename; and a **Close tab** action that dispatches `bus.send({ kind: 'closeTab', payload: { tabId } })` and SHALL NOT also trigger the row's focus. A single `ContextMenu` instance SHALL be shared across the Temporary list, opened for whichever row was right-clicked. A drag that begins on a temporary row and ends without crossing into the Pinned section SHALL be treated as a reorder within Temporary (dispatching `reorderTemp`); a drag that ends inside the Pinned section SHALL pin the tab (dispatching `pinTab`). A pointer interaction that does not pass the drag threshold SHALL remain a click, not a drag; a secondary (right) button press SHALL NOT start a drag. The sidebar SHALL NOT optimistically update — it SHALL wait for the next `state-broadcast`. Rows SHALL be keyed by `tabId`. The Temporary list SHALL only render tabs present in `liveTabsById`; a `tempTabId` with no `liveTabsById` entry SHALL be skipped rather than rendered blank.
+Clicking a row SHALL dispatch `bus.send({ kind: 'focusTab', payload: { tabId } })`. The hover-revealed `✕` SHALL close the tab directly — dispatching `bus.send({ kind: 'closeTab', payload: { tabId } })` — and SHALL NOT also trigger the row's focus or start a drag (it stops pointer/click propagation); this restores the one-click inline close (reversing the favicon-row change that had folded close into the overflow menu). Right-clicking a row SHALL open the action menu at the cursor, suppressing the browser's native context menu, and SHALL NOT focus or switch to the tab. The right-click menu SHALL carry, top to bottom: a non-destructive **Favorite** action that dispatches `bus.send({ kind: 'favoriteTab', payload: { tabId, windowId } })` and leaves the tab open (see the `lunma-bookmark-bindings` capability, Requirement: Couple and decouple favorites by direct manipulation); a **Rename** action that opens the row's inline rename; **Move up** and **Move down** actions that reorder the row one position within the Temporary list — dispatching `reorderTemp` carrying the full post-move `tabIds` order — each rendered disabled (the standard disabled treatment, not hidden) when the row is already at that end of the list, so reordering is reachable from the keyboard (the context-menu key / `Shift+F10` opens this menu) and from touch long-press; and a **Close tab** action that dispatches `bus.send({ kind: 'closeTab', payload: { tabId } })` and SHALL NOT also trigger the row's focus. A single `ContextMenu` instance SHALL be shared across the Temporary list, opened for whichever row was right-clicked. A drag that begins on a temporary row and ends without crossing into the Pinned section SHALL be treated as a reorder within Temporary (dispatching `reorderTemp`); a drag that ends inside the Pinned section SHALL pin the tab (dispatching `pinTab`). A pointer interaction that does not pass the drag threshold SHALL remain a click, not a drag; a secondary (right) button press SHALL NOT start a drag. The sidebar SHALL NOT optimistically update — it SHALL wait for the next `state-broadcast`. Rows SHALL be keyed by `tabId`. The Temporary list SHALL only render tabs present in `liveTabsById`; a `tempTabId` with no `liveTabsById` entry SHALL be skipped rather than rendered blank.
 
 #### Scenario: Active Space with temp tabs renders a row list
 
@@ -817,6 +817,19 @@ Clicking a row SHALL dispatch `bus.send({ kind: 'focusTab', payload: { tabId } }
 - **WHEN** the user right-clicks a temporary row and selects **Favorite**
 - **THEN** the sidebar SHALL dispatch `favoriteTab` for that tab
 - **AND** the tab SHALL remain open (no `closeTab` is dispatched)
+
+#### Scenario: Move down reorders a temporary row by one
+
+- **GIVEN** window 100's active Space has `tempTabIds: [17, 22, 31]`
+- **WHEN** the user selects **Move down** from tab 17's context menu
+- **THEN** the sidebar SHALL dispatch `reorderTemp` carrying `tabIds: [22, 17, 31]`
+- **AND** the rendered order SHALL update from the next `state-broadcast` (no optimistic update)
+
+#### Scenario: Move up is disabled on the first temporary row
+
+- **GIVEN** tab 17 is first in `tempTabIds`
+- **WHEN** its context menu opens
+- **THEN** **Move up** SHALL render disabled and activating it SHALL dispatch nothing
 
 #### Scenario: A home tab is excluded from the Temporary list
 
@@ -1216,7 +1229,7 @@ The sidebar SHALL expose two temporary-tab actions, each acting on **its own car
 2. Close the temporary tabs (pinned/bound tabs are untouched). When the temporary tabs being cleared are the window's **only** tabs, the coordinator SHALL open the Space home (a new home tab) BEFORE closing them, so the window survives on its home — Clear empties the Temporary list but SHALL NOT close the window (and therefore SHALL NOT quit the browser when it is the last window).
 3. After insertion, broadcast a state update so the sidebar reflects both the empty temporary list and the updated `archivedTabs`.
 
-The sidebar SHALL mount a `Toast` primitive (`apps/extension/src/ui/Toast.svelte`) that displays a transient "Cleared N tabs — Undo" message for 5 seconds after `clearTempTabs` completes, where N is the count of tabs cleared (known locally by the sidebar from its own temporary-tab list — no value flows back through the bus, whose ack carries no data). Activating the Undo action SHALL dispatch `bus.send({ kind: 'undoClearTempTabs', payload: { windowId, tabIds } })` carrying the originating window and the `tabId`s of the batch just cleared. The coordinator's `undoClearTempTabs` handler SHALL, for each `tabId` in order, restore the most-recent surviving archived entry bearing that `tabId` into `windowId`, skipping any `tabId` whose archived entry no longer survives; the sidebar dismisses the toast on Undo.
+The sidebar SHALL mount a `Toast` primitive (`apps/extension/src/ui/Toast.svelte`) that displays a transient "Cleared N tabs — Undo" message for a **nominal 5 seconds** after `clearTempTabs` completes — interruptible per the `visual-system` Toast requirement: the countdown pauses while the pointer is over the toast or focus is within it, and `Escape` from within dismisses it — where N is the count of tabs cleared (known locally by the sidebar from its own temporary-tab list — no value flows back through the bus, whose ack carries no data). Activating the Undo action SHALL dispatch `bus.send({ kind: 'undoClearTempTabs', payload: { windowId, tabIds } })` carrying the originating window and the `tabId`s of the batch just cleared. The coordinator's `undoClearTempTabs` handler SHALL, for each `tabId` in order, restore the most-recent surviving archived entry bearing that `tabId` into `windowId`, skipping any `tabId` whose archived entry no longer survives; the sidebar dismisses the toast on Undo.
 
 Clear SHALL be rendered on any panel whose Space has ≥1 temporary tab open in the window, and hidden otherwise; clearing a background Space's temps SHALL NOT switch the active Space.
 
@@ -1262,12 +1275,12 @@ Clear SHALL be rendered on any panel whose Space has ≥1 temporary tab open in 
 
 - **GIVEN** the user has just cleared N temporary tabs in Space "work"
 - **WHEN** the `clearTempTabs` command completes
-- **THEN** the sidebar SHALL mount the `Toast` showing "Cleared N tabs — Undo" for 5 seconds
+- **THEN** the sidebar SHALL mount the `Toast` showing "Cleared N tabs — Undo" for a nominal 5 seconds (pausing while hovered or focused, per the `visual-system` Toast requirement)
 
 #### Scenario: Undo restores the cleared batch
 
 - **GIVEN** the Toast is visible after a Clear of 3 tabs with ids `[10, 11, 12]` in window 100
-- **WHEN** the user activates the Undo action within 5 seconds
+- **WHEN** the user activates the Undo action while the toast is visible
 - **THEN** the sidebar SHALL call `bus.send({ kind: 'undoClearTempTabs', payload: { windowId: 100, tabIds: [10, 11, 12] } })`
 - **AND** the coordinator SHALL restore each tab in order into window 100
 
@@ -1573,19 +1586,27 @@ edit all three, persisting them to the folder node.
 Folder edit actions SHALL be presented through the **same in-place row-morph menu
 used for tab actions** (a shared row-morph primitive), NOT a separate floating
 dropdown. A kebab trigger on the folder row SHALL morph the row open in place into
-an action drawer offering **Rename**, **Icon & colour**, and **Delete folder**.
-Rename SHALL edit the name in place; **Icon & colour** SHALL reveal an inline
-colour-swatch row and icon picker WITHIN the morph (a keep-open action that grows
-the drawer), not a panel rendered elsewhere; **Delete folder** SHALL remove the
-folder (spilling its children per the Folder lifecycle requirement). The morph's
-motion, dismissal (outside-click / `Escape`), and roving keyboard focus SHALL
-match the tab action menu.
+an action drawer offering **Rename**, **Icon & colour**, **Move up**, **Move down**,
+and **Delete folder**. Rename SHALL edit the name in place; **Icon & colour** SHALL
+reveal an inline colour-swatch row and icon picker WITHIN the morph (a keep-open
+action that grows the drawer), not a panel rendered elsewhere. **Move up** and
+**Move down** SHALL reorder the folder one position within the top-level pinned
+list, dispatching `reorderPinned` carrying the full post-move node order; each SHALL
+render disabled (the standard disabled treatment, not hidden) when the folder is
+already at that end of the list, so folder reordering is reachable without a pointer
+drag. **Delete folder** SHALL remove the folder (spilling its children per the
+Folder lifecycle requirement) as a **two-step confirm**: the first activation SHALL
+arm the entry into a danger-treated confirm affordance and keep the drawer open
+without dispatching; only a second activation SHALL dispatch `deleteFolder` and
+close the drawer. Closing the drawer, pressing `Escape`, or activating any other
+entry SHALL disarm without deleting. The morph's motion, dismissal (outside-click /
+`Escape`), and roving keyboard focus SHALL match the tab action menu.
 
 #### Scenario: Folder editing morphs in place like a tab
 
 - **WHEN** the user activates a folder row's kebab trigger
 - **THEN** the folder row SHALL morph open in place into an action drawer (the same row-morph as tab actions)
-- **AND** the drawer SHALL offer Rename, Icon & colour, and Delete folder
+- **AND** the drawer SHALL offer Rename, Icon & colour, Move up, Move down, and Delete folder
 
 #### Scenario: Rename a folder
 
@@ -1598,6 +1619,24 @@ match the tab action menu.
 - **THEN** an inline colour-swatch row and icon picker SHALL appear within the morph
 - **AND** picking a new icon or colour SHALL update and persist the folder node's `icon` / `color`
 - **AND** the folder row SHALL reflect the new icon/colour
+
+#### Scenario: Delete folder is a two-step confirm
+
+- **WHEN** the user activates **Delete folder** in a folder row's drawer
+- **THEN** the drawer SHALL stay open and the entry SHALL become a danger-treated confirm affordance, with no `deleteFolder` dispatched
+- **AND WHEN** the user activates the armed entry again
+- **THEN** `deleteFolder` SHALL be dispatched for that folder (its children spilling per the Folder lifecycle requirement)
+
+#### Scenario: Dismissal disarms Delete folder without deleting
+
+- **WHEN** the user has armed **Delete folder** and then closes the drawer or presses `Escape`
+- **THEN** no `deleteFolder` SHALL be dispatched and the entry SHALL be unarmed on the next open
+
+#### Scenario: Move down reorders the folder by one
+
+- **GIVEN** a folder that is the first of three top-level pinned nodes
+- **WHEN** the user activates its drawer's **Move down**
+- **THEN** the sidebar SHALL dispatch `reorderPinned` carrying the node order with that folder in the second slot
 
 ### Requirement: Folder expand/collapse is per-window and ephemeral
 
@@ -1993,4 +2032,59 @@ favicon drag-out remove.
 - **WHEN** they release outside the row
 - **THEN** the favourite SHALL still be removed (the spec'd intentional drag-out),
   unaffected by the reorder-cancel rule above
+
+### Requirement: Pinned rows reorder via keyboard-reachable menu actions
+
+The pinned row's context menu SHALL carry **Move up** and **Move down** entries
+that reorder the row one position within its containing list — within the
+folder's `children` when the row is inside a folder (a child row at the edge of
+its folder SHALL NOT escape the folder; the entry is disabled instead), and
+within the top-level pinned list otherwise — by dispatching `reorderPinned`
+carrying the full post-move node order. No new bus message kinds are used. The
+entries SHALL be disabled (standard disabled treatment, not hidden) when the
+row is already at the corresponding end of its containing list, and activating
+a disabled entry SHALL dispatch nothing. Because the context menu opens from
+the keyboard (context-menu key / `Shift+F10`) and from touch long-press, this
+makes pinned reordering fully reachable without a pointer drag. (The menu's
+action enumeration lives in the `tab-row-menu` capability; this requirement
+owns the reorder semantics.)
+
+#### Scenario: Move down reorders a pinned row by one
+
+- **GIVEN** the active Space's top-level pinned list holds tabs A, B, C
+- **WHEN** the user selects **Move down** from A's context menu
+- **THEN** the sidebar SHALL dispatch `reorderPinned` carrying the node order B, A, C
+- **AND** the rendered order SHALL update from the next `state-broadcast`
+
+#### Scenario: Move up at the top of a folder's children is disabled
+
+- **GIVEN** a pinned tab that is the first child of a folder
+- **WHEN** its context menu opens
+- **THEN** **Move up** SHALL render disabled and activating it SHALL dispatch nothing
+  (the row does NOT escape its folder)
+
+### Requirement: Row drag does not block touch panning
+
+Tab rows, folder rows, and favorite tiles SHALL NOT statically disable touch
+panning (no resting `touch-action: none` on row/tile wrappers): touch users
+SHALL be able to scroll the pinned and temporary lists by dragging anywhere on
+them. The drag controller SHALL suppress native panning and text selection
+only for the duration of an active drag (applied when a drag actually starts,
+removed when it ends or cancels). On touch input, where the browser claims
+vertical pans, reordering remains available via the keyboard-reachable menu
+actions (long-press opens the context menu). The `SpaceSwitcher`'s chip rail is
+explicitly out of scope: it is a horizontal swipe surface and keeps its
+existing touch handling.
+
+#### Scenario: Touch pan scrolls the list
+
+- **WHEN** a touch user drags vertically on a temporary tab row in a list tall
+  enough to scroll
+- **THEN** the list pans natively and no tab reorder is dispatched
+
+#### Scenario: Pan suppression applies only during an active drag
+
+- **WHEN** a pointer drag passes the drag threshold on a pinned row
+- **THEN** panning/selection suppression is applied for the drag's duration
+- **AND** it is removed when the drag commits or cancels
 

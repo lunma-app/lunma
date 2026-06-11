@@ -78,9 +78,55 @@ describe('FaviconTile', () => {
     expect(container.querySelector('.spin [data-icon-name="loader-circle"]')).not.toBeNull();
   });
 
-  test('drifted renders the shared drift dot', () => {
+  test('drifted renders the corner drift dot (retained on tiles — no subtitle room)', () => {
     const { container } = render(FaviconTileHarness, { props: { drifted: true } });
     expect(container.querySelector('[data-testid="drift-dot"]')).not.toBeNull();
+  });
+
+  test('a drifted tile keeps the dot AND gains the favicon return affordance + tooltip name', () => {
+    const onclick = vi.fn();
+    const onGoHome = vi.fn();
+    const { container } = render(FaviconTileHarness, {
+      props: { drifted: true, homeHost: 'figma.com', onclick, onGoHome },
+    });
+    // Dot retained (the at-rest signal) AND the return glyph is present.
+    expect(container.querySelector('[data-testid="drift-dot"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="favicon-return"]')).not.toBeNull();
+    const tile = container.querySelector('[data-testid="favicon-tile"]') as HTMLElement;
+    expect(tile.classList.contains('returnable')).toBe(true);
+    // The tile's accessible name + tooltip read "Return to <host>".
+    expect(tile.getAttribute('aria-label')).toBe('Return to figma.com');
+  });
+
+  test('left-clicking a drifted tile returns home (onGoHome), not focus', async () => {
+    const onclick = vi.fn();
+    const onGoHome = vi.fn();
+    const { container } = render(FaviconTileHarness, {
+      props: { drifted: true, homeHost: 'figma.com', onclick, onGoHome },
+    });
+    await fireEvent.click(container.querySelector('[data-testid="favicon-tile"]') as HTMLElement);
+    expect(onGoHome).toHaveBeenCalledTimes(1);
+    expect(onclick).not.toHaveBeenCalled();
+  });
+
+  test('a non-drifted tile has no return affordance and click focuses', async () => {
+    const onclick = vi.fn();
+    const onGoHome = vi.fn();
+    const { container } = render(FaviconTileHarness, { props: { onclick, onGoHome } });
+    expect(container.querySelector('[data-testid="favicon-return"]')).toBeNull();
+    const tile = container.querySelector('[data-testid="favicon-tile"]') as HTMLElement;
+    expect(tile.classList.contains('returnable')).toBe(false);
+    await fireEvent.click(tile);
+    expect(onclick).toHaveBeenCalledTimes(1);
+    expect(onGoHome).not.toHaveBeenCalled();
+  });
+
+  test('a drifted tile with no resolvable home host keeps the dot but no return affordance', () => {
+    const { container } = render(FaviconTileHarness, { props: { drifted: true, homeHost: '' } });
+    expect(container.querySelector('[data-testid="drift-dot"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="favicon-return"]')).toBeNull();
+    const tile = container.querySelector('[data-testid="favicon-tile"]') as HTMLElement;
+    expect(tile.classList.contains('returnable')).toBe(false);
   });
 
   test('unbound dims the tile and suppresses drift + active (no live tab)', () => {

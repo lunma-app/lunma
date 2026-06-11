@@ -36,8 +36,15 @@ interface Props {
   onSetColor?: ((color: SpaceColor) => void) | undefined;
   /** Set the folder icon (an "Icon & colour" picker pick). */
   onSetIcon?: ((icon: IconName) => void) | undefined;
-  /** Delete the folder (the destructive action). */
+  /** Delete the folder (the destructive action, gated behind a two-step confirm). */
   onDelete?: (() => void) | undefined;
+  /** Reorder the folder one slot up/down within the top-level pinned list. */
+  onMoveUp?: (() => void) | undefined;
+  onMoveDown?: (() => void) | undefined;
+  /** Whether Move up/down are available — false renders the entry disabled (the
+   * folder is already at that end of the top-level list). */
+  canMoveUp?: boolean | undefined;
+  canMoveDown?: boolean | undefined;
   /** The colour palette for the inline swatch row. */
   colors?: readonly SpaceColor[];
 }
@@ -57,6 +64,10 @@ const {
   onSetColor,
   onSetIcon,
   onDelete,
+  onMoveUp,
+  onMoveDown,
+  canMoveUp = false,
+  canMoveDown = false,
   colors = [],
 }: Props = $props();
 
@@ -65,7 +76,11 @@ const hue = $derived(colourToHue(color));
 // Action-morph state + the in-drawer icon/colour panel toggle.
 let menuOpen = $state(false);
 let showAppearance = $state(false);
+// Two-step Delete arm — Delete folder arms into a danger confirm before dispatching.
+let confirmingDelete = $state(false);
 
+// Move entries are plain text (no icon) per the change's visual language; the
+// destructive Delete stays last and arms before firing.
 const menuItems = $derived<RowMenuItem[]>([
   { id: 'rename', label: 'Rename', icon: 'pencil', onSelect: () => onStartRename?.() },
   {
@@ -74,20 +89,50 @@ const menuItems = $derived<RowMenuItem[]>([
     icon: 'palette',
     keepOpen: true,
     onSelect: () => {
+      confirmingDelete = false; // selecting another entry disarms a pending Delete
       showAppearance = !showAppearance;
     },
   },
   {
-    id: 'delete-folder',
-    label: 'Delete folder',
-    icon: 'trash-2',
-    danger: true,
-    onSelect: () => onDelete?.(),
+    id: 'move-up',
+    label: 'Move up',
+    disabled: !canMoveUp,
+    onSelect: () => onMoveUp?.(),
   },
+  {
+    id: 'move-down',
+    label: 'Move down',
+    disabled: !canMoveDown,
+    onSelect: () => onMoveDown?.(),
+  },
+  confirmingDelete
+    ? {
+        id: 'delete-folder',
+        label: 'Delete folder — confirm',
+        icon: 'trash-2',
+        danger: true,
+        onSelect: () => {
+          confirmingDelete = false;
+          onDelete?.();
+        },
+      }
+    : {
+        id: 'delete-folder',
+        label: 'Delete folder',
+        icon: 'trash-2',
+        danger: true,
+        keepOpen: true, // arm in place, keep the drawer open
+        onSelect: () => {
+          confirmingDelete = true;
+        },
+      },
 ]);
 
 function onMenuOpenChange(open: boolean): void {
-  if (!open) showAppearance = false;
+  if (!open) {
+    showAppearance = false;
+    confirmingDelete = false; // closing / Escape disarms a pending Delete
+  }
 }
 </script>
 

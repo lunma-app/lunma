@@ -82,10 +82,34 @@ While a saved tab is bound in any window, every `chrome.tabs.onUpdated` for one 
 
 ### Requirement: Drift indicator and affordances
 
-A saved tab SHALL be considered drifted **in a window** when it is bound in that window and that window's bound tab's current URL differs from `originalURL`. The sidebar — a per-window surface — SHALL render the drift indicator for its own window's binding only. A saved tab drifted in a window SHALL offer:
+A saved tab SHALL be considered drifted **in a window** when it is bound in that window and that window's bound tab's current URL differs from `originalURL`. The sidebar — a per-window surface — SHALL render the drift indicator for its own window's binding only.
 
-- **Go home** — navigates **that window's** bound tab to `originalURL` via `chrome.tabs.update(tabId, { url: originalURL })`; after it lands, that window's binding is no longer drifted and the indicator clears.
-- **Make this home** — sets `originalURL := the window's bound tab's current URL` **in Lunma state only** (no Chrome bookmark to update); the indicator clears.
+A drifted **pinned row** (`TabRow`) SHALL surface drift as a **home-host subtitle** — a second line under the title reading the `originalURL` hostname (`hostOf(originalURL)`, e.g. `figma.com`) — and SHALL NOT render the former corner drift dot. A non-drifted pinned row SHALL remain single-line; the subtitle SHALL appear only while drifted. A drifted **favorite tile** (`FaviconTile`) — which has no room for a subtitle — SHALL retain a corner drift dot as its at-rest signal.
+
+A saved tab drifted in a window SHALL offer:
+
+- **Return home on the favicon** — on a drifted pinned row or favorite tile, hovering the favicon SHALL reveal a one-click return-home affordance (the favicon swaps to a `↩` return-arrow icon) whose **left-click** performs **Go home**; the affordance SHALL carry a "Return to &lt;host&gt;" message (a `Tooltip` reading `Return to <hostOf(originalURL)>`). On a non-drifted row/tile the favicon SHALL NOT become a return affordance. The rest of a pinned row (title area) SHALL continue to focus the bound tab on click — i.e. the favicon and the title SHALL be separate click targets.
+- **Go home** — navigates **that window's** bound tab to `originalURL` via `chrome.tabs.update(tabId, { url: originalURL })`; after it lands, that window's binding is no longer drifted and the indicator clears. Reachable from BOTH the favicon return affordance AND the right-click context menu (`tab-row-menu`).
+- **Make this home** — sets `originalURL := the window's bound tab's current URL` **in Lunma state only** (no Chrome bookmark to update); the indicator clears. Reachable from the right-click context menu.
+
+#### Scenario: Drifted pinned row shows a home-host subtitle, not a dot
+
+- **WHEN** a pinned saved tab is drifted in window 100 (`currentURL !== originalURL`)
+- **THEN** its `TabRow` SHALL render a subtitle line reading `hostOf(originalURL)`
+- **AND** its `TabRow` SHALL NOT render the corner drift dot
+- **AND** a non-drifted pinned row in the same list SHALL render no subtitle and remain single-line
+
+#### Scenario: Clicking the favicon of a drifted row returns home
+
+- **WHEN** the user hovers the favicon of a drifted pinned row
+- **THEN** the favicon SHALL present a `↩` return affordance with a "Return to &lt;host&gt;" tooltip
+- **AND** a left-click on it SHALL dispatch the existing `goHome` for that window's binding
+- **AND** after the tab lands on `originalURL` the row SHALL no longer be drifted and the subtitle SHALL clear
+
+#### Scenario: The title area still focuses a drifted tab
+
+- **WHEN** the user clicks the title area (not the favicon) of a drifted pinned row
+- **THEN** the bound tab SHALL be focused (the existing focus behaviour), NOT returned home
 
 #### Scenario: Make this home updates originalURL in state
 
@@ -177,10 +201,14 @@ A tab id present in any window slot of `tabBindings` SHALL NOT appear in that wi
 
 All saved-tab behaviours SHALL apply identically to pinned tabs and favicon-row entries. They SHALL differ only by **coupling state and placement**: a pinned tab carries `spaceId = X` and is referenced by `pinnedBySpace[X]`; a favicon-row favorite carries `spaceId = null`, is referenced by the flat `faviconRow` placement, and has an **ungrouped** live tab. There SHALL NOT be separate binding logic per type — per-window binding, drift, restart recovery, and dormant/active activation SHALL be identical, and a record SHALL NOT be duplicated across placements.
 
+Drift **affordances** SHALL be identical in behaviour across the two placements but rendered in the host primitive's shape: a pinned `TabRow` shows the home-host subtitle plus the favicon return affordance; a favorite `FaviconTile` — having no subtitle row — shows the corner drift dot plus the same favicon return affordance and "Return to &lt;host&gt;" tooltip. The underlying **Go home** / **Make this home** actions SHALL be the same for both.
+
 #### Scenario: Favicon-row drift behaves like pinned drift
 
 - **WHEN** a favicon-row saved tab's bound tab navigates such that `currentURL !== originalURL`
-- **THEN** the same drift indicator and Go home / Make this home affordances SHALL apply as for a pinned saved tab
+- **THEN** the favorite tile SHALL render a corner drift dot and the same favicon return affordance (favicon→`↩` on hover, "Return to &lt;host&gt;" tooltip, left-click → `goHome`) as a pinned row's favicon
+- **AND** the Go home / Make this home actions SHALL behave identically to a pinned saved tab
+- **AND** the favorite tile SHALL NOT render a home-host subtitle (no room on a square tile)
 
 #### Scenario: A favorite binds per window like a pinned tab
 
@@ -658,10 +686,24 @@ offer:
 - **Lock to its site…** — a drill-in that morphs the menu in place (a back-arrow header
   + the boundary editor) WITHOUT closing it, so the user can widen or relax the lock
   (see Requirement: A bound saved tab MAY be confined to a domain boundary);
+- **Move left** and **Move right** — reorder the favorite one position within the
+  favicon row, dispatching `reorderFavorites` carrying the full row order with this
+  favorite moved one position toward that end. Each entry SHALL render disabled (the
+  standard disabled treatment, not hidden) when the favorite is already at that end of
+  the row, and activating a disabled entry SHALL dispatch nothing. Because the context
+  menu opens from the keyboard (context-menu key / `Shift+F10`) and from touch
+  long-press, this makes favorites reordering reachable without a pointer drag;
 - **Remove from favorites** — dispatch `unpinTab` (non-destructive: a bound tab returns
   to Temporary and stays open);
 - **Delete** — a destructive `deleteSavedTab` that removes the record entirely and
-  closes its bound live tab.
+  closes its bound live tab — presented as a **two-step confirm** (the confirmation
+  required by Requirement: Deleting a bound bookmark closes its tab after confirmation,
+  in the same arm pattern the pinned row uses): the first activation SHALL arm the
+  entry into a danger-treated confirm affordance and keep the menu open without
+  dispatching; only a second activation SHALL dispatch `deleteSavedTab` and close the
+  menu. Closing the menu, pressing Escape, or activating any other entry SHALL disarm
+  without deleting. A favorite dormant in all windows SHALL still delete without
+  prompting (per the existing deletion requirement).
 
 The menu SHALL be the shared `apps/extension/src/ui/ContextMenu.svelte` primitive composed by the
 feature component `FaviconRow.svelte` (one instance, opened at the right-clicked tile's
@@ -679,10 +721,35 @@ drag-out alone proved undiscoverable.
 - **WHEN** the user selects **Remove from favorites** from a favorite's context menu
 - **THEN** the sidebar SHALL dispatch `unpinTab` for that favorite (non-destructive)
 
-#### Scenario: Delete removes the favorite record
+#### Scenario: Delete is a two-step confirm
 
-- **WHEN** the user selects **Delete** from a favorite's context menu
-- **THEN** the sidebar SHALL dispatch `deleteSavedTab` for that favorite
+- **WHEN** the user selects **Delete** from a bound favorite's context menu
+- **THEN** the menu SHALL stay open and the entry SHALL become a danger-treated confirm
+  affordance, with no `deleteSavedTab` dispatched
+- **AND WHEN** the user activates the armed entry again
+- **THEN** the sidebar SHALL dispatch `deleteSavedTab` for that favorite and close the menu
+
+#### Scenario: Dismissal after arming Delete makes no changes
+
+- **WHEN** the user arms **Delete** on a bound favorite and then closes the menu or
+  presses Escape
+- **THEN** no `deleteSavedTab` SHALL be dispatched and the entry SHALL be unarmed on the
+  next open
+
+#### Scenario: Move right reorders a favorite by one
+
+- **GIVEN** the favorite is first of three in `state.faviconRow`
+- **WHEN** the user selects **Move right** from its context menu
+- **THEN** the sidebar SHALL dispatch `reorderFavorites` carrying the row order with
+  that favorite in the second position
+- **AND** the rendered order SHALL update from the next state broadcast (no optimistic
+  update)
+
+#### Scenario: Move left is disabled at the start of the row
+
+- **GIVEN** the favorite is first in `state.faviconRow`
+- **WHEN** its context menu opens
+- **THEN** **Move left** SHALL render disabled and activating it SHALL dispatch nothing
 
 #### Scenario: Go home and Make this home appear only when drifted
 

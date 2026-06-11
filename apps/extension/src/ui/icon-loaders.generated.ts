@@ -106,6 +106,7 @@ export const iconLoaders: Record<string, IconLoader> = {
   construction: () => import('@lucide/svelte/icons/construction'),
   cookie: () => import('@lucide/svelte/icons/cookie'),
   'cooking-pot': () => import('@lucide/svelte/icons/cooking-pot'),
+  'corner-up-left': () => import('@lucide/svelte/icons/corner-up-left'),
   cpu: () => import('@lucide/svelte/icons/cpu'),
   'credit-card': () => import('@lucide/svelte/icons/credit-card'),
   croissant: () => import('@lucide/svelte/icons/croissant'),

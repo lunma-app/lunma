@@ -246,6 +246,9 @@
 
 .list {
   overflow-y: auto;
+  /* Contain scroll chaining: wheeling/touching past the list's end must not
+   * scroll the host page behind the scrim (overlay-aria-parity). */
+  overscroll-behavior: contain;
   padding: 8px;
   display: flex;
   flex-direction: column;

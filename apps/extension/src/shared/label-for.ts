@@ -12,3 +12,18 @@ export function labelFor(title: string, url: string): string {
     return 'Untitled';
   }
 }
+
+/**
+ * Returns the bare hostname of `url` (e.g. `figma.com`), or `''` when the URL is
+ * unparseable or carries no hostname (e.g. `blob:`). Mirrors `labelFor`'s
+ * try/catch but degrades to an empty string instead of a label fallback, so a
+ * caller can suppress an affordance (the drift subtitle/tooltip) on an empty host
+ * rather than render a placeholder.
+ */
+export function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return '';
+  }
+}

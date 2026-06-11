@@ -4,7 +4,7 @@ import type { AnimationConfig } from 'svelte/animate';
 import { cubicOut } from 'svelte/easing';
 import { dispatch } from '../shared/bus';
 import type { IconName } from '../shared/icon-names';
-import { labelFor } from '../shared/label-for';
+import { hostOf, labelFor } from '../shared/label-for';
 import type {
   FolderId,
   PinNode,
@@ -23,7 +23,7 @@ import IconButton from '../ui/IconButton.svelte';
 import type { MenuItem } from '../ui/menu-types';
 import TabRow from '../ui/TabRow.svelte';
 import { boundaryDefault } from './boundary-default.svelte';
-import { type DropResult, drag } from './drag.svelte';
+import { type DropResult, drag, reorderFlipMs } from './drag.svelte';
 import EmptyState from './EmptyState.svelte';
 import { useStore } from './store-context.svelte';
 import TabBoundaryEditor from './TabBoundaryEditor.svelte';
@@ -40,9 +40,6 @@ const { windowId, spaceId, active = true }: Props = $props();
 const store = useStore();
 
 const ZONE = $derived(`pinned:${spaceId}`);
-// Post-drop reorder animation (the list only moves AFTER the authoritative
-// broadcast, never during the drag). Mid-band per the visual policy.
-const FLIP_MS = 160;
 
 /**
  * Translate-only FLIP. Svelte's built-in `flip` also animates scale when an
@@ -51,13 +48,16 @@ const FLIP_MS = 160;
  * Reorder only needs position to glide, so we animate `translate` from the old
  * top-left delta to zero and ignore size entirely. A row whose position is
  * unchanged (dx=dy=0) gets a no-op, so expand/collapse never animates the row.
+ *
+ * Duration is sampled from `reorderFlipMs()` at animation start (0 under reduced
+ * motion, else `--motion-base`) — no hard-coded millisecond literal.
  */
 function flipMove(_node: Element, { from, to }: { from: DOMRect; to: DOMRect }): AnimationConfig {
   const dx = from.left - to.left;
   const dy = from.top - to.top;
   if (dx === 0 && dy === 0) return { duration: 0 };
   return {
-    duration: FLIP_MS,
+    duration: reorderFlipMs(),
     easing: cubicOut,
     css: (_t, u) => `transform: translate(${u * dx}px, ${u * dy}px)`,
   };
@@ -95,6 +95,9 @@ interface TabView {
   renamed: boolean;
   /** The tab's home URL — passed to the boundary editor to seed the domain. */
   originalURL: string;
+  /** Home hostname (`hostOf(originalURL)`) — the drift subtitle + the favicon
+   * "Return to <host>" affordance's text. Empty when `originalURL` has no host. */
+  homeHost: string;
   /** The saved tab's explicit boundary (undefined ⇒ inheriting the global default). */
   boundary: TabBoundary | undefined;
 }
@@ -152,6 +155,7 @@ function projectTab(id: SavedTabId): TabView | null {
     boundTabId,
     renamed: saved.customTitle !== undefined,
     originalURL: saved.originalURL,
+    homeHost: hostOf(saved.originalURL),
     boundary: saved.boundary,
   };
 }
@@ -446,6 +450,55 @@ function findFolderNode(list: PinNode[], id: string): PinNode {
     : { kind: 'tab', id }; // defensive fallback (shouldn't happen)
 }
 
+// --- keyboard/touch reorder via the menu (Move up/down) -----------------------
+// Move reorders a node ONE slot within its CONTAINING list — the top level for a
+// top-level tab or a folder, the folder's `children` for a child row. It never
+// escapes a folder (a child at an edge reports `can: false` → disabled entry).
+// The reorder dispatches the existing `reorderPinned` with the full post-move
+// tree (no new bus kinds; no optimistic mutation — the broadcast defines order).
+
+/** Whether `id` (a top-level node or a folder child) can move up/down within its
+ * containing list. */
+function moveBounds(id: string): { up: boolean; down: boolean } {
+  const nodes = store.state.pinnedBySpace[spaceId] ?? [];
+  const top = nodes.findIndex((n) => n.id === id);
+  if (top !== -1) return { up: top > 0, down: top < nodes.length - 1 };
+  for (const n of nodes) {
+    if (n.kind === 'folder') {
+      const ci = n.children.indexOf(id);
+      if (ci !== -1) return { up: ci > 0, down: ci < n.children.length - 1 };
+    }
+  }
+  return { up: false, down: false };
+}
+
+/** Move `id` one slot (`dir` = -1 up / +1 down) within its containing list and
+ * dispatch the full post-move node order. A no-op at the containing list's edge. */
+function moveNode(id: string, dir: -1 | 1): void {
+  const nodes = clone(store.state.pinnedBySpace[spaceId] ?? []);
+  const swap = <T,>(arr: T[], i: number, j: number): boolean => {
+    if (j < 0 || j >= arr.length) return false;
+    [arr[i], arr[j]] = [arr[j] as T, arr[i] as T];
+    return true;
+  };
+  const top = nodes.findIndex((n) => n.id === id);
+  if (top !== -1) {
+    if (!swap(nodes, top, top + dir)) return;
+    dispatch({ kind: 'reorderPinned', payload: { spaceId, nodes } });
+    return;
+  }
+  for (const n of nodes) {
+    if (n.kind === 'folder') {
+      const ci = n.children.indexOf(id);
+      if (ci !== -1) {
+        if (!swap(n.children, ci, ci + dir)) return;
+        dispatch({ kind: 'reorderPinned', payload: { spaceId, nodes } });
+        return;
+      }
+    }
+  }
+}
+
 // --- folder expand/collapse (sidebar-local, no bus) --------------------------
 function toggleFolder(folderId: FolderId): void {
   if (drag.consumeJustDragged()) return;
@@ -546,6 +599,8 @@ let menuOpen = $state(false);
 let menuX = $state(0);
 let menuY = $state(0);
 let menuRowId = $state<SavedTabId | null>(null);
+// The row element a keyboard-invoked menu anchors to (see onRowContextMenu / D6).
+let menuAnchorEl = $state<HTMLElement | undefined>(undefined);
 
 /** Every tab view in the list, flattened across folders — the lookup the menu
  * re-derives its active row from. */
@@ -568,6 +623,9 @@ function onRowContextMenu(e: MouseEvent, row: TabView): void {
   e.preventDefault();
   menuX = e.clientX;
   menuY = e.clientY;
+  // The invoking row element — ContextMenu anchors to it when the event carries no
+  // pointer position (keyboard menu key / Shift+F10 reports clientX/Y 0,0; D6).
+  menuAnchorEl = e.currentTarget as HTMLElement;
   menuRowId = row.id;
   editingBoundaryId = null;
   confirmingDeleteId = null;
@@ -630,9 +688,28 @@ function tabMenuItems(row: TabView): MenuItem[] {
     onSelect: () => {
       // Drill the menu into the boundary editor (ContextMenu's panel view). The
       // back affordance / Esc returns to the actions.
+      confirmingDeleteId = null; // selecting another entry disarms a pending Delete
       editingBoundaryId = row.id;
     },
   });
+  // Move up/down — reorder within the containing list (top level, or the folder's
+  // children for a child row; never escaping the folder), disabled at the edges so
+  // reordering is reachable from the keyboard (context-menu key) and touch long-press.
+  const bounds = moveBounds(row.id);
+  items.push(
+    {
+      id: 'move-up',
+      label: 'Move up',
+      disabled: !bounds.up,
+      onSelect: () => moveNode(row.id, -1),
+    },
+    {
+      id: 'move-down',
+      label: 'Move down',
+      disabled: !bounds.down,
+      onSelect: () => moveNode(row.id, 1),
+    },
+  );
   items.push({
     id: 'unpin',
     label: 'Unpin',
@@ -666,19 +743,18 @@ function tabMenuItems(row: TabView): MenuItem[] {
 }
 </script>
 
-{#if isEmpty}
-  <!-- Match the list's --list-pad inset so the empty-state text lines up with the
-       header glyph + the favicon column (EmptyState adds its own --space-3). -->
-  <div class="pinned-empty">
+<div class="pinned" class:empty={isEmpty} data-testid="pinned-tabs" bind:this={containerEl}>
+  {#if isEmpty}
+    <!-- The empty state lives INSIDE the registered drop zone (`.pinned` is the
+         zone el), so the drop-zone card is itself the hit target — dragging a tab
+         over the card lights it up (`over`) instead of a thin strip beneath it. -->
     <EmptyState
+      icon="pin"
       title="No pinned tabs yet."
       subtitle="Drag a tab up here, or press Option+D, to pin it."
+      over={drag.state.active && drag.state.targetZone === ZONE}
     />
-  </div>
-{/if}
-
-<div class="pinned" class:empty={isEmpty} data-testid="pinned-tabs" bind:this={containerEl}>
-  {#if drag.state.active && drag.state.targetZone === ZONE}
+  {:else if drag.state.active && drag.state.targetZone === ZONE}
     <div class="drop-line" style:top={`${lineTop(drag.state.targetIndex)}px`}></div>
   {/if}
   {#each rows as row, i (row.id)}
@@ -724,6 +800,8 @@ function tabMenuItems(row: TabView): MenuItem[] {
             active={row.active}
             loading={row.loading}
             drifted={row.drifted}
+            homeHost={row.homeHost}
+            onGoHome={() => dispatch({ kind: 'goHome', payload: { savedTabId: row.id, windowId } })}
             editing={renamingTabId === row.id}
             oncommitName={(next) => commitTabRename(row.id, next)}
             oncancelName={cancelTabRename}
@@ -742,6 +820,10 @@ function tabMenuItems(row: TabView): MenuItem[] {
             dropTarget={isOntoTarget(row.id)}
             editing={renamingFolderId === row.id}
             colors={COLORS}
+            canMoveUp={moveBounds(row.id).up}
+            canMoveDown={moveBounds(row.id).down}
+            onMoveUp={() => moveNode(row.id, -1)}
+            onMoveDown={() => moveNode(row.id, 1)}
             onToggle={() => toggleFolder(row.id)}
             onRename={(name) => commitRename(row.id, name)}
             onRenameCancel={cancelRename}
@@ -790,6 +872,8 @@ function tabMenuItems(row: TabView): MenuItem[] {
                   active={child.active}
                   loading={child.loading}
                   drifted={child.drifted}
+                  homeHost={child.homeHost}
+                  onGoHome={() => dispatch({ kind: 'goHome', payload: { savedTabId: child.id, windowId } })}
                   editing={renamingTabId === child.id}
                   oncommitName={(next) => commitTabRename(child.id, next)}
                   oncancelName={cancelTabRename}
@@ -831,6 +915,7 @@ function tabMenuItems(row: TabView): MenuItem[] {
     bind:open={menuOpen}
     x={menuX}
     y={menuY}
+    anchorEl={menuAnchorEl}
     items={tabMenuItems(activeMenuRow)}
     label="Tab actions"
     testid="pinned-menu"
@@ -847,26 +932,19 @@ function tabMenuItems(row: TabView): MenuItem[] {
 {/if}
 
 <style>
-  /* Share the list's horizontal inset so the empty-state text lines up with the
-   * header glyph and the favicon column (EmptyState adds its own --space-3). */
-  .pinned-empty {
-    padding: 0 var(--list-pad);
-  }
-
   .pinned {
     position: relative;
     display: flex;
     flex-direction: column;
     padding: var(--space-1) var(--list-pad);
   }
-  .pinned.empty {
-    min-height: 28px;
-  }
 
   .row-wrap {
     padding-bottom: var(--row-gap);
     animation: pinned-row-in var(--motion-base) var(--ease-emphasised);
-    touch-action: none;
+    /* No resting `touch-action: none` — touch users pan the pinned list; the drag
+     * controller suppresses panning only during an active pointer drag
+     * (row-drag-does-not-block-touch-panning). */
   }
   .row-wrap.dragging {
     opacity: 0.4;

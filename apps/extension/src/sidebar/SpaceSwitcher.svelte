@@ -287,9 +287,11 @@ function openOptions(): void {
     opacity: 0.4;
     /* Chips are pointer-draggable to reorder; suppress touch scrolling on them. */
     touch-action: none;
+    /* Durations read the motion tokens (no hard-coded ms literals) so they collapse
+     * to the fast tick under prefers-reduced-motion via the token override block. */
     transition:
-      opacity 460ms cubic-bezier(0.16, 1, 0.3, 1),
-      background-color 220ms ease,
+      opacity var(--motion-slow) cubic-bezier(0.16, 1, 0.3, 1),
+      background-color var(--motion-base) ease,
       transform var(--motion-fast) var(--ease-standard);
   }
 

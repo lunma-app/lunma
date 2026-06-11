@@ -12,6 +12,10 @@ export interface RowMenuItem {
   icon?: string | undefined;
   danger?: boolean | undefined;
   keepOpen?: boolean | undefined;
+  /** Renders the row in the muted disabled treatment and inert: it stays
+   * focusable (`aria-disabled`, so roving keyboard nav doesn't skip a gap) but
+   * activating it dispatches nothing. Used for end-of-list Move entries. */
+  disabled?: boolean | undefined;
   /** Renders a trailing chevron + `aria-haspopup` to signal the row opens a
    * drill-in sub-view (a titled `panel`) rather than firing an action. */
   submenu?: boolean | undefined;
@@ -272,6 +276,7 @@ function onTriggerClick(): void {
 }
 
 async function onItemClick(item: RowMenuItem): Promise<void> {
+  if (item.disabled) return; // inert end-of-list entry (e.g. Move at a boundary)
   item.onSelect();
   if (item.keepOpen) {
     await tick();
@@ -323,7 +328,9 @@ async function onItemClick(item: RowMenuItem): Promise<void> {
                 role="menuitem"
                 class="item"
                 class:danger={item.danger}
+                class:disabled={item.disabled}
                 aria-haspopup={item.submenu ? 'menu' : undefined}
+                aria-disabled={item.disabled ? 'true' : undefined}
                 data-menu-id={item.id}
                 data-testid={`${testidPrefix}-item`}
                 onclick={() => onItemClick(item)}
@@ -491,6 +498,23 @@ async function onItemClick(item: RowMenuItem): Promise<void> {
   }
   .item.danger .leading {
     color: var(--danger);
+  }
+
+  /* Disabled (inert) entry — e.g. Move up/down at a list end. Stays focusable
+   * (aria-disabled) but muted and non-interactive: no hover lift, no press. */
+  .item.disabled,
+  .item.disabled:hover,
+  .item.disabled.danger,
+  .item.disabled.danger:hover {
+    color: var(--text-faint);
+    background: transparent;
+    cursor: default;
+  }
+  .item.disabled:active {
+    transform: none;
+  }
+  .item.disabled .leading {
+    color: var(--text-faint);
   }
 
   /* In-drawer expandable region (e.g. the folder icon/colour picker). */

@@ -147,7 +147,7 @@ describe('TempTabs', () => {
 
   test('clicking a row dispatches focusTab', async () => {
     const { container } = render(TempTabsHarness, { props: { store: makeStore(), windowId: 100 } });
-    const firstHit = container.querySelector('button.hit') as HTMLButtonElement;
+    const firstHit = container.querySelector('button.title-btn') as HTMLButtonElement;
     await fireEvent.click(firstHit);
     expect(sendMock).toHaveBeenCalledTimes(1);
     expect(sendMock).toHaveBeenCalledWith({ kind: 'focusTab', payload: { tabId: 17 } });
@@ -227,6 +227,30 @@ describe('TempTabs', () => {
     const items = await openRowMenu(container);
     await fireEvent.click(menuItem(items, 'rename'));
     expect(container.querySelector('[data-testid="tab-rename-input"]')).not.toBeNull();
+  });
+
+  test('Move down reorders a temp row by one (reorderTemp with the full post-move order)', async () => {
+    const store = makeStore();
+    // Three temp tabs [17, 22, 31]; Move down on 17 → [22, 17, 31].
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [17, 22, 31], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[31] = liveTab({ tabId: 31, title: 'Third' });
+    const { container } = render(TempTabsHarness, { props: { store, windowId: 100 } });
+    const items = await openRowMenu(container, 0); // row for tab 17
+    await fireEvent.click(menuItem(items, 'move-down'));
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'reorderTemp',
+      payload: { windowId: 100, tabIds: [22, 17, 31] },
+    });
+  });
+
+  test('Move up is disabled on the first temp row and dispatches nothing', async () => {
+    const { container } = render(TempTabsHarness, { props: { store: makeStore(), windowId: 100 } });
+    const items = await openRowMenu(container, 0); // first row (tab 17)
+    expect(menuItem(items, 'move-up').getAttribute('aria-disabled')).toBe('true');
+    await fireEvent.click(menuItem(items, 'move-up'));
+    expect(sendMock).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'reorderTemp' }));
   });
 
   test('a secondary (right) button press does not start a drag', async () => {

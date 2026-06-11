@@ -116,9 +116,10 @@ body,
   --hover: oklch(0.255 0.050 var(--base-hue));
   --press: oklch(0.295 0.054 var(--base-hue));
   /* Glass keeps its :root (hue-tinted) value. The aurora is kept QUIET on this
-   * dense working surface — far below the new-tab hero (`:root` default 0.9) —
-   * because it is masked to the upper region (see `.sidebar-aurora`) and sits
-   * behind content; it's a soft top glow, not a landing-page field. The
+   * dense working surface — below the @lunma/tokens vivid default
+   * (`--aurora-opacity: 0.5`) — because it is masked to the upper region (see
+   * `.sidebar-aurora`) and sits behind content; it's a soft top glow, not a
+   * landing-page field. The
    * `<Aurora>` is composed WITHOUT an `intensity` prop, so it inherits this
    * scoped value; `standard`/`subtle` drop it further, satisfying "aurora reduced
    * or absent" at the calm levels. */

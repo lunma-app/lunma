@@ -57,4 +57,23 @@ describe('RowMenu', () => {
     });
     expect(trigger(container).getAttribute('aria-expanded')).toBe('false');
   });
+
+  test('a disabled item renders muted + aria-disabled, stays inert, and keeps the drawer open', async () => {
+    const onMove = vi.fn();
+    const { container } = render(RowMenuHarness, {
+      props: {
+        items: [
+          { id: 'move-up', label: 'Move up', disabled: true, onSelect: onMove },
+          { id: 'a', label: 'Action A', onSelect: () => undefined },
+        ],
+      },
+    });
+    await fireEvent.click(trigger(container));
+    const moveUp = document.querySelector('[data-menu-id="move-up"]') as HTMLButtonElement;
+    expect(moveUp.classList.contains('disabled')).toBe(true);
+    expect(moveUp.getAttribute('aria-disabled')).toBe('true');
+    await fireEvent.click(moveUp);
+    expect(onMove).not.toHaveBeenCalled();
+    expect(trigger(container).getAttribute('aria-expanded')).toBe('true'); // still open
+  });
 });

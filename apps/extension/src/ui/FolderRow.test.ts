@@ -111,4 +111,63 @@ describe('FolderRow', () => {
       expect(onRenameCancel).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe('action drawer (move + two-step delete)', () => {
+    const TRIGGER = '[data-testid="folder-row-menu-trigger"]';
+    const item = (id: string): HTMLButtonElement =>
+      document.querySelector(`[data-menu-id="${id}"]`) as HTMLButtonElement;
+
+    async function openDrawer(props: Record<string, unknown>): Promise<HTMLElement> {
+      const { container } = render(FolderRowHarness, { props: { ...base, ...props } });
+      await fireEvent.click(container.querySelector(TRIGGER) as HTMLButtonElement);
+      return container.querySelector(TRIGGER) as HTMLElement;
+    }
+
+    test('drawer offers Rename, Icon & colour, Move up, Move down, Delete folder', async () => {
+      await openDrawer({ canMoveUp: true, canMoveDown: true });
+      const ids = [...document.querySelectorAll('[data-testid="folder-row-menu-item"]')].map((e) =>
+        e.getAttribute('data-menu-id'),
+      );
+      expect(ids).toEqual(['rename', 'appearance', 'move-up', 'move-down', 'delete-folder']);
+    });
+
+    test('Move down dispatches onMoveDown; disabled at the list end dispatches nothing', async () => {
+      const onMoveDown = vi.fn();
+      const onMoveUp = vi.fn();
+      await openDrawer({ canMoveUp: false, canMoveDown: true, onMoveUp, onMoveDown });
+      // Move up is disabled (folder is first) — inert.
+      expect(item('move-up').getAttribute('aria-disabled')).toBe('true');
+      await fireEvent.click(item('move-up'));
+      expect(onMoveUp).not.toHaveBeenCalled();
+      // Move down is enabled.
+      await fireEvent.click(item('move-down'));
+      expect(onMoveDown).toHaveBeenCalledTimes(1);
+    });
+
+    test('Delete folder is a two-step confirm', async () => {
+      const onDelete = vi.fn();
+      const trigger = await openDrawer({ onDelete });
+      // First activation arms: no delete, drawer stays open, label becomes confirm.
+      await fireEvent.click(item('delete-folder'));
+      expect(onDelete).not.toHaveBeenCalled();
+      expect(trigger.getAttribute('aria-expanded')).toBe('true');
+      expect(item('delete-folder').textContent).toContain('confirm');
+      // Second activation deletes.
+      await fireEvent.click(item('delete-folder'));
+      expect(onDelete).toHaveBeenCalledTimes(1);
+    });
+
+    test('closing the drawer disarms a pending Delete folder', async () => {
+      const onDelete = vi.fn();
+      const trigger = await openDrawer({ onDelete });
+      await fireEvent.click(item('delete-folder')); // arm
+      await fireEvent.keyDown(document.querySelector('[role="menu"]') as HTMLElement, {
+        key: 'Escape',
+      }); // close
+      expect(onDelete).not.toHaveBeenCalled();
+      // Re-open: unarmed again.
+      await fireEvent.click(trigger as HTMLButtonElement);
+      expect(item('delete-folder').textContent).not.toContain('confirm');
+    });
+  });
 });

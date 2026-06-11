@@ -14,6 +14,12 @@ interface Props {
   editing?: boolean;
   onRename?: (name: string) => void;
   onRenameCancel?: () => void;
+  onStartRename?: () => void;
+  onDelete?: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
 }
 
 const {
@@ -27,6 +33,12 @@ const {
   editing,
   onRename,
   onRenameCancel,
+  onStartRename,
+  onDelete,
+  onMoveUp,
+  onMoveDown,
+  canMoveUp,
+  canMoveDown,
 }: Props = $props();
 </script>
 
@@ -41,4 +53,10 @@ const {
   {editing}
   {onRename}
   {onRenameCancel}
+  {onStartRename}
+  {onDelete}
+  {onMoveUp}
+  {onMoveDown}
+  {canMoveUp}
+  {canMoveDown}
 />

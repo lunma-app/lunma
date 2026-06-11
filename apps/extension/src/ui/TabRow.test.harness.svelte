@@ -8,10 +8,13 @@ interface Props {
   active?: boolean;
   loading?: boolean;
   drifted?: boolean;
+  homeHost?: string;
+  onGoHome?: () => void;
   meta?: string;
   onclick?: () => void;
   withTrailing?: boolean;
   onTrailingClick?: () => void;
+  editing?: boolean;
 }
 
 function noop(): void {
@@ -25,10 +28,13 @@ const {
   active = false,
   loading = false,
   drifted = false,
+  homeHost,
+  onGoHome = noop,
   meta,
   onclick = noop,
   withTrailing = false,
   onTrailingClick = noop,
+  editing = false,
 }: Props = $props();
 </script>
 
@@ -43,7 +49,10 @@ const {
   {active}
   {loading}
   {drifted}
+  {homeHost}
+  {onGoHome}
   {meta}
   {onclick}
+  {editing}
   trailing={withTrailing ? trailingAction : undefined}
 />

@@ -8,6 +8,7 @@ import {
   type DropOntoRow,
   type DropResult,
   drag,
+  reorderFlipMs,
   SPRING_LOAD_MS,
 } from './drag.svelte';
 
@@ -122,6 +123,44 @@ describe('DragController press threshold', () => {
     window.dispatchEvent(pointer('pointermove', 0, 10));
     expect(drag.state.active).toBe(true);
     expect(drag.state.data?.id).toBe('st-1');
+  });
+
+  test('pan/selection suppression applies only during an active drag', () => {
+    // At rest the body carries no suppression (rows pan on touch).
+    expect(document.body.style.touchAction).toBe('');
+    expect(document.body.style.userSelect).toBe('');
+
+    const rowEl = el({ left: 0, right: 100, top: 0, bottom: 20 });
+    registerZone('pinned:work', { left: 0, right: 100, top: 0, bottom: 60 }, [
+      { left: 0, right: 100, top: 0, bottom: 20 },
+    ]);
+    drag.press(DATA, pointer('pointerdown', 0, 0), rowEl, vi.fn());
+    window.dispatchEvent(pointer('pointermove', 0, 10)); // past threshold → drag starts
+
+    // For the drag's duration, the body suppresses native panning + selection.
+    expect(drag.state.active).toBe(true);
+    expect(document.body.style.touchAction).toBe('none');
+    expect(document.body.style.userSelect).toBe('none');
+
+    // On release it is removed.
+    window.dispatchEvent(pointer('pointerup', 0, 10));
+    expect(document.body.style.touchAction).toBe('');
+    expect(document.body.style.userSelect).toBe('');
+  });
+
+  test('an aborted drag (Escape) also removes pan/selection suppression', () => {
+    const rowEl = el({ left: 0, right: 100, top: 0, bottom: 20 });
+    registerZone('pinned:work', { left: 0, right: 100, top: 0, bottom: 60 }, [
+      { left: 0, right: 100, top: 0, bottom: 20 },
+    ]);
+    drag.press(DATA, pointer('pointerdown', 0, 0), rowEl, vi.fn());
+    window.dispatchEvent(pointer('pointermove', 0, 10));
+    expect(document.body.style.touchAction).toBe('none');
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(drag.state.active).toBe(false);
+    expect(document.body.style.touchAction).toBe('');
+    expect(document.body.style.userSelect).toBe('');
   });
 });
 
@@ -449,5 +488,35 @@ describe('DragController drop-onto + nested zones (pinned-tab-folders)', () => {
     expect(onSpringLoad).not.toHaveBeenCalled();
     window.dispatchEvent(pointer('pointerup', 50, 5));
     vi.useRealTimers();
+  });
+});
+
+describe('reorderFlipMs (reduced-motion-aware FLIP duration)', () => {
+  const mockReducedMotion = (matches: boolean): void => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: query.includes('prefers-reduced-motion') ? matches : false,
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    );
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    document.documentElement.style.removeProperty('--motion-base');
+  });
+
+  test('returns 0 under prefers-reduced-motion', () => {
+    mockReducedMotion(true);
+    expect(reorderFlipMs()).toBe(0);
+  });
+
+  test('reads the --motion-base token (ms) when motion is allowed', () => {
+    mockReducedMotion(false);
+    document.documentElement.style.setProperty('--motion-base', '200ms');
+    expect(reorderFlipMs()).toBe(200);
   });
 });

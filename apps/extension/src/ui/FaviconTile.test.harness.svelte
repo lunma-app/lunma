@@ -8,6 +8,8 @@ interface Props {
   active?: boolean;
   loading?: boolean;
   drifted?: boolean;
+  homeHost?: string;
+  onGoHome?: () => void;
   unbound?: boolean;
   favoriting?: boolean;
   onclick?: () => void;
@@ -24,6 +26,8 @@ const {
   active,
   loading,
   drifted,
+  homeHost,
+  onGoHome = noop,
   unbound,
   favoriting,
   onclick = noop,
@@ -37,6 +41,8 @@ const {
   {active}
   {loading}
   {drifted}
+  {homeHost}
+  {onGoHome}
   {unbound}
   {favoriting}
   {onclick}

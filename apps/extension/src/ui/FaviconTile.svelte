@@ -32,8 +32,19 @@ interface Props {
   active?: boolean | undefined;
   /** Loading treatment: the favicon slot becomes the shared spinner. */
   loading?: boolean | undefined;
-  /** Drift treatment: a Space-coloured corner dot — the bound tab wandered off home. */
+  /** Drift treatment: a Space-coloured corner dot — the bound tab wandered off home.
+   * A drifted tile also turns its favicon into a one-click "return home" affordance
+   * on hover (see `onGoHome` / `homeHost`); the corner dot stays as the at-rest
+   * signal (a square tile has no room for a subtitle — D4). */
   drifted?: boolean | undefined;
+  /** One-click "return home" for a drifted tile — fired by a LEFT-CLICK on the tile
+   * while drifted. When absent, or the tile is not drifted, the click falls through
+   * to `onclick` (focus the favorite's tab). */
+  onGoHome?: (() => void) | undefined;
+  /** Home hostname (`hostOf(originalURL)`, e.g. `figma.com`) shown in the drift
+   * "Return to <host>" tooltip + accessible name. An empty/absent host suppresses
+   * the return affordance even while drifted (the corner dot still renders). */
+  homeHost?: string | undefined;
   /** Dormant: no live tab in this window. Dims the favicon; suppresses drift/active. */
   unbound?: boolean | undefined;
   /** One-shot `favoriting-pulse` entrance (a tile that just became a favorite). */
@@ -55,6 +66,8 @@ const {
   active = false,
   loading = false,
   drifted = false,
+  onGoHome,
+  homeHost,
   unbound = false,
   favoriting = false,
   tabindex,
@@ -78,9 +91,13 @@ const FAVICON_PX = 24;
 // guard here too (the row already withholds them), per the spec scenario.
 const isActive = $derived(active && !unbound);
 const isDrift = $derived(drifted && !unbound);
+// "Returnable" — the favicon becomes a one-click return-home control — needs a
+// resolvable home host on top of drift; without it the tile keeps its dot but the
+// click stays focus (a weird URL degrades, never breaks — Risks: odd URLs).
+const returnable = $derived(isDrift && !!homeHost);
 </script>
 
-<Tooltip label={title} side="bottom">
+<Tooltip label={returnable ? `Return to ${homeHost}` : title} side="bottom">
   {#snippet children(props)}
     <button
       {...props}
@@ -90,11 +107,12 @@ const isDrift = $derived(drifted && !unbound);
       class:loading
       class:unbound
       class:favoriting
+      class:returnable
       data-testid="favicon-tile"
       data-active={isActive}
-      aria-label={title}
+      aria-label={returnable ? `Return to ${homeHost}` : title}
       {tabindex}
-      onclick={() => onclick?.()}
+      onclick={() => (returnable ? onGoHome?.() : onclick?.())}
       oncontextmenu={onContextMenu}
     >
       <span class="favicon">
@@ -107,6 +125,13 @@ const isDrift = $derived(drifted && !unbound);
           <span class="drift-dot" data-testid="drift-dot" aria-label="Off home"></span>
         {/if}
       </span>
+      <!-- Drifted tile: hover/focus cross-fades the favicon → a Space-hued ↩ return
+           glyph. The dot stays as the at-rest signal; this is the one-click return. -->
+      {#if returnable}
+        <span class="return-glyph" data-testid="favicon-return" aria-hidden="true">
+          <Icon name="corner-up-left" size={20} />
+        </span>
+      {/if}
     </button>
   {/snippet}
 </Tooltip>
@@ -206,6 +231,30 @@ const isDrift = $derived(drifted && !unbound);
     }
   }
 
+  /* Return affordance — TabRow's recipe, tile-sized: a Space-hued ↩ overlaying the
+   * favicon, revealed on hover/focus of a drifted tile as the favicon fades out. The
+   * whole tile is the click target (left-click → onGoHome), so the glyph is purely a
+   * visual swap (pointer-events off). */
+  .return-glyph {
+    position: absolute;
+    inset: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--space-c);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--motion-fast) var(--ease-standard);
+  }
+  .favicon-tile.returnable:hover .favicon,
+  .favicon-tile.returnable:focus-visible .favicon {
+    opacity: 0;
+  }
+  .favicon-tile.returnable:hover .return-glyph,
+  .favicon-tile.returnable:focus-visible .return-glyph {
+    opacity: 1;
+  }
+
   /* Loading — TabRow's verbatim spinner: 0.8s linear, `--space-c`. */
   .spin {
     display: inline-flex;
@@ -250,6 +299,11 @@ const isDrift = $derived(drifted && !unbound);
     }
     .favicon-tile:hover {
       transform: none;
+    }
+    /* Favicon → return-glyph swap is instant (no cross-fade) under reduced motion. */
+    .favicon,
+    .return-glyph {
+      transition: none;
     }
     .spin {
       animation-duration: 1.6s;

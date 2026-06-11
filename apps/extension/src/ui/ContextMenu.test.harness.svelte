@@ -12,6 +12,7 @@ const { items, label }: Props = $props();
 let open = $state(false);
 let x = $state(0);
 let y = $state(0);
+let anchorEl = $state<HTMLElement | undefined>(undefined);
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -22,10 +23,11 @@ let y = $state(0);
     e.preventDefault();
     x = e.clientX;
     y = e.clientY;
+    anchorEl = e.currentTarget as HTMLElement;
     open = true;
   }}
 >
   right-click me
 </button>
 
-<ContextMenu bind:open {x} {y} {items} {label} />
+<ContextMenu bind:open {x} {y} {anchorEl} {items} {label} />

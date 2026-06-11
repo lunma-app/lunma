@@ -25,9 +25,12 @@ import TrustBand from '$lib/TrustBand.svelte';
   <meta name="twitter:card" content="summary_large_image" />
 </svelte:head>
 
+<!-- Skip link: the FIRST focusable element, visually hidden until focused, so a
+     keyboard user can jump straight past the sticky nav to the main content. -->
+<a class="skip-link" href="#main">Skip to content</a>
 <Nav />
-<Hero />
-<main>
+<main id="main" tabindex="-1">
+  <Hero />
   <Chapters />
   <TrustBand />
   <Faq />

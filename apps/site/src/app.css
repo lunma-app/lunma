@@ -42,6 +42,18 @@
 html {
   scroll-behavior: smooth;
   color-scheme: dark;
+  /* Sticky-nav height + breathing room — anchor targets inset their scroll
+   * position by this so a section heading lands clear of the glass nav. */
+  --nav-offset: calc(64px + var(--space-4));
+}
+
+/* Every section-level nav anchor target (the hero, each chapter, the trust band,
+ * the staged demo) clears the sticky nav when jumped to. */
+.hero,
+.chapter,
+.trust,
+.stage {
+  scroll-margin-top: var(--nav-offset);
 }
 
 body {
@@ -68,6 +80,48 @@ a {
   outline: var(--focus-width) solid var(--focus-color);
   outline-offset: var(--focus-offset);
   border-radius: var(--r-xs);
+}
+
+/* The skip-link target is focused programmatically (a `tabindex=-1` landmark);
+ * it needs no focus ring of its own — the visible jump is the feedback. */
+main:focus {
+  outline: none;
+}
+
+/* Skip-to-content link — visually hidden until focused, then a small frosted pill
+ * at the top-left, above the sticky nav. Composes the shared glass tokens. */
+.skip-link {
+  position: fixed;
+  top: var(--space-3);
+  left: var(--space-3);
+  z-index: var(--z-overlay);
+  padding: 10px 16px;
+  border-radius: var(--r-pill);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+  /* Hidden off the top until focused; revealed with a small slide. */
+  transform: translateY(-150%);
+  opacity: 0;
+  transition:
+    transform var(--motion-fast) var(--ease-emphasised),
+    opacity var(--motion-fast) var(--ease-emphasised);
+}
+.skip-link:focus {
+  transform: none;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skip-link {
+    transition: none;
+  }
 }
 
 /* Display type carries the brand voice; body + UI ride Mona Sans. */

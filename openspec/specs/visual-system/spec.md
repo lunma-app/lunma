@@ -417,3 +417,51 @@ each consumer.
 - **THEN** the automated parity check SHALL fail (`vitest`), so the TS runtime
   mirror stays locked to the canonical tokens
 
+### Requirement: Toast auto-dismiss is interruptible
+
+The shared `Toast` primitive's auto-dismiss timer SHALL pause while the
+pointer is over the toast or while focus is within it, and SHALL resume with
+the remaining time when the pointer leaves and focus moves out. Pressing
+**Escape** while focus is within the toast SHALL dismiss it immediately. The
+toast's visual presentation (surface, shadow, action styling) is unchanged —
+pausing has no countdown chrome.
+
+#### Scenario: Hover pauses the dismiss timer
+
+- **WHEN** a 5s toast is showing and the user moves the pointer over it for 10
+  seconds, then leaves
+- **THEN** the toast is still visible throughout the hover
+- **AND** it dismisses only after the remaining time elapses post-leave
+
+#### Scenario: Focus within pauses, Escape dismisses
+
+- **WHEN** the user tabs focus to the toast's Undo action and waits past the
+  nominal timeout
+- **THEN** the toast remains visible
+- **AND WHEN** the user presses Escape
+- **THEN** the toast dismisses without invoking the action
+
+### Requirement: JS-driven move animations honour reduced motion
+
+JS-driven list-move animations in the sidebar SHALL honour reduced motion:
+the FLIP move helpers, Svelte `animate:flip` usages, and any JS-read
+transition durations SHALL resolve from the motion tokens or collapse to zero when
+`prefers-reduced-motion: reduce` is active, sampled at each animation start
+(so an OS-level toggle takes effect without a reload). The sidebar surfaces
+this change touches (the FLIP move helpers and the `SpaceSwitcher`'s JS-read
+transition durations) SHALL NOT carry hard-coded millisecond literals for
+those animations; their durations read the `--motion-*` tokens.
+
+#### Scenario: Reduced motion suppresses FLIP moves
+
+- **WHEN** `prefers-reduced-motion: reduce` is active and a tab reorder
+  re-sorts the list
+- **THEN** rows take their new positions without a sliding FLIP animation
+
+#### Scenario: Mid-session OS toggle is respected
+
+- **WHEN** the user enables reduced motion at the OS level while the sidebar is
+  open and then triggers a Space-switch settle
+- **THEN** the settle resolves on the fast tick without requiring a sidebar
+  reload
+

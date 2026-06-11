@@ -12,6 +12,10 @@ export interface MenuItem {
   icon?: string | undefined;
   danger?: boolean | undefined;
   keepOpen?: boolean | undefined;
+  /** Renders the item in the muted disabled treatment and inert: it stays
+   * focusable (`aria-disabled`, so roving keyboard nav doesn't skip a gap) but
+   * activating it dispatches nothing. Used for end-of-list Move entries. */
+  disabled?: boolean | undefined;
   /** Renders a trailing chevron + `aria-haspopup` to signal the item drills into a
    * titled `panel` (a sub-view) rather than firing a one-shot action. */
   submenu?: boolean | undefined;

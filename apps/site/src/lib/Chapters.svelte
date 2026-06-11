@@ -28,7 +28,7 @@ import TabRowMock from '$lib/mocks/TabRowMock.svelte';
   {/snippet}
 </Chapter>
 
-<Chapter index={2} kicker="Spaces" title="Group tabs into colour-coded Spaces." layout="right">
+<Chapter index={2} id="spaces" kicker="Spaces" title="Group tabs into colour-coded Spaces." layout="right">
   {#snippet copy()}
     <p>
       Make a Space for each project or context. Each one keeps its own tabs, in

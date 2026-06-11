@@ -23,6 +23,12 @@ interface Props {
   /** Anchor (viewport coords, e.g. the `contextmenu` event's clientX/clientY). */
   x: number;
   y: number;
+  /** The element that invoked the menu (the row/tile). When the event carried no
+   * usable pointer position — a keyboard-invoked `contextmenu` (menu key /
+   * `Shift+F10`) reports `clientX === 0 && clientY === 0` — the menu anchors to
+   * this element's rect (title column, vertically centred) instead of (0,0), so a
+   * keyboard user's menu opens at the focused row rather than the viewport corner. */
+  anchorEl?: HTMLElement | undefined;
   /** Actions, top to bottom. */
   items: MenuItem[];
   /** Accessible label for the menu. */
@@ -52,7 +58,22 @@ let {
   panel,
   panelTitle,
   onPanelBack,
+  anchorEl,
 }: Props = $props();
+
+/** Effective anchor point: the event coords, or — for a keyboard-invoked menu
+ * (`x === 0 && y === 0`) with a known invoking element — that element's rect at its
+ * title column, vertically centred. Clamped into the viewport by `place()`. */
+function anchorPoint(): { x: number; y: number } {
+  if (x === 0 && y === 0 && anchorEl) {
+    const r = anchorEl.getBoundingClientRect();
+    return { x: r.left + ROW_TITLE_INSET, y: r.top + r.height / 2 };
+  }
+  return { x, y };
+}
+/** Inset from a row's left edge to its title column (favicon gutter), so a
+ * keyboard-anchored menu opens beside the title rather than at the row's edge. */
+const ROW_TITLE_INSET = 28;
 
 // Drill-in: a titled panel takes over the popover (back-header + panel) in place of
 // the action list (mirrors RowMenu). The host controls whether panel/panelTitle pass.
@@ -76,6 +97,7 @@ function close(): void {
 }
 
 function onItemClick(item: MenuItem): void {
+  if (item.disabled) return; // inert end-of-list entry (e.g. Move at a boundary)
   item.onSelect();
   if (!item.keepOpen) close();
 }
@@ -85,8 +107,9 @@ function onItemClick(item: MenuItem): void {
 $effect(() => {
   if (!open) return;
   openerEl = (document.activeElement instanceof HTMLElement ? document.activeElement : null);
-  placedX = x;
-  placedY = y;
+  const p = anchorPoint();
+  placedX = p.x;
+  placedY = p.y;
   addOutside();
   void place();
 });
@@ -109,11 +132,12 @@ async function place(): Promise<void> {
     : panelEl?.querySelector<HTMLButtonElement>('[role="menuitem"]');
   target?.focus();
   if (!panelEl || typeof window === 'undefined') return;
+  const p = anchorPoint();
   const r = panelEl.getBoundingClientRect();
   if (r.width === 0 && r.height === 0) return; // unmeasured (jsdom) — leave at anchor
   const m = 8;
-  placedX = Math.max(m, Math.min(x, window.innerWidth - m - r.width));
-  placedY = Math.max(m, Math.min(y, window.innerHeight - m - r.height));
+  placedX = Math.max(m, Math.min(p.x, window.innerWidth - m - r.width));
+  placedY = Math.max(m, Math.min(p.y, window.innerHeight - m - r.height));
 }
 
 // --- outside-click dismissal -------------------------------------------------
@@ -219,7 +243,9 @@ function onKeydown(event: KeyboardEvent): void {
               role="menuitem"
               class="item"
               class:danger={item.danger}
+              class:disabled={item.disabled}
               aria-haspopup={item.submenu ? 'menu' : undefined}
+              aria-disabled={item.disabled ? 'true' : undefined}
               data-menu-id={item.id}
               data-testid={`${testid}-item`}
               onclick={() => onItemClick(item)}
@@ -306,6 +332,20 @@ function onKeydown(event: KeyboardEvent): void {
   }
   .item.danger .leading {
     color: var(--danger);
+  }
+
+  /* Disabled (inert) entry — e.g. Move up/down at a list end. Stays focusable
+   * (aria-disabled) but muted and non-interactive: no hover lift, default cursor. */
+  .item.disabled,
+  .item.disabled:hover,
+  .item.disabled.danger,
+  .item.disabled.danger:hover {
+    color: var(--text-faint);
+    background: transparent;
+    cursor: default;
+  }
+  .item.disabled .leading {
+    color: var(--text-faint);
   }
 
   /* Trailing chevron for a drill-in (submenu) item. */

@@ -131,6 +131,7 @@ function onPreloadError(): void {
     {alt}
     width={size}
     height={size}
+    draggable="false"
     style:--favicon-px={`${size}px`}
   />
 {:else if candidate === undefined}

@@ -9,7 +9,7 @@ import { faviconCacheKey, faviconFor, faviconUrl } from '../ui/favicon';
 import IconButton from '../ui/IconButton.svelte';
 import type { MenuItem } from '../ui/menu-types';
 import TabRow from '../ui/TabRow.svelte';
-import { type DropResult, drag } from './drag.svelte';
+import { type DropResult, drag, reorderFlipMs } from './drag.svelte';
 import { useStore } from './store-context.svelte';
 
 interface Props {
@@ -26,7 +26,6 @@ const { windowId, spaceId, active = true }: Props = $props();
 const store = useStore();
 
 const ZONE = $derived(`temp:${windowId}`);
-const FLIP_MS = 160;
 
 interface TempItem {
   id: string; // stringified TabId — the drag-controller item id
@@ -196,11 +195,34 @@ function favoriteTab(item: TempItem): void {
   dispatch({ kind: 'favoriteTab', payload: { tabId: item.tabId, windowId } });
 }
 
+// --- keyboard/touch reorder via the menu (Move up/down) -----------------------
+// Move reorders a temporary row ONE slot within the list, dispatching the existing
+// `reorderTemp` with the full post-move `tabIds` order (no new bus kinds; no
+// optimistic mutation). Disabled at the list ends.
+
+/** Whether `item` can move up/down within the Temporary list. */
+function tempBounds(item: TempItem): { up: boolean; down: boolean } {
+  const i = items.findIndex((x) => x.tabId === item.tabId);
+  return { up: i > 0, down: i !== -1 && i < items.length - 1 };
+}
+
+/** Move `item` one slot (`dir` = -1 up / +1 down) and dispatch the full order. */
+function moveTemp(item: TempItem, dir: -1 | 1): void {
+  const ids = items.map((x) => x.tabId);
+  const from = ids.indexOf(item.tabId);
+  if (from === -1) return;
+  const to = from + dir;
+  if (to < 0 || to >= ids.length) return;
+  [ids[from], ids[to]] = [ids[to] as TabId, ids[from] as TabId];
+  dispatch({ kind: 'reorderTemp', payload: { windowId, tabIds: ids } });
+}
+
 /** The right-click action menu for a temporary row: Favorite (non-destructive),
- * Rename (inline), and Close tab. Built as `ContextMenu` `MenuItem[]` so temp +
- * pinned rows share the favicon-tile right-click interaction. The one-click close
- * lives separately on the row's trailing ✕. */
+ * Rename (inline), Move up/down (reorder), and Close tab. Built as `ContextMenu`
+ * `MenuItem[]` so temp + pinned rows share the favicon-tile right-click interaction.
+ * The one-click close lives separately on the row's trailing ✕. */
 function tabMenuItems(item: TempItem): MenuItem[] {
+  const bounds = tempBounds(item);
   return [
     {
       id: 'favorite',
@@ -213,6 +235,18 @@ function tabMenuItems(item: TempItem): MenuItem[] {
       label: 'Rename',
       icon: 'pencil',
       onSelect: () => startRename(item),
+    },
+    {
+      id: 'move-up',
+      label: 'Move up',
+      disabled: !bounds.up,
+      onSelect: () => moveTemp(item, -1),
+    },
+    {
+      id: 'move-down',
+      label: 'Move down',
+      disabled: !bounds.down,
+      onSelect: () => moveTemp(item, 1),
     },
     {
       id: 'close',
@@ -231,6 +265,8 @@ let menuOpen = $state(false);
 let menuX = $state(0);
 let menuY = $state(0);
 let menuTabId = $state<TabId | null>(null);
+// The row element a keyboard-invoked menu anchors to (see onRowContextMenu / D6).
+let menuAnchorEl = $state<HTMLElement | undefined>(undefined);
 const activeMenuItem = $derived(
   menuTabId !== null ? (items.find((i) => i.tabId === menuTabId) ?? null) : null,
 );
@@ -241,6 +277,8 @@ function onRowContextMenu(e: MouseEvent, item: TempItem): void {
   e.preventDefault();
   menuX = e.clientX;
   menuY = e.clientY;
+  // The invoking row — ContextMenu anchors to it for a keyboard-invoked menu (D6).
+  menuAnchorEl = e.currentTarget as HTMLElement;
   menuTabId = item.tabId;
   menuOpen = true;
 }
@@ -279,7 +317,7 @@ function commitRename(item: TempItem, newName: string): void {
       onpointerdown={(e) => onRowPointerDown(e, item)}
       oncontextmenu={(e) => onRowContextMenu(e, item)}
       ondblclick={() => startRename(item)}
-      animate:flip={{ duration: FLIP_MS }}
+      animate:flip={{ duration: () => reorderFlipMs() }}
     >
       {#snippet closeButton()}
         <!-- The ✕ stops pointerdown propagation so pressing it never arms the
@@ -321,6 +359,7 @@ function commitRename(item: TempItem, newName: string): void {
     bind:open={menuOpen}
     x={menuX}
     y={menuY}
+    anchorEl={menuAnchorEl}
     items={tabMenuItems(activeMenuItem)}
     label="Tab actions"
     testid="temp-menu"
@@ -343,7 +382,9 @@ function commitRename(item: TempItem, newName: string): void {
      * tracks the active density. */
     padding-bottom: var(--row-gap);
     animation: temp-row-in var(--motion-base) var(--ease-emphasised);
-    touch-action: none;
+    /* No resting `touch-action: none` — touch users pan the temporary list; the
+     * drag controller suppresses panning only during an active pointer drag
+     * (row-drag-does-not-block-touch-panning). */
   }
 
   /* Wraps the trailing ✕ so it can swallow its own pointerdown (no drag) while the

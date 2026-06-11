@@ -2,7 +2,7 @@
 import '../ui/drop-line.css';
 import { SvelteSet } from 'svelte/reactivity';
 import { dispatch } from '../shared/bus';
-import { labelFor } from '../shared/label-for';
+import { hostOf, labelFor } from '../shared/label-for';
 import { log } from '../shared/logger';
 import type { SavedTabId, TabBoundary, WindowId } from '../shared/types';
 import ContextMenu from '../ui/ContextMenu.svelte';
@@ -10,6 +10,7 @@ import FaviconTile from '../ui/FaviconTile.svelte';
 import { faviconCacheKey, faviconFor, faviconUrl } from '../ui/favicon';
 import type { MenuItem } from '../ui/menu-types';
 import { type DropResult, drag } from './drag.svelte';
+import EmptyState from './EmptyState.svelte';
 import { useStore } from './store-context.svelte';
 import TabBoundaryEditor from './TabBoundaryEditor.svelte';
 
@@ -30,6 +31,9 @@ interface FavView {
   url: string;
   /** The favorite's home URL — seeds the boundary editor's domain. */
   originalURL: string;
+  /** Home hostname (`hostOf(originalURL)`) — the drift "Return to <host>"
+   * affordance's text. Empty when `originalURL` has no host. */
+  homeHost: string;
   /** The favorite's explicit site-boundary (undefined ⇒ favorites default to locked). */
   boundary: TabBoundary | undefined;
   active: boolean;
@@ -37,6 +41,10 @@ interface FavView {
   drifted: boolean;
   /** Dormant: no live tab bound in THIS window. */
   unbound: boolean;
+  /** Bound to a live tab in ANY window — gates the Delete two-step: a favorite
+   * dormant in every window deletes without a confirm (per the deletion spec),
+   * whereas one with a live tab somewhere arms first (deletion closes that tab). */
+  boundAnywhere: boolean;
 }
 
 /**
@@ -49,9 +57,14 @@ interface FavView {
 function projectFavorite(id: SavedTabId): FavView | null {
   const saved = store.state.savedTabs[id];
   if (!saved) return null;
-  const boundTabId = store.state.tabBindings[id]?.[windowId];
+  const bindings = store.state.tabBindings[id];
+  const boundTabId = bindings?.[windowId];
   const bound = boundTabId !== undefined;
   const live = bound ? store.state.liveTabsById[boundTabId] : undefined;
+  // Bound in ANY window? (gates the Delete confirm — see FavView.boundAnywhere).
+  const boundAnywhere = bindings
+    ? Object.values(bindings).some((tid) => store.state.liveTabsById[tid] !== undefined)
+    : false;
   // Drift is per window: this window's bound tab's LIVE url diverging from home.
   const liveUrl = live?.url;
   const drifted = bound && liveUrl !== undefined && liveUrl !== '' && liveUrl !== saved.originalURL;
@@ -65,6 +78,7 @@ function projectFavorite(id: SavedTabId): FavView | null {
     id,
     url,
     originalURL: saved.originalURL,
+    homeHost: hostOf(saved.originalURL),
     boundary: saved.boundary,
     title: saved.customTitle ?? labelFor(liveOrSaved, url),
     // Request a hi-res favicon (64px) for the `_favicon` fallback: the row's tiles
@@ -82,6 +96,7 @@ function projectFavorite(id: SavedTabId): FavView | null {
     loading: live?.status === 'loading',
     drifted,
     unbound: !bound,
+    boundAnywhere,
   };
 }
 
@@ -155,6 +170,28 @@ function copyLink(url: string): void {
   });
 }
 
+// --- keyboard/touch reorder via the menu (Move left/right) --------------------
+// Move reorders a favorite ONE slot within the row, dispatching the existing
+// `reorderFavorites` with the full post-move id order (no new bus kinds; no
+// optimistic mutation). Disabled at the row ends.
+
+/** Whether `fav` can move left/right within the favicon row. */
+function favBounds(fav: FavView): { left: boolean; right: boolean } {
+  const i = favorites.findIndex((f) => f.id === fav.id);
+  return { left: i > 0, right: i !== -1 && i < favorites.length - 1 };
+}
+
+/** Move `fav` one slot (`dir` = -1 left / +1 right) and dispatch the full order. */
+function moveFavorite(fav: FavView, dir: -1 | 1): void {
+  const ids = favorites.map((f) => f.id);
+  const from = ids.indexOf(fav.id);
+  if (from === -1) return;
+  const to = from + dir;
+  if (to < 0 || to >= ids.length) return;
+  [ids[from], ids[to]] = [ids[to] as SavedTabId, ids[from] as SavedTabId];
+  dispatch({ kind: 'reorderFavorites', payload: { ids } });
+}
+
 // Right-click context-menu actions for a favorite tile — the discoverable removal
 // path (the user found drag-out alone undiscoverable), plus open + copy. Remove is
 // `danger` and dispatches `unpinTab` (non-destructive — a bound tab returns to
@@ -204,8 +241,26 @@ function contextItemsFor(fav: FavView): MenuItem[] {
       submenu: true,
       keepOpen: true,
       onSelect: () => {
+        confirmingDeleteId = null; // selecting another entry disarms a pending Delete
         panelOpen = true;
       },
+    },
+  );
+  // Move left/right — reorder within the row, disabled at the ends so favorites
+  // reordering is reachable from the keyboard (context-menu key) and touch long-press.
+  const bounds = favBounds(fav);
+  items.push(
+    {
+      id: 'move-left',
+      label: 'Move left',
+      disabled: !bounds.left,
+      onSelect: () => moveFavorite(fav, -1),
+    },
+    {
+      id: 'move-right',
+      label: 'Move right',
+      disabled: !bounds.right,
+      onSelect: () => moveFavorite(fav, 1),
     },
     {
       // Gentle: leaves favorites; a bound tab returns to Temporary and STAYS OPEN.
@@ -214,16 +269,34 @@ function contextItemsFor(fav: FavView): MenuItem[] {
       icon: 'x',
       onSelect: () => removeFavorite(fav.id),
     },
-    {
-      // Destructive: deletes the favorite record entirely (and closes its bound tab) —
-      // the same `deleteSavedTab` the pinned-row Delete uses.
+  );
+  // Destructive Delete (`deleteSavedTab` removes the record and closes its bound tab).
+  // Two-step confirm when the favorite is bound to a live tab in ANY window (the
+  // confirmation the deletion spec requires); a favorite dormant in every window
+  // deletes without prompting. The arm mirrors the pinned-row pattern.
+  if (fav.boundAnywhere && confirmingDeleteId !== fav.id) {
+    items.push({
       id: 'delete',
       label: 'Delete',
       icon: 'trash-2',
       danger: true,
-      onSelect: () => dispatch({ kind: 'deleteSavedTab', payload: { savedTabId: fav.id } }),
-    },
-  );
+      keepOpen: true,
+      onSelect: () => {
+        confirmingDeleteId = fav.id;
+      },
+    });
+  } else {
+    items.push({
+      id: 'delete',
+      label: fav.boundAnywhere ? 'Delete — confirm' : 'Delete',
+      icon: 'trash-2',
+      danger: true,
+      onSelect: () => {
+        confirmingDeleteId = null;
+        dispatch({ kind: 'deleteSavedTab', payload: { savedTabId: fav.id } });
+      },
+    });
+  }
   return items;
 }
 
@@ -412,7 +485,13 @@ let menuOpen = $state(false);
 let menuX = $state(0);
 let menuY = $state(0);
 let menuFavId = $state<SavedTabId | null>(null);
+// The tile element a keyboard-invoked menu anchors to (see onTileContextMenu / D6).
+let menuAnchorEl = $state<HTMLElement | undefined>(undefined);
 let panelOpen = $state(false);
+// Two-step Delete arm: holds the favorite whose Delete is armed into its
+// "Delete — confirm" affordance. Reset on menu close, Escape, opening another
+// tile's menu, or selecting any other entry (see contextItemsFor / onclose).
+let confirmingDeleteId = $state<SavedTabId | null>(null);
 const activeMenuFav = $derived(
   menuFavId !== null ? (favorites.find((f) => f.id === menuFavId) ?? null) : null,
 );
@@ -420,8 +499,11 @@ const activeMenuFav = $derived(
 function onTileContextMenu(e: MouseEvent, fav: FavView): void {
   menuX = e.clientX;
   menuY = e.clientY;
+  // The invoking tile — ContextMenu anchors to it for a keyboard-invoked menu (D6).
+  menuAnchorEl = e.currentTarget as HTMLElement;
   menuFavId = fav.id;
   panelOpen = false;
+  confirmingDeleteId = null; // a fresh open starts unarmed
   menuOpen = true;
 }
 </script>
@@ -472,6 +554,8 @@ function onTileContextMenu(e: MouseEvent, fav: FavView): void {
             active={fav.active}
             loading={fav.loading}
             drifted={fav.drifted}
+            homeHost={fav.homeHost}
+            onGoHome={() => dispatch({ kind: 'goHome', payload: { savedTabId: fav.id, windowId } })}
             unbound={fav.unbound}
             favoriting={pulsing.has(fav.id)}
             tabindex={i === rovingTile ? 0 : -1}
@@ -482,18 +566,18 @@ function onTileContextMenu(e: MouseEvent, fav: FavView): void {
       {/each}
     </div>
   {:else}
-    <!-- Empty-state placeholder: a quiet preview of the favorite shape (Space-tinted
-         ghost tiles) + a hint, on the same transparent strip. It doubles as the
-         decouple drop target — when a pinned tab is dragged over it the ghosts +
-         hint light up to read as "drop here". -->
-    <div class="empty-state" class:over={favoriteDropTargeted} data-testid="favicon-empty">
-      <span class="empty-ghosts" aria-hidden="true">
-        <span class="ghost"></span>
-        <span class="ghost"></span>
-        <span class="ghost"></span>
-      </span>
-      <span class="empty-hint">{favoriteDropTargeted ? 'Drop to favorite' : 'Drag tabs up to favorite'}</span>
-    </div>
+    <!-- Empty-state placeholder — the SAME plated drop-zone card the pinned list uses
+         (shared `EmptyState`), so favorites and pinned read as one language. It doubles
+         as the decouple/favorite drop target: when a pinned/temp tab is dragged over the
+         row the card lights up to read as "drop here" (`over`), and its hint swaps to the
+         active copy. -->
+    <EmptyState
+      icon="star"
+      testid="favicon-empty"
+      title="No favorites yet."
+      subtitle={favoriteDropTargeted ? 'Drop to favorite' : 'Drag a tab up here to favorite it.'}
+      over={favoriteDropTargeted}
+    />
   {/if}
 </div>
 
@@ -518,6 +602,7 @@ function onTileContextMenu(e: MouseEvent, fav: FavView): void {
     bind:open={menuOpen}
     x={menuX}
     y={menuY}
+    anchorEl={menuAnchorEl}
     items={contextItemsFor(activeMenuFav)}
     label="Favorite actions"
     testid="favicon-menu"
@@ -528,6 +613,7 @@ function onTileContextMenu(e: MouseEvent, fav: FavView): void {
     }}
     onclose={() => {
       panelOpen = false;
+      confirmingDeleteId = null; // closing / Escape disarms a pending Delete
     }}
   />
 {/if}
@@ -567,9 +653,9 @@ function onTileContextMenu(e: MouseEvent, fav: FavView): void {
 
   .tile-wrap {
     position: relative;
-    /* Tiles are pointer-draggable to reorder / couple / move back; suppress touch
-     * scrolling so a press becomes a drag, not a pan. */
-    touch-action: none;
+    /* No resting `touch-action: none` — touch users must be able to pan the lists
+     * (row-drag-does-not-block-touch-panning). The drag controller suppresses
+     * panning only for the duration of an active pointer drag. */
   }
   /* Drag source stays in place but dims while its clone is carried. */
   .tile-wrap.dragging {
@@ -612,68 +698,8 @@ function onTileContextMenu(e: MouseEvent, fav: FavView): void {
     box-shadow: 0 0 6px var(--space-c);
   }
 
-  /* Empty-state placeholder: fills the glass shelf with a preview of the favorite
-   * shape (ghost tiles) + an editorial hint, left-aligned on the same `--space-3`
-   * inset the populated strip uses so the row reads identically full-or-empty. */
-  .empty-state {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    /* Same `--space-3` box as the populated `.strip` so the row height is identical
-     * empty-or-populated — adding the first favorite never makes the band jump. */
-    padding: var(--space-3);
-    transition: opacity var(--motion-base) var(--ease-standard);
-  }
-  .empty-ghosts {
-    flex: 0 0 auto;
-    display: inline-flex;
-    gap: var(--space-2);
-  }
-  /* Each ghost is a `--favicon-tile`-sized dashed outline in the Space hue
-   * (`--space-c-dim` carries the floored chroma at every tint), previewing where
-   * favorite plates land. A gentle opacity step makes the row trail off into "room for
-   * more". Matches the plated tiles' `--r-lg` corners. */
-  .ghost {
-    width: var(--favicon-tile);
-    height: var(--favicon-tile);
-    border: 1px dashed var(--space-c-dim);
-    border-radius: var(--r-lg);
-    opacity: 0.7;
-    transition:
-      border-color var(--motion-slow) var(--ease-emphasised),
-      background var(--motion-fast) var(--ease-standard),
-      opacity var(--motion-fast) var(--ease-standard);
-  }
-  .ghost:nth-child(2) {
-    opacity: 0.5;
-  }
-  .ghost:nth-child(3) {
-    opacity: 0.32;
-  }
-  .empty-hint {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--text-dim);
-    font: var(--weight-medium) var(--text-xs) / 1 var(--font-sans);
-    transition: color var(--motion-fast) var(--ease-standard);
-  }
-  /* Decouple hover: a pinned tab is held over the empty shelf — the ghosts fill
-   * with the soft Space wash + brighten, and the hint lifts to full text, so the
-   * placeholder reads as an active "drop here" target. (The shelf's own under-glow
-   * swell rides `.favicon-row.drop-active`, above.) */
-  .empty-state.over .ghost {
-    background: var(--space-c-soft);
-    border-color: var(--space-c);
-    opacity: 1;
-  }
-  .empty-state.over .empty-hint {
-    color: var(--text);
-  }
+  /* (The empty-state placeholder is the shared `EmptyState` plated drop-zone card —
+   * same component the pinned list uses — so no bespoke empty styling lives here.) */
 
   /* "Lock to its site…" boundary editor — rendered as the favorite menu's drill-in
    * panel (ContextMenu owns the padding); a min-width so the allow-list editor has room. */

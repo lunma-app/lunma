@@ -433,6 +433,62 @@ describe('Alt+L overlay', () => {
   });
 });
 
+describe('Alt+L overlay — ARIA combobox/listbox contract', () => {
+  test('the input is a combobox owning the listbox; aria-expanded tracks results', async () => {
+    suggestResults = [
+      { id: 'tab:1', source: 'tab', title: 'One', url: 'https://one/', score: 3, tabId: 1 },
+      { id: 'tab:2', source: 'tab', title: 'Two', url: 'https://two/', score: 2, tabId: 2 },
+    ];
+    await loadOverlay();
+    openOverlay();
+    const input = overlayInput();
+    expect(input.getAttribute('role')).toBe('combobox');
+    const list = shadow().querySelector('[role="listbox"]') as HTMLElement;
+    expect(input.getAttribute('aria-controls')).toBe(list.id);
+    // Empty query → collapsed.
+    expect(input.getAttribute('aria-expanded')).toBe('false');
+    // Results render → expanded.
+    await typeAndAwaitRows('o', 2);
+    expect(input.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  test('result rows are options; arrow-key selection moves aria-activedescendant + aria-selected', async () => {
+    suggestResults = [
+      { id: 'tab:1', source: 'tab', title: 'One', url: 'https://one/', score: 3, tabId: 1 },
+      { id: 'tab:2', source: 'tab', title: 'Two', url: 'https://two/', score: 2, tabId: 2 },
+    ];
+    await loadOverlay();
+    openOverlay();
+    await typeAndAwaitRows('o', 2);
+    const input = overlayInput();
+    const [r0, r1] = rows();
+    expect(r0?.getAttribute('role')).toBe('option');
+    // Initially row 0 is the active descendant + selected.
+    expect(input.getAttribute('aria-activedescendant')).toBe(r0?.id);
+    expect(r0?.getAttribute('aria-selected')).toBe('true');
+    expect(r1?.getAttribute('aria-selected')).toBe('false');
+    // ArrowDown moves the selection to row 1.
+    key('ArrowDown');
+    expect(input.getAttribute('aria-activedescendant')).toBe(r1?.id);
+    expect(r1?.getAttribute('aria-selected')).toBe('true');
+    expect(r0?.getAttribute('aria-selected')).toBe('false');
+  });
+
+  test('a result favicon that fails to load falls back to the globe glyph', async () => {
+    suggestResults = [
+      { id: 'tab:1', source: 'tab', title: 'One', url: 'https://one/', score: 3, tabId: 1 },
+    ];
+    await loadOverlay();
+    openOverlay();
+    await typeAndAwaitRows('o', 1);
+    const img = rows()[0]?.querySelector('img.favicon') as HTMLImageElement;
+    expect(img).not.toBeNull();
+    img.dispatchEvent(new Event('error'));
+    // Swapped to an inline globe data URI, not a broken-image glyph.
+    expect(img.src.startsWith('data:image/svg+xml')).toBe(true);
+  });
+});
+
 describe('Alt+L keydown fallback', () => {
   test('Alt+L toggles the overlay open then closed without the command path', async () => {
     await loadOverlay();

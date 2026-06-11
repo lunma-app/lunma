@@ -921,3 +921,42 @@ either (a) the bundle's dependency graph includes any Svelte runtime module, or
 - **THEN** the guard test SHALL pass with the gzipped size below 15 × 1024 bytes
 - **AND** no `node_modules/svelte/` input SHALL appear in the bundle's dependency graph
 
+### Requirement: The overlay's ARIA contract matches the new-tab surface
+
+The Alt+L overlay SHALL expose the same assistive-technology contract the
+new-tab launcher surface already renders: the query input SHALL carry
+`role="combobox"`, `aria-expanded` reflecting whether results are shown, and
+`aria-activedescendant` referencing the selected result row's `id`; each
+result row SHALL carry `role="option"`, a stable `id`, and `aria-selected`
+reflecting the current selection under the existing `role="listbox"`
+container. Attributes SHALL update as arrow keys move the selection. The
+overlay's scrollable result list SHALL set `overscroll-behavior: contain` so
+wheel/touch scrolling at the list's end does not chain-scroll the host page
+behind the scrim. Result, chip, and hint favicon images SHALL fall back to the
+globe glyph on load error (the vanilla equivalent of the shared `Favicon`
+primitive's staged fallback) rather than showing a broken-image glyph.
+
+#### Scenario: Arrow-key selection is exposed to assistive technology
+
+- **WHEN** the overlay shows results and the user presses ArrowDown
+- **THEN** the input's `aria-activedescendant` references the newly selected
+  row's `id` and that row's `aria-selected` is `"true"` while the previous
+  row's is `"false"`
+
+#### Scenario: Combobox state reflects result visibility
+
+- **WHEN** the overlay's query is empty and no results render
+- **THEN** the input's `aria-expanded` is `"false"`
+- **AND WHEN** typing produces results
+- **THEN** `aria-expanded` is `"true"`
+
+#### Scenario: Scrolling the list does not scroll the host page
+
+- **WHEN** the user wheels past the end of the overlay's result list
+- **THEN** the host page behind the scrim does not scroll
+
+#### Scenario: A failed favicon falls back to the globe
+
+- **WHEN** a result row's favicon URL fails to load
+- **THEN** the row renders the globe fallback glyph, not a broken image
+

@@ -324,7 +324,7 @@ describe('FaviconRow', () => {
     expect((pulsing[0] as HTMLElement).getAttribute('aria-label')).toBe('F3');
   });
 
-  test('a drifted favorite shows the shared drift indicator', () => {
+  test('a drifted favorite shows the corner dot AND the favicon return affordance', () => {
     const store = makeStore(['f1']);
     store.state.tabBindings.f1 = { 100: 42 };
     store.state.liveTabsById[42] = {
@@ -336,7 +336,32 @@ describe('FaviconRow', () => {
       status: 'complete',
     };
     const { container } = render(FaviconRowHarness, { props: { store, windowId: 100 } });
+    // Dot retained on tiles (no subtitle room) PLUS the return affordance + name.
     expect(container.querySelector('[data-testid="drift-dot"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="favicon-return"]')).not.toBeNull();
+    const tile = container.querySelector('[data-testid="favicon-tile"]') as HTMLElement;
+    expect(tile.getAttribute('aria-label')).toBe('Return to f1.example');
+  });
+
+  test('left-clicking a drifted favorite returns home (dispatches goHome)', async () => {
+    const store = makeStore(['f1']);
+    store.state.tabBindings.f1 = { 100: 42 };
+    store.state.liveTabsById[42] = {
+      tabId: 42,
+      windowId: 100,
+      title: 'F1 wandered',
+      url: 'https://elsewhere.example/page',
+      active: false,
+      status: 'complete',
+    };
+    const { container } = render(FaviconRowHarness, { props: { store, windowId: 100 } });
+    await fireEvent.click(container.querySelector('[data-testid="favicon-tile"]') as HTMLElement);
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'goHome',
+      payload: { savedTabId: 'f1', windowId: 100 },
+    });
+    // The drifted tile's click returns home, it does NOT focus the wandered tab.
+    expect(sendMock).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'focusSavedTab' }));
   });
 
   test('clicking a dormant favorite opens its saved tab; a bound one focuses it', async () => {
@@ -617,6 +642,117 @@ describe('FaviconRow couple / reorder drag', () => {
     expect(document.querySelector('[data-testid="favicon-boundary-editor"]')).toBeNull();
     expect(document.querySelectorAll('[data-testid="favicon-menu-item"]').length).toBeGreaterThan(
       0,
+    );
+  });
+
+  // --- two-step Delete confirm (compliance: deleting a bound favorite closes its tab) ---
+
+  /** A favorite bound to a live tab in window 100 (so Delete must confirm). */
+  function makeBoundStore(): LunmaStore {
+    const store = makeStore(['f1']);
+    store.state.tabBindings.f1 = { 100: 42 };
+    store.state.liveTabsById[42] = {
+      tabId: 42,
+      windowId: 100,
+      title: 'F1',
+      url: 'https://f1.example/',
+      active: true,
+      status: 'complete',
+    };
+    return store;
+  }
+
+  async function openMenu(container: HTMLElement): Promise<void> {
+    const tile = container.querySelector('[data-testid="favicon-tile"]') as HTMLElement;
+    await fireEvent(
+      tile,
+      new MouseEvent('contextmenu', { button: 2, clientX: 20, clientY: 20, bubbles: true }),
+    );
+  }
+  const deleteItem = (): HTMLButtonElement =>
+    [...document.querySelectorAll('[data-testid="favicon-menu-item"]')].find(
+      (e) => e.getAttribute('data-menu-id') === 'delete',
+    ) as HTMLButtonElement;
+
+  test('Delete on a bound favorite is a two-step confirm', async () => {
+    const store = makeBoundStore();
+    const { container } = render(FaviconRowHarness, { props: { store, windowId: 100 } });
+    await Promise.resolve();
+    await openMenu(container);
+
+    // First activation arms: danger-treated confirm, menu stays open, no dispatch.
+    await fireEvent.click(deleteItem());
+    expect(sendMock).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'deleteSavedTab' }));
+    expect(document.querySelector('[data-testid="favicon-menu"]')).not.toBeNull();
+    expect(deleteItem().textContent).toContain('confirm');
+
+    // Second activation dispatches the delete and closes the menu.
+    await fireEvent.click(deleteItem());
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'deleteSavedTab',
+      payload: { savedTabId: 'f1' },
+    });
+    expect(document.querySelector('[data-testid="favicon-menu"]')).toBeNull();
+  });
+
+  test('Delete on a favorite dormant in all windows deletes without prompting', async () => {
+    const store = makeStore(['f1']); // no binding anywhere
+    const { container } = render(FaviconRowHarness, { props: { store, windowId: 100 } });
+    await Promise.resolve();
+    await openMenu(container);
+
+    expect(deleteItem().textContent).not.toContain('confirm');
+    await fireEvent.click(deleteItem());
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'deleteSavedTab',
+      payload: { savedTabId: 'f1' },
+    });
+  });
+
+  test('Escape after arming Delete disarms it (no dispatch, unarmed on next open)', async () => {
+    const store = makeBoundStore();
+    const { container } = render(FaviconRowHarness, { props: { store, windowId: 100 } });
+    await Promise.resolve();
+    await openMenu(container);
+
+    await fireEvent.click(deleteItem()); // arm
+    const panel = document.querySelector('[data-testid="favicon-menu"]') as HTMLElement;
+    await fireEvent.keyDown(panel, { key: 'Escape' }); // closes + disarms
+    expect(sendMock).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'deleteSavedTab' }));
+
+    // Re-open: Delete is unarmed again (back to its plain label).
+    await openMenu(container);
+    expect(deleteItem().textContent).not.toContain('confirm');
+  });
+
+  // --- Move left/right (keyboard/touch-reachable reorder) ---
+
+  const moveItem = (id: string): HTMLButtonElement =>
+    [...document.querySelectorAll('[data-testid="favicon-menu-item"]')].find(
+      (e) => e.getAttribute('data-menu-id') === id,
+    ) as HTMLButtonElement;
+
+  test('Move right reorders a favorite by one (reorderFavorites with the full order)', async () => {
+    const store = makeStore(['f1', 'f2', 'f3']);
+    const { container } = render(FaviconRowHarness, { props: { store, windowId: 100 } });
+    await Promise.resolve();
+    await openMenu(container); // first tile = f1
+    await fireEvent.click(moveItem('move-right'));
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'reorderFavorites',
+      payload: { ids: ['f2', 'f1', 'f3'] },
+    });
+  });
+
+  test('Move left is disabled on the first favorite and dispatches nothing', async () => {
+    const store = makeStore(['f1', 'f2', 'f3']);
+    const { container } = render(FaviconRowHarness, { props: { store, windowId: 100 } });
+    await Promise.resolve();
+    await openMenu(container); // first tile = f1
+    expect(moveItem('move-left').getAttribute('aria-disabled')).toBe('true');
+    await fireEvent.click(moveItem('move-left'));
+    expect(sendMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'reorderFavorites' }),
     );
   });
 });

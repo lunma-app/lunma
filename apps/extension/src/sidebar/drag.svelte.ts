@@ -217,7 +217,13 @@ class DragController {
       targetIndex: 0,
       targetOntoId: null,
     };
+    // Suppress native panning + text selection for the DURATION of the drag only
+    // (applied here, removed in #teardown). Rows/tiles carry no resting
+    // `touch-action: none`, so touch users can pan the lists at rest (row-drag-does
+    // -not-block-touch-panning); on touch the browser claims the pan before the
+    // drag threshold, so pointer-drag reorder is effectively mouse/pen-only.
     document.body.style.userSelect = 'none';
+    document.body.style.touchAction = 'none';
     window.addEventListener('pointermove', this.#move);
     window.addEventListener('pointerup', this.#end, { once: true });
     // pointercancel (OS/gesture interrupt) and Escape both ABORT — teardown with no
@@ -371,6 +377,7 @@ class DragController {
     window.removeEventListener('pointercancel', this.#abort);
     window.removeEventListener('keydown', this.#onKeyDown);
     document.body.style.userSelect = '';
+    document.body.style.touchAction = '';
     this.#clearSpring();
   }
 
@@ -427,3 +434,20 @@ class DragController {
 
 /** Singleton — one drag at a time across the sidebar. */
 export const drag = new DragController();
+
+/**
+ * Duration (ms) for the post-reorder FLIP settle of the pinned/temporary lists,
+ * sampled at CALL time (each animation start) so an OS-level reduced-motion toggle
+ * takes effect without a sidebar reload: `0` under `prefers-reduced-motion: reduce`,
+ * else the `--motion-base` design token. Keeping the FLIP helpers off a hard-coded
+ * millisecond literal is the `JS-driven move animations honour reduced motion`
+ * requirement; co-located here since both reorder surfaces already import `drag`.
+ */
+export function reorderFlipMs(): number {
+  if (typeof window === 'undefined') return 0;
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return 0;
+  const raw = getComputedStyle(document.documentElement).getPropertyValue('--motion-base').trim();
+  const n = Number.parseFloat(raw);
+  if (!Number.isFinite(n)) return 200; // token unreadable (jsdom) — sane default
+  return raw.endsWith('ms') ? n : n * 1000; // tokens are ms; tolerate a bare-seconds value
+}

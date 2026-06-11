@@ -3,9 +3,12 @@ import type { FaviconSpec } from './apps';
 import Favicon from './Favicon.svelte';
 
 // A sidebar tab row, mirroring the extension's real TabRow: favicon + title,
-// with the active treatment (soft Space wash + a 3px gradient leading bar in
-// --space-c), a drift dot, a fading/archiving state, and optional right-edge
-// meta. --space-c is supplied by the surrounding stage scope.
+// with the active treatment (a soft Space wash + heavier title — no accent bar),
+// a drift dot, a fading/archiving state, and optional right-edge meta. --space-c
+// is supplied by the surrounding stage scope. The drift dot rings in the
+// surrounding substrate (--stage-bg inside a stage, falling back to --bg) — the
+// extension's real dot rings in var(--bg) — so the ring reads against whatever
+// the row sits on without hand-coding the colour.
 interface Props {
   title: string;
   fav: FaviconSpec;
@@ -31,7 +34,7 @@ let { title, fav, active = false, fading = false, drifted = false, meta }: Props
     position: relative;
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: var(--space-2);
     height: var(--row-h);
     padding: 0 var(--space-3);
     border-radius: var(--r-md);
@@ -40,32 +43,11 @@ let { title, fav, active = false, fading = false, drifted = false, meta }: Props
     transition: opacity var(--motion-slow) var(--ease-emphasised);
   }
 
-  /* Leading accent bar — inset 5px, faded top/bottom, in the Space colour. */
-  .row::before {
-    content: '';
-    position: absolute;
-    left: 5px;
-    top: 50%;
-    transform: translateY(-50%) scaleY(0);
-    width: 3px;
-    height: 18px;
-    border-radius: var(--r-pill);
-    background: linear-gradient(
-      180deg,
-      transparent 0%,
-      var(--space-c) 28%,
-      var(--space-c) 72%,
-      transparent 100%
-    );
-    opacity: 0.9;
-  }
-
+  /* Active treatment: a soft Space-coloured wash + heavier title carry it — no
+   * leading accent bar (matches the extension's TabRow). */
   .row.active {
     background: var(--space-c-soft);
     color: var(--text);
-  }
-  .row.active::before {
-    transform: translateY(-50%) scaleY(1);
   }
   .row.active .title {
     font-weight: var(--weight-semibold);
@@ -93,7 +75,7 @@ let { title, fav, active = false, fading = false, drifted = false, meta }: Props
     height: 7px;
     border-radius: var(--r-pill);
     background: var(--space-c);
-    box-shadow: 0 0 0 1.5px oklch(0.17 0.008 var(--space-h));
+    box-shadow: 0 0 0 1.5px var(--stage-bg, var(--bg));
   }
 
   .title {

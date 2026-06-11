@@ -15,6 +15,15 @@ browser's native context menu, and SHALL NOT focus or switch to the tab (no
 `focusTab`/`focusSavedTab` is dispatched on right-click). The row's primary click
 behaviour is unchanged.
 
+When the `contextmenu` event carries no usable pointer position (a
+keyboard-invoked event — context-menu key / `Shift+F10` — reports
+`clientX === 0 && clientY === 0`), the menu SHALL anchor to the invoking row's
+bounding rect (at the row's title column, vertically centred on the row),
+clamped into the viewport, instead of the event coordinates — so a keyboard
+user's menu opens at the focused row, not at the viewport corner. This
+anchoring rule applies to every surface sharing the `ContextMenu` primitive
+(pinned rows, temporary rows, favorite tiles).
+
 A single `ContextMenu` instance SHALL be shared across the pinned list, opened
 for whichever row was right-clicked; the active row SHALL be re-derived from the
 right-clicked row's id against live state, so the menu reflects state after each
@@ -32,6 +41,14 @@ round-trip and disappears if that row leaves the list.
   (or `Shift+F10`)
 - **THEN** the same floating action menu opens (the `contextmenu` event is served
   identically to a right-click)
+
+#### Scenario: Keyboard-invoked menu opens at the focused row
+
+- **WHEN** focus is on a pinned tab row and the user presses the context-menu key
+  (or `Shift+F10`), producing a `contextmenu` event with `clientX === 0` and
+  `clientY === 0`
+- **THEN** the menu opens anchored to that row's bounding rect, not at the
+  viewport's top-left corner
 
 ### Requirement: A hover-revealed close button closes the pinned tab
 
@@ -111,7 +128,13 @@ cycling within the open drawer) is intentionally dropped with the drawer.
 
 The menu SHALL present the same actions the pinned-tab menu presents today — Go
 home and Make this home (only when the tab has drifted), Rename (and Reset name
-when a custom name is set), the "Lock to its site…" drill-in, Unpin, and Delete —
+when a custom name is set), the "Lock to its site…" drill-in, **Move up** and
+**Move down** (reorder the row one position within its containing list — its
+folder's `children` when inside a folder, the top-level pinned list otherwise —
+dispatching `reorderPinned` with the full post-move node order; disabled, not
+hidden, at the ends of the containing list; a child row at a folder's edge does
+NOT escape the folder; see the `spaces-and-tabs` capability, Requirement: Pinned
+rows reorder via keyboard-reachable menu actions), Unpin, and Delete —
 dispatched through the existing bus commands unchanged. Deleting a non-dormant
 bound tab SHALL remain a two-step confirmation: the first activation re-renders
 the entry as a confirm affordance and keeps the menu open; the second activation
@@ -122,13 +145,21 @@ dispatches the delete and closes the menu.
 - **WHEN** the menu opens for a pinned tab whose current URL has drifted from its
   home URL
 - **THEN** the menu includes Go home and Make this home in addition to Rename,
-  Lock to its site…, Unpin, and Delete
+  Lock to its site…, Move up, Move down, Unpin, and Delete
 
 #### Scenario: Delete is a two-step confirm
 
 - **WHEN** the user selects Delete on a non-dormant bound pinned tab
 - **THEN** the menu stays open and the entry becomes a confirm affordance; only a
   second activation dispatches the delete and closes the menu
+
+#### Scenario: Move entries reorder within the containing list
+
+- **WHEN** the user selects Move down on a top-level pinned row that is not last
+- **THEN** `reorderPinned` is dispatched carrying the full node order with that
+  row moved one position down
+- **AND** Move up on the first row of a list (or of a folder's children) renders
+  disabled and dispatches nothing
 
 ### Requirement: Animated reveal honours reduced motion
 

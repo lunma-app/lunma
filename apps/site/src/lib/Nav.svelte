@@ -86,9 +86,26 @@ onMount(() => {
     color: var(--text);
   }
 
+  /* ≤720px: keep every destination reachable as a compact link row (one type stop
+   * smaller, tighter gaps) rather than hiding the links. The row may scroll
+   * horizontally on a very narrow viewport so no link is ever cut off. */
   @media (max-width: 720px) {
-    .navlink {
+    .nav-inner {
+      padding: 14px 16px;
+      gap: var(--space-3);
+    }
+    .links {
+      gap: var(--space-3);
+      min-width: 0;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .links::-webkit-scrollbar {
       display: none;
+    }
+    .navlink {
+      font-size: var(--text-sm);
+      white-space: nowrap;
     }
   }
 

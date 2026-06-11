@@ -268,7 +268,7 @@ describe('PinnedTabs active treatment', () => {
     });
     const row = container.querySelector('[data-testid="tab-row"]');
     expect(row?.classList.contains('active')).toBe(false);
-    await fireEvent.click(container.querySelector('button.hit') as HTMLButtonElement);
+    await fireEvent.click(container.querySelector('button.title-btn') as HTMLButtonElement);
     expect(sendMock).toHaveBeenCalledWith({
       kind: 'openSavedTab',
       payload: { savedTabId: 'st-1', windowId: 100 },
@@ -295,18 +295,22 @@ describe('PinnedTabs per-window drift (per-window-tab-bindings, ADR 0009)', () =
     });
     store.state.pinnedBySpace.work = [{ kind: 'tab', id: 'st-1' }];
 
-    // Window 100 surface — bound tab at home → no drift indicator.
+    // Window 100 surface — bound tab at home → no home-host subtitle.
     const home = render(PinnedTabsHarness, {
       props: { store, windowId: 100, spaceId: 'work', active: false },
     });
-    expect(home.container.querySelector('[data-testid="drift-dot"]')).toBeNull();
+    expect(home.container.querySelector('[data-testid="drift-subtitle"]')).toBeNull();
     cleanup();
 
-    // Window 200 surface — bound tab drifted → drift indicator shown.
+    // Window 200 surface — bound tab drifted → home-host subtitle naming `originalURL`.
     const drifted = render(PinnedTabsHarness, {
       props: { store, windowId: 200, spaceId: 'work', active: false },
     });
-    expect(drifted.container.querySelector('[data-testid="drift-dot"]')).not.toBeNull();
+    const subtitle = drifted.container.querySelector(
+      '[data-testid="drift-subtitle"]',
+    ) as HTMLElement;
+    expect(subtitle).not.toBeNull();
+    expect(subtitle.textContent).toContain('example.com');
   });
 
   test('a tab dormant in this window renders neither bound nor drifted', () => {
@@ -324,10 +328,35 @@ describe('PinnedTabs per-window drift (per-window-tab-bindings, ADR 0009)', () =
     const { container } = render(PinnedTabsHarness, {
       props: { store, windowId: 100, spaceId: 'work', active: false },
     });
-    expect(container.querySelector('[data-testid="drift-dot"]')).toBeNull();
+    expect(container.querySelector('[data-testid="drift-subtitle"]')).toBeNull();
     expect(container.querySelector('[data-testid="tab-row"]')?.classList.contains('active')).toBe(
       false,
     );
+  });
+
+  test('left-clicking the favicon of a drifted row dispatches goHome (not focus)', async () => {
+    const store = makeStore();
+    store.state.savedTabs['st-1'] = savedTab({ id: 'st-1', originalURL: 'https://example.com/' });
+    store.state.tabBindings['st-1'] = { 100: 42 };
+    store.state.liveTabsById[42] = liveTab({
+      tabId: 42,
+      windowId: 100,
+      url: 'https://example.com/elsewhere',
+    });
+    store.state.pinnedBySpace.work = [{ kind: 'tab', id: 'st-1' }];
+
+    const { container } = render(PinnedTabsHarness, {
+      props: { store, windowId: 100, spaceId: 'work', active: false },
+    });
+    const favBtn = container.querySelector('[data-testid="tab-favicon-btn"]') as HTMLButtonElement;
+    expect(favBtn.getAttribute('aria-label')).toBe('Return to example.com');
+    await fireEvent.click(favBtn);
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'goHome',
+      payload: { savedTabId: 'st-1', windowId: 100 },
+    });
+    // The favicon return is NOT a focus — the tab is not activated by it.
+    expect(sendMock).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'focusSavedTab' }));
   });
 });
 
@@ -601,7 +630,7 @@ describe('PinnedTabs folders', () => {
       container.querySelector('[data-testid="folder-row"] .hit') as HTMLElement,
     );
     const childArea = container.querySelector('[data-testid="folder-children"]') as HTMLElement;
-    await fireEvent.click(childArea.querySelector('button.hit') as HTMLButtonElement);
+    await fireEvent.click(childArea.querySelector('button.title-btn') as HTMLButtonElement);
     expect(sendMock).toHaveBeenCalledWith({
       kind: 'openSavedTab',
       payload: { savedTabId: 'st-2', windowId: 100 },
@@ -1031,6 +1060,134 @@ describe('PinnedTabs right-click menu + hover close', () => {
     expect(sendMock).toHaveBeenCalledWith({
       kind: 'setTabBoundary',
       payload: { savedTabId: 'st-1', boundary: { mode: 'off' } },
+    });
+  });
+});
+
+describe('PinnedTabs keyboard reorder (Move up/down)', () => {
+  /** Three top-level pinned tabs A, B, C (all dormant). */
+  function withThree(): LunmaStore {
+    const store = makeStore();
+    for (const id of ['A', 'B', 'C']) {
+      store.state.savedTabs[id] = savedTab({ id, currentURL: null });
+      store.state.tabBindings[id] = {};
+    }
+    store.state.pinnedBySpace.work = [
+      { kind: 'tab', id: 'A' },
+      { kind: 'tab', id: 'B' },
+      { kind: 'tab', id: 'C' },
+    ];
+    return store;
+  }
+
+  const menuItem = (id: string): HTMLButtonElement =>
+    [...document.querySelectorAll('[data-testid="pinned-menu-item"]')].find(
+      (el) => el.getAttribute('data-menu-id') === id,
+    ) as HTMLButtonElement;
+
+  async function openRowMenu(container: HTMLElement, index: number): Promise<void> {
+    const rows = container.querySelectorAll('.row-wrap');
+    (rows[index] as HTMLElement).dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }),
+    );
+    await Promise.resolve();
+  }
+
+  test('Move down on a top-level row dispatches reorderPinned with the swapped order', async () => {
+    const store = withThree();
+    const { container } = render(PinnedTabsHarness, {
+      props: { store, windowId: 100, spaceId: 'work' },
+    });
+    await openRowMenu(container, 0); // row A
+    await fireEvent.click(menuItem('move-down'));
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'reorderPinned',
+      payload: {
+        spaceId: 'work',
+        nodes: [
+          { kind: 'tab', id: 'B' },
+          { kind: 'tab', id: 'A' },
+          { kind: 'tab', id: 'C' },
+        ],
+      },
+    });
+  });
+
+  test('Move up is disabled on the first top-level row and dispatches nothing', async () => {
+    const store = withThree();
+    const { container } = render(PinnedTabsHarness, {
+      props: { store, windowId: 100, spaceId: 'work' },
+    });
+    await openRowMenu(container, 0); // row A (first)
+    expect(menuItem('move-up').getAttribute('aria-disabled')).toBe('true');
+    await fireEvent.click(menuItem('move-up'));
+    expect(sendMock).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'reorderPinned' }));
+  });
+
+  test('Move up at the top of a folder child is disabled (does not escape the folder)', async () => {
+    const store = makeStore();
+    store.state.savedTabs['st-1'] = savedTab({ id: 'st-1', currentURL: null });
+    store.state.savedTabs['st-2'] = savedTab({ id: 'st-2', currentURL: null });
+    store.state.tabBindings['st-1'] = {};
+    store.state.tabBindings['st-2'] = {};
+    // A folder whose only child st-2 is at the top edge of its children.
+    store.state.pinnedBySpace.work = [
+      { kind: 'tab', id: 'st-1' },
+      {
+        kind: 'folder',
+        id: 'f1',
+        name: 'Reading',
+        icon: 'book',
+        color: 'blue',
+        children: ['st-2'],
+      },
+    ];
+    const { container } = render(PinnedTabsHarness, {
+      props: { store, windowId: 100, spaceId: 'work' },
+    });
+    await fireEvent.click(
+      container.querySelector('[data-testid="folder-row"] .hit') as HTMLElement,
+    );
+    const childArea = container.querySelector('[data-testid="folder-children"]') as HTMLElement;
+    (childArea.querySelector('.child-wrap') as HTMLElement).dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }),
+    );
+    await Promise.resolve();
+    // Both Move up and Move down are disabled (st-2 is the only/edge child) and inert.
+    expect(menuItem('move-up').getAttribute('aria-disabled')).toBe('true');
+    expect(menuItem('move-down').getAttribute('aria-disabled')).toBe('true');
+    await fireEvent.click(menuItem('move-up'));
+    expect(sendMock).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'reorderPinned' }));
+  });
+
+  test('a folder Move down via its drawer dispatches reorderPinned with the folder in slot 2', async () => {
+    const store = makeStore();
+    store.state.savedTabs['st-1'] = savedTab({ id: 'st-1', currentURL: null });
+    store.state.tabBindings['st-1'] = {};
+    // Folder first, a top-level tab second.
+    store.state.pinnedBySpace.work = [
+      { kind: 'folder', id: 'f1', name: 'Reading', icon: 'book', color: 'blue', children: [] },
+      { kind: 'tab', id: 'st-1' },
+    ];
+    const { container } = render(PinnedTabsHarness, {
+      props: { store, windowId: 100, spaceId: 'work' },
+    });
+    await fireEvent.click(
+      container.querySelector('[data-testid="folder-row-menu-trigger"]') as HTMLButtonElement,
+    );
+    const down = [...container.querySelectorAll('[data-testid="folder-row-menu-item"]')].find(
+      (el) => el.getAttribute('data-menu-id') === 'move-down',
+    ) as HTMLButtonElement;
+    await fireEvent.click(down);
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'reorderPinned',
+      payload: {
+        spaceId: 'work',
+        nodes: [
+          { kind: 'tab', id: 'st-1' },
+          { kind: 'folder', id: 'f1', name: 'Reading', icon: 'book', color: 'blue', children: [] },
+        ],
+      },
     });
   });
 });

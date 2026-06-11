@@ -65,4 +65,51 @@ describe('Toast', () => {
     vi.advanceTimersByTime(10000);
     expect(onDismiss).not.toHaveBeenCalled();
   });
+
+  test('hover pauses the dismiss timer and resumes with the remaining time', () => {
+    vi.useFakeTimers();
+    const onDismiss = vi.fn();
+    const { container } = render(Toast, {
+      props: { message: 'Cleared 3 tabs', actionLabel: 'Undo', onDismiss, duration: 5000 },
+    });
+    const toast = container.querySelector('.toast') as HTMLElement;
+    vi.advanceTimersByTime(2000); // 3000ms remain
+    fireEvent.pointerEnter(toast); // pause
+    vi.advanceTimersByTime(10000); // paused: stays visible
+    expect(onDismiss).not.toHaveBeenCalled();
+    fireEvent.pointerLeave(toast); // resume with 3000ms
+    vi.advanceTimersByTime(2999);
+    expect(onDismiss).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(onDismiss).toHaveBeenCalledOnce();
+  });
+
+  test('focus within pauses the timer; Escape dismisses immediately', () => {
+    vi.useFakeTimers();
+    const onDismiss = vi.fn();
+    const { container } = render(Toast, {
+      props: { message: 'Cleared 3 tabs', actionLabel: 'Undo', onDismiss, duration: 5000 },
+    });
+    const toast = container.querySelector('.toast') as HTMLElement;
+    fireEvent.focusIn(toast); // focus within → pause
+    vi.advanceTimersByTime(10000);
+    expect(onDismiss).not.toHaveBeenCalled();
+    fireEvent.keyDown(toast, { key: 'Escape' });
+    expect(onDismiss).toHaveBeenCalledOnce();
+  });
+
+  test('focus moving between the toast’s own controls does not resume the timer', () => {
+    vi.useFakeTimers();
+    const onDismiss = vi.fn();
+    const { container } = render(Toast, {
+      props: { message: 'Cleared 3 tabs', actionLabel: 'Undo', onDismiss, duration: 5000 },
+    });
+    const toast = container.querySelector('.toast') as HTMLElement;
+    const button = container.querySelector('button') as HTMLElement;
+    fireEvent.focusIn(toast); // paused
+    // A focusout whose relatedTarget stays within the toast must keep it paused.
+    fireEvent.focusOut(toast, { relatedTarget: button });
+    vi.advanceTimersByTime(10000);
+    expect(onDismiss).not.toHaveBeenCalled();
+  });
 });

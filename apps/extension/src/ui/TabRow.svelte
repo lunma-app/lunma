@@ -14,13 +14,25 @@ interface Props {
   /** Fallback favicon URL — the Chrome `_favicon` endpoint (`faviconUrl`) — tried
    * by the composed `Favicon` when `faviconSrc` fails to load (staged fallback). */
   faviconFallbackSrc?: string | undefined;
-  /** Active-tab treatment: soft Space-coloured background + leading accent bar. */
+  /** Active-tab treatment: a soft Space-coloured background wash (no accent bar). */
   active?: boolean | undefined;
   /** Loading treatment: favicon slot becomes a spinner, title dims. */
   loading?: boolean | undefined;
-  /** Drift treatment: a Space-coloured dot at the favicon corner signalling the
-   * bound tab has wandered off its home URL (`currentURL !== originalURL`). */
+  /** Drift treatment: the bound tab has wandered off its home URL
+   * (`currentURL !== originalURL`). A drifted row grows a home-host subtitle and
+   * turns its favicon into a one-click "return home" affordance (see `onGoHome` /
+   * `homeHost`). Non-drifted rows stay single-line with a plain favicon. */
   drifted?: boolean | undefined;
+  /** One-click "return home" for a drifted row — fired by a LEFT-CLICK on the
+   * favicon while `drifted`. When absent, or the row is not drifted, the favicon
+   * click falls through to `onclick` (focus the tab), so non-drifted behaviour is
+   * unchanged. The rest of the row (title) always focuses via `onclick`. */
+  onGoHome?: (() => void) | undefined;
+  /** Home hostname (`hostOf(originalURL)`, e.g. `figma.com`) shown in the drift
+   * subtitle and the favicon's "Return to <host>" tooltip/label. An empty or
+   * absent host suppresses the subtitle and the return affordance even while
+   * drifted (a weird URL degrades to "no subtitle", never a crash). */
+  homeHost?: string | undefined;
   /** Optional short metadata pinned to the row's right edge (e.g. an archived age +
    * delete countdown). Muted, shown at rest. When `trailing` is ALSO supplied the
    * two share one cell and cross-fade in place — meta at rest, actions on hover —
@@ -52,6 +64,8 @@ const {
   active = false,
   loading = false,
   drifted = false,
+  onGoHome,
+  homeHost,
   meta,
   onclick,
   trailing,
@@ -61,26 +75,22 @@ const {
   oncancelName,
   renameAllowEmpty = false,
 }: Props = $props();
+
+// A row is "returnable" (favicon → return-home affordance + subtitle) only when
+// drifted AND it has a resolvable home host; an empty host degrades to a plain,
+// non-drifted-looking favicon rather than a broken affordance (Risks: odd URLs).
+const returnable = $derived(drifted && !!homeHost);
 </script>
 
-{#snippet faviconSlot()}
+<!-- The plain favicon visual (image or spinner). Shared by the editing-mode
+     markup and the favicon button below; carries no drift signal of its own —
+     the drift affordance (return glyph / subtitle) is layered around it. -->
+{#snippet faviconVisual()}
   <span class="favicon">
     {#if loading}
       <span class="spin"><Icon name="loader-circle" size={16} /></span>
     {:else}
       <Favicon src={faviconSrc} fallbackSrc={faviconFallbackSrc} size={16} />
-    {/if}
-    {#if drifted}
-      <Tooltip label="Off home" side="top">
-        {#snippet children(props)}
-          <span
-            {...props}
-            class="drift-dot"
-            data-testid="drift-dot"
-            aria-label="Off home"
-          ></span>
-        {/snippet}
-      </Tooltip>
     {/if}
   </span>
 {/snippet}
@@ -96,7 +106,7 @@ const {
 >
   {#if editing}
     <div class="hit editing">
-      {@render faviconSlot()}
+      {@render faviconVisual()}
       <EditableLabel
         value={title}
         editing
@@ -108,10 +118,66 @@ const {
       />
     </div>
   {:else}
-    <button type="button" class="hit" title={title} onclick={() => onclick?.()}>
-      {@render faviconSlot()}
-      <span class="title">{title}</span>
-    </button>
+    <!-- D1: favicon and title are SEPARATE click targets under one row body. The
+         favicon returns home when drifted (else falls through to focus); the title
+         always focuses the tab. The whole-row focus layer below catches every
+         OTHER pixel (the min-height gap above/below the text, the inter-control
+         gaps) so the entire row — not just the label — focuses on click. -->
+    <div class="hit">
+      <!-- Mouse-only full-row focus target. Painted behind the favicon/title (it
+           is the first child, so they sit above it and keep their own clicks) and
+           kept out of the tab order (the title/favicon buttons are the keyboard
+           focus targets), so it adds reach without an extra tab stop or changing
+           the row's natural height — drift still grows the row. -->
+      <button
+        type="button"
+        class="row-focus"
+        tabindex="-1"
+        aria-hidden="true"
+        data-testid="tab-row-focus"
+        onclick={() => onclick?.()}
+      ></button>
+      <Tooltip label={returnable ? `Return to ${homeHost}` : ''} side="top" enabled={returnable}>
+        {#snippet children(props)}
+          <button
+            {...props}
+            type="button"
+            class="favicon-btn"
+            class:returnable
+            data-testid="tab-favicon-btn"
+            aria-label={returnable ? `Return to ${homeHost}` : title}
+            onclick={() => (returnable ? onGoHome?.() : onclick?.())}
+          >
+            {@render faviconVisual()}
+            {#if returnable}
+              <span class="return-glyph" aria-hidden="true">
+                <Icon name="corner-up-left" size={16} />
+              </span>
+            {/if}
+          </button>
+        {/snippet}
+      </Tooltip>
+      <button
+        type="button"
+        class="title-btn"
+        title={title}
+        aria-label={title}
+        onclick={() => onclick?.()}
+      >
+        <span class="title">{title}</span>
+        <!-- Drifted-only home-host subtitle. The grid-rows shell stays mounted so
+             the grow/shrink animates both ways; the inner line renders only while
+             drifted so a calm row carries no second line (and no DOM subtitle). -->
+        <span class="subtitle-wrap" class:open={returnable}>
+          {#if returnable}
+            <span class="subtitle" data-testid="drift-subtitle">
+              <Icon name="corner-up-left" size={12} />
+              <span class="subtitle-host">{homeHost}</span>
+            </span>
+          {/if}
+        </span>
+      </button>
+    </div>
   {/if}
   {#if (meta || trailing) && !editing}
     <span class="row-end" class:has-swap={!!meta && !!trailing}>
@@ -126,71 +192,43 @@ const {
     position: relative;
     display: flex;
     align-items: center;
-    height: var(--row-h);
+    /* `min-height` (not a fixed `height`) so a drifted row can grow a second
+     * line — the home-host subtitle's grid-rows tween drives the visible grow;
+     * a non-drifted row stays exactly one --row-h tall. */
+    min-height: var(--row-h);
     padding: 0 var(--space-3);
     border-radius: var(--r-md);
-    /* Active background + the leading accent bar glide on the slower curve;
-     * height eases too so a density change reflows rather than snaps (reduced
-     * motion collapses --motion-base to the fast tick via the global rule). */
+    /* Active background glides on the slower curve; min-height eases too so a
+     * density change reflows rather than snaps (reduced motion collapses
+     * --motion-base to the fast tick via the global rule). */
     transition:
       background var(--motion-base) var(--ease-emphasised),
-      height var(--motion-base) var(--ease-standard);
-  }
-
-  /* Leading accent indicator for the active tab. Inset off the row edge (so it
-   * floats inside the highlight pill rather than doubling the sidebar's own
-   * edge stripe) and faded at top/bottom so it blends instead of reading as a
-   * hard bar. */
-  .tab-row::before {
-    content: '';
-    position: absolute;
-    left: 5px;
-    top: 50%;
-    transform: translateY(-50%) scaleY(0);
-    width: 3px;
-    height: 18px;
-    border-radius: var(--r-pill);
-    background: linear-gradient(
-      180deg,
-      transparent 0%,
-      var(--space-c) 28%,
-      var(--space-c) 72%,
-      transparent 100%
-    );
-    opacity: 0.9;
-    transition: transform var(--motion-base) var(--ease-emphasised);
+      min-height var(--motion-base) var(--ease-standard);
   }
 
   .tab-row:hover {
     background: var(--surface-2);
   }
 
-  /* Active fill is a soft Space-coloured wash. The accent bar is absolutely
-   * positioned and sits left of the content, so it needs NO content inset —
-   * shifting padding on activation would reflow the favicon/title (a visible
-   * jump). Identity comes from the wash + bar, never from moving content. */
+  /* Active fill is a soft Space-coloured wash — distinct in HUE from the neutral
+   * hover (`--surface-2`), so the two never read alike. The wash plus the
+   * heavier active title (below) carry the active identity on their own; there is
+   * deliberately no leading accent bar (a short floated tick read as a stray
+   * artifact against the wash). Identity comes from colour + weight, never from
+   * moving content, so activation never reflows the favicon/title. */
   .tab-row.active {
     background: var(--space-c-soft);
   }
-  .tab-row.active::before {
-    transform: translateY(-50%) scaleY(1);
-  }
 
-  /* The clickable body: favicon + title. Fills the row so the whole thing
-   * reads as the hit target; the trailing slot sits outside it. */
+  /* The row body: a container holding the favicon button + the title button as
+   * SEPARATE hit targets (D1). Fills the row width; the trailing slot sits
+   * outside it. Colour is set here and inherited by both buttons. */
   .hit {
-    appearance: none;
-    border: 0;
-    margin: 0;
-    padding: 0;
-    background: transparent;
     flex: 1;
     min-width: 0;
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    height: 100%;
-    cursor: pointer;
     color: var(--text-2);
     transition: color var(--motion-fast) var(--ease-standard);
   }
@@ -202,10 +240,112 @@ const {
     color: var(--text-muted);
   }
 
-  .hit:focus-visible {
+  /* Whole-row focus overlay — fills the row (the row is `position: relative`) and
+   * sits at the back of the content, so the favicon/title/close (later in DOM, or
+   * in `.row-end`) paint above it and keep their own clicks. Every other pixel of
+   * the row falls through to this, so a click anywhere focuses the tab. Chromeless;
+   * no focus ring (it is `tabindex=-1` — keyboard uses the title/favicon buttons). */
+  .row-focus {
+    position: absolute;
+    inset: 0;
+    appearance: none;
+    border: 0;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  /* Both buttons reset to chromeless and inherit the row's colour. */
+  .favicon-btn,
+  .title-btn {
+    appearance: none;
+    border: 0;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  /* Favicon button — the return-home target when drifted, else a second focus
+   * target. Relative so the hover return glyph can overlay the favicon; presses
+   * squish like the row's other controls. */
+  .favicon-btn {
+    position: relative;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--r-sm);
+    transition: transform var(--motion-fast) var(--ease-standard);
+  }
+  /* The visible favicon is only --favicon-size (16px) — far too small a click/hover
+   * target for the drifted return-home affordance. Extend the HIT AREA (clicks and
+   * the hover that reveals the ↩ glyph/tooltip) to the row's full height, the row's
+   * left padding, and half the favicon↔title gap — without moving a pixel of
+   * layout. The title button stays a separate target (it paints later, so the
+   * overlap boundary resolves to it), per the favicon/title split the bindings
+   * spec mandates. */
+  .favicon-btn::before {
+    content: '';
+    position: absolute;
+    top: calc((var(--row-h) - var(--favicon-size)) / -2);
+    bottom: calc((var(--row-h) - var(--favicon-size)) / -2);
+    left: calc(-1 * var(--space-3));
+    right: calc(var(--space-2) / -2);
+  }
+  .favicon-btn:active {
+    transform: scale(var(--press-scale));
+  }
+  .favicon-btn:focus-visible {
     outline: var(--focus-width) solid var(--focus-color);
     outline-offset: var(--focus-offset);
     border-radius: var(--r-sm);
+  }
+
+  /* Title button — stacks the title over the drifted-only subtitle and stays the
+   * row's primary focus target (clicking it focuses the tab). */
+  .title-btn {
+    /* Positioned so it (and the favicon button) paint ABOVE the absolute
+     * `.row-focus` overlay and keep their own clicks — return-home on the favicon,
+     * focus on the title — while the overlay catches the surrounding dead space. */
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: stretch;
+    text-align: left;
+  }
+  .title-btn:focus-visible {
+    outline: var(--focus-width) solid var(--focus-color);
+    outline-offset: var(--focus-offset);
+    border-radius: var(--r-sm);
+  }
+
+  /* Return affordance: a Space-hued ↩ glyph overlaying the favicon, revealed on
+   * hover/focus of a drifted favicon button as the favicon cross-fades out. */
+  .return-glyph {
+    position: absolute;
+    inset: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--space-c);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--motion-fast) var(--ease-standard);
+  }
+  .favicon-btn.returnable:hover .favicon,
+  .favicon-btn.returnable:focus-visible .favicon {
+    opacity: 0;
+  }
+  .favicon-btn.returnable:hover .return-glyph,
+  .favicon-btn.returnable:focus-visible .return-glyph {
+    opacity: 1;
   }
 
   /* While renaming, the row lights up in the Space's hue — a soft wash plus a
@@ -239,35 +379,40 @@ const {
     opacity: 1;
   }
 
-  /* Drift indicator: a small Space-coloured dot at the favicon's bottom-right
-   * corner, ringed in the row's background so it reads cleanly over any
-   * favicon. Fades in over 150ms when drift begins. */
-  .drift-dot {
-    position: absolute;
-    right: -2px;
-    bottom: -2px;
-    width: 7px;
-    height: 7px;
-    border-radius: var(--r-pill);
-    background: var(--space-c);
-    box-shadow: 0 0 0 1.5px var(--bg);
-    animation: tab-row-drift-in 150ms var(--ease-standard);
+  /* Drifted-only home-host subtitle. The grid-rows shell animates 0fr↔1fr so the
+   * row grows/shrinks smoothly on drift/return; the inner line is clipped to 0
+   * height while collapsed. The leading ↩ glyph + dim host read as "back to". */
+  .subtitle-wrap {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows var(--motion-base) var(--ease-standard);
+  }
+  .subtitle-wrap.open {
+    grid-template-rows: 1fr;
+  }
+  .subtitle {
+    overflow: hidden;
+    min-height: 0;
+    padding-top: 2px;
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    color: var(--text-dim);
+    font: var(--weight-medium) var(--text-xs) / 1.2 var(--font-sans);
+  }
+  .subtitle-host {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  @keyframes tab-row-drift-in {
-    from {
-      opacity: 0;
-      transform: scale(0.4);
-    }
-    to {
-      opacity: 1;
-      transform: scale(1);
-    }
-  }
-
+  /* Reduced motion: the subtitle appears/disappears with no height tween and the
+   * favicon→return swap is instant (no cross-fade). */
   @media (prefers-reduced-motion: reduce) {
-    .drift-dot {
-      animation: none;
+    .subtitle-wrap,
+    .return-glyph,
+    .favicon {
+      transition: none;
     }
   }
 
@@ -295,6 +440,9 @@ const {
    * Trailing-only rows (e.g. a live tab's close button) keep the classic
    * reveal-on-hover behaviour; meta-only rows just show the metadata. */
   .row-end {
+    /* Positioned so the trailing meta/close paint ABOVE the full-row `.row-focus`
+     * overlay and keep their own clicks (the ✕ must close, not focus the tab). */
+    position: relative;
     flex: 0 0 auto;
     margin-left: var(--space-2);
     display: inline-flex;

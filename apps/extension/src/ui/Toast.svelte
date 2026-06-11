@@ -26,12 +26,76 @@ interface Props {
 
 const { message, actionLabel, onAction, onDismiss, duration = 5000 }: Props = $props();
 
-// Own the auto-dismiss timer for as long as we're mounted; clean it up on unmount
-// (parent removal) so a pending dismiss never fires against a gone parent.
+// Interruptible auto-dismiss (toast-auto-dismiss-is-interruptible): the countdown
+// pauses while the pointer is over the toast OR focus is within it, and resumes
+// with the time that REMAINED when paused; Escape from within dismisses now. The
+// duration is therefore a NOMINAL window — engaging the toast holds it open.
+let toastEl = $state<HTMLElement>();
+let remaining = 0; // ms left to run (seeded from `duration` on mount)
+let startedAt = 0; // Date.now() when the running segment began
+let handle: ReturnType<typeof setTimeout> | undefined;
+let hovered = false;
+let focused = false;
+
+function clearTimer(): void {
+  if (handle !== undefined) {
+    clearTimeout(handle);
+    handle = undefined;
+  }
+}
+function runTimer(): void {
+  clearTimer();
+  startedAt = Date.now();
+  handle = setTimeout(() => onDismiss(), remaining);
+}
+function pauseTimer(): void {
+  if (handle === undefined) return;
+  clearTimer();
+  remaining = Math.max(0, remaining - (Date.now() - startedAt));
+}
+/** Pause while engaged (hovered or focus-within), else run the remaining time. */
+function sync(): void {
+  if (hovered || focused) pauseTimer();
+  else runTimer();
+}
+
+// Run the countdown for as long as we're mounted; clean up on unmount (parent
+// removal) so a pending dismiss never fires against a gone parent. Seeding
+// `remaining` here (not at declaration) keeps the reactive `duration` read inside
+// the effect.
 $effect(() => {
-  const handle = setTimeout(() => onDismiss(), duration);
-  return () => clearTimeout(handle);
+  remaining = duration;
+  runTimer();
+  return () => clearTimer();
 });
+
+function onPointerEnter(): void {
+  hovered = true;
+  sync();
+}
+function onPointerLeave(): void {
+  hovered = false;
+  sync();
+}
+function onFocusIn(): void {
+  focused = true;
+  sync();
+}
+function onFocusOut(e: FocusEvent): void {
+  // Ignore focus moves that stay WITHIN the toast (e.g. between its controls).
+  if (e.relatedTarget instanceof Node && toastEl?.contains(e.relatedTarget)) return;
+  focused = false;
+  sync();
+}
+function onKeydown(e: KeyboardEvent): void {
+  // Escape while focus is within the toast dismisses it (the listener only fires
+  // for keydowns bubbling from a focused descendant — i.e. focus-within).
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    e.stopPropagation();
+    onDismiss();
+  }
+}
 
 function handleAction(): void {
   onAction?.();
@@ -39,7 +103,18 @@ function handleAction(): void {
 }
 </script>
 
-<div class="toast" role="status" aria-live="polite">
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<div
+  bind:this={toastEl}
+  class="toast"
+  role="status"
+  aria-live="polite"
+  onpointerenter={onPointerEnter}
+  onpointerleave={onPointerLeave}
+  onfocusin={onFocusIn}
+  onfocusout={onFocusOut}
+  onkeydown={onKeydown}
+>
   <span class="toast-message">{message}</span>
   {#if actionLabel}
     <Button variant="ghost" onclick={handleAction}>{actionLabel}</Button>

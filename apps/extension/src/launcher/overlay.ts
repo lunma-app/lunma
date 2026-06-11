@@ -27,6 +27,27 @@ const SEARCH_SVG =
 const X_SVG =
   '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
 
+// Globe fallback for a favicon `<img>` that fails to load — the vanilla mirror of
+// the Svelte `Favicon` primitive's staged globe. A muted grey stroke (the img has
+// no CSS context to resolve `currentColor`), inlined as a data URI.
+const GLOBE_DATA_URI = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9aa0a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>',
+)}`;
+
+/** Swap a favicon `<img>` to the globe glyph once if its source fails to load
+ * (single-shot — clears its own handler so the globe can never re-trigger it). */
+function withGlobeFallback(img: HTMLImageElement): void {
+  img.onerror = (): void => {
+    img.onerror = null;
+    img.src = GLOBE_DATA_URI;
+  };
+}
+
+/** Stable DOM ids for the listbox + its options, so the combobox input can
+ * reference the active option via `aria-activedescendant`. */
+const LIST_ID = 'lunma-launcher-list';
+const optionId = (i: number): string => `lunma-launcher-opt-${i}`;
+
 /**
  * Should the overlay dismiss on a `focusout` whose focus moved to `relatedTarget`?
  * True when focus left the overlay entirely — `relatedTarget` is `null` (focus
@@ -253,6 +274,7 @@ export function shouldDismissOnFocusOut(
     chipIconEl.width = 14;
     chipIconEl.height = 14;
     chipIconEl.alt = '';
+    withGlobeFallback(chipIconEl); // engine favicon → globe on load error
     chipLabelEl = el('span', 'chip-label');
     chipRemoveEl = document.createElement('button');
     chipRemoveEl.type = 'button';
@@ -272,6 +294,12 @@ export function shouldDismissOnFocusOut(
     input.placeholder = 'Search tabs, bookmarks…';
     input.setAttribute('aria-label', 'Search tabs, bookmarks, and history');
     input.autocomplete = 'off';
+    // Combobox semantics matching the Svelte new-tab surface: the input owns the
+    // listbox and exposes the active option to assistive tech (overlay-aria-parity).
+    input.setAttribute('role', 'combobox');
+    input.setAttribute('aria-controls', LIST_ID);
+    input.setAttribute('aria-autocomplete', 'list');
+    input.setAttribute('aria-expanded', 'false');
     const kbd = el('span', 'kbd');
     kbd.textContent = `${modifierLabel}L`;
     inputRow.append(leading, chipEl, input, kbd);
@@ -288,6 +316,8 @@ export function shouldDismissOnFocusOut(
 
     listEl = el('div', 'list');
     listEl.setAttribute('role', 'listbox');
+    listEl.id = LIST_ID;
+    listEl.setAttribute('aria-label', 'Search results');
 
     card.append(inputRow, hintEl, listEl);
     scrim.append(card);
@@ -563,6 +593,7 @@ export function shouldDismissOnFocusOut(
           icon.width = 14;
           icon.height = 14;
           icon.alt = '';
+          withGlobeFallback(icon); // engine favicon → globe on load error
           icon.src = engineIcon(engine);
           const name = document.createElement('span');
           name.textContent = engine.name;
@@ -698,7 +729,10 @@ export function shouldDismissOnFocusOut(
   function render(): void {
     if (!listEl) return;
     listEl.textContent = '';
+    // Combobox `aria-expanded` reflects whether options are shown to AT.
+    input?.setAttribute('aria-expanded', results.length > 0 ? 'true' : 'false');
     if (results.length === 0) {
+      input?.removeAttribute('aria-activedescendant');
       if (input && input.value.trim() !== '') {
         const empty = el('p', 'empty');
         empty.textContent = 'No matches';
@@ -710,12 +744,17 @@ export function shouldDismissOnFocusOut(
       const row = document.createElement('button');
       row.type = 'button';
       row.className = i === selected ? 'row selected' : 'row';
+      // Listbox option semantics + a stable id for `aria-activedescendant`.
+      row.id = optionId(i);
+      row.setAttribute('role', 'option');
+      row.setAttribute('aria-selected', i === selected ? 'true' : 'false');
       row.title = r.url;
       const img = document.createElement('img');
       img.className = 'favicon';
       img.width = 16;
       img.height = 16;
       img.alt = '';
+      withGlobeFallback(img); // set BEFORE src so a cached failure still swaps
       img.src = faviconUrl(r.url, 16);
       const title = el('span', 'title');
       title.textContent = r.title;
@@ -731,14 +770,20 @@ export function shouldDismissOnFocusOut(
       row.addEventListener('click', () => act(r));
       listEl?.append(row);
     });
+    // Point the combobox at the freshly-rendered active option.
+    input?.setAttribute('aria-activedescendant', optionId(selected));
   }
 
   function applySelection(): void {
     if (!listEl) return;
-    const rows = listEl.querySelectorAll('.row');
+    const rows = listEl.querySelectorAll<HTMLElement>('.row');
     rows.forEach((row, i) => {
-      row.classList.toggle('selected', i === selected);
+      const isSel = i === selected;
+      row.classList.toggle('selected', isSel);
+      row.setAttribute('aria-selected', isSel ? 'true' : 'false');
     });
+    // Move the combobox's active-descendant pointer with the selection.
+    if (rows[selected]) input?.setAttribute('aria-activedescendant', optionId(selected));
     rows[selected]?.scrollIntoView({ block: 'nearest' });
   }
 
