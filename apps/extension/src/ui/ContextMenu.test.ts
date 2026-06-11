@@ -23,7 +23,7 @@ function rightClick(node: Element): Promise<boolean> {
 describe('ContextMenu', () => {
   test('renders nothing until opened (no built-in trigger)', () => {
     const { container } = render(ContextMenuHarness, { props: { items: items() } });
-    expect(container.querySelector('[data-testid="context-menu"]')).toBeNull();
+    expect(document.querySelector('[data-testid="context-menu"]')).toBeNull();
     // It is NOT a kebab: no menu-trigger button of its own.
     expect(container.querySelector('[data-testid="menu-trigger"]')).toBeNull();
   });
@@ -31,8 +31,8 @@ describe('ContextMenu', () => {
   test('a right-click opens the menu at the cursor with the items in order', async () => {
     const { container } = render(ContextMenuHarness, { props: { items: items() } });
     await rightClick(container.querySelector('[data-testid="anchor"]') as Element);
-    expect(container.querySelector('[data-testid="context-menu"]')).not.toBeNull();
-    const ids = [...container.querySelectorAll('[data-testid="context-menu-item"]')].map((e) =>
+    expect(document.querySelector('[data-testid="context-menu"]')).not.toBeNull();
+    const ids = [...document.querySelectorAll('[data-testid="context-menu-item"]')].map((e) =>
       e.getAttribute('data-menu-id'),
     );
     expect(ids).toEqual(['open', 'remove']);
@@ -42,18 +42,18 @@ describe('ContextMenu', () => {
     const onSelect = vi.fn();
     const { container } = render(ContextMenuHarness, { props: { items: items([{ onSelect }]) } });
     await rightClick(container.querySelector('[data-testid="anchor"]') as Element);
-    const open = [...container.querySelectorAll('[data-testid="context-menu-item"]')].find(
+    const open = [...document.querySelectorAll('[data-testid="context-menu-item"]')].find(
       (e) => e.getAttribute('data-menu-id') === 'open',
     ) as HTMLButtonElement;
     await fireEvent.click(open);
     expect(onSelect).toHaveBeenCalledTimes(1);
-    expect(container.querySelector('[data-testid="context-menu"]')).toBeNull();
+    expect(document.querySelector('[data-testid="context-menu"]')).toBeNull();
   });
 
   test('the danger item paints destructive', async () => {
     const { container } = render(ContextMenuHarness, { props: { items: items() } });
     await rightClick(container.querySelector('[data-testid="anchor"]') as Element);
-    const remove = [...container.querySelectorAll('[data-testid="context-menu-item"]')].find(
+    const remove = [...document.querySelectorAll('[data-testid="context-menu-item"]')].find(
       (e) => e.getAttribute('data-menu-id') === 'remove',
     ) as HTMLButtonElement;
     expect(remove.classList.contains('danger')).toBe(true);
@@ -62,16 +62,16 @@ describe('ContextMenu', () => {
   test('Escape closes the menu', async () => {
     const { container } = render(ContextMenuHarness, { props: { items: items() } });
     await rightClick(container.querySelector('[data-testid="anchor"]') as Element);
-    const panel = container.querySelector('[data-testid="context-menu"]') as HTMLElement;
+    const panel = document.querySelector('[data-testid="context-menu"]') as HTMLElement;
     await fireEvent.keyDown(panel, { key: 'Escape' });
-    expect(container.querySelector('[data-testid="context-menu"]')).toBeNull();
+    expect(document.querySelector('[data-testid="context-menu"]')).toBeNull();
   });
 
   test('an outside pointerdown closes the menu', async () => {
     const { container } = render(ContextMenuHarness, { props: { items: items() } });
     await rightClick(container.querySelector('[data-testid="anchor"]') as Element);
-    expect(container.querySelector('[data-testid="context-menu"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="context-menu"]')).not.toBeNull();
     await fireEvent.pointerDown(document.body);
-    expect(container.querySelector('[data-testid="context-menu"]')).toBeNull();
+    expect(document.querySelector('[data-testid="context-menu"]')).toBeNull();
   });
 });

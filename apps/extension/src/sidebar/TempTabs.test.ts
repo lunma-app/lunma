@@ -162,7 +162,7 @@ describe('TempTabs', () => {
     );
     await Promise.resolve();
     return Array.from(
-      container.querySelectorAll('[data-testid="temp-menu-item"]'),
+      document.querySelectorAll('[data-testid="temp-menu-item"]'),
     ) as HTMLButtonElement[];
   }
 
@@ -194,7 +194,7 @@ describe('TempTabs', () => {
     // Native context menu suppressed.
     expect(ev.defaultPrevented).toBe(true);
     // Menu floats at the cursor (jsdom reports a zero rect, so it stays at anchor).
-    const menu = container.querySelector('[data-testid="temp-menu"]') as HTMLElement;
+    const menu = document.querySelector('[data-testid="temp-menu"]') as HTMLElement;
     expect(menu).not.toBeNull();
     expect(menu.style.left).toBe('12px');
     expect(menu.style.top).toBe('18px');

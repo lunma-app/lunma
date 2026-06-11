@@ -580,7 +580,7 @@ describe('PinnedTabs folders', () => {
       new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }),
     );
     await Promise.resolve();
-    const unpin = [...container.querySelectorAll('[data-testid="pinned-menu-item"]')].find(
+    const unpin = [...document.querySelectorAll('[data-testid="pinned-menu-item"]')].find(
       (el) => el.getAttribute('data-menu-id') === 'unpin',
     ) as HTMLButtonElement;
     expect(unpin).toBeTruthy();
@@ -871,7 +871,7 @@ describe('PinnedTabs right-click menu + hover close', () => {
     );
     await Promise.resolve();
     return [
-      ...container.querySelectorAll('[data-testid="pinned-menu-item"]'),
+      ...document.querySelectorAll('[data-testid="pinned-menu-item"]'),
     ] as HTMLButtonElement[];
   }
 
@@ -920,7 +920,7 @@ describe('PinnedTabs right-click menu + hover close', () => {
     wrap.dispatchEvent(ev);
     await Promise.resolve();
     expect(ev.defaultPrevented).toBe(true);
-    const menu = container.querySelector('[data-testid="pinned-menu"]') as HTMLElement;
+    const menu = document.querySelector('[data-testid="pinned-menu"]') as HTMLElement;
     expect(menu).not.toBeNull();
     expect(menu.style.left).toBe('12px');
     expect(menu.style.top).toBe('18px');
@@ -981,10 +981,10 @@ describe('PinnedTabs right-click menu + hover close', () => {
       kind: 'deleteSavedTab',
       payload: { savedTabId: 'st-1' },
     });
-    expect(container.querySelector('[data-menu-id="delete"] .label')?.textContent).toBe(
+    expect(document.querySelector('[data-menu-id="delete"] .label')?.textContent).toBe(
       'Delete — confirm',
     );
-    await fireEvent.click(container.querySelector('[data-menu-id="delete"]') as HTMLButtonElement);
+    await fireEvent.click(document.querySelector('[data-menu-id="delete"]') as HTMLButtonElement);
     expect(sendMock).toHaveBeenCalledWith({
       kind: 'deleteSavedTab',
       payload: { savedTabId: 'st-1' },
@@ -1022,8 +1022,8 @@ describe('PinnedTabs right-click menu + hover close', () => {
     expect(lock.getAttribute('aria-haspopup')).toBe('menu');
     await fireEvent.click(lock);
     // Drilled in: the back affordance + the boundary editor render.
-    expect(container.querySelector('[data-testid="pinned-menu-back"]')).not.toBeNull();
-    const editor = container.querySelector('[data-testid="tab-boundary-editor"]') as HTMLElement;
+    expect(document.querySelector('[data-testid="pinned-menu-back"]')).not.toBeNull();
+    const editor = document.querySelector('[data-testid="tab-boundary-editor"]') as HTMLElement;
     expect(editor).not.toBeNull();
     // Selecting a mode (Off) dispatches setTabBoundary.
     const off = editor.querySelector('input[type="radio"][value="off"]') as HTMLInputElement;

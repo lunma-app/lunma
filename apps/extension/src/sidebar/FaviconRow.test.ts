@@ -561,10 +561,10 @@ describe('FaviconRow couple / reorder drag', () => {
       tile,
       new MouseEvent('contextmenu', { button: 2, clientX: 20, clientY: 20, bubbles: true }),
     );
-    const menu = container.querySelector('[data-testid="favicon-menu"]');
+    const menu = document.querySelector('[data-testid="favicon-menu"]');
     expect(menu).not.toBeNull();
 
-    const remove = [...container.querySelectorAll('[data-testid="favicon-menu-item"]')].find(
+    const remove = [...document.querySelectorAll('[data-testid="favicon-menu-item"]')].find(
       (e) => e.getAttribute('data-menu-id') === 'remove',
     ) as HTMLButtonElement;
     await fireEvent.click(remove);
@@ -585,13 +585,13 @@ describe('FaviconRow couple / reorder drag', () => {
       tile,
       new MouseEvent('contextmenu', { button: 2, clientX: 20, clientY: 20, bubbles: true }),
     );
-    const lock = [...container.querySelectorAll('[data-testid="favicon-menu-item"]')].find(
+    const lock = [...document.querySelectorAll('[data-testid="favicon-menu-item"]')].find(
       (e) => e.getAttribute('data-menu-id') === 'lock',
     ) as HTMLButtonElement;
     expect(lock).not.toBeNull();
 
     await fireEvent.click(lock);
-    expect(container.querySelector('[data-testid="favicon-boundary-editor"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="favicon-boundary-editor"]')).not.toBeNull();
   });
 
   test('the boundary editor has a back arrow that returns to the menu actions', async () => {
@@ -604,18 +604,18 @@ describe('FaviconRow couple / reorder drag', () => {
       tile,
       new MouseEvent('contextmenu', { button: 2, clientX: 20, clientY: 20, bubbles: true }),
     );
-    const lock = [...container.querySelectorAll('[data-testid="favicon-menu-item"]')].find(
+    const lock = [...document.querySelectorAll('[data-testid="favicon-menu-item"]')].find(
       (e) => e.getAttribute('data-menu-id') === 'lock',
     ) as HTMLButtonElement;
     await fireEvent.click(lock);
-    expect(container.querySelector('[data-testid="favicon-boundary-editor"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="favicon-boundary-editor"]')).not.toBeNull();
 
     // The drill-in back affordance returns to the action list (parity with pinned rows).
-    const back = container.querySelector('[data-testid="favicon-menu-back"]') as HTMLButtonElement;
+    const back = document.querySelector('[data-testid="favicon-menu-back"]') as HTMLButtonElement;
     expect(back).not.toBeNull();
     await fireEvent.click(back);
-    expect(container.querySelector('[data-testid="favicon-boundary-editor"]')).toBeNull();
-    expect(container.querySelectorAll('[data-testid="favicon-menu-item"]').length).toBeGreaterThan(
+    expect(document.querySelector('[data-testid="favicon-boundary-editor"]')).toBeNull();
+    expect(document.querySelectorAll('[data-testid="favicon-menu-item"]').length).toBeGreaterThan(
       0,
     );
   });

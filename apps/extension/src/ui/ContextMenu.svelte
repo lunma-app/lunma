@@ -131,6 +131,21 @@ function stop(event: Event): void {
   event.stopPropagation();
 }
 
+// Portal the floating panel to <body> so its `position: fixed` is anchored to the
+// VIEWPORT, not to a transformed ancestor. The sidebar carousel translates its
+// track (`transform: translate3d`), which establishes a containing block for
+// fixed descendants — without this, a menu opened from a pinned/temp row (which
+// live inside the track) would float at the wrong place. Mirrors how DragClone /
+// Toast are mounted at the root, outside the track.
+function portal(node: HTMLElement): { destroy(): void } {
+  document.body.appendChild(node);
+  return {
+    destroy() {
+      node.remove();
+    },
+  };
+}
+
 // --- keyboard nav ------------------------------------------------------------
 function menuItemEls(): HTMLButtonElement[] {
   if (!panelEl) return [];
@@ -170,6 +185,7 @@ function onKeydown(event: KeyboardEvent): void {
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     bind:this={panelEl}
+    use:portal
     class="context-menu"
     style:left={`${placedX}px`}
     style:top={`${placedY}px`}
