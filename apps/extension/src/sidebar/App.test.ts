@@ -1,4 +1,4 @@
-import { fireEvent, render } from '@testing-library/svelte';
+import { cleanup, fireEvent, render } from '@testing-library/svelte';
 import { flushSync } from 'svelte';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { LunmaStore } from '../shared/store.svelte';
@@ -32,23 +32,50 @@ const { sendMock } = vi.hoisted(() => ({ sendMock: vi.fn(() => Promise.resolve()
 // hold whichever path the surface uses.
 vi.mock('../shared/bus', () => ({ bus: { send: sendMock }, dispatch: sendMock }));
 
+// Backing store for the `chrome.storage.sync` mock, reset per test. Drives the
+// first-run-notice gating (settings: `autoArchiveEnabled`/`autoArchiveIdleMinutes`;
+// onboarding: `autoArchiveNoticeDismissed`).
+let syncData: Record<string, unknown> = {};
+// Spies for the options-deep-link path ("Recently archived" / "Manage in settings").
+let tabsCreate: ReturnType<typeof vi.fn>;
+
 function installChrome(): void {
+  tabsCreate = vi.fn(async () => undefined);
   (globalThis as unknown as { chrome: unknown }).chrome = {
     runtime: {
       sendMessage: vi.fn(async () => undefined),
       onMessage: { addListener: vi.fn(), removeListener: vi.fn() },
       openOptionsPage: vi.fn(),
-      getURL: (path: string) => `chrome-extension://abc${path}`,
+      getURL: (path: string) => `chrome-extension://abc/${path}`,
     },
+    storage: {
+      sync: {
+        get: vi.fn(async (key: string | null) => {
+          if (key === null) return { ...syncData };
+          const value = syncData[key];
+          return value === undefined ? {} : { [key]: value };
+        }),
+        set: vi.fn(async (items: Record<string, unknown>) => {
+          Object.assign(syncData, items);
+        }),
+      },
+      onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
+    },
+    tabs: { query: vi.fn(async () => []), create: tabsCreate, update: vi.fn() },
+    windows: { update: vi.fn() },
   };
 }
 
 beforeEach(() => {
+  syncData = {};
   installChrome();
   sendMock.mockClear();
 });
 
 afterEach(() => {
+  // Unmount BEFORE removing `chrome`: the sidebar's `watchSettings` subscription
+  // calls `chrome.storage.onChanged.removeListener` on destroy.
+  cleanup();
   delete (globalThis as unknown as { chrome?: unknown }).chrome;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -489,5 +516,89 @@ describe('App — single-track carousel (spike model)', () => {
     // No wrap: the push commits nothing, and the rail stays LOCKED at rest (no over-scroll).
     expect(sendMock).not.toHaveBeenCalled();
     expect(parseTx(track)).toBe(-2 * W);
+  });
+});
+
+describe('App — first-run auto-archive notice (auto-archive)', () => {
+  function syncGet(): ReturnType<typeof vi.fn> {
+    return (
+      globalThis as unknown as { chrome: { storage: { sync: { get: ReturnType<typeof vi.fn> } } } }
+    ).chrome.storage.sync.get;
+  }
+  /** Let the onMount async settings + onboarding reads resolve and flush reactivity.
+   * Both reads issue one `storage.sync.get`, so two calls means both have returned;
+   * draining a couple of microtasks then lets the `.then` assignments + the `{#if}`
+   * render settle. */
+  async function settle(): Promise<void> {
+    await vi.waitFor(() => expect(syncGet()).toHaveBeenCalledTimes(2));
+    // A macrotask drains every queued microtask (the awaited reads + Promise.all
+    // + the `.then` assignments) before we flush reactivity and assert.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    flushSync();
+  }
+  function noticeButton(container: HTMLElement, label: string): HTMLButtonElement {
+    const notice = container.querySelector('[data-testid="first-run-notice"]') as HTMLElement;
+    const btn = [...notice.querySelectorAll('button')].find((b) => b.textContent?.trim() === label);
+    if (!btn) throw new Error(`notice button "${label}" not found`);
+    return btn as HTMLButtonElement;
+  }
+
+  test('shows on first run when enabled and not dismissed, with the derived threshold', async () => {
+    // Empty sync → settings + onboarding DEFAULTS (enabled, 720min, not dismissed).
+    const { container } = render(AppHarness, { props: { store: makeStore('blue'), windowId: 1 } });
+    await settle();
+    const notice = container.querySelector('[data-testid="first-run-notice"]') as HTMLElement;
+    expect(notice).not.toBeNull();
+    expect(notice.textContent).toContain('Auto-archive is on');
+    expect(notice.textContent).toContain('12 hours');
+  });
+
+  test('does not show when autoArchiveEnabled is false', async () => {
+    syncData['lunma.settings'] = { autoArchiveEnabled: false };
+    const { container } = render(AppHarness, { props: { store: makeStore('blue'), windowId: 1 } });
+    await settle();
+    expect(container.querySelector('[data-testid="first-run-notice"]')).toBeNull();
+  });
+
+  test('does not show after dismissal (onboarding flag true)', async () => {
+    syncData['lunma.onboarding'] = { autoArchiveNoticeDismissed: true };
+    const { container } = render(AppHarness, { props: { store: makeStore('blue'), windowId: 1 } });
+    await settle();
+    expect(container.querySelector('[data-testid="first-run-notice"]')).toBeNull();
+  });
+
+  test('dismissing persists the flag and hides the notice', async () => {
+    const { container } = render(AppHarness, { props: { store: makeStore('blue'), windowId: 1 } });
+    await settle();
+    const set = (
+      globalThis as unknown as { chrome: { storage: { sync: { set: ReturnType<typeof vi.fn> } } } }
+    ).chrome.storage.sync.set;
+    await fireEvent.click(
+      container.querySelector('[data-testid="first-run-dismiss"]') as HTMLElement,
+    );
+    flushSync();
+    expect(container.querySelector('[data-testid="first-run-notice"]')).toBeNull();
+    expect(set).toHaveBeenCalledWith({ 'lunma.onboarding': { autoArchiveNoticeDismissed: true } });
+  });
+
+  test('"Manage in settings" opens the options page to the #auto-archive group', async () => {
+    const { container } = render(AppHarness, { props: { store: makeStore('blue'), windowId: 1 } });
+    await settle();
+    await fireEvent.click(noticeButton(container, 'Manage in settings'));
+    // No existing options tab (query → []), so it creates one deep-linked to the group.
+    expect(tabsCreate).toHaveBeenCalledWith({
+      url: 'chrome-extension://abc/src/options/index.html#auto-archive',
+    });
+  });
+
+  test('disclosure does not archive: no bus command on show or dismiss', async () => {
+    const { container } = render(AppHarness, { props: { store: makeStore('blue'), windowId: 1 } });
+    await settle();
+    expect(sendMock).not.toHaveBeenCalled();
+    await fireEvent.click(
+      container.querySelector('[data-testid="first-run-dismiss"]') as HTMLElement,
+    );
+    flushSync();
+    expect(sendMock).not.toHaveBeenCalled();
   });
 });

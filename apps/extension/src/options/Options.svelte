@@ -123,19 +123,29 @@ onMount(async () => {
   void checkLauncherShortcut();
 });
 
-// Deep-link from the sidebar's archived chip (`#recently-archived`): scroll the
-// Recently-archived card into view on load and on hash change (a reused options tab).
+// Deep-link by hash: scroll the matching element into view on load and on hash
+// change (a reused options tab). Drives both the sidebar archived chip
+// (`#recently-archived` → the Recently-archived card) and the sidebar first-run
+// notice's "Manage in settings" action (`#auto-archive` → the Auto-archive
+// settings group, anchored by `groupSlug`).
 onMount(() => {
-  const scrollToArchived = (): void => {
-    if (location.hash !== '#recently-archived') return;
+  const scrollToHash = (): void => {
+    const id = location.hash.slice(1);
+    if (!id) return;
     requestAnimationFrame(() => {
-      document.getElementById('recently-archived')?.scrollIntoView({ block: 'start' });
+      document.getElementById(id)?.scrollIntoView({ block: 'start' });
     });
   };
-  scrollToArchived();
-  window.addEventListener('hashchange', scrollToArchived);
-  return () => window.removeEventListener('hashchange', scrollToArchived);
+  scrollToHash();
+  window.addEventListener('hashchange', scrollToHash);
+  return () => window.removeEventListener('hashchange', scrollToHash);
 });
+
+/** A stable anchor id for a settings group, so a surface can deep-link to it via
+ * `#<slug>` (e.g. "Auto-archive" → `auto-archive`). */
+function groupSlug(group: string): string {
+  return group.toLowerCase().replace(/\s+/g, '-');
+}
 
 /**
  * Detect whether Chrome has bound the launcher's `Alt+L` shortcut. Chrome
@@ -237,7 +247,7 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
 
     {#each groups as [group, decls] (group)}
       <Surface variant="glass">
-        <section class="group">
+        <section class="group" id={groupSlug(group)}>
           <h2 class="group-label">{group}</h2>
           {#each decls as decl (decl.key)}
             {#if isVisible(decl)}

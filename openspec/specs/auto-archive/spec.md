@@ -303,3 +303,72 @@ The options subpage (`apps/extension/src/options/RecentlyArchived.svelte`) SHALL
 - **WHEN** the user activates the Cancel button in the inline confirm row
 - **THEN** the confirm row SHALL be dismissed and the "Clear all" trigger SHALL be visible again
 
+### Requirement: First-run disclosure notice
+
+Auto-archive SHALL disclose itself to the user before it can act, via a one-time, dismissible
+notice rendered in the sidebar. The notice SHALL be shown only while `autoArchiveEnabled` is
+`true` AND the onboarding flag `autoArchiveNoticeDismissed` is `false`; it SHALL never be shown
+when auto-archive is disabled (the capability does not advertise behaviour that is off).
+
+The dismissed state SHALL persist as a boolean `autoArchiveNoticeDismissed` on an onboarding
+record stored under the `lunma.onboarding` key in `chrome.storage.sync` (sibling to
+`lunma.settings`, NOT part of `AppState`), read and written through `src/shared/onboarding.ts`.
+On absence or a malformed/failed read, the record SHALL default to
+`autoArchiveNoticeDismissed: false` (the notice shows).
+
+The notice SHALL disclose, in plain language: that idle temporary tabs are archived
+automatically; the active idle threshold (reflecting the current `autoArchiveIdleMinutes`); and
+that archived tabs remain restorable for the configured retention window. The notice SHALL
+offer a dismiss action and a "Manage in settings" action; the latter SHALL open the options
+page to the Auto-archive settings group.
+
+Dismissing the notice SHALL set `autoArchiveNoticeDismissed` to `true` and hide the notice for
+the remainder of the session and all future sessions. Disclosing the notice SHALL NOT modify
+any auto-archive setting and SHALL NOT enqueue or alter any sweep.
+
+#### Scenario: Notice shown on first run when enabled
+
+- **WHEN** the sidebar mounts, `autoArchiveEnabled` is `true`, and `autoArchiveNoticeDismissed`
+  is `false`
+- **THEN** the first-run notice SHALL be rendered
+
+#### Scenario: Notice not shown when auto-archive is disabled
+
+- **WHEN** the sidebar mounts and `autoArchiveEnabled` is `false`
+- **THEN** the first-run notice SHALL NOT be rendered, regardless of `autoArchiveNoticeDismissed`
+
+#### Scenario: Notice not shown after dismissal
+
+- **WHEN** the sidebar mounts, `autoArchiveEnabled` is `true`, and `autoArchiveNoticeDismissed`
+  is `true`
+- **THEN** the first-run notice SHALL NOT be rendered
+
+#### Scenario: Dismissal persists across reloads
+
+- **WHEN** the user dismisses the notice
+- **THEN** `setAutoArchiveNoticeDismissed(true)` SHALL write `autoArchiveNoticeDismissed: true`
+  to the `lunma.onboarding` record in `chrome.storage.sync`
+- **AND** a subsequent sidebar mount SHALL NOT render the notice
+
+#### Scenario: Onboarding record defaults to not-dismissed on absence
+
+- **WHEN** `loadOnboarding()` runs and no `lunma.onboarding` record exists (or it is malformed
+  or the read fails)
+- **THEN** it SHALL return a record with `autoArchiveNoticeDismissed: false`
+
+#### Scenario: Disclosed threshold reflects the configured idle minutes
+
+- **WHEN** the notice is rendered and `autoArchiveIdleMinutes` is the configured value
+- **THEN** the notice copy SHALL state an idle threshold derived from that value
+
+#### Scenario: Manage action opens the Auto-archive settings group
+
+- **WHEN** the user activates the notice's "Manage in settings" action
+- **THEN** the options page SHALL be opened to the Auto-archive settings group
+
+#### Scenario: Disclosure does not change archiving
+
+- **WHEN** the notice is shown or dismissed
+- **THEN** no auto-archive setting SHALL be modified
+- **AND** no `autoArchiveSweep` command SHALL be enqueued as a result
+

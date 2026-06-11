@@ -3,8 +3,9 @@ import { onDestroy, onMount, untrack } from 'svelte';
 import { bus, dispatch } from '../shared/bus';
 import { log } from '../shared/logger';
 import { requestNewTabLauncher } from '../shared/messages';
+import { loadOnboarding, setAutoArchiveNoticeDismissed } from '../shared/onboarding';
 import { modifierLabel } from '../shared/platform';
-import type { Tint } from '../shared/settings';
+import { readSettings, type Tint, watchSettings } from '../shared/settings';
 import type { LunmaStore } from '../shared/store.svelte';
 import type { IconName, Space, SpaceColor, SpaceId, WindowId } from '../shared/types';
 import '@lunma/tokens/tokens.css';
@@ -29,6 +30,7 @@ import Toast from '../ui/Toast.svelte';
 import ArchivedChip from './ArchivedChip.svelte';
 import DragClone from './DragClone.svelte';
 import FaviconRow from './FaviconRow.svelte';
+import FirstRunNotice from './FirstRunNotice.svelte';
 import PinnedTabs from './PinnedTabs.svelte';
 import SectionHeader from './SectionHeader.svelte';
 import SpaceSwitcher from './SpaceSwitcher.svelte';
@@ -49,6 +51,46 @@ interface Props {
 
 const { store, windowId, tint = 'vivid' }: Props = $props();
 setStore(() => store);
+
+// ── First-run auto-archive disclosure notice (auto-archive) ──────────────────
+// A one-time, dismissible heads-up that discloses auto-archive BEFORE it acts,
+// gated on `autoArchiveEnabled && !autoArchiveNoticeDismissed`. Settings + the
+// onboarding flag live in `chrome.storage.sync` (read directly through `shared`,
+// like the options surface writes settings directly — sidebar → shared, no bus).
+// Defaults keep the notice HIDDEN until the async load resolves, so it never
+// flashes before we know the real state. Disclosure-only: nothing here enqueues a
+// sweep or mutates a setting.
+let autoArchiveEnabled = $state(false);
+let autoArchiveIdleMinutes = $state(720);
+let autoArchiveNoticeDismissed = $state(true);
+const showFirstRunNotice = $derived(autoArchiveEnabled && !autoArchiveNoticeDismissed);
+
+onMount(() => {
+  let cancelled = false;
+  void (async () => {
+    const [settings, onboarding] = await Promise.all([readSettings(), loadOnboarding()]);
+    if (cancelled) return;
+    autoArchiveEnabled = settings.autoArchiveEnabled;
+    autoArchiveIdleMinutes = settings.autoArchiveIdleMinutes;
+    autoArchiveNoticeDismissed = onboarding.autoArchiveNoticeDismissed;
+  })();
+  // Keep the gate + threshold copy live if the user changes auto-archive in the
+  // options page while the sidebar is open (e.g. toggling it off hides the notice).
+  const unwatch = watchSettings((settings) => {
+    autoArchiveEnabled = settings.autoArchiveEnabled;
+    autoArchiveIdleMinutes = settings.autoArchiveIdleMinutes;
+  });
+  return () => {
+    cancelled = true;
+    unwatch();
+  };
+});
+
+// Dismiss → persist the flag (best-effort) and hide for this + future sessions.
+function dismissFirstRunNotice(): void {
+  autoArchiveNoticeDismissed = true;
+  void setAutoArchiveNoticeDismissed(true);
+}
 
 // ── Authoritative active Space (store) ──────────────────────────────────────
 // The store stays the single source of truth for WHICH Space is active. It drives
@@ -381,9 +423,9 @@ function onUndoClear(tabIds: number[]): void {
 // popover — archived tabs are secondary, so they live out of the sidebar. Reuse an
 // existing options tab if one is open (deep-linked via the `#recently-archived`
 // hash), else open one.
-async function openArchivedOptions(): Promise<void> {
+async function openOptionsAt(hash: string): Promise<void> {
   const base = chrome.runtime.getURL('src/options/index.html');
-  const url = `${base}#recently-archived`;
+  const url = `${base}${hash}`;
   try {
     const tabs = await chrome.tabs.query({});
     const existing = tabs.find((t) => t.id !== undefined && t.url?.startsWith(base));
@@ -395,9 +437,17 @@ async function openArchivedOptions(): Promise<void> {
       return;
     }
   } catch (err) {
-    log.debug('openArchivedOptions: reuse query failed; creating fresh', { err });
+    log.debug('openOptionsAt: reuse query failed; creating fresh', { err, hash });
   }
   await chrome.tabs.create({ url });
+}
+function openArchivedOptions(): void {
+  void openOptionsAt('#recently-archived');
+}
+// "Manage in settings" (first-run notice) → the options Auto-archive settings
+// group, anchored by `#auto-archive` (Options.svelte's per-group `groupSlug`).
+function openAutoArchiveSettings(): void {
+  void openOptionsAt('#auto-archive');
 }
 function onNewFolder(spaceId: SpaceId): void {
   // The New-folder trigger lives in the pinned header now, but the post-create
@@ -510,6 +560,17 @@ function onCancel(): void {
        track — it stays put through a Space swipe and re-hues with the centred Space
        in lockstep with the wash (D3 / D8). -->
   <FaviconRow {windowId} />
+  <!-- First-run auto-archive disclosure notice (auto-archive). A SIBLING of the
+       carousel (never rides the track), gated on `autoArchiveEnabled &&
+       !autoArchiveNoticeDismissed`. Disclosure-only — its actions just dismiss
+       (persist the flag) or open the options Auto-archive group. -->
+  {#if showFirstRunNotice}
+    <FirstRunNotice
+      {autoArchiveIdleMinutes}
+      onDismiss={dismissFirstRunNotice}
+      onManage={openAutoArchiveSettings}
+    />
+  {/if}
   <div class="content-stage" data-testid="sidebar-content" bind:this={stageEl}>
     {#if panels.length > 0}
       <!-- Single composited track: all Space panels in a flex row; the active one

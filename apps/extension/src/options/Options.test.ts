@@ -362,6 +362,15 @@ describe('Options — Auto-archive group (toggle + number)', () => {
     });
   });
 
+  test('the Auto-archive group exposes the #auto-archive deep-link anchor', () => {
+    // The sidebar first-run notice's "Manage in settings" deep-links here via
+    // `#auto-archive` (Options.svelte's `groupSlug`); the section carries that id.
+    const { container } = render(Options, { props: {} });
+    const section = container.querySelector('section.group#auto-archive') as HTMLElement;
+    expect(section).not.toBeNull();
+    expect(section.textContent).toContain('Auto-archive idle tabs');
+  });
+
   test('toggling the master switch persists a boolean', async () => {
     const { container } = render(Options, { props: {} });
     await waitFor(() => expect(chromeMock.get).toHaveBeenCalled());

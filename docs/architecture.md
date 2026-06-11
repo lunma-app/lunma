@@ -18,7 +18,7 @@ lunma/                              # pnpm workspace root (private)
 ├─ apps/
 │  ├─ extension/                    # the Chrome MV3 extension — @lunma/extension
 │  │  ├─ src/
-│  │  │  ├─ shared/                 # cross-surface: types · schemas (+migrations) · store.svelte.ts · messages · settings · logger
+│  │  │  ├─ shared/                 # cross-surface: types · schemas (+migrations) · store.svelte.ts · messages · settings · onboarding · logger
 │  │  │  │  └─ chrome/              # thin typed wrappers over chrome.* APIs
 │  │  │  ├─ ui/                     # cross-surface primitives (build primitives, compose features)
 │  │  │  │  ├─ Button.svelte        # …+ Icon · Tooltip · Stack · Kbd · SegmentedControl · TabRow · TabRowMenu
