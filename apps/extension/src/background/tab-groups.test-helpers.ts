@@ -129,9 +129,15 @@ export function installTabGroupsChrome(): TabGroupsController {
         ctrl.calls.push(`tabs.move:${tabId}->${props.index}`);
         return { ...tab };
       }),
-      update: vi.fn(async (tabId: number, props: { active?: boolean }) => {
+      update: vi.fn(async (tabId: number, props: { active?: boolean; url?: string }) => {
         const tab = ctrl.tabs.get(tabId);
+        // A missing tab rejects — the in-place open's stale-`replaceTabId` path
+        // (newtab-hearth) relies on this to fall back to the create path.
         if (!tab) throw new Error(`No tab with id: ${tabId}`);
+        if (props.url !== undefined) {
+          tab.url = props.url;
+          ctrl.calls.push(`tabs.update:url:${tabId}`);
+        }
         if (props.active) {
           for (const t of ctrl.tabs.values()) {
             if (t.windowId === tab.windowId) t.active = t.id === tabId;

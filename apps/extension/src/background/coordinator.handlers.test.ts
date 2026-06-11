@@ -303,6 +303,56 @@ describe('Coordinator handlers: openSavedTab', () => {
       result: { error: expect.stringContaining('no id') },
     });
   });
+
+  // In-place open (newtab-hearth): the home passes its own tab id as
+  // `replaceTabId`, so the saved tab opens by navigating THAT tab (no new tab).
+  test('with replaceTabId navigates that tab in place (no new tab) and binds it', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    chromeStub.tabs.update.mockResolvedValueOnce({ id: 42, windowId: 100 } as chrome.tabs.Tab);
+    const { coordinator, store, emitAck } = makeCoordinator();
+    store.state.savedTabs['st-1'] = savedTab('st-1', 'https://x/', null);
+    coordinator.enqueue(
+      sidebar(
+        { kind: 'openSavedTab', payload: { savedTabId: 'st-1', windowId: 100, replaceTabId: 42 } },
+        'sess:1',
+      ),
+    );
+    await coordinator.idle();
+    expect(chromeStub.tabs.update).toHaveBeenCalledWith(42, { url: 'https://x/' });
+    expect(chromeStub.tabs.create).not.toHaveBeenCalled();
+    expect(store.state.tabBindings['st-1']).toEqual({ 100: 42 });
+    expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'sess:1', result: 'ok' });
+  });
+
+  test('a stale replaceTabId falls back to the create path (still acks ok)', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    chromeStub.tabs.update.mockRejectedValueOnce(new Error('No tab with id: 42'));
+    const { coordinator, store, emitAck } = makeCoordinator();
+    store.state.savedTabs['st-1'] = savedTab('st-1', 'https://x/', null);
+    coordinator.enqueue(
+      sidebar(
+        { kind: 'openSavedTab', payload: { savedTabId: 'st-1', windowId: 100, replaceTabId: 42 } },
+        'sess:1',
+      ),
+    );
+    await coordinator.idle();
+    expect(chromeStub.tabs.create).toHaveBeenCalledWith({ url: 'https://x/', windowId: 100 });
+    expect(store.state.tabBindings['st-1']).toEqual({ 100: 999 });
+    expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'sess:1', result: 'ok' });
+  });
+
+  test('without replaceTabId the create path is unchanged (no navigation update)', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    store.state.savedTabs['st-1'] = savedTab('st-1', 'https://x/', null);
+    coordinator.enqueue(
+      sidebar({ kind: 'openSavedTab', payload: { savedTabId: 'st-1', windowId: 100 } }, 'sess:1'),
+    );
+    await coordinator.idle();
+    expect(chromeStub.tabs.create).toHaveBeenCalledWith({ url: 'https://x/', windowId: 100 });
+    expect(chromeStub.tabs.update).not.toHaveBeenCalled();
+    expect(store.state.tabBindings['st-1']).toEqual({ 100: 999 });
+  });
 });
 
 describe('Coordinator handlers: focusSavedTab', () => {

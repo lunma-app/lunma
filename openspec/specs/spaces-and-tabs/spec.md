@@ -984,7 +984,7 @@ A Space's **tab set in a window** (used to build / rebuild its group) SHALL be i
 
 **2. New tab joins the active group.** On `tabs.onCreated` for a tab in window `W` whose active Space is `S` and which is not bound to a saved tab, the coordinator SHALL add the tab to `S`'s group via `chrome.tabs.group`. When `S` has no live group yet in `W` (e.g. at boot it has open tabs but was never activated this session), the coordinator SHALL build the group from `S`'s **whole window tab set** (its existing temp + bound tabs together with this tab), not from this tab alone — so the new tab is grouped WITH its siblings rather than in a lone one-tab group — then `recordSpaceGroup`. A home tab is grouped into `S` the same way but is NOT recorded in `tempTabIds` (see "Home tabs are not listed as temporary tabs").
 
-**2b. Opened saved tab joins its Space's group, EXCEPT a global favorite.** On `openSavedTab` for a saved tab in Space `S` opened into window `W`, after binding the created tab the coordinator SHALL add it to `S`'s group in `W` (reusing the live group, or creating + recording + titling one when `S` has none yet). When the opened saved tab is a **global favorite** (`saved.spaceId === null`), the coordinator SHALL instead call `ensureFavoriteUngrouped(<created>)` rather than `addTabToSpaceGroup`, so the favorite's live tab is left ungrouped (global) and is never adopted into any Space's group. `addTabToSpaceGroup` keeps its `spaceId: SpaceId` signature; a favorite SHALL be routed to `ensureFavoriteUngrouped` before it could ever reach it.
+**2b. Opened saved tab joins its Space's group, EXCEPT a global favorite.** On `openSavedTab` for a saved tab in Space `S` opened into window `W`, after binding the created tab the coordinator SHALL add it to `S`'s group in `W` (reusing the live group, or creating + recording + titling one when `S` has none yet). When the opened saved tab is a **global favorite** (`saved.spaceId === null`), the coordinator SHALL instead call `ensureFavoriteUngrouped(<created>)` rather than `addTabToSpaceGroup`, so the favorite's live tab is left ungrouped (global) and is never adopted into any Space's group. `addTabToSpaceGroup` keeps its `spaceId: SpaceId` signature; a favorite SHALL be routed to `ensureFavoriteUngrouped` before it could ever reach it. **The same rules apply when `openSavedTab` opens in place via `replaceTabId`** (the `newtab-hearth` path): the *navigated* tab takes the created tab's role — after binding, a Space-pinned saved tab's navigated tab is added to `S`'s group, and a global favorite's navigated tab is routed to `ensureFavoriteUngrouped(<navigated>)`. This matters because the navigated tab (the home tab) may already sit inside the active Space's group from new-tab grouping (rule 2); the helper's ungroup + park establishes the favorite invariant regardless of the tab's prior membership.
 
 **3. Rename / recolour propagate to groups.** On `renameSpace` / `recolourSpace`, the coordinator SHALL `chrome.tabGroups.update` the title / colour of the Space's live group in every window where it is instantiated. If a `chrome.tabGroups.update` fails during a rename, the name change SHALL be reverted (the existing rename-atomicity requirement).
 
@@ -1037,6 +1037,13 @@ A Space's **tab set in a window** (used to build / rebuild its group) SHALL be i
 - **WHEN** the coordinator processes `openSavedTab` for `fav` into window 100
 - **THEN** after binding the created tab the coordinator SHALL call `ensureFavoriteUngrouped(<created>)` and SHALL NOT call `addTabToSpaceGroup` / `chrome.tabs.group` for it
 - **AND** the created tab SHALL be ungrouped (`groupId === -1`) and SHALL NOT be a member of `G_work` or any other Space group
+
+#### Scenario: Opening a favorite in place ungroups the navigated home tab
+
+- **GIVEN** a global favorite `fav` and window 100's home tab 42, which sits inside the active Space's group `G_work` (grouped on creation per rule 2)
+- **WHEN** the coordinator processes `openSavedTab` for `fav` with `replaceTabId: 42`
+- **THEN** after binding tab 42 the coordinator SHALL call `ensureFavoriteUngrouped(42)`
+- **AND** tab 42 SHALL end ungrouped (`groupId === -1`) and parked at the strip start, a member of no Space group
 
 #### Scenario: Rebuilding a stale group includes the Space's bound tabs
 

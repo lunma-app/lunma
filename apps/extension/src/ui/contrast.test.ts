@@ -27,6 +27,7 @@ import type { SpaceColor } from '../shared/types';
 
 const TOKENS_PATH = resolve(process.cwd(), '../../packages/tokens/tokens.css');
 const APP_CSS_PATH = resolve(process.cwd(), 'src/sidebar/app.css');
+const NEWTAB_CSS_PATH = resolve(process.cwd(), 'src/launcher/newtab/newtab.css');
 
 /** The nine canonical Space colours (space-palette-refresh). */
 const SPACE_COLORS: SpaceColor[] = [
@@ -368,6 +369,86 @@ describe('immersive surfaces — text on glass over aurora (WCAG AA per tint)', 
           wcagContrast(col(toRgba(rootToken('--text'))), col(auroraEff)),
         ).toBeGreaterThanOrEqual(3);
       });
+    });
+  }
+});
+
+/**
+ * The new-tab hearth bloom (newtab-hearth) — the caption (`--text-muted`) is the
+ * one text that crosses the low-centre ember bloom on the idle home. The bloom is
+ * the `--glow-hearth` colour composed into a radial gradient at a per-tint PEAK
+ * alpha owned by `newtab.css` (`--hearth-peak`, read here so the test's source of
+ * truth IS the stylesheet). We composite the bloom at its peak over the home
+ * substrate (`--bg`) and measure muted text on the result, at each tint level —
+ * the bound the spec scopes ("muted text over the hearth bloom's peak"). This is
+ * already conservative: the caption sits in the upper identity band, well ABOVE
+ * the low-centre peak, so it never actually crosses this much bloom; the aurora's
+ * own legibility budget is bounded separately by the immersive-surfaces tests
+ * above. The bloom resolves to the resting ember hue via the token's `:root`
+ * fallbacks (oklch(0.72 0.15 62)), the default-substitution convention this file
+ * uses throughout.
+ */
+describe('new-tab hearth bloom — muted caption over the peak (WCAG AA per tint)', () => {
+  const tokens = readTokens();
+  const NEWTAB_CSS = readFileSync(NEWTAB_CSS_PATH, 'utf-8');
+
+  interface Rgba {
+    r: number;
+    g: number;
+    b: number;
+    a: number;
+  }
+  function toRgba(expr: string): Rgba {
+    const c = parse(expr);
+    if (!c) throw new Error(`culori failed to parse '${expr}'`);
+    const r = rgb(c);
+    const clamp = (n: number): number => Math.min(1, Math.max(0, n));
+    return { r: clamp(r.r), g: clamp(r.g), b: clamp(r.b), a: c.alpha ?? 1 };
+  }
+  function over(fg: Rgba, bg: Rgba): Rgba {
+    const a = fg.a;
+    return {
+      r: fg.r * a + bg.r * (1 - a),
+      g: fg.g * a + bg.g * (1 - a),
+      b: fg.b * a + bg.b * (1 - a),
+      a: 1,
+    };
+  }
+  function col(c: Rgba): { mode: 'rgb'; r: number; g: number; b: number } {
+    return { mode: 'rgb', r: c.r, g: c.g, b: c.b };
+  }
+  function rootToken(name: string): string {
+    const v = tokens.get(name);
+    if (!v) throw new Error(`tokens.css missing ${name}`);
+    return v;
+  }
+
+  /** Read the per-tint `--hearth-peak` percentage from `newtab.css` (vivid is the
+   * base `.hearth` block; the calmer tints are `[data-tint='..'] .hearth` overrides),
+   * returned as a 0..1 alpha. */
+  function hearthPeak(tint: 'vivid' | 'standard' | 'subtle'): number {
+    const re =
+      tint === 'vivid'
+        ? /\.hearth\s*\{[^}]*?--hearth-peak:\s*([\d.]+)%/
+        : new RegExp(
+            `data-tint='${tint}'\\]\\s*\\.hearth\\s*\\{[^}]*?--hearth-peak:\\s*([\\d.]+)%`,
+          );
+    const m = NEWTAB_CSS.match(re);
+    if (!m?.[1]) throw new Error(`newtab.css missing --hearth-peak for ${tint}`);
+    return Number(m[1]) / 100;
+  }
+
+  // The home substrate is the :root `--bg` (the home does NOT override --bg per tint).
+  const substrate = toRgba(resolveOklch(rootToken('--bg')));
+  // The hearth bloom's colour, resolved to the resting ember via the token fallbacks.
+  const hearthColour = resolveOklch(rootToken('--glow-hearth'));
+
+  for (const tint of ['vivid', 'standard', 'subtle'] as const) {
+    test(`muted caption (\`--text-muted\`) over the ${tint} hearth peak meets AA Normal (4.5:1)`, () => {
+      const bloom = over({ ...toRgba(hearthColour), a: hearthPeak(tint) }, substrate);
+      expect(
+        wcagContrast(col(toRgba(resolveOklch(rootToken('--text-muted')))), col(bloom)),
+      ).toBeGreaterThanOrEqual(4.5);
     });
   }
 });

@@ -9,6 +9,7 @@
     "dev": "pnpm gen:icons && vite",
     "build": "pnpm gen:icons && vite build",
     "gen:icons": "node scripts/gen-icon-loaders.mjs",
+    "gen:app-icons": "node scripts/gen-app-icons.mjs",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-check --tsconfig ./tsconfig.json --watch",

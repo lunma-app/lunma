@@ -142,7 +142,9 @@ input, query the suggestions channel, and render a results list **below**
 the input. The full identity SHALL NOT be unmounted on the first
 keystroke; it SHALL crossfade to the chip. It SHALL compose the `apps/extension/src/ui`
 primitives `ResultRow` and `ResultList` (and the existing `Icon` / `Kbd` /
-`Surface`); it SHALL NOT re-roll row/list styling inline.
+`Surface`, plus `FaviconTile` for the idle home's favorites row — see
+Requirement: The idle home offers the global favorites); it SHALL NOT
+re-roll row/list styling inline.
 
 The search input SHALL **autofocus on initial mount**, AND SHALL **refocus its
 idle-home input when the page is reactivated** — the page becomes visible again
@@ -157,7 +159,7 @@ query) SHALL NOT have its focus overridden on reactivation.
 #### Scenario: Empty query shows the identity home
 
 - **WHEN** the new-tab search input is empty
-- **THEN** the page SHALL render the active Space's full identity home (icon tile + name + meta, no results list)
+- **THEN** the page SHALL render the active Space's full identity home (icon tile + name + caption, no results list)
 
 #### Scenario: Typing collapses the identity to a chip
 
@@ -441,16 +443,22 @@ On the new-tab home, the active Space's colour SHALL fill the viewport as
 an aurora hue-mesh backdrop; the Space identity SHALL be presented as a
 frosted-glass icon tile carrying the Space's hue glow, with the Space name
 set in the display serif at display size with a hue text-glow and a quiet
-meta line beneath it; the search SHALL be a frosted-glass input pill; and
-results SHALL render in a frosted-glass card. **While searching, the full
-identity SHALL collapse into a compact identity chip — the Space icon
-(in the Space colour) + name — composed from the shared `Surface` and
-`Icon` primitives, with no re-rolled glass.** The identity, search, and
-results SHALL stagger their entrance on load. When no active Space is
-resolved, the home SHALL show the neutral substrate with no name/icon and
-no loading flash. The home SHALL compose the shared `Aurora`, `Surface`,
-and `SearchField` primitives and SHALL NOT re-roll glass, aurora, or the
-search pill inline.
+caption beneath it (the counts line or the brand empty line — see
+Requirement: The idle home speaks the brand voice); the search SHALL be a
+frosted-glass input pill; and results SHALL render in a frosted-glass
+card. **While searching, the full identity SHALL collapse into a compact
+identity chip — the Space icon (in the Space colour) + name — composed
+from the shared `Surface` and `Icon` primitives, with no re-rolled
+glass.** On load the home SHALL play the **kindle entrance**: the hearth
+bloom rises from dim to full while the identity, search, and (when
+present) the favorites row stagger in (see Requirement: The kindle
+entrance plays once per page load — this supersedes the former generic
+identity/search/results stagger). When no active Space is resolved, the
+home SHALL show the neutral substrate with no name/icon and no loading
+flash; the hearth bloom SHALL still render, resolving to the resting
+ember hue via the `--glow-hearth` token fallbacks. The home SHALL compose
+the shared `Aurora`, `Surface`, and `SearchField` primitives and SHALL
+NOT re-roll glass, aurora, or the search pill inline.
 
 On the `Alt+L` overlay, the scrim SHALL use the immersive scrim treatment
 (a tinted backdrop blur) and the card SHALL render as a frosted-glass
@@ -470,7 +478,7 @@ frosted glass at every tint level.
 - **AND** the Space's icon SHALL appear in a frosted-glass tile carrying the Space's hue glow
 - **AND** the Space name SHALL be set in the display serif at display size
 - **AND** the search pill and the results card SHALL render as frosted glass
-- **AND** the identity, search, and results SHALL stagger their entrance on load
+- **AND** the hearth bloom, identity, search, and (when favorites exist) the favorites row SHALL enter via the kindle entrance on load
 
 #### Scenario: New-tab home collapses identity to a chip while searching
 
@@ -483,6 +491,7 @@ frosted glass at every tint level.
 - **WHEN** the new-tab page renders with no resolved active Space
 - **THEN** it SHALL show the neutral substrate with no Space name or icon
 - **AND** it SHALL NOT show a spinner or a loading flash
+- **AND** the hearth bloom SHALL render at the resting ember hue (the token fallbacks)
 
 #### Scenario: Overlay renders as frosted glass
 
@@ -493,7 +502,7 @@ frosted glass at every tint level.
 #### Scenario: Reduced motion removes entrance and drift
 
 - **WHEN** the user prefers reduced motion
-- **THEN** the new-tab staggered entrance, the identity↔chip crossfade, the idle↔search pose glide, and the aurora drift SHALL NOT animate
+- **THEN** the kindle entrance (the hearth bloom-up and the staggered rises), the identity↔chip crossfade, the idle↔search pose glide, and the aurora drift SHALL NOT animate
 - **AND** the surfaces SHALL settle directly to their final state (the input snaps to its pose)
 
 ### Requirement: The launcher overlay reflects the active Space colour
@@ -959,4 +968,152 @@ primitive's staged fallback) rather than showing a broken-image glyph.
 
 - **WHEN** a result row's favicon URL fails to load
 - **THEN** the row renders the globe fallback glyph, not a broken image
+
+### Requirement: The idle home renders the hearth
+
+The new-tab idle home SHALL render a resting hearth bloom — a single
+fixed radial glow anchored low-centre behind the identity band, painted from
+the `--glow-hearth` token's colour — legible at rest under the `vivid` tint
+(not only the icon tile's tight glow). The bloom SHALL recolour with the
+active Space's hue exactly as the other immersive treatments do (a `gray`
+Space washes neutral; no active Space rests on the ember hue via the token
+fallbacks), SHALL scale its alpha down across the calmer tint levels
+(strongest at `vivid`, nearly removed at `subtle` — the per-tint alphas are
+owned by this surface's CSS, not the token), and SHALL NOT intercept pointer
+events. All text over the bloom SHALL hold WCAG-AA contrast at every tint
+level. On the idle→search pose transition the bloom SHALL soften (reduced
+alpha) beneath the results card and restore when the page returns to idle.
+
+#### Scenario: The resting home is visibly lit
+
+- **WHEN** the new-tab page is at its idle home under the `vivid` tint with a
+  resolved active Space
+- **THEN** a bloom in the Space's hue renders behind the identity band,
+  anchored low-centre, and the caption text over it meets WCAG-AA
+
+#### Scenario: No active Space rests on the ember
+
+- **WHEN** the new-tab page renders with no resolved active Space under the
+  `vivid` tint
+- **THEN** the hearth bloom renders in the resting ember hue (the
+  `--glow-hearth` fallbacks) over the neutral substrate
+
+#### Scenario: The hearth recolours with the Space
+
+- **WHEN** the active Space is blue
+- **THEN** the bloom renders in the Space's blue, gliding to a new hue with the
+  existing Space-switch transition
+
+#### Scenario: Calm tints calm the hearth
+
+- **WHEN** the user sets Colour intensity to `subtle`
+- **THEN** the bloom is nearly removed, consistent with the other immersive
+  treatments
+
+### Requirement: The kindle entrance plays once per page load
+
+On the new-tab page's first paint, the hearth bloom SHALL animate from dim to
+full and the identity, search field, and favorites row SHALL stagger in
+(opacity + a small rise; transform/opacity only), the whole sequence within
+the slow motion band (~600ms total). This reworks the surface's existing
+staggered entrance — it is the same load-entrance slot with the hearth beat
+added, not a second entrance. The entrance SHALL run once per page load:
+reactivating an already-open new-tab (the visibilitychange/focus refocus
+path) SHALL NOT replay it. Under `prefers-reduced-motion: reduce` the
+sequence SHALL resolve instantly to the identical lit end state with no
+motion (the surface's existing `animation: none` reduced-motion path).
+
+#### Scenario: First paint kindles
+
+- **WHEN** a new-tab page loads
+- **THEN** the hearth blooms up and the identity, search, and (when present) the
+  favorites row stagger in, completing within the slow motion band
+
+#### Scenario: Reactivation does not re-kindle
+
+- **WHEN** an already-open new-tab page regains visibility or focus
+- **THEN** the page refocuses its input per the existing requirement without
+  replaying the entrance
+
+#### Scenario: Reduced motion resolves instantly
+
+- **WHEN** `prefers-reduced-motion: reduce` is active and a new-tab page loads
+- **THEN** the page renders the fully-lit end state immediately, with no
+  bloom-up or stagger
+
+### Requirement: The idle home offers the global favorites
+
+The idle home SHALL render the user's global favorites when `faviconRow` is
+non-empty, as a centred row of `FaviconTile` primitives beneath the
+search field, capped at two wrapped rows (overflow hidden — the sidebar
+remains the full manager). Tiles render **without drift affordances** (no
+drift dot or return-home affordance on this surface — the sidebar owns
+management and drift). The home derives each favorite's bound-vs-dormant
+state for the focused window from the broadcast state's bindings.
+
+Activating a tile SHALL reuse the saved-tab activation semantics of
+`lunma-bookmark-bindings`, with one home-specific refinement: a **bound**
+favorite dispatches `focusSavedTab` (its tab is focused; the home tab
+remains, consistent with the at-most-one-home-tab-per-window model), while a
+**dormant** favorite opens **in place** — the home dispatches `openSavedTab`
+carrying the new optional `replaceTabId` payload field set to the home's own
+tab id, and the background opens the favorite by navigating that tab
+(`chrome.tabs.update(replaceTabId, …)`) and binding it, instead of spawning a
+new tab and stranding the home (the Arc/Chrome new-tab convention). When
+`replaceTabId` is absent the `openSavedTab` behaviour is unchanged (a new
+tab), so existing callers are unaffected. The home's tiles are activate-only:
+no drag, reorder, or context menu on this surface. With no favorites the row
+SHALL NOT render (the home stays minimal). The `FaviconTile` primitive SHALL
+be composed directly; the sidebar's `FaviconRow` feature component SHALL NOT
+be imported into the launcher layer.
+
+#### Scenario: Favorites render on the idle home
+
+- **WHEN** the user has three favorites and opens a new tab
+- **THEN** the idle home shows three favicon tiles centred beneath the search
+  field, none carrying drift affordances
+
+#### Scenario: Activating a dormant favorite opens it in place
+
+- **WHEN** the user clicks a dormant favorite tile on the new-tab home
+- **THEN** the home dispatches `openSavedTab` with `replaceTabId` set to its own
+  tab id
+- **AND** the background navigates that tab to the favorite and binds it (no new
+  tab is created; the home does not linger behind)
+
+#### Scenario: Activating a bound favorite focuses its tab
+
+- **WHEN** the user clicks a favorite tile bound in the focused window
+- **THEN** `focusSavedTab` is dispatched and the bound tab is focused (the home
+  tab remains, per the one-home-tab-per-window model)
+
+#### Scenario: openSavedTab without replaceTabId is unchanged
+
+- **WHEN** `openSavedTab` is dispatched without `replaceTabId` (any existing
+  caller)
+- **THEN** the favorite opens in a new tab exactly as before
+
+#### Scenario: No favorites, no row
+
+- **WHEN** the user has no favorites
+- **THEN** the idle home renders without a favorites row
+
+### Requirement: The idle home speaks the brand voice
+
+The idle home's caption SHALL render the tab/pinned counts only when there is
+something to count (`tabCount + pinnedCount > 0`). When the active Space has
+nothing to count, the caption SHALL instead render the brand empty line:
+"Nothing kept here yet. Open a few tabs — anything you don't pin settles out
+on its own." The caption (either form) renders only with a resolved active
+Space, per the existing no-Space neutral-substrate behaviour.
+
+#### Scenario: A lived-in Space shows its counts
+
+- **WHEN** the active Space has 4 tabs and 2 pinned
+- **THEN** the caption shows the counts line
+
+#### Scenario: A fresh Space is welcomed, not counted
+
+- **WHEN** the active Space has 0 tabs and 0 pinned
+- **THEN** the caption shows the brand empty line, not "0 tabs · 0 pinned"
 

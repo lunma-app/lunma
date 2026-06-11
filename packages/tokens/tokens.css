@@ -262,6 +262,18 @@
     oklch(clamp(0, calc(var(--space-l, 0.62) + 0.1), 1) var(--space-chroma, 0.15) var(--space-h, 62) / 0.35);
   --glow-space-soft: 0 8px 40px
     oklch(clamp(0, calc(var(--space-l, 0.62) + 0.1), 1) var(--space-chroma, 0.15) var(--space-h, 62) / 0.22);
+  /* The hearth bloom's COLOUR (newtab-hearth) — a full-alpha parametric `oklch()`
+   * value, deliberately NOT a complete box-shadow like `--glow-space` (unusable
+   * inside a `background` gradient) and NOT a gradient. It carries the same lifted
+   * lightness the glow family uses (`--space-l + 0.1`) so the bloom reads a touch
+   * brighter than the identity fill. The `:root` fallbacks (`, 0.15` / `, 62`)
+   * resolve it to the resting ember (hue 62) where no per-Space scope is set,
+   * recolour it inside a `.home`/`.sidebar` Space scope, and wash it neutral for a
+   * `gray` Space (chroma 0) — exactly like the other immersive tokens. Consumers
+   * compose this colour into their OWN radial gradient and own the per-tint alpha
+   * scaling (the new-tab home is the first consumer); the token itself is colour
+   * only and is never restated as a formula by a consumer. */
+  --glow-hearth: oklch(clamp(0, calc(var(--space-l, 0.62) + 0.1), 1) var(--space-chroma, 0.15) var(--space-h, 62));
   --aurora-opacity: 0.5;
   --scrim: oklch(0.08 0.02 var(--base-hue) / 0.5);
   --scrim-blur: 8px;

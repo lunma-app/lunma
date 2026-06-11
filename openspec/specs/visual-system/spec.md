@@ -465,3 +465,35 @@ those animations; their durations read the `--motion-*` tokens.
 - **THEN** the settle resolves on the fast tick without requiring a sidebar
   reload
 
+### Requirement: A hearth glow colour token joins the immersive family
+
+`packages/tokens/tokens.css` SHALL declare a `--glow-hearth` token in the
+immersive family: the hearth bloom's **colour** — a full-alpha `oklch()`
+colour value (NOT a box-shadow value like `--glow-space`, and not a
+gradient), parametric on `var(--space-h)` / `var(--space-chroma)` with the
+same `:root` fallbacks the other immersive tokens carry (`, 62` / `, 0.15`)
+so it resolves to the ember at rest, recolours inside a per-Space scope, and
+washes neutral for a `gray` Space. Consumers compose the colour into their
+own gradients and apply their own per-tint alpha scaling (the launcher's
+hearth requirement owns the new-tab home's alphas) — the token itself
+carries colour only, and consumers SHALL read the token rather than
+restating the formula. The new-tab home is the first consumer.
+
+#### Scenario: The token resolves at :root without a Space scope
+
+- **WHEN** `--glow-hearth` is read on a surface with no per-Space scope
+- **THEN** it resolves to the ember-hue colour via the declared fallbacks (not
+  invalid-at-computed-value)
+
+#### Scenario: A Space scope recolours the token
+
+- **WHEN** `--glow-hearth` is read inside a scope declaring `--space-h`/
+  `--space-chroma` for a blue Space
+- **THEN** it resolves to the blue Space's hue and chroma
+
+#### Scenario: Contrast holds over the hearth at every tint
+
+- **WHEN** the automated WCAG-AA contrast tests run
+- **THEN** they include muted text over the hearth bloom's peak (at the
+  consumer's per-tint alphas) at each tint level, and pass
+

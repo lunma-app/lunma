@@ -322,6 +322,50 @@ describe('Coordinator handler: openSavedTab for a favorite', () => {
     // No tabs.group call adopted the favorite into a Space group.
     expect(chrome.calls.some((c) => c.startsWith('tabs.group'))).toBe(false);
   });
+
+  // In-place open (newtab-hearth, spaces-and-tabs rule 2b): a favorite activated on
+  // the home navigates the home's OWN tab via `replaceTabId`. The navigated tab —
+  // which already sits inside the active Space's group from new-tab grouping — is
+  // ungrouped + parked so the favorite invariant holds regardless of prior membership.
+  test('opening a favorite in place ungroups the navigated home tab (no new tab)', async () => {
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push(space('work'));
+    store.state.activeSpaceByWindow[100] = 'work';
+    // Home tab 42 sits inside the active Space's group G_work (grouped on creation).
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [42], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[42] = live(42, 100, 'chrome://newtab/', 'New Tab');
+    store.state.savedTabs.fav = {
+      id: 'fav',
+      spaceId: null,
+      title: 'GH',
+      originalURL: 'https://github.com/',
+      currentURL: null,
+    };
+    store.state.faviconRow = ['fav'];
+    store.state.tabBindings.fav = {};
+    chrome.addGroup({ id: 1, windowId: 100 });
+    chrome.addTab({ id: 42, windowId: 100, groupId: 1, active: true });
+
+    coordinator.enqueue(
+      sidebar(
+        { kind: 'openSavedTab', payload: { savedTabId: 'fav', windowId: 100, replaceTabId: 42 } },
+        'c1',
+      ),
+    );
+    await coordinator.idle();
+
+    // Navigated in place — tab 42 was bound, no new tab created.
+    expect(store.state.tabBindings.fav).toEqual({ 100: 42 });
+    expect(chrome.calls).toContain('tabs.update:url:42');
+    expect(chrome.calls.some((c) => c.startsWith('tabs.create'))).toBe(false);
+    // The navigated home tab ends ungrouped (global) and parked at the strip start,
+    // a member of no Space group despite its prior G_work membership.
+    expect(chrome.tabs.get(42)?.groupId).toBe(-1);
+    expect(chrome.calls).toContain('tabs.ungroup:[42]');
+    expect(chrome.calls).toContain('tabs.move:42->0');
+  });
 });
 
 describe('null-spaceId favorite flows through coordinator paths without crashing (D8)', () => {

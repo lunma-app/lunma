@@ -216,11 +216,13 @@ The saved-tab flows `openSavedTab`, `focusSavedTab`, `goHome`, `makeThisHome`, a
 
 The sidebar SHALL invoke these flows exclusively through `bus.send({ kind: 'openSavedTab' | 'focusSavedTab' | 'goHome' | 'makeThisHome' | 'deleteSavedTab', payload: { savedTabId, ... } })`. The command payload key SHALL be `savedTabId` (replacing the former `bookmarkId`).
 
+`openSavedTab`'s payload MAY additionally carry an optional `replaceTabId: number` (the `newtab-hearth` in-place open): when present, the handler SHALL open the saved tab by navigating that existing tab (`chrome.tabs.update(replaceTabId, …)`) and binding it, instead of creating a new tab. When `replaceTabId` is stale — the tab no longer exists or the update rejects — the handler SHALL fall back to the create path (the command's effect is "open the saved tab"; the in-place navigation is a refinement, not a precondition). When `replaceTabId` is absent, behaviour is unchanged.
+
 `runRestartRecovery` SHALL remain exported from `tab-bindings.ts` but SHALL NOT call coordinator methods.
 
 **Handler error contract:** if a handler cannot produce the effect its command name implies, it SHALL throw; the error becomes the ack's `result: { error }` and the sidebar's `await bus.send(...)` rejects. Per command:
 
-- `openSavedTab` throws on: unknown `savedTabId`, `chrome.tabs.create` rejection, created tab has no `id`.
+- `openSavedTab` throws on: unknown `savedTabId`, `chrome.tabs.create` rejection, created tab has no `id`. With a `replaceTabId` present, a `chrome.tabs.update` rejection or stale tab does NOT itself throw — the handler falls back to the create path and throws only if that path throws.
 - `focusSavedTab` throws on: unknown `savedTabId`, binding is `null`/undefined (dormant), `chrome.tabs.update` or `chrome.windows.update` rejection.
 - `goHome` throws on: unknown `savedTabId`, binding is `null`/undefined (dormant), `chrome.tabs.update` rejection.
 - `makeThisHome` throws on: unknown `savedTabId`, `currentURL` is `null`. It sets `originalURL := currentURL` in Lunma state only and SHALL NOT call `chrome.bookmarks.update`.
@@ -232,6 +234,19 @@ The sidebar SHALL invoke these flows exclusively through `bus.send({ kind: 'open
 - **THEN** the coordinator handler SHALL call `chrome.tabs.create` for the record's `originalURL` in window 100
 - **AND** the handler SHALL call `store.bindSavedTab(savedTabId, newTabId, originalURL)`
 - **AND** the drain cycle SHALL emit one `state-broadcast` and one `'lunma/command-ack'` with `result: 'ok'`
+
+#### Scenario: Open with replaceTabId navigates that tab instead of creating one
+
+- **WHEN** the new-tab home dispatches `bus.send({ kind: 'openSavedTab', payload: { savedTabId: 't-1', windowId: 100, replaceTabId: 42 } })`
+- **AND** tab 42 is live in window 100
+- **THEN** the handler SHALL call `chrome.tabs.update(42, …)` for the record's `originalURL` and SHALL NOT call `chrome.tabs.create`
+- **AND** the handler SHALL bind the saved tab to tab 42
+
+#### Scenario: A stale replaceTabId falls back to the create path
+
+- **WHEN** `openSavedTab` is dispatched with `replaceTabId: 42` and tab 42 no longer exists (the update rejects)
+- **THEN** the handler SHALL fall back to `chrome.tabs.create` and bind the created tab
+- **AND** the ack SHALL be `result: 'ok'` (no rejection from the stale id alone)
 
 #### Scenario: Open of an unknown saved tab rejects the promise
 

@@ -68,6 +68,55 @@ body,
   --glass-bg-strong: oklch(0.24 0 0 / 0.66);
 }
 
+/* The hearth (newtab-hearth) — one fixed low-centre radial bloom reading the
+ * `--glow-hearth` colour (the token carries colour only; the gradient + per-tint
+ * peak alpha are composed HERE, the established consumer pattern). Painted with a
+ * `background` gradient — NO `filter: blur` — so it keeps the immersive perf
+ * budget; never interactive. It sits above the ambient aurora but beneath the
+ * content (`.stage` is `--z-raised`) by DOM order, and recolours with the active
+ * Space because `--glow-hearth` reads the scoped `--space-h`/`--space-chroma` (a
+ * `gray` Space washes neutral; no Space rests on the ember via the token
+ * fallbacks). Opacity 1 at rest; eased down while searching. */
+.hearth {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  /* Per-tint peak alpha — strongest at `vivid`, nearly removed at `subtle`,
+   * mirroring how the aurora calms. Owned by this surface, NOT the token (D2);
+   * the contrast harness reads these values so muted text over the peak stays AA. */
+  --hearth-peak: 26%;
+  background: radial-gradient(
+    ellipse 78% 52% at 50% 72%,
+    color-mix(in oklch, var(--glow-hearth) var(--hearth-peak), transparent) 0%,
+    transparent 70%
+  );
+  opacity: 1;
+  /* The kindle bloom-up on load (design D3). `backwards` (NOT `both`) so once the
+   * entrance ends the resting/searching opacity wins — a `forwards` fill would pin
+   * opacity to 1 and defeat the search-pose softening below. */
+  animation: kindle-bloom var(--motion-slow) var(--ease-emphasised) backwards;
+  transition: opacity var(--motion-base) var(--ease-emphasised);
+}
+.home[data-tint='standard'] .hearth {
+  --hearth-peak: 16%;
+}
+.home[data-tint='subtle'] .hearth {
+  --hearth-peak: 7%;
+}
+/* Idle→search pose softens the bloom (~40%) beneath the results card, on the same
+ * crossfade band as the identity↔chip swap; Escape / idle return restores it. */
+.home.searching .hearth {
+  opacity: 0.4;
+}
+
+/* The kindle bloom-up: dim → full. Only `from` is set, so the animation eases to
+ * the element's base opacity (1) and `backwards` releases to it on completion. */
+@keyframes kindle-bloom {
+  from {
+    opacity: 0;
+  }
+}
+
 /* Two-pose anchor grid above the aurora. Idle, the flexible top + bottom bands
  * are equal, so the search row (the centre `auto` band) sits at the vertical
  * centre, the identity grows upward above it and results grow downward below it —
@@ -108,8 +157,11 @@ body,
   display: grid;
   justify-items: center;
   align-items: end;
+  /* The kindle (design D3): identity rises in first after the hearth bloom-up,
+   * then search (+160ms) and favorites (+240ms) — the whole sequence within the
+   * slow band. A 4px rise (transform/opacity only). */
   animation: rise var(--motion-slow) var(--ease-emphasised) both;
-  animation-delay: 120ms;
+  animation-delay: 80ms;
 }
 
 /* Full identity + chip share one grid cell so the crossfade never reflows. */
@@ -191,6 +243,12 @@ body,
   font: var(--weight-regular) var(--text-base) / 1.3 var(--font-sans);
   color: var(--text-muted);
 }
+/* The brand empty line (newtab-hearth) — quieter (`--text-sm`) and width-constrained
+ * so it reads as a warm aside, not a dashboard stat. */
+.meta.empty {
+  max-width: 34ch;
+  font-size: var(--text-sm);
+}
 
 /* Search — the frosted SearchField pill. Centred in the `auto` row when idle;
  * rides up to the top as the `.stage` searching pose collapses the top band.
@@ -199,7 +257,27 @@ body,
   grid-row: 2;
   width: min(560px, 86vw);
   animation: rise var(--motion-base) var(--ease-emphasised) both;
-  animation-delay: 280ms;
+  animation-delay: 160ms;
+}
+
+/* Global favorites (newtab-hearth) — a centred wrapping row of plated FaviconTiles
+ * one full `--space-6` below the search (the `--space-4` grid row-gap + this
+ * `--space-4` margin), capped at two rows (overflow hidden keeps the home calm with
+ * many favorites). Idle home only; rises in last on the kindle (+240ms). */
+.favorites {
+  grid-row: 3;
+  align-self: start;
+  width: min(560px, 86vw);
+  margin-top: var(--space-4);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  /* Two rows of `--favicon-tile` plates plus one inter-row gap; extra rows clip. */
+  max-height: calc(var(--favicon-tile) * 2 + var(--space-2));
+  overflow: hidden;
+  animation: rise var(--motion-base) var(--ease-emphasised) both;
+  animation-delay: 240ms;
 }
 
 /* Below the input (bottom 1fr row): the Tab-to-search hint stacked over the
@@ -287,7 +365,7 @@ body,
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(14px);
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
@@ -300,18 +378,23 @@ body,
 @media (prefers-reduced-motion: reduce) {
   .identity-band,
   .search-row,
-  .below {
+  .favorites,
+  .below,
+  /* The hearth resolves instantly to its lit end state — no bloom-up, no flash
+   * (design D3): `animation: none` leaves opacity at its base (1). */
+  .hearth {
     animation: none;
   }
   /* The chip entrance + hint fade are removed; identical end state. */
   .engine-hint {
     animation: none;
   }
-  /* Instant full↔chip swap AND instant idle↔searching pose change (the input
-   * snaps to its top pose), identical end state. */
+  /* Instant full↔chip swap, instant idle↔searching pose change (the input snaps
+   * to its top pose), and instant hearth softening — identical end state. */
   .stage,
   .identity,
-  .identity-chip {
+  .identity-chip,
+  .hearth {
     transition: none;
   }
 }

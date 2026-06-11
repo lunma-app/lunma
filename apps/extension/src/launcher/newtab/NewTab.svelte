@@ -1,11 +1,19 @@
 <script lang="ts">
 import { onMount, tick } from 'svelte';
 import { dispatch } from '../../shared/bus';
+import { labelFor } from '../../shared/label-for';
 import { onStateBroadcast, requestLauncherSuggestions } from '../../shared/messages';
 import { modifierLabel } from '../../shared/platform';
 import type { SearchEngine } from '../../shared/search-engines';
 import type { Tint } from '../../shared/settings';
-import type { AppState, IconName, Space, SpaceColor, WindowId } from '../../shared/types';
+import type {
+  AppState,
+  IconName,
+  SavedTabId,
+  Space,
+  SpaceColor,
+  WindowId,
+} from '../../shared/types';
 import '@lunma/tokens/tokens.css';
 import '@lunma/tokens/fonts.css';
 import '@lunma/tokens/recipes.css';
@@ -21,7 +29,8 @@ import {
 } from '../../shared/space-hue';
 import Aurora from '../../ui/Aurora.svelte';
 import Chip from '../../ui/Chip.svelte';
-import { faviconFor } from '../../ui/favicon';
+import FaviconTile from '../../ui/FaviconTile.svelte';
+import { faviconCacheKey, faviconFor, faviconUrl } from '../../ui/favicon';
 import Icon from '../../ui/Icon.svelte';
 import Kbd from '../../ui/Kbd.svelte';
 import type { ResultListApi } from '../../ui/ResultList.svelte';
@@ -57,7 +66,24 @@ let liveState = $state<AppState | null>(null);
 // rune type-checking for the whole component.
 const appState = $derived<AppState | null>(liveState ?? initialState);
 
+// This tab's own id, learned once at mount (newtab-hearth): a dormant favorite
+// activated on the home opens IN PLACE — `openSavedTab` carries this as
+// `replaceTabId` so the background navigates THIS tab to the favorite instead of
+// stranding the home behind a new tab. `chrome.tabs` is absent in unit tests
+// (only `chrome.runtime` is faked), so guard the call; a missing id simply omits
+// `replaceTabId` and the favorite opens in a new tab (the unchanged path).
+let homeTabId = $state<number | undefined>();
+
 onMount(() => {
+  chrome.tabs
+    ?.getCurrent?.()
+    .then((tab) => {
+      homeTabId = tab?.id;
+    })
+    .catch(() => {
+      // No own-tab id (e.g. not a real tab context) — leave undefined; dormant
+      // favorites then open in a new tab rather than in place.
+    });
   const unsubscribe = onStateBroadcast((msg) => {
     liveState = msg.state;
   });
@@ -119,6 +145,78 @@ const pinnedCount = $derived.by(() => {
   return count;
 });
 const metaLine = $derived(`${tabCount} ${tabCount === 1 ? 'tab' : 'tabs'} · ${pinnedCount} pinned`);
+// Brand-voice caption (newtab-hearth): the counts line renders only when the
+// Space has something to count; a fresh/empty Space is welcomed, not counted
+// (the brief's empty line) — nothing a dashboard would say.
+const hasCounts = $derived(tabCount + pinnedCount > 0);
+const EMPTY_CAPTION =
+  "Nothing kept here yet. Open a few tabs — anything you don't pin settles out on its own.";
+
+// --- Global favorites on the idle home (newtab-hearth) ----------------------
+// Project `faviconRow` into renderable tiles, deriving each favorite's
+// bound-vs-dormant state for THIS window from the broadcast bindings (a small
+// launcher-side derivation — the sidebar's `FaviconRow` projection lives in the
+// sidebar layer and is unimportable here). Tiles are activate-only and carry NO
+// drift affordances (the sidebar owns management); de-dup like the sidebar so a
+// duplicate id can't collide the keyed `{#each}`.
+interface FavTile {
+  id: SavedTabId;
+  title: string;
+  faviconSrc: string;
+  faviconFallbackSrc: string;
+  /** Dormant: no live tab bound in THIS window. */
+  unbound: boolean;
+}
+const favorites = $derived.by<FavTile[]>(() => {
+  if (!appState) return [];
+  const seen = new Set<string>();
+  const out: FavTile[] = [];
+  for (const id of appState.faviconRow) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const saved = appState.savedTabs[id];
+    if (!saved) continue;
+    const boundTabId = appState.tabBindings[id]?.[windowId];
+    const bound = boundTabId !== undefined;
+    const live = bound ? appState.liveTabsById[boundTabId] : undefined;
+    const liveUrl = live?.url;
+    const url = bound
+      ? liveUrl && liveUrl !== ''
+        ? liveUrl
+        : saved.originalURL
+      : (saved.currentURL ?? saved.originalURL);
+    out.push({
+      id,
+      title: saved.customTitle ?? labelFor(live?.title ? live.title : saved.title, url),
+      // Hi-res (64px) favicon to match the larger plated tile, mirroring the
+      // sidebar row's request so a retina plate stays crisp.
+      faviconSrc: faviconFor(url, live?.favIconUrl, 64),
+      faviconFallbackSrc: faviconUrl(url, 64, faviconCacheKey(live?.favIconUrl)),
+      unbound: !bound,
+    });
+  }
+  return out;
+});
+
+/** Activate a favorite tile (newtab-hearth): a bound favorite focuses its tab;
+ * a dormant one opens IN PLACE — `openSavedTab` carries `replaceTabId` = this
+ * home's own tab id so the background navigates this tab to the favorite. When
+ * the own-tab id is unknown (no `chrome.tabs`), it falls back to the new-tab
+ * open. Activate-only: no drag, reorder, or context menu on this surface. */
+function activateFavorite(fav: FavTile): void {
+  if (fav.unbound) {
+    dispatch({
+      kind: 'openSavedTab',
+      payload: {
+        savedTabId: fav.id,
+        windowId,
+        ...(homeTabId !== undefined ? { replaceTabId: homeTabId } : {}),
+      },
+    });
+  } else {
+    dispatch({ kind: 'focusSavedTab', payload: { savedTabId: fav.id, windowId } });
+  }
+}
 
 // --- Launcher search (launcher-v1 + launcher-tab-to-search) ---------------
 // Empty query → the identity home (idle). Non-empty → debounced suggestions
@@ -344,6 +442,13 @@ const faviconSrc = (result: LauncherResult): string => faviconFor(result.url);
        intensity tracking the tint level. aria-hidden, never interactive. -->
   <Aurora intensity={tint} />
 
+  <!-- The hearth (newtab-hearth): a single fixed low-centre radial bloom reading
+       the `--glow-hearth` colour — the brand's "fire in the nook". Sits above the
+       ambient aurora but beneath the content (`.stage` is `--z-raised`), never
+       intercepts pointer events, and softens while searching. Recolours with the
+       active Space via the scoped hue; rests on the ember when no Space resolves. -->
+  <div class="hearth" data-testid="newtab-hearth-bloom" aria-hidden="true"></div>
+
   <div class="stage">
     {#if activeSpace}
       <!-- Identity band — the full home identity (idle) crossfading to a compact
@@ -357,7 +462,11 @@ const faviconSrc = (result: LauncherResult): string => faviconFor(result.url);
             </Surface>
           </div>
           <h1 class="name" data-testid="newtab-name">{activeSpace.name}</h1>
-          <p class="meta" data-testid="newtab-meta">{metaLine}</p>
+          <!-- Brand-voice caption: counts only when there's something to count;
+               otherwise the warm empty line (set quieter + width-constrained). -->
+          <p class="meta" class:empty={!hasCounts} data-testid="newtab-meta">
+            {hasCounts ? metaLine : EMPTY_CAPTION}
+          </p>
         </div>
         <div class="identity-chip" data-testid="newtab-identity-chip" aria-hidden={!searching}>
           <Surface variant="glass" testid="newtab-chip">
@@ -403,6 +512,27 @@ const faviconSrc = (result: LauncherResult): string => faviconFor(result.url);
         activeDescendant={activeOptionId ?? undefined}
       />
     </div>
+
+    <!-- Global favorites (newtab-hearth): the idle home only — a centred wrapping
+         row of the `FaviconTile` primitive beneath the search field, one click
+         from any new tab to a kept place. Composed directly (the sidebar's
+         `FaviconRow` feature component stays out of the launcher layer per the
+         import DAG); capped at two rows (CSS), no row when empty, no drift props
+         (no dot / return affordance — the sidebar owns management). When searching
+         the bottom band belongs to the results, so the row hides. -->
+    {#if !searching && favorites.length > 0}
+      <div class="favorites" data-testid="newtab-favorites">
+        {#each favorites as fav (fav.id)}
+          <FaviconTile
+            title={fav.title}
+            faviconSrc={fav.faviconSrc}
+            faviconFallbackSrc={fav.faviconFallbackSrc}
+            unbound={fav.unbound}
+            onclick={() => activateFavorite(fav)}
+          />
+        {/each}
+      </div>
+    {/if}
 
     <!-- Below the anchored input (bottom band): the quiet Tab affordance, then
          the results card. Sharing one grid cell keeps the input pinned. -->

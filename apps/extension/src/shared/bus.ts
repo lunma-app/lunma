@@ -27,7 +27,14 @@ export type SidebarCommand =
   | { kind: 'deleteSpace'; payload: { spaceId: SpaceId } }
   | { kind: 'restoreSpaceFromTrash'; payload: { spaceId: SpaceId } }
   | { kind: 'activateSpace'; payload: { windowId: WindowId; spaceId: SpaceId } }
-  | { kind: 'openSavedTab'; payload: { savedTabId: SavedTabId; windowId: WindowId } }
+  // `replaceTabId` (newtab-hearth): the in-place open — when present the handler
+  // navigates THAT existing tab to the saved tab and binds it (the new-tab home's
+  // own tab id), instead of creating a new tab. Stale id → fall back to create;
+  // absent → unchanged new-tab behaviour (existing callers unaffected).
+  | {
+      kind: 'openSavedTab';
+      payload: { savedTabId: SavedTabId; windowId: WindowId; replaceTabId?: TabId };
+    }
   // Per-window-tab-bindings (ADR 0009): focus/go-home act on THIS window's bound
   // tab, so both carry the activating `windowId`.
   | { kind: 'focusSavedTab'; payload: { savedTabId: SavedTabId; windowId: WindowId } }
@@ -315,7 +322,12 @@ const COMMAND_SCHEMAS = {
   }),
   openSavedTab: z.strictObject({
     kind: z.literal('openSavedTab'),
-    payload: z.strictObject({ savedTabId: z.string(), windowId: z.number() }),
+    payload: z.strictObject({
+      savedTabId: z.string(),
+      windowId: z.number(),
+      // Optional in-place open target (newtab-hearth).
+      replaceTabId: z.number().optional(),
+    }),
   }),
   focusSavedTab: z.strictObject({
     kind: z.literal('focusSavedTab'),

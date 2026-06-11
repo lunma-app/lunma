@@ -19,14 +19,35 @@ export function pinnedTabHandlers(): Pick<
 > {
   return {
     openSavedTab: async (ctx, event) => {
-      const { savedTabId, windowId } = event.payload;
+      const { savedTabId, windowId, replaceTabId } = event.payload;
       const saved = ctx.store.state.savedTabs[savedTabId];
       if (!saved) {
         throw new Error(`openSavedTab: unknown savedTabId '${savedTabId}'`);
       }
-      const tab = await chrome.tabs.create({ url: saved.originalURL, windowId });
+      // In-place open (newtab-hearth): when the home passes `replaceTabId` (its
+      // own tab id), navigate THAT tab to the saved tab instead of spawning a new
+      // one and stranding the home — the Arc/Chrome new-tab convention. A stale id
+      // (the tab closed between click and handling, or `update` rejects) falls back
+      // to the create path: the command's effect is "open the saved tab", so the
+      // in-place navigation is a refinement, not a precondition. Absent
+      // `replaceTabId` → unchanged create path (existing callers unaffected).
+      let tab: chrome.tabs.Tab | undefined;
+      if (replaceTabId !== undefined) {
+        try {
+          tab = await chrome.tabs.update(replaceTabId, { url: saved.originalURL });
+        } catch (err) {
+          log.debug('openSavedTab: replaceTabId stale, falling back to create', {
+            savedTabId,
+            replaceTabId,
+            err,
+          });
+        }
+      }
+      if (!tab) {
+        tab = await chrome.tabs.create({ url: saved.originalURL, windowId });
+      }
       if (tab.id === undefined) {
-        throw new Error('openSavedTab: created tab has no id');
+        throw new Error('openSavedTab: opened tab has no id');
       }
       // Capture the narrowed id in a const so it survives into the floated
       // side-effect closure below (TS widens `tab.id` back across a closure).
@@ -48,6 +69,12 @@ export function pinnedTabHandlers(): Pick<
         favIconUrl: tab.favIconUrl,
       });
       ctx.store.setActiveTab(windowId, tabId);
+      // The grouping side-effect applies to `tabId` whether it was created OR
+      // navigated in place (newtab-hearth, spaces-and-tabs rule 2b): the navigated
+      // tab takes the created tab's grouping role. This matters on the in-place
+      // path because the home tab may ALREADY sit inside the active Space's group
+      // (grouped on creation, rule 2) — `ensureFavoriteUngrouped`'s ungroup + park
+      // establishes the favorite invariant regardless of that prior membership.
       if (saved.spaceId === null) {
         // A global favorite (favicon-row-model, ADR 0010 D3/D8): leave its live
         // tab UNGROUPED (global) instead of adopting it into any Space's group,

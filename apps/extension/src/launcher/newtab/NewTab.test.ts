@@ -18,6 +18,9 @@ interface ChromeMock {
 let mock: ChromeMock;
 /** Results the faked suggestions channel returns for any non-empty query. */
 let suggestResults: LauncherResult[] = [];
+/** This tab's own id, returned by the faked `chrome.tabs.getCurrent` (newtab-hearth
+ * in-place open). `undefined` simulates a context with no own-tab id. */
+let currentTabId: number | undefined;
 
 function installChrome(): void {
   mock = {
@@ -39,6 +42,10 @@ function installChrome(): void {
       sendMessage: mock.sendMessage,
       getURL: (path: string) => `chrome-extension://test/${path}`,
       onMessage: { addListener: mock.addListener, removeListener: mock.removeListener },
+    },
+    tabs: {
+      getCurrent: () =>
+        Promise.resolve(currentTabId === undefined ? undefined : { id: currentTabId }),
     },
   };
 }
@@ -66,6 +73,7 @@ async function typeQuery(input: HTMLInputElement, value: string): Promise<void> 
 
 beforeEach(() => {
   suggestResults = [];
+  currentTabId = undefined;
   installChrome();
 });
 
@@ -410,6 +418,20 @@ describe('NewTab (immersive surfaces)', () => {
     );
   });
 
+  // Brand-voice caption (newtab-hearth): a fresh/empty Space is welcomed, not
+  // counted — the counts line renders only when tabCount + pinnedCount > 0.
+  test('a fresh Space shows the brand empty line, not "0 tabs · 0 pinned"', () => {
+    // WORK with no instance + no pinned → 0 tabs, 0 pinned.
+    const { container } = render(NewTabHarness, {
+      props: { windowId: 100, initialState: stateWithActiveSpace(100, WORK) },
+    });
+    const meta = container.querySelector('[data-testid="newtab-meta"]');
+    expect(meta?.textContent?.trim()).toBe(
+      "Nothing kept here yet. Open a few tabs — anything you don't pin settles out on its own.",
+    );
+    expect(meta?.textContent).not.toContain('0 tabs');
+  });
+
   test('a gray Space still renders the full identity at a neutral chroma (unlike the overlay fallback)', () => {
     const gray = { id: 'g', name: 'Grey', color: 'gray', icon: 'briefcase' } as const;
     const { container } = render(NewTabHarness, {
@@ -421,6 +443,175 @@ describe('NewTab (immersive surfaces)', () => {
     expect(container.querySelector('[data-testid="newtab-name"]')?.textContent).toBe('Grey');
     const home = container.querySelector('[data-testid="newtab-home"]') as HTMLElement;
     expect(home.style.getPropertyValue('--space-chroma')).toBe('0');
+  });
+});
+
+describe('NewTab (hearth + favorites, newtab-hearth)', () => {
+  function input(container: HTMLElement): HTMLInputElement {
+    return container.querySelector('[data-testid="newtab-search"]') as HTMLInputElement;
+  }
+  function tiles(container: HTMLElement): NodeListOf<HTMLElement> {
+    return container.querySelectorAll(
+      '[data-testid="newtab-favorites"] [data-testid="favicon-tile"]',
+    );
+  }
+
+  /** Build a state seeded with global favorites. Each favorite is bound (a live
+   * tab in this window) or dormant (no binding). */
+  function stateWithFavorites(
+    windowId: number,
+    space: Space,
+    favs: Array<{ id: string; boundTabId?: number }>,
+  ): AppState {
+    const state = stateWithActiveSpace(windowId, space);
+    for (const f of favs) {
+      state.savedTabs[f.id] = {
+        id: f.id,
+        spaceId: null,
+        title: f.id,
+        originalURL: `https://${f.id}/`,
+        currentURL: `https://${f.id}/`,
+      };
+      state.faviconRow.push(f.id);
+      if (f.boundTabId !== undefined) {
+        state.tabBindings[f.id] = { [windowId]: f.boundTabId };
+        state.liveTabsById[f.boundTabId] = {
+          tabId: f.boundTabId,
+          windowId,
+          title: f.id,
+          url: `https://${f.id}/`,
+          active: false,
+          status: 'complete',
+        };
+      } else {
+        state.tabBindings[f.id] = {};
+      }
+    }
+    return state;
+  }
+
+  // The hearth bloom renders unconditionally on the home — a plain element (no
+  // gating class), which is how its CSS load entrance plays once per page load and
+  // never replays on reactivation (the entrance is CSS, not JS-toggled).
+  test('renders the hearth bloom layer behind the content', () => {
+    const { container } = render(NewTabHarness, {
+      props: { windowId: 100, initialState: stateWithActiveSpace(100, WORK) },
+    });
+    expect(container.querySelector('[data-testid="newtab-hearth-bloom"]')).not.toBeNull();
+  });
+
+  // Pose toggling (task 2.3): the home gains `.searching` when typing (CSS softens
+  // the bloom via `.home.searching .hearth`) and drops it again on Escape.
+  test('typing toggles the searching pose on the home (drives the hearth softening)', async () => {
+    const { container } = render(NewTabHarness, {
+      props: { windowId: 100, initialState: stateWithActiveSpace(100, WORK) },
+    });
+    const home = container.querySelector('[data-testid="newtab-home"]') as HTMLElement;
+    expect(home.classList.contains('searching')).toBe(false);
+    await fireEvent.input(input(container), { target: { value: 'q' } });
+    expect(home.classList.contains('searching')).toBe(true);
+    await fireEvent.keyDown(input(container), { key: 'Escape' });
+    await waitFor(() => expect(home.classList.contains('searching')).toBe(false));
+  });
+
+  // Reactivation keeps the hearth present (the CSS entrance does not replay because
+  // the element is never re-created / re-classed) — the structural contract.
+  test('reactivation does not remove or re-gate the hearth bloom', async () => {
+    const { container } = render(NewTabHarness, {
+      props: { windowId: 100, initialState: stateWithActiveSpace(100, WORK) },
+    });
+    expect(container.querySelector('[data-testid="newtab-hearth-bloom"]')).not.toBeNull();
+    document.dispatchEvent(new Event('visibilitychange'));
+    window.dispatchEvent(new Event('focus'));
+    await Promise.resolve();
+    expect(container.querySelector('[data-testid="newtab-hearth-bloom"]')).not.toBeNull();
+  });
+
+  test('renders a favicon tile for each global favorite beneath the search', () => {
+    const { container } = render(NewTabHarness, {
+      props: {
+        windowId: 100,
+        initialState: stateWithFavorites(100, WORK, [
+          { id: 'a', boundTabId: 11 },
+          { id: 'b' },
+          { id: 'c' },
+        ]),
+      },
+    });
+    expect(tiles(container)).toHaveLength(3);
+    // No drift affordances are passed on this surface (no dot / return-home).
+    expect(container.querySelector('[data-testid="drift-dot"]')).toBeNull();
+    expect(container.querySelector('[data-testid="favicon-return"]')).toBeNull();
+  });
+
+  test('renders no favorites row when there are no favorites', () => {
+    const { container } = render(NewTabHarness, {
+      props: { windowId: 100, initialState: stateWithActiveSpace(100, WORK) },
+    });
+    expect(container.querySelector('[data-testid="newtab-favorites"]')).toBeNull();
+  });
+
+  test('the favorites row hides while searching (the bottom band is the results)', async () => {
+    const { container } = render(NewTabHarness, {
+      props: {
+        windowId: 100,
+        initialState: stateWithFavorites(100, WORK, [{ id: 'a' }]),
+      },
+    });
+    expect(container.querySelector('[data-testid="newtab-favorites"]')).not.toBeNull();
+    await fireEvent.input(input(container), { target: { value: 'q' } });
+    await waitFor(() =>
+      expect(container.querySelector('[data-testid="newtab-favorites"]')).toBeNull(),
+    );
+  });
+
+  test('activating a bound favorite dispatches focusSavedTab', async () => {
+    const { container } = render(NewTabHarness, {
+      props: {
+        windowId: 100,
+        initialState: stateWithFavorites(100, WORK, [{ id: 'a', boundTabId: 11 }]),
+      },
+    });
+    await fireEvent.click(tiles(container)[0] as HTMLElement);
+    expect(lastCommand()).toEqual({
+      kind: 'focusSavedTab',
+      payload: { savedTabId: 'a', windowId: 100 },
+    });
+  });
+
+  test('activating a dormant favorite opens it in place (openSavedTab with replaceTabId = own tab)', async () => {
+    currentTabId = 555; // chrome.tabs.getCurrent resolves to this tab
+    const { container } = render(NewTabHarness, {
+      props: {
+        windowId: 100,
+        initialState: stateWithFavorites(100, WORK, [{ id: 'a' }]),
+      },
+    });
+    // Let chrome.tabs.getCurrent resolve so homeTabId is learned before the click.
+    await waitFor(() => expect(tiles(container)).toHaveLength(1));
+    await new Promise((r) => setTimeout(r));
+    await fireEvent.click(tiles(container)[0] as HTMLElement);
+    expect(lastCommand()).toEqual({
+      kind: 'openSavedTab',
+      payload: { savedTabId: 'a', windowId: 100, replaceTabId: 555 },
+    });
+  });
+
+  test('a dormant favorite without an own tab id falls back to a plain openSavedTab', async () => {
+    currentTabId = undefined; // no own-tab id resolvable
+    const { container } = render(NewTabHarness, {
+      props: {
+        windowId: 100,
+        initialState: stateWithFavorites(100, WORK, [{ id: 'a' }]),
+      },
+    });
+    await waitFor(() => expect(tiles(container)).toHaveLength(1));
+    await new Promise((r) => setTimeout(r));
+    await fireEvent.click(tiles(container)[0] as HTMLElement);
+    expect(lastCommand()).toEqual({
+      kind: 'openSavedTab',
+      payload: { savedTabId: 'a', windowId: 100 },
+    });
   });
 });
 
