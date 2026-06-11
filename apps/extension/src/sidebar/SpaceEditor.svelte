@@ -229,7 +229,7 @@ function onColorKeydown(event: KeyboardEvent): void {
   swatchRowEl?.querySelectorAll<HTMLButtonElement>('[data-testid="color-swatch"]')?.[next]?.focus();
 }
 
-// --- dismissal (hand-rolled, mirroring TabRowMenu) ---------------------------
+// --- dismissal (hand-rolled — its own Esc/click-outside/focus pattern) -------
 
 function focusables(): HTMLElement[] {
   if (!panelEl) return [];

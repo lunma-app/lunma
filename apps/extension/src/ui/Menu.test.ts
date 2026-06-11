@@ -19,7 +19,7 @@ describe('Menu', () => {
     expect(container.querySelector('[data-testid="menu-trigger"]')).not.toBeNull();
     expect(container.querySelector('[role="menu"]')).toBeNull();
     // It does NOT render a row/tab — it is a standalone kebab (the whole point
-    // of the primitive, vs TabRowMenu which composes a TabRow header).
+    // of the primitive, vs a row that composes a TabRow header).
     expect(container.querySelector('[data-testid="tab-row"]')).toBeNull();
   });
 

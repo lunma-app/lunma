@@ -373,7 +373,7 @@ row**, laid out like the tab and folder rows — the Space glyph at the favicon 
 the name at the title column, at row height and title weight, **sentence-case (NOT
 uppercased)**, hue-tinted under the immersive tints (Per-Space colour identity, signal
 3). Its trailing edge carries a **kebab overflow menu** — the SAME `RowMenu` morph the
-tab rows (via `TabRowMenu`) and folder rows compose: a hover-revealed `⋮` kebab whose
+folder rows compose: a hover-revealed `⋮` kebab whose
 row morphs in place into an action card sharing one elevated surface (the header is
 transparent while open so it reads as a single card, not a darker bar stacked on the
 actions). The menu SHALL carry a **"New folder"** item whose selection dispatches
@@ -790,11 +790,11 @@ At service-worker boot, after windows are seeded and before listener registratio
 
 ### Requirement: Temporary tabs list rendering and interaction
 
-When the active Space has one or more temporary tabs, the sidebar SHALL render the Temporary section as a list of rows — one `TabRow` per temporary tab in `tempTabIds` array order. Each row SHALL show the tab's favicon (resolved by `faviconFor(url, favIconUrl)` as the **primary** source, with the `_favicon` page-URL endpoint — `faviconUrl(url)` — retried as the **fallback** when the primary fails to load, and a neutral globe icon only when both fail; this staged fallback is provided by the shared `Favicon` primitive that `TabRow` composes), the tab's `title`, and a **row overflow menu** — the SAME `TabRowMenu` morph the pinned rows compose: a hover-revealed `⋮` kebab whose row morphs in place into an action card. The row for the window's active tab SHALL render with the active treatment defined in the sidebar shell's colour identity.
+When the active Space has one or more temporary tabs, the sidebar SHALL render the Temporary section as a list of rows — one `TabRow` per temporary tab in `tempTabIds` array order. Each row SHALL show the tab's favicon (resolved by `faviconFor(url, favIconUrl)` as the **primary** source, with the `_favicon` page-URL endpoint — `faviconUrl(url)` — retried as the **fallback** when the primary fails to load, and a neutral globe icon only when both fail; this staged fallback is provided by the shared `Favicon` primitive that `TabRow` composes), the tab's `title`, a hover-revealed **close (`✕`)** button in the row's trailing slot, and a **right-click action menu** — the SAME interaction the global favicon tiles use: a floating `ContextMenu` popover anchored at the pointer, opened on a `contextmenu` event. There SHALL be no on-row kebab and no morph drawer. The row for the window's active tab SHALL render with the active treatment defined in the sidebar shell's colour identity.
 
 A **home tab** SHALL NEVER appear in this list — home tabs are not added to `tempTabIds` (see "Home tabs are not listed as temporary tabs"), so an empty Space showing only its home renders no temporary rows (the divider + New Tab affordance from the sidebar shell remain).
 
-Clicking a row SHALL dispatch `bus.send({ kind: 'focusTab', payload: { tabId } })`. The row overflow menu SHALL carry, top to bottom: a non-destructive **Favorite** action that dispatches `bus.send({ kind: 'favoriteTab', payload: { tabId, windowId } })` and leaves the tab open (see the `lunma-bookmark-bindings` capability, Requirement: Couple and decouple favorites by direct manipulation); a **Rename** action that opens the row's inline rename; and a **Close tab** action that dispatches `bus.send({ kind: 'closeTab', payload: { tabId } })` and SHALL NOT also trigger the row's focus. (The former inline close button moved into this menu — the favicon-row change — so temporary and pinned rows share one overflow-menu interaction.) A drag that begins on a temporary row and ends without crossing into the Pinned section SHALL be treated as a reorder within Temporary (dispatching `reorderTemp`); a drag that ends inside the Pinned section SHALL pin the tab (dispatching `pinTab`). A pointer interaction that does not pass the drag threshold SHALL remain a click, not a drag. The sidebar SHALL NOT optimistically update — it SHALL wait for the next `state-broadcast`. Rows SHALL be keyed by `tabId`. The Temporary list SHALL only render tabs present in `liveTabsById`; a `tempTabId` with no `liveTabsById` entry SHALL be skipped rather than rendered blank.
+Clicking a row SHALL dispatch `bus.send({ kind: 'focusTab', payload: { tabId } })`. The hover-revealed `✕` SHALL close the tab directly — dispatching `bus.send({ kind: 'closeTab', payload: { tabId } })` — and SHALL NOT also trigger the row's focus or start a drag (it stops pointer/click propagation); this restores the one-click inline close (reversing the favicon-row change that had folded close into the overflow menu). Right-clicking a row SHALL open the action menu at the cursor, suppressing the browser's native context menu, and SHALL NOT focus or switch to the tab. The right-click menu SHALL carry, top to bottom: a non-destructive **Favorite** action that dispatches `bus.send({ kind: 'favoriteTab', payload: { tabId, windowId } })` and leaves the tab open (see the `lunma-bookmark-bindings` capability, Requirement: Couple and decouple favorites by direct manipulation); a **Rename** action that opens the row's inline rename; and a **Close tab** action that dispatches `bus.send({ kind: 'closeTab', payload: { tabId } })` and SHALL NOT also trigger the row's focus. A single `ContextMenu` instance SHALL be shared across the Temporary list, opened for whichever row was right-clicked. A drag that begins on a temporary row and ends without crossing into the Pinned section SHALL be treated as a reorder within Temporary (dispatching `reorderTemp`); a drag that ends inside the Pinned section SHALL pin the tab (dispatching `pinTab`). A pointer interaction that does not pass the drag threshold SHALL remain a click, not a drag; a secondary (right) button press SHALL NOT start a drag. The sidebar SHALL NOT optimistically update — it SHALL wait for the next `state-broadcast`. Rows SHALL be keyed by `tabId`. The Temporary list SHALL only render tabs present in `liveTabsById`; a `tempTabId` with no `liveTabsById` entry SHALL be skipped rather than rendered blank.
 
 #### Scenario: Active Space with temp tabs renders a row list
 
@@ -802,14 +802,19 @@ Clicking a row SHALL dispatch `bus.send({ kind: 'focusTab', payload: { tabId } }
 - **WHEN** the sidebar renders
 - **THEN** the Temporary section SHALL contain two `TabRow` elements in that order
 
-#### Scenario: Clicking a temp row focuses; the menu's Close closes
+#### Scenario: Clicking a temp row focuses; the hover close closes
 
-- **WHEN** the user clicks a temporary row, then opens its overflow menu and selects **Close tab**
-- **THEN** the row click SHALL dispatch `focusTab` and the Close action SHALL dispatch `closeTab` without also dispatching `focusTab`
+- **WHEN** the user clicks a temporary row, then on another row activates the hover-revealed `✕`
+- **THEN** the row click SHALL dispatch `focusTab` and the `✕` SHALL dispatch `closeTab` without also dispatching `focusTab`
 
-#### Scenario: The row menu's Favorite action keeps the tab open
+#### Scenario: Right-click opens the action menu without focusing
 
-- **WHEN** the user opens a temporary row's overflow menu and selects **Favorite**
+- **WHEN** the user right-clicks a temporary row
+- **THEN** the floating action menu SHALL open at the cursor, the browser's native context menu SHALL be suppressed, and `focusTab` SHALL NOT be dispatched
+
+#### Scenario: The right-click menu's Favorite action keeps the tab open
+
+- **WHEN** the user right-clicks a temporary row and selects **Favorite**
 - **THEN** the sidebar SHALL dispatch `favoriteTab` for that tab
 - **AND** the tab SHALL remain open (no `closeTab` is dispatched)
 

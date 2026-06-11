@@ -42,7 +42,7 @@ test.afterAll(async () => {
 const tempRows = (p: Page): Locator => p.getByTestId('temp-tabs').getByTestId('tab-row');
 const pinnedRows = (p: Page): Locator => p.getByTestId('pinned-tabs').getByTestId('tab-row');
 const lockItem = (p: Page): Locator =>
-  p.getByTestId('tab-row-menu-item').filter({ hasText: 'Lock to its site' });
+  p.getByTestId('pinned-menu-item').filter({ hasText: 'Lock to its site' });
 
 /** Open the sidebar page (a normal tab — it connects to the live SW exactly like
  * the side panel) at a side-panel-ish width and wait for it to render. */
@@ -78,11 +78,10 @@ async function pinSite(context: BrowserContext, sidebar: Page): Promise<Page> {
   return site;
 }
 
-/** Open the pinned row's menu, drill into the editor, and switch to On (which
- * seeds the registrable domain). Leaves the menu open. */
+/** Open the pinned row's right-click menu, drill into the editor, and switch to On
+ * (which seeds the registrable domain). Leaves the menu open. */
 async function lockToSite(sidebar: Page): Promise<void> {
-  await pinnedRows(sidebar).first().hover();
-  await sidebar.getByTestId('tab-row-menu-trigger').first().click();
+  await pinnedRows(sidebar).first().click({ button: 'right' });
   await lockItem(sidebar).click();
   const editor = sidebar.getByTestId('tab-boundary-editor');
   await expect(editor).toBeVisible();
@@ -98,8 +97,7 @@ test('the menu drills into the boundary editor, seeds the domain, and back retur
   await openSidebar(page, extensionId);
   await pinSite(context, page);
 
-  await pinnedRows(page).first().hover();
-  await page.getByTestId('tab-row-menu-trigger').first().click();
+  await pinnedRows(page).first().click({ button: 'right' });
   await expect(lockItem(page)).toBeVisible(); // actions list
   // The drill-in row advertises its submenu (chevron + aria-haspopup).
   await expect(lockItem(page)).toHaveAttribute('aria-haspopup', 'menu');
@@ -108,8 +106,8 @@ test('the menu drills into the boundary editor, seeds the domain, and back retur
   const editor = page.getByTestId('tab-boundary-editor');
   await expect(editor).toBeVisible();
   // Drill-in REPLACES the actions with a back affordance.
-  await expect(page.getByTestId('tab-row-menu-item')).toHaveCount(0);
-  await expect(page.getByTestId('tab-row-menu-back')).toBeVisible();
+  await expect(page.getByTestId('pinned-menu-item')).toHaveCount(0);
+  await expect(page.getByTestId('pinned-menu-back')).toBeVisible();
   // Default mode surfaces a discoverability link to the global default.
   await expect(editor.getByTestId('boundary-options-link')).toBeVisible();
 
@@ -118,7 +116,7 @@ test('the menu drills into the boundary editor, seeds the domain, and back retur
   await expect(editor.getByTestId('chip')).toHaveText(/localhost/);
 
   // Back returns to the action list (editor gone).
-  await page.getByTestId('tab-row-menu-back').click();
+  await page.getByTestId('pinned-menu-back').click();
   await expect(lockItem(page)).toBeVisible();
   await expect(editor).toHaveCount(0);
 });

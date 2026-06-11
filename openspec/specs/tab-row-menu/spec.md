@@ -3,77 +3,75 @@
 ## Purpose
 TBD - created by archiving change pinned-tab-row-menu. Update Purpose after archive.
 ## Requirements
-### Requirement: Pinned-tab actions open as a drawer that grows from behind the tab
+### Requirement: Pinned-tab actions open on right-click as a floating menu at the cursor
 
-The pinned-tab actions menu SHALL open as an action drawer that emerges from
-**behind** the tab row — not as a detached floating popover and not as a separate
-card laid over the tab. The tab row itself SHALL remain unchanged and on top; the
-drawer SHALL be rendered beneath it (lower stacking order) and grow downward out
-from under it, so the actions appear to slide out of the tab. The tab's leading
-content (favicon + title) SHALL stay exactly as it is throughout.
+A pinned tab's action menu SHALL open on a **`contextmenu`** event (right-click,
+or the platform context-menu key / `Shift+F10`) as the shared floating
+`ContextMenu` popover anchored at the pointer position
+(`event.clientX`/`event.clientY`), clamped into the viewport — the SAME primitive
+and interaction the global favicon tiles use. There SHALL be no on-row kebab
+trigger and no morph drawer. Opening the menu SHALL `preventDefault()` the
+browser's native context menu, and SHALL NOT focus or switch to the tab (no
+`focusTab`/`focusSavedTab` is dispatched on right-click). The row's primary click
+behaviour is unchanged.
 
-#### Scenario: Kebab opens a drawer from behind the tab
+A single `ContextMenu` instance SHALL be shared across the pinned list, opened
+for whichever row was right-clicked; the active row SHALL be re-derived from the
+right-clicked row's id against live state, so the menu reflects state after each
+round-trip and disappears if that row leaves the list.
 
-- **WHEN** the user clicks the kebab on a pinned tab row
-- **THEN** an action drawer grows out from behind that tab, revealing its actions
-  below the title, rather than a separate popover floating beside the trigger or a
-  card appearing on top of the tab
+#### Scenario: Right-click opens the menu at the pointer
 
-#### Scenario: The tab stays itself
+- **WHEN** the user right-clicks a pinned tab row
+- **THEN** the floating action menu opens at the cursor, the browser's native
+  context menu is suppressed, and the tab is neither focused nor switched to
 
-- **WHEN** the drawer is open for a given pinned tab
-- **THEN** the tab row still shows the same favicon and title in place, unchanged,
-  sitting on top of the drawer
+#### Scenario: Keyboard context-menu key opens the menu
 
-### Requirement: Opening the menu does not reflow the list
+- **WHEN** focus is on a pinned tab row and the user presses the context-menu key
+  (or `Shift+F10`)
+- **THEN** the same floating action menu opens (the `contextmenu` event is served
+  identically to a right-click)
 
-Opening the menu SHALL NOT change the layout of any other row. The drawer SHALL be
-rendered out of normal flow within the tab's fixed-height slot, so it overlays the
-rows below it rather than pushing them down. No row beneath SHALL move when the
-menu opens or closes.
+### Requirement: A hover-revealed close button closes the pinned tab
 
-#### Scenario: Rows below do not move when the menu opens
+Each pinned tab row SHALL render, in its `TabRow` trailing slot, a one-click
+**close (`✕`)** `IconButton` revealed on row hover/focus (the same reveal the
+former kebab used). Activating it SHALL close the row's **bound live tab** by
+dispatching `bus.send({ kind: 'closeTab', payload: { tabId } })` with the row's
+live `tabId`, leaving the saved record as a **dormant** pinned tab; it SHALL NOT
+also focus or switch to the tab, and SHALL NOT start a drag or trigger the row's
+click (it stops pointer/click propagation). A pinned row that is **dormant** (no
+bound live tab in this window) SHALL render **no close button** — there is no
+live tab to close. Removing the saved record outright remains the menu's
+**Delete**; returning it to Temporary remains the menu's **Unpin**.
 
-- **WHEN** the user opens the actions menu on a pinned tab that has rows below it
-- **THEN** those rows stay at their exact positions while the drawer grows over
-  them, with no downward shift
+#### Scenario: Hovering a bound pinned row reveals close
 
-#### Scenario: Closing restores nothing because nothing moved
+- **WHEN** the user hovers a pinned row whose tab is bound (open) in this window
+- **THEN** a `✕` close button appears in the trailing slot, and activating it
+  dispatches `closeTab` for that tab without focusing the row
 
-- **WHEN** the menu closes
-- **THEN** the list is unchanged from before it opened — there is no reflow on
-  close either
+#### Scenario: A dormant pinned row shows no close button
 
-### Requirement: The trigger reflects open state and toggles its glyph
-
-The kebab trigger SHALL carry `aria-haspopup="menu"` and reflect open state via
-`aria-expanded`. Its glyph SHALL be a vertical kebab (`⋮`) when closed and a close
-(`✕`) glyph when open, and activating it while open SHALL close the menu. The
-trigger SHALL remain visible while the menu is open even if the row is not hovered.
-
-#### Scenario: Trigger exposes menu state and swaps glyph
-
-- **WHEN** the menu is closed and then opened
-- **THEN** the trigger's `aria-expanded` flips from `false` to `true`, it advertises
-  `aria-haspopup="menu"`, and its glyph changes from the kebab to the close icon
-
-#### Scenario: Re-activating the trigger closes the menu
-
-- **WHEN** the menu is open and the user activates the (now `✕`) trigger again
-- **THEN** the menu closes
+- **WHEN** the user hovers a pinned row that is dormant in this window
+- **THEN** no `✕` close button is shown (nothing live to close); Delete and Unpin
+  remain available from the row's right-click menu
 
 ### Requirement: The menu is modal-ish and keyboard-dismissible
 
 While the menu is open: row drag-to-reorder and the Space-switch swipe SHALL NOT
-start from interactions with the menu (the trigger and the action drawer suppress
-pointer propagation). `Escape` SHALL close the menu, a pointer-down anywhere
-outside the open menu SHALL close it, and closing SHALL return focus to the kebab
-trigger that opened it.
+start from interactions with the menu (the floating menu suppresses pointer
+propagation). `Escape` SHALL close the menu, a pointer-down anywhere outside the
+open menu SHALL close it, and closing SHALL return focus to the element that
+opened it (the focused row or the close button), not to any kebab trigger (there
+is none).
 
 #### Scenario: Escape closes and returns focus
 
 - **WHEN** the menu is open and the user presses `Escape`
-- **THEN** the menu closes and keyboard focus returns to the kebab trigger
+- **THEN** the menu closes and keyboard focus returns to the element that opened
+  it
 
 #### Scenario: Outside pointer-down closes
 
@@ -84,9 +82,17 @@ trigger that opened it.
 ### Requirement: Keyboard and ARIA contract
 
 The action list SHALL be `role="menu"` with each action as `role="menuitem"`. On
-open, focus SHALL move into the menu; `ArrowUp`/`ArrowDown` SHALL move between
-actions; the open menu SHALL trap focus (`Tab`/`Shift+Tab` cycle within it) for the
-duration it is open.
+open, focus SHALL move into the menu (to the first action, or the back affordance
+when opened straight into a drill-in); `ArrowUp`/`ArrowDown` SHALL move between
+actions; `Home`/`End` SHALL jump to the first/last; `Escape` SHALL dismiss (or
+step back out of a drill-in view first).
+
+Unlike the former morph drawer, the floating menu SHALL NOT trap focus with
+`Tab`/`Shift+Tab` — this is the deliberate popover model shared with the favicon
+tiles' context menu: the menu instead dismisses on `Escape` or an outside
+pointer-down and returns focus to the element that opened it (see "The menu is
+modal-ish and keyboard-dismissible"). The previous focus-trap guarantee (`Tab`
+cycling within the open drawer) is intentionally dropped with the drawer.
 
 #### Scenario: Arrow keys move between actions
 
@@ -94,88 +100,99 @@ duration it is open.
 - **THEN** `ArrowDown`/`ArrowUp` move focus to the next/previous action within the
   menu
 
+#### Scenario: Tab is not trapped within the open menu
+
+- **WHEN** the menu is open and the user presses `Tab`
+- **THEN** focus is NOT cycled/held within the menu (no focus trap); the menu
+  relies on `Escape`/outside pointer-down for dismissal, matching the favicon
+  context menu
+
 ### Requirement: The existing action set and two-step delete-confirm are preserved
 
-The menu SHALL present the same actions the pinned-tab menu presents today — Go home
-and Make this home (only when the tab has drifted), Unpin, and Delete — dispatched
-through the existing bus commands unchanged. Deleting a bound tab SHALL remain a
-two-step confirmation: the first activation re-renders the row as a confirm
-affordance and keeps the menu open; the second activation dispatches the delete and
-closes the menu.
+The menu SHALL present the same actions the pinned-tab menu presents today — Go
+home and Make this home (only when the tab has drifted), Rename (and Reset name
+when a custom name is set), the "Lock to its site…" drill-in, Unpin, and Delete —
+dispatched through the existing bus commands unchanged. Deleting a non-dormant
+bound tab SHALL remain a two-step confirmation: the first activation re-renders
+the entry as a confirm affordance and keeps the menu open; the second activation
+dispatches the delete and closes the menu.
 
 #### Scenario: Drifted tab shows the home actions
 
 - **WHEN** the menu opens for a pinned tab whose current URL has drifted from its
   home URL
-- **THEN** the menu includes Go home and Make this home in addition to Unpin and
-  Delete
+- **THEN** the menu includes Go home and Make this home in addition to Rename,
+  Lock to its site…, Unpin, and Delete
 
 #### Scenario: Delete is a two-step confirm
 
-- **WHEN** the user selects Delete on a bound pinned tab
-- **THEN** the menu stays open and the row becomes a confirm affordance; only a
+- **WHEN** the user selects Delete on a non-dormant bound pinned tab
+- **THEN** the menu stays open and the entry becomes a confirm affordance; only a
   second activation dispatches the delete and closes the menu
 
 ### Requirement: Animated reveal honours reduced motion
 
-Opening SHALL animate the drawer height from the row height to its expanded height
-over the `--motion-base`/`--ease-standard` token pair, so the actions visibly grow
-out from behind the tab rather than appearing instantly. Closing SHALL reverse the
-growth. Under `prefers-reduced-motion: reduce`, the animation SHALL use the reduced
-duration produced by the existing global token collapse (`--motion-base` →
-`--motion-fast`); no bespoke per-component suppression SHALL be required.
+Opening the menu SHALL use the floating `ContextMenu`'s entrance animation (a
+short rise + fade over the `--motion-fast`/`--ease-emphasised` token pair), the
+same entrance the favicon menu uses, rather than a drawer growing from behind the
+row. Under `prefers-reduced-motion: reduce`, the entrance SHALL be suppressed via
+the primitive's existing reduced-motion rule; no bespoke per-row suppression
+SHALL be required.
 
-#### Scenario: Drawer grows rather than snapping
+#### Scenario: Menu animates in on the fast tick
 
 - **WHEN** the user opens the menu
-- **THEN** the drawer eases open over roughly 200ms, the actions emerging from
-  behind the tab, rather than appearing instantly
+- **THEN** the floating menu rises and fades in over roughly the `--motion-fast`
+  duration rather than appearing with a drawer that grows from the row
 
-#### Scenario: Reduced motion uses the fast tick
+#### Scenario: Reduced motion suppresses the entrance
 
 - **WHEN** `prefers-reduced-motion: reduce` is active and the menu opens
-- **THEN** the reveal uses the collapsed `--motion-fast` duration, consistent with
-  every other transition in the app
+- **THEN** the entrance animation is suppressed, consistent with every other
+  popover in the app
 
 ### Requirement: The menu closes if its tab is removed underneath it
 
-The menu SHALL be associated with a specific pinned-tab id. If a state update
-removes that tab (for example it is unpinned or closed from another window) while
-the menu is open, the menu SHALL close (the keyed row unmounts, taking the open
-menu with it).
+The menu SHALL be associated with a specific pinned-row id. The active row SHALL
+be re-derived from that id against live state; if a state update removes that row
+(for example it is unpinned, deleted, or closed from another window) while the
+menu is open, the derived row SHALL become absent and the menu SHALL close.
 
-#### Scenario: Underlying tab disappears
+#### Scenario: Underlying row disappears
 
-- **WHEN** the menu is open for a pinned tab and a state broadcast arrives in which
-  that tab no longer exists
-- **THEN** the menu closes and the sidebar returns to its normal state
+- **WHEN** the menu is open for a pinned row and a state broadcast arrives in
+  which that row no longer exists
+- **THEN** the derived active row becomes absent and the menu closes, returning
+  the sidebar to its normal state
 
 ### Requirement: Pinned rows expose a "Lock to its site" boundary editor
 
-A pinned tab's overflow menu SHALL offer a **"Lock to its site…"** entry that opens
-a boundary editor for that tab. Choosing the entry SHALL **drill into a dedicated
-view inside the menu drawer** — the action list is replaced by a back affordance
-(`‹ Lock to its site`) above the editor, and the back affordance (or `Esc`) SHALL
-return to the actions. The editor SHALL present a tri-state mode control
-(**Default** · **Off** · **On** — the user-facing labels for the
-inherit/off/locked modes) and, when **On**, an editable list of host-glob patterns
-(each removable) with a field to add a new pattern. Selecting a mode or editing the
-list SHALL dispatch `setTabBoundary` over the bus (`null` for **Default**). The
-**Default** option SHALL surface the live global default (e.g. "Default: off — this
-tab navigates freely.") so inheritance is legible, not hidden.
+A pinned tab's right-click menu SHALL offer a **"Lock to its site…"** entry that
+opens a boundary editor for that tab. Choosing the entry SHALL **drill into a
+dedicated view inside the floating menu** — the action list is replaced by a back
+affordance (`‹ Lock to its site`) above the editor, and the back affordance (or
+`Esc`) SHALL return to the actions — using the `ContextMenu` primitive's
+`panel`/`panelTitle` drill-in (the same drill-in the favicon menu uses). The
+editor SHALL present a tri-state mode control (**Default** · **Off** · **On** —
+the user-facing labels for the inherit/off/locked modes) and, when **On**, an
+editable list of host-glob patterns (each removable) with a field to add a new
+pattern. Selecting a mode or editing the list SHALL dispatch `setTabBoundary`
+over the bus (`null` for **Default**). The **Default** option SHALL surface the
+live global default (e.g. "Default: off — this tab navigates freely.") so
+inheritance is legible, not hidden.
 
 The "Lock to its site…" entry SHALL carry a **submenu affordance** — a trailing
 chevron plus `aria-haspopup` — signalling that it drills into a sub-view rather
-than firing an immediate action. (There is no separate per-row locked-state badge;
-the lock state is surfaced through the menu/editor.) The editor SHALL compose
-existing primitives (`SegmentedControl`, `TextInput`, `Button`) plus the new `Chip`
-primitive for the pattern tokens; it SHALL NOT re-roll any primitive inline. The
-"Lock to its site…" entry SHALL be added to `TabRowMenu` as a data-driven action so
-the menu primitive stays generic.
+than firing an immediate action. (There is no separate per-row locked-state
+badge; the lock state is surfaced through the menu/editor.) The editor SHALL
+compose existing primitives (`SegmentedControl`, `TextInput`, `Button`, `Chip`);
+it SHALL NOT re-roll any primitive inline. The "Lock to its site…" entry SHALL be
+a data-driven `ContextMenu` action (a `MenuItem`), so the menu primitive stays
+generic.
 
 #### Scenario: Opening the editor from the row menu
 
-- **WHEN** the user opens a pinned row's overflow menu and chooses "Lock to its site…"
+- **WHEN** the user opens a pinned row's right-click menu and chooses "Lock to its site…"
 - **THEN** the menu SHALL drill into the boundary editor (replacing the actions, with a back affordance) showing the tab's current mode (Default / Off / On) and, when On, its host-glob list
 
 #### Scenario: Adding a host glob dispatches setTabBoundary
@@ -185,29 +202,11 @@ the menu primitive stays generic.
 
 #### Scenario: The lock entry advertises its submenu
 
-- **WHEN** a pinned row's overflow menu is open
+- **WHEN** a pinned row's right-click menu is open
 - **THEN** the "Lock to its site…" entry SHALL show a trailing chevron and expose `aria-haspopup`, marking it as a drill-in rather than an immediate action
 
 #### Scenario: Default shows the live default
 
 - **WHEN** the editor is open in Default mode
 - **THEN** the Default control SHALL reflect whether the global default is currently off or lock-to-domain
-
-### Requirement: The morph menu is a token-only apps/extension/src/ui primitive and replaces Menu
-
-The menu SHALL ship as `apps/extension/src/ui/TabRowMenu.svelte`, with the `TabRowMenu` component
-exported from `apps/extension/src/ui/index.ts`, composing the existing `TabRow` and `Icon`
-primitives and using only design tokens from `@lunma/tokens` (no hard-coded colours or
-pixel design values). `TabRowMenu` SHALL render the row via `TabRow`, keeping it
-unchanged while the drawer grows behind it; `TabRow` SHALL expose a `trailingVisible`
-prop so the trigger stays visible while the menu is open. The previous
-floating-dropdown primitive `apps/extension/src/ui/Menu.svelte` (and its `MenuItem` type, tests,
-and export) SHALL be removed, since `PinnedTabs` — its only consumer — migrates to
-`TabRowMenu` in this change.
-
-#### Scenario: Pinned tabs use the new primitive
-
-- **WHEN** the sidebar renders pinned tabs
-- **THEN** their actions menu is provided by `TabRowMenu`, and `Menu.svelte` no
-  longer exists in the codebase or `apps/extension/src/ui/index.ts`
 

@@ -506,8 +506,9 @@ describe('PinnedTabs folders', () => {
     const { container } = render(PinnedTabsHarness, {
       props: { store, windowId: 100, spaceId: 'work' },
     });
-    // The folder's actions are a plain kebab `Menu` — NOT a `TabRowMenu` (which
-    // would render a duplicate row: folder name + globe favicon floated right).
+    // The folder's actions are a plain kebab `Menu` — NOT a row that composes a
+    // TabRow header (which would render a duplicate row: folder name + globe
+    // favicon floated right).
     const folderRow = container.querySelector('[data-testid="folder-row"]') as HTMLElement;
     expect(folderRow.querySelector('[data-testid="tab-row"]')).toBeNull();
     expect(folderRow.querySelector('[data-testid="tab-row-menu-trigger"]')).toBeNull();
@@ -574,11 +575,12 @@ describe('PinnedTabs folders', () => {
     const childArea = container.querySelector('[data-testid="folder-children"]') as HTMLElement;
     expect(childArea).not.toBeNull();
 
-    // Open the child's actions menu and pick Unpin.
-    await fireEvent.click(
-      childArea.querySelector('[data-testid="tab-row-menu-trigger"]') as HTMLButtonElement,
+    // Right-click the child row to open the shared action menu, then pick Unpin.
+    (childArea.querySelector('.child-wrap') as HTMLElement).dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }),
     );
-    const unpin = [...childArea.querySelectorAll('[data-testid="tab-row-menu-item"]')].find(
+    await Promise.resolve();
+    const unpin = [...container.querySelectorAll('[data-testid="pinned-menu-item"]')].find(
       (el) => el.getAttribute('data-menu-id') === 'unpin',
     ) as HTMLButtonElement;
     expect(unpin).toBeTruthy();
@@ -848,5 +850,187 @@ describe('PinnedTabs folders', () => {
     tempEl.remove();
 
     expect(sendMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('PinnedTabs right-click menu + hover close', () => {
+  /** A pinned row bound to a live tab (42) in window 100. */
+  function boundStore(extra?: Partial<SavedTab>, live?: Partial<LiveTab>): LunmaStore {
+    const store = makeStore();
+    store.state.savedTabs['st-1'] = savedTab({ id: 'st-1', ...extra });
+    store.state.tabBindings['st-1'] = { 100: 42 };
+    store.state.liveTabsById[42] = liveTab({ tabId: 42, ...live });
+    store.state.pinnedBySpace.work = [{ kind: 'tab', id: 'st-1' }];
+    return store;
+  }
+
+  async function openMenu(container: HTMLElement, rowId = 'st-1'): Promise<HTMLButtonElement[]> {
+    const wrap = container.querySelector(`.row-wrap[data-row-id="${rowId}"]`) as HTMLElement;
+    wrap.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 12, clientY: 18 }),
+    );
+    await Promise.resolve();
+    return [
+      ...container.querySelectorAll('[data-testid="pinned-menu-item"]'),
+    ] as HTMLButtonElement[];
+  }
+
+  const byId = (items: HTMLButtonElement[], id: string): HTMLButtonElement | undefined =>
+    items.find((el) => el.getAttribute('data-menu-id') === id);
+
+  test('a bound row shows the ✕ close; activating it closes the bound tab without focusing', async () => {
+    const store = boundStore();
+    const { container } = render(PinnedTabsHarness, {
+      props: { store, windowId: 100, spaceId: 'work' },
+    });
+    const close = container.querySelector('[data-testid="pinned-close"]') as HTMLButtonElement;
+    expect(close).not.toBeNull();
+    await fireEvent.click(close);
+    // Closes the bound LIVE tab (→ dormant record), never focuses/switches.
+    expect(sendMock).toHaveBeenCalledWith({ kind: 'closeTab', payload: { tabId: 42 } });
+    expect(sendMock).not.toHaveBeenCalledWith({
+      kind: 'focusSavedTab',
+      payload: { savedTabId: 'st-1', windowId: 100 },
+    });
+  });
+
+  test('a dormant row shows no ✕ close (Delete/Unpin stay in the menu)', () => {
+    const store = makeStore();
+    store.state.savedTabs['st-1'] = savedTab({ id: 'st-1', currentURL: null });
+    store.state.tabBindings['st-1'] = {};
+    store.state.pinnedBySpace.work = [{ kind: 'tab', id: 'st-1' }];
+    const { container } = render(PinnedTabsHarness, {
+      props: { store, windowId: 100, spaceId: 'work' },
+    });
+    expect(container.querySelector('[data-testid="pinned-close"]')).toBeNull();
+  });
+
+  test('right-click opens the menu at the cursor, suppresses the native menu, and does not focus', async () => {
+    const store = boundStore();
+    const { container } = render(PinnedTabsHarness, {
+      props: { store, windowId: 100, spaceId: 'work' },
+    });
+    const wrap = container.querySelector('.row-wrap[data-row-id="st-1"]') as HTMLElement;
+    const ev = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 12,
+      clientY: 18,
+    });
+    wrap.dispatchEvent(ev);
+    await Promise.resolve();
+    expect(ev.defaultPrevented).toBe(true);
+    const menu = container.querySelector('[data-testid="pinned-menu"]') as HTMLElement;
+    expect(menu).not.toBeNull();
+    expect(menu.style.left).toBe('12px');
+    expect(menu.style.top).toBe('18px');
+    expect(sendMock).not.toHaveBeenCalledWith({
+      kind: 'focusSavedTab',
+      payload: { savedTabId: 'st-1', windowId: 100 },
+    });
+  });
+
+  test('the menu Unpin dispatches unpinTab', async () => {
+    const store = boundStore();
+    const { container } = render(PinnedTabsHarness, {
+      props: { store, windowId: 100, spaceId: 'work' },
+    });
+    const items = await openMenu(container);
+    await fireEvent.click(byId(items, 'unpin') as HTMLButtonElement);
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'unpinTab',
+      payload: { savedTabId: 'st-1', windowId: 100 },
+    });
+  });
+
+  test('Go home / Make this home appear only when the bound tab has drifted', async () => {
+    const stay = boundStore(
+      { originalURL: 'https://example.com/' },
+      { url: 'https://example.com/' },
+    );
+    const r1 = render(PinnedTabsHarness, {
+      props: { store: stay, windowId: 100, spaceId: 'work' },
+    });
+    let items = await openMenu(r1.container);
+    expect(byId(items, 'go-home')).toBeUndefined();
+    expect(byId(items, 'make-home')).toBeUndefined();
+    cleanup();
+    drag.__resetForTest();
+
+    const drift = boundStore(
+      { originalURL: 'https://example.com/' },
+      { url: 'https://example.com/elsewhere' },
+    );
+    const r2 = render(PinnedTabsHarness, {
+      props: { store: drift, windowId: 100, spaceId: 'work' },
+    });
+    items = await openMenu(r2.container);
+    expect(byId(items, 'go-home')).toBeTruthy();
+    expect(byId(items, 'make-home')).toBeTruthy();
+  });
+
+  test('Delete is a two-step confirm', async () => {
+    const store = boundStore();
+    const { container } = render(PinnedTabsHarness, {
+      props: { store, windowId: 100, spaceId: 'work' },
+    });
+    const items = await openMenu(container);
+    await fireEvent.click(byId(items, 'delete') as HTMLButtonElement);
+    // keepOpen — not dispatched yet; the entry becomes a confirm affordance.
+    expect(sendMock).not.toHaveBeenCalledWith({
+      kind: 'deleteSavedTab',
+      payload: { savedTabId: 'st-1' },
+    });
+    expect(container.querySelector('[data-menu-id="delete"] .label')?.textContent).toBe(
+      'Delete — confirm',
+    );
+    await fireEvent.click(container.querySelector('[data-menu-id="delete"]') as HTMLButtonElement);
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'deleteSavedTab',
+      payload: { savedTabId: 'st-1' },
+    });
+  });
+
+  test('Rename opens the inline editor; Reset name shows only when a custom name is set', async () => {
+    const store = boundStore({ customTitle: 'Custom' });
+    const { container } = render(PinnedTabsHarness, {
+      props: { store, windowId: 100, spaceId: 'work' },
+    });
+    const items = await openMenu(container);
+    expect(byId(items, 'reset-name')).toBeTruthy();
+    await fireEvent.click(byId(items, 'rename') as HTMLButtonElement);
+    expect(container.querySelector('[data-testid="tab-rename-input"]')).not.toBeNull();
+  });
+
+  test('Reset name is absent when the tab has no custom name', async () => {
+    const store = boundStore();
+    const { container } = render(PinnedTabsHarness, {
+      props: { store, windowId: 100, spaceId: 'work' },
+    });
+    const items = await openMenu(container);
+    expect(byId(items, 'reset-name')).toBeUndefined();
+  });
+
+  test('"Lock to its site…" drills into the boundary editor and dispatches setTabBoundary', async () => {
+    const store = boundStore();
+    const { container } = render(PinnedTabsHarness, {
+      props: { store, windowId: 100, spaceId: 'work' },
+    });
+    const items = await openMenu(container);
+    const lock = byId(items, 'keep-on-site') as HTMLButtonElement;
+    // Advertises its drill-in via the submenu affordance.
+    expect(lock.getAttribute('aria-haspopup')).toBe('menu');
+    await fireEvent.click(lock);
+    // Drilled in: the back affordance + the boundary editor render.
+    expect(container.querySelector('[data-testid="pinned-menu-back"]')).not.toBeNull();
+    const editor = container.querySelector('[data-testid="tab-boundary-editor"]') as HTMLElement;
+    expect(editor).not.toBeNull();
+    // Selecting a mode (Off) dispatches setTabBoundary.
+    const off = editor.querySelector('input[type="radio"][value="off"]') as HTMLInputElement;
+    await fireEvent.click(off);
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'setTabBoundary',
+      payload: { savedTabId: 'st-1', boundary: { mode: 'off' } },
+    });
   });
 });

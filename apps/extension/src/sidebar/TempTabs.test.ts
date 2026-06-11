@@ -153,14 +153,16 @@ describe('TempTabs', () => {
     expect(sendMock).toHaveBeenCalledWith({ kind: 'focusTab', payload: { tabId: 17 } });
   });
 
-  /** Open the overflow menu on the first temp row and return its action items. */
-  async function openFirstRowMenu(container: HTMLElement): Promise<HTMLButtonElement[]> {
-    const trigger = container.querySelector(
-      '[data-testid="tab-row-menu-trigger"]',
-    ) as HTMLButtonElement;
-    await fireEvent.click(trigger);
+  /** Right-click a temp row's wrapper to open the action menu (suppressing the
+   * native menu); returns the menu's action items. */
+  async function openRowMenu(container: HTMLElement, rowIndex = 0): Promise<HTMLButtonElement[]> {
+    const wrap = container.querySelectorAll('.row-wrap')[rowIndex] as HTMLElement;
+    wrap.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 12, clientY: 18 }),
+    );
+    await Promise.resolve();
     return Array.from(
-      container.querySelectorAll('[data-testid="tab-row-menu-item"]'),
+      container.querySelectorAll('[data-testid="temp-menu-item"]'),
     ) as HTMLButtonElement[];
   }
 
@@ -168,19 +170,49 @@ describe('TempTabs', () => {
     return items.find((el) => el.getAttribute('data-menu-id') === id) as HTMLButtonElement;
   }
 
-  test('the overflow-menu Close action dispatches closeTab and not focusTab', async () => {
-    // The inline ✕ moved into the row's TabRowMenu morph (sidebar-favicon-row,
-    // Option B): temp + pinned rows now share one overflow-menu interaction.
+  test('the hover close (✕) dispatches closeTab and not focusTab', async () => {
+    // The one-click inline close is restored to the row's trailing slot (it had
+    // been folded into the overflow menu); it closes directly without focusing.
     const { container } = render(TempTabsHarness, { props: { store: makeStore(), windowId: 100 } });
-    const items = await openFirstRowMenu(container);
+    const close = container.querySelector('[data-testid="temp-close"]') as HTMLButtonElement;
+    await fireEvent.click(close);
+    expect(sendMock).toHaveBeenCalledWith({ kind: 'closeTab', payload: { tabId: 17 } });
+    expect(sendMock).not.toHaveBeenCalledWith({ kind: 'focusTab', payload: { tabId: 17 } });
+  });
+
+  test('right-click opens the menu at the cursor, suppresses the native menu, and does not focus', async () => {
+    const { container } = render(TempTabsHarness, { props: { store: makeStore(), windowId: 100 } });
+    const wrap = container.querySelector('.row-wrap') as HTMLElement;
+    const ev = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 12,
+      clientY: 18,
+    });
+    wrap.dispatchEvent(ev);
+    await Promise.resolve();
+    // Native context menu suppressed.
+    expect(ev.defaultPrevented).toBe(true);
+    // Menu floats at the cursor (jsdom reports a zero rect, so it stays at anchor).
+    const menu = container.querySelector('[data-testid="temp-menu"]') as HTMLElement;
+    expect(menu).not.toBeNull();
+    expect(menu.style.left).toBe('12px');
+    expect(menu.style.top).toBe('18px');
+    // Right-click never focuses/switches the tab.
+    expect(sendMock).not.toHaveBeenCalledWith({ kind: 'focusTab', payload: { tabId: 17 } });
+  });
+
+  test('the right-click menu Close tab dispatches closeTab and not focusTab', async () => {
+    const { container } = render(TempTabsHarness, { props: { store: makeStore(), windowId: 100 } });
+    const items = await openRowMenu(container);
     await fireEvent.click(menuItem(items, 'close'));
     expect(sendMock).toHaveBeenCalledWith({ kind: 'closeTab', payload: { tabId: 17 } });
     expect(sendMock).not.toHaveBeenCalledWith({ kind: 'focusTab', payload: { tabId: 17 } });
   });
 
-  test('the overflow-menu Favorite action dispatches favoriteTab and keeps the tab open', async () => {
+  test('the right-click menu Favorite dispatches favoriteTab and keeps the tab open', async () => {
     const { container } = render(TempTabsHarness, { props: { store: makeStore(), windowId: 100 } });
-    const items = await openFirstRowMenu(container);
+    const items = await openRowMenu(container);
     await fireEvent.click(menuItem(items, 'favorite'));
     expect(sendMock).toHaveBeenCalledWith({
       kind: 'favoriteTab',
@@ -188,6 +220,29 @@ describe('TempTabs', () => {
     });
     // Non-destructive: favoriting an open tab never closes it.
     expect(sendMock).not.toHaveBeenCalledWith({ kind: 'closeTab', payload: { tabId: 17 } });
+  });
+
+  test('the right-click menu Rename opens the inline editor', async () => {
+    const { container } = render(TempTabsHarness, { props: { store: makeStore(), windowId: 100 } });
+    const items = await openRowMenu(container);
+    await fireEvent.click(menuItem(items, 'rename'));
+    expect(container.querySelector('[data-testid="tab-rename-input"]')).not.toBeNull();
+  });
+
+  test('a secondary (right) button press does not start a drag', async () => {
+    // drag.press guards on `button !== 0`, so a right-click never arms a drag —
+    // the right-click path needs no separate drag suppression (design / impact).
+    const { container } = render(TempTabsHarness, { props: { store: makeStore(), windowId: 100 } });
+    await Promise.resolve();
+    const rows = container.querySelectorAll('.row-wrap');
+    await fireEvent.pointerDown(rows[0] as Element, { clientX: 50, clientY: 10, button: 2 });
+    window.dispatchEvent(
+      new MouseEvent('pointermove', { clientX: 50, clientY: 60, button: 2, bubbles: true }),
+    );
+    expect(drag.state.active).toBe(false);
+    window.dispatchEvent(
+      new MouseEvent('pointerup', { clientX: 50, clientY: 60, button: 2, bubbles: true }),
+    );
   });
 
   test('a tempTabId missing from liveTabsById is skipped without error', () => {

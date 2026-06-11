@@ -4,8 +4,11 @@ import { flip } from 'svelte/animate';
 import { dispatch } from '../shared/bus';
 import { labelFor } from '../shared/label-for';
 import type { IconName, LiveTab, SpaceId, TabId, WindowId } from '../shared/types';
+import ContextMenu from '../ui/ContextMenu.svelte';
 import { faviconCacheKey, faviconFor, faviconUrl } from '../ui/favicon';
-import TabRowMenu, { type TabRowMenuItem } from '../ui/TabRowMenu.svelte';
+import IconButton from '../ui/IconButton.svelte';
+import type { MenuItem } from '../ui/menu-types';
+import TabRow from '../ui/TabRow.svelte';
 import { type DropResult, drag } from './drag.svelte';
 import { useStore } from './store-context.svelte';
 
@@ -193,10 +196,11 @@ function favoriteTab(item: TempItem): void {
   dispatch({ kind: 'favoriteTab', payload: { tabId: item.tabId, windowId } });
 }
 
-/** The overflow-menu actions for a temporary row: Favorite (non-destructive),
- * Rename (inline), and Close. Composes `TabRowMenu` so temp + pinned rows share
- * one overflow-menu interaction (the inline ✕ close moved into this menu). */
-function tabMenuItems(item: TempItem): TabRowMenuItem[] {
+/** The right-click action menu for a temporary row: Favorite (non-destructive),
+ * Rename (inline), and Close tab. Built as `ContextMenu` `MenuItem[]` so temp +
+ * pinned rows share the favicon-tile right-click interaction. The one-click close
+ * lives separately on the row's trailing ✕. */
+function tabMenuItems(item: TempItem): MenuItem[] {
   return [
     {
       id: 'favorite',
@@ -213,10 +217,32 @@ function tabMenuItems(item: TempItem): TabRowMenuItem[] {
     {
       id: 'close',
       label: 'Close tab',
-      icon: 'x' as IconName,
+      icon: 'x',
       onSelect: () => closeTab(item.tabId),
     },
   ];
+}
+
+// --- right-click menu (one shared instance, opened at the cursor) -------------
+// Mirrors FaviconRow: a single ContextMenu floated at the pointer for whichever
+// row was right-clicked; the active row is re-derived by `tabId` against `items`
+// so the menu auto-closes when its row leaves the list.
+let menuOpen = $state(false);
+let menuX = $state(0);
+let menuY = $state(0);
+let menuTabId = $state<TabId | null>(null);
+const activeMenuItem = $derived(
+  menuTabId !== null ? (items.find((i) => i.tabId === menuTabId) ?? null) : null,
+);
+
+function onRowContextMenu(e: MouseEvent, item: TempItem): void {
+  // Open the action menu at the cursor and suppress Chrome's native menu. A
+  // right-click never focuses/switches the tab (design D4).
+  e.preventDefault();
+  menuX = e.clientX;
+  menuY = e.clientY;
+  menuTabId = item.tabId;
+  menuOpen = true;
 }
 
 // Inline rename: double-click a row to name it. The custom name lives only in
@@ -251,27 +277,55 @@ function commitRename(item: TempItem, newName: string): void {
       class:dragging={isDragSource(item)}
       bind:this={rowEls[i]}
       onpointerdown={(e) => onRowPointerDown(e, item)}
+      oncontextmenu={(e) => onRowContextMenu(e, item)}
       ondblclick={() => startRename(item)}
       animate:flip={{ duration: FLIP_MS }}
     >
-      <TabRowMenu
-        header={{
-          title: item.title,
-          faviconSrc: item.faviconSrc,
-          faviconFallbackSrc: item.faviconFallbackSrc,
-          active: item.active,
-          loading: item.loading,
-        }}
-        items={tabMenuItems(item)}
-        onRowClick={() => focusTab(item)}
-        label="Tab actions"
+      {#snippet closeButton()}
+        <!-- The ✕ stops pointerdown propagation so pressing it never arms the
+             row's drag; the button's own click closes the tab (it is not nested
+             inside the row's hit target, so it never focuses the row). -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <span class="close-slot" onpointerdown={(e) => e.stopPropagation()}>
+          <IconButton
+            icon={'x' as IconName}
+            ariaLabel="Close tab"
+            title="Close tab"
+            size={14}
+            testid="temp-close"
+            onclick={() => closeTab(item.tabId)}
+          />
+        </span>
+      {/snippet}
+      <TabRow
+        title={item.title}
+        faviconSrc={item.faviconSrc}
+        faviconFallbackSrc={item.faviconFallbackSrc}
+        active={item.active}
+        loading={item.loading}
         editing={item.id === renamingId}
         oncommitName={(next) => commitRename(item, next)}
         oncancelName={() => (renamingId = null)}
+        onclick={() => focusTab(item)}
+        trailing={closeButton}
       />
     </div>
   {/each}
 </div>
+
+<!-- One shared right-click menu, opened at the cursor for whichever row was
+     right-clicked (mirrors FaviconRow). The active row is re-derived by id so the
+     menu auto-closes if that row leaves the list. -->
+{#if activeMenuItem}
+  <ContextMenu
+    bind:open={menuOpen}
+    x={menuX}
+    y={menuY}
+    items={tabMenuItems(activeMenuItem)}
+    label="Tab actions"
+    testid="temp-menu"
+  />
+{/if}
 
 <style>
   .temp-tabs {
@@ -290,6 +344,12 @@ function commitRename(item: TempItem, newName: string): void {
     padding-bottom: var(--row-gap);
     animation: temp-row-in var(--motion-base) var(--ease-emphasised);
     touch-action: none;
+  }
+
+  /* Wraps the trailing ✕ so it can swallow its own pointerdown (no drag) while the
+   * IconButton primitive keeps its box/ring. */
+  .close-slot {
+    display: inline-flex;
   }
   /* Source row stays in place but dims while dragged. */
   .row-wrap.dragging {

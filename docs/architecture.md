@@ -21,7 +21,7 @@ lunma/                              # pnpm workspace root (private)
 │  │  │  ├─ shared/                 # cross-surface: types · schemas (+migrations) · store.svelte.ts · messages · settings · onboarding · logger
 │  │  │  │  └─ chrome/              # thin typed wrappers over chrome.* APIs
 │  │  │  ├─ ui/                     # cross-surface primitives (build primitives, compose features)
-│  │  │  │  ├─ Button.svelte        # …+ Icon · Tooltip · Stack · Kbd · SegmentedControl · TabRow · TabRowMenu
+│  │  │  │  ├─ Button.svelte        # …+ Icon · Tooltip · Stack · Kbd · SegmentedControl · TabRow · RowMenu · ContextMenu
 │  │  │  │  └─ favicon.ts · index.ts   # design TOKENS now come from @lunma/tokens (see packages/)
 │  │  │  ├─ background/             # SW: index · coordinator (+ handlers/ slices · group-orchestrator · boundary-controller) · bus-adapter · *-handler · seed-* · (planned) auto-archive
 │  │  │  ├─ sidebar/                # flat — feature components compose ui/ primitives
@@ -360,7 +360,7 @@ never enqueues, mutates, persists, or broadcasts.
 ### Component library (`apps/extension/src/ui/`)
 
 Cross-surface UI primitives (e.g. `SpaceIcon`, `Tooltip`, `Stack`,
-`TabRowMenu`) live in `apps/extension/src/ui/`; the design tokens they reference
+`RowMenu`, `ContextMenu`) live in `apps/extension/src/ui/`; the design tokens they reference
 live in the shared **`@lunma/tokens`** package (`packages/tokens/tokens.css`),
 imported at each surface's CSS entry. Feature components compose primitives; they
 do not re-roll buttons, tooltips, etc. inline. Neutral tokens are OKLCH

@@ -13,11 +13,15 @@ import type {
   SpaceColor,
   SpaceId,
   TabBoundary,
+  TabId,
   WindowId,
 } from '../shared/types';
+import ContextMenu from '../ui/ContextMenu.svelte';
 import FolderRow from '../ui/FolderRow.svelte';
 import { faviconCacheKey, faviconFor, faviconUrl } from '../ui/favicon';
-import TabRowMenu, { type TabRowMenuItem } from '../ui/TabRowMenu.svelte';
+import IconButton from '../ui/IconButton.svelte';
+import type { MenuItem } from '../ui/menu-types';
+import TabRow from '../ui/TabRow.svelte';
 import { boundaryDefault } from './boundary-default.svelte';
 import { type DropResult, drag } from './drag.svelte';
 import EmptyState from './EmptyState.svelte';
@@ -83,6 +87,9 @@ interface TabView {
   loading: boolean;
   drifted: boolean;
   dormant: boolean;
+  /** This window's bound live tab id, or undefined when dormant — the target of
+   * the trailing ✕ close (closing it leaves the saved record dormant). */
+  boundTabId: TabId | undefined;
   /** True when the user has set a custom name (`SavedTab.customTitle`) — drives
    * the "Reset name" menu item's visibility. */
   renamed: boolean;
@@ -142,6 +149,7 @@ function projectTab(id: SavedTabId): TabView | null {
     loading: live?.status === 'loading',
     drifted,
     dormant: !bound,
+    boundTabId,
     renamed: saved.customTitle !== undefined,
     originalURL: saved.originalURL,
     boundary: saved.boundary,
@@ -492,8 +500,8 @@ function cancelRename(): void {
 
 // --- pinned-tab rename (inline, via double-click or the row menu) -------------
 // Mirrors the folder rename pattern: the parent owns the editing flag and the
-// trigger; TabRowMenu forwards `editing`/`oncommitName`/`oncancelName` to its
-// header TabRow, which swaps the title for an EditableLabel.
+// trigger; the row's `TabRow` takes `editing`/`oncommitName`/`oncancelName`
+// directly, swapping the title for an EditableLabel.
 let renamingTabId = $state<SavedTabId | null>(null);
 
 function startTabRename(savedTabId: SavedTabId): void {
@@ -526,8 +534,45 @@ function chooseIcon(folderId: FolderId, icon: IconName): void {
 
 // --- dispatch + tab interactions ---------------------------------------------
 let confirmingDeleteId = $state<SavedTabId | null>(null);
-// Which row's boundary editor is open in its menu drawer (pinned-tab-domain-boundary).
+// Which row's boundary editor is open as the menu's drill-in (pinned-tab-domain-boundary).
 let editingBoundaryId = $state<SavedTabId | null>(null);
+
+// --- right-click menu (one shared instance, opened at the cursor) -------------
+// Mirrors FaviconRow: a single ContextMenu floated at the pointer for whichever
+// row was right-clicked. The active row is re-derived by id across the live rows
+// (top-level + folder children) so the menu reflects state after each round-trip
+// and auto-closes when that row leaves the list (design D2).
+let menuOpen = $state(false);
+let menuX = $state(0);
+let menuY = $state(0);
+let menuRowId = $state<SavedTabId | null>(null);
+
+/** Every tab view in the list, flattened across folders — the lookup the menu
+ * re-derives its active row from. */
+const allTabViews = $derived.by<TabView[]>(() => {
+  const out: TabView[] = [];
+  for (const row of rows) {
+    if (row.kind === 'tab') out.push(row);
+    else out.push(...row.children);
+  }
+  return out;
+});
+const activeMenuRow = $derived(
+  menuRowId !== null ? (allTabViews.find((t) => t.id === menuRowId) ?? null) : null,
+);
+
+function onRowContextMenu(e: MouseEvent, row: TabView): void {
+  // Open the action menu at the cursor and suppress Chrome's native menu. A
+  // right-click never focuses/switches the tab (design D4). Reset transient row
+  // state so the menu opens into the actions list, not a stale drill-in/confirm.
+  e.preventDefault();
+  menuX = e.clientX;
+  menuY = e.clientY;
+  menuRowId = row.id;
+  editingBoundaryId = null;
+  confirmingDeleteId = null;
+  menuOpen = true;
+}
 
 function onTabClick(row: TabView): void {
   if (drag.consumeJustDragged()) return; // a drag just ended — not a click
@@ -538,8 +583,16 @@ function onTabClick(row: TabView): void {
   }
 }
 
-function tabMenuItems(row: TabView): TabRowMenuItem[] {
-  const items: TabRowMenuItem[] = [];
+// The trailing ✕ closes the row's BOUND live tab (→ dormant saved record, the
+// Arc model). Only rendered for bound rows, so `boundTabId` is defined here.
+function closeBoundTab(row: TabView): void {
+  if (row.boundTabId !== undefined) {
+    dispatch({ kind: 'closeTab', payload: { tabId: row.boundTabId } });
+  }
+}
+
+function tabMenuItems(row: TabView): MenuItem[] {
+  const items: MenuItem[] = [];
   if (row.drifted) {
     items.push({
       id: 'go-home',
@@ -575,7 +628,9 @@ function tabMenuItems(row: TabView): TabRowMenuItem[] {
     keepOpen: true,
     submenu: true,
     onSelect: () => {
-      editingBoundaryId = editingBoundaryId === row.id ? null : row.id;
+      // Drill the menu into the boundary editor (ContextMenu's panel view). The
+      // back affordance / Esc returns to the actions.
+      editingBoundaryId = row.id;
     },
   });
   items.push({
@@ -640,45 +695,40 @@ function tabMenuItems(row: TabView): TabRowMenuItem[] {
       data-row-id={row.id}
       bind:this={rowEls[i]}
       onpointerdown={row.kind === 'tab' ? (e) => onRowPointerDown(e, row, ZONE) : undefined}
+      oncontextmenu={row.kind === 'tab' ? (e) => onRowContextMenu(e, row) : undefined}
       animate:flipMove
     >
       {#if row.kind === 'tab'}
-        {#snippet boundaryPanel()}
-          <TabBoundaryEditor
-            savedTabId={row.id}
-            boundary={row.boundary}
-            originalURL={row.originalURL}
-            globalDefault={boundaryDefault.value}
-          />
+        {#snippet closeButton()}
+          <!-- Bound rows only: the ✕ closes the live tab (→ dormant). It swallows
+               its own pointerdown so pressing it never arms the row's drag; the
+               button is outside the row hit target, so it never focuses the row. -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <span class="close-slot" onpointerdown={(e) => e.stopPropagation()}>
+            <IconButton
+              icon={'x' as IconName}
+              ariaLabel="Close tab"
+              title="Close tab"
+              size={14}
+              testid="pinned-close"
+              onclick={() => closeBoundTab(row)}
+            />
+          </span>
         {/snippet}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="drag-handle" ondblclick={() => startTabRename(row.id)}>
-          <TabRowMenu
-            header={{
-              title: row.title,
-              faviconSrc: row.faviconSrc,
-              faviconFallbackSrc: row.faviconFallbackSrc,
-              active: row.active,
-              loading: row.loading,
-              drifted: row.drifted,
-            }}
-            items={tabMenuItems(row)}
-            panel={editingBoundaryId === row.id ? boundaryPanel : undefined}
-            panelTitle={editingBoundaryId === row.id ? 'Lock to its site' : undefined}
-            onPanelBack={() => {
-              editingBoundaryId = null;
-            }}
-            onRowClick={() => onTabClick(row)}
-            label="Tab actions"
+          <TabRow
+            title={row.title}
+            faviconSrc={row.faviconSrc}
+            faviconFallbackSrc={row.faviconFallbackSrc}
+            active={row.active}
+            loading={row.loading}
+            drifted={row.drifted}
             editing={renamingTabId === row.id}
             oncommitName={(next) => commitTabRename(row.id, next)}
             oncancelName={cancelTabRename}
-            onOpenChange={(open) => {
-              if (!open) {
-                if (confirmingDeleteId === row.id) confirmingDeleteId = null;
-                if (editingBoundaryId === row.id) editingBoundaryId = null;
-              }
-            }}
+            onclick={() => onTabClick(row)}
+            trailing={row.dormant ? undefined : closeButton}
           />
         </div>
       {:else}
@@ -717,42 +767,34 @@ function tabMenuItems(row: TabView): TabRowMenuItem[] {
                 class:dragging={isDragSource(child.id)}
                 bind:this={childRowElById[child.id]}
                 onpointerdown={(e) => onRowPointerDown(e, child, FOLDER_ZONE(row.id))}
+                oncontextmenu={(e) => onRowContextMenu(e, child)}
                 ondblclick={() => startTabRename(child.id)}
               >
-                {#snippet childBoundaryPanel()}
-                  <TabBoundaryEditor
-                    savedTabId={child.id}
-                    boundary={child.boundary}
-                    originalURL={child.originalURL}
-                    globalDefault={boundaryDefault.value}
-                  />
+                {#snippet childCloseButton()}
+                  <!-- svelte-ignore a11y_no_static_element_interactions -->
+                  <span class="close-slot" onpointerdown={(e) => e.stopPropagation()}>
+                    <IconButton
+                      icon={'x' as IconName}
+                      ariaLabel="Close tab"
+                      title="Close tab"
+                      size={14}
+                      testid="pinned-close"
+                      onclick={() => closeBoundTab(child)}
+                    />
+                  </span>
                 {/snippet}
-                <TabRowMenu
-                  header={{
-                    title: child.title,
-                    faviconSrc: child.faviconSrc,
-                    faviconFallbackSrc: child.faviconFallbackSrc,
-                    active: child.active,
-                    loading: child.loading,
-                    drifted: child.drifted,
-                  }}
-                  items={tabMenuItems(child)}
-                  panel={editingBoundaryId === child.id ? childBoundaryPanel : undefined}
-                  panelTitle={editingBoundaryId === child.id ? 'Lock to its site' : undefined}
-                  onPanelBack={() => {
-                    editingBoundaryId = null;
-                  }}
-                  onRowClick={() => onTabClick(child)}
-                  label="Tab actions"
+                <TabRow
+                  title={child.title}
+                  faviconSrc={child.faviconSrc}
+                  faviconFallbackSrc={child.faviconFallbackSrc}
+                  active={child.active}
+                  loading={child.loading}
+                  drifted={child.drifted}
                   editing={renamingTabId === child.id}
                   oncommitName={(next) => commitTabRename(child.id, next)}
                   oncancelName={cancelTabRename}
-                  onOpenChange={(open) => {
-                    if (!open) {
-                      if (confirmingDeleteId === child.id) confirmingDeleteId = null;
-                      if (editingBoundaryId === child.id) editingBoundaryId = null;
-                    }
-                  }}
+                  onclick={() => onTabClick(child)}
+                  trailing={child.dormant ? undefined : childCloseButton}
                 />
               </div>
             {/each}
@@ -765,6 +807,44 @@ function tabMenuItems(row: TabView): TabRowMenuItem[] {
     </div>
   {/each}
 </div>
+
+{#snippet boundaryPanel()}
+  {#if activeMenuRow}
+    <div class="boundary-body">
+      <TabBoundaryEditor
+        savedTabId={activeMenuRow.id}
+        boundary={activeMenuRow.boundary}
+        originalURL={activeMenuRow.originalURL}
+        globalDefault={boundaryDefault.value}
+      />
+    </div>
+  {/if}
+{/snippet}
+
+<!-- One shared right-click menu, opened at the cursor for whichever row was
+     right-clicked (mirrors FaviconRow). "Lock to its site…" drills it into the
+     boundary editor with a back-header; the active row is re-derived by id so the
+     panel reflects state after each round-trip and the menu closes if the row
+     leaves the list. -->
+{#if activeMenuRow}
+  <ContextMenu
+    bind:open={menuOpen}
+    x={menuX}
+    y={menuY}
+    items={tabMenuItems(activeMenuRow)}
+    label="Tab actions"
+    testid="pinned-menu"
+    panel={editingBoundaryId === activeMenuRow.id ? boundaryPanel : undefined}
+    panelTitle={editingBoundaryId === activeMenuRow.id ? 'Lock to its site' : undefined}
+    onPanelBack={() => {
+      editingBoundaryId = null;
+    }}
+    onclose={() => {
+      confirmingDeleteId = null;
+      editingBoundaryId = null;
+    }}
+  />
+{/if}
 
 <style>
   /* Share the list's horizontal inset so the empty-state text lines up with the
@@ -791,6 +871,18 @@ function tabMenuItems(row: TabView): TabRowMenuItem[] {
   .row-wrap.dragging {
     opacity: 0.4;
   }
+
+  /* Wraps the trailing ✕ so it can swallow its own pointerdown (no drag) while the
+   * IconButton primitive keeps its box/ring. */
+  .close-slot {
+    display: inline-flex;
+  }
+
+  /* "Lock to its site…" boundary editor — rendered as the menu's drill-in panel
+   * (ContextMenu owns the padding); a min-width so the allow-list editor has room. */
+  .boundary-body {
+    min-width: 216px;
+  }
   /* Drop-onto a top-level TAB (create-folder-from-two): a colour-tinted ring,
    * distinct from the between-row insertion line. Folder rows get their own
    * highlight from FolderRow's `dropTarget` prop. */
@@ -811,10 +903,9 @@ function tabMenuItems(row: TabView): TabRowMenuItem[] {
     padding-left: var(--space-4);
     display: flex;
     flex-direction: column;
-    /* No `overflow: hidden` here: a child row's TabRowMenu action drawer grows
-     * downward (absolutely positioned, beyond the row) and would be clipped,
-     * making a folder-child's actions menu invisible. The `folder-open`
-     * entrance is translate + opacity only, so it needs no clipping. */
+    /* The `folder-open` entrance is translate + opacity only, so it needs no
+     * clipping; we leave `overflow` unset so a child row's hover affordances are
+     * never clipped. */
     animation: folder-open var(--motion-base) var(--ease-emphasised);
   }
   .child-wrap {
