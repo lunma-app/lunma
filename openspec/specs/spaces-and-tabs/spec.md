@@ -1934,3 +1934,58 @@ navigates a home tab to a real URL it ceases to be a home tab.
 - **WHEN** the boot reconciliation runs
 - **THEN** it SHALL treat the stale id as "no live group" and materialize a fresh group from the Space's tabs (real + home), rather than skip materialization and leave the tabs ungrouped
 
+### Requirement: An in-progress drag is cancellable
+
+A sidebar drag SHALL be cancellable so the user can abandon it without committing
+an unintended change. This covers a pinned-tab reorder/move, a Space-switcher chip
+reorder, and a temporary-tab reorder.
+
+While a drag is live, pressing `Escape` SHALL **abort** it: the drag controller
+SHALL tear down its listeners and spring state, reset to no-drag state, and invoke
+**no** drop callback — so no `reorderPinned`, `reorderSpaces`, `unpinTab`, or
+favourite-removal command is dispatched, and the dragged item returns to its origin
+position. A `pointercancel` (OS/gesture interruption) SHALL behave the same way.
+
+Releasing the pointer while it is outside every drop zone (`targetZone === null`)
+SHALL NOT commit a reorder or move: a reorder/move consumer SHALL treat an
+outside-all-zones release as a **cancel** (no command dispatched, item returns),
+rather than committing the last in-zone position. The drop-line indicator is
+already hidden in this state, so cancel matches what the user sees.
+
+The favicon row's drag-**out**-to-**remove** behaviour is the explicit exception
+and is unchanged: that consumer removes a favourite on its fall-through default —
+any off-grid release that is neither an in-grid reorder nor a pin-couple,
+including an outside-all-zones release — so a null/outside target SHALL still
+remove the favourite there. This requirement constrains the **reorder/move**
+consumers (which SHALL cancel on a null/outside target), not that spec'd
+favicon drag-out remove.
+
+#### Scenario: Escape aborts a live drag with no mutation
+
+- **GIVEN** the user is dragging a pinned tab (or a Space chip, or a temporary tab)
+- **WHEN** they press `Escape` before releasing
+- **THEN** the drag SHALL end with no `reorderPinned` / `reorderSpaces` / `unpinTab`
+  / remove command dispatched
+- **AND** the dragged item SHALL return to its origin position
+- **AND** the controller SHALL reset to no-drag state (no spring timer or listener leaks)
+
+#### Scenario: Releasing outside every zone cancels a reorder
+
+- **GIVEN** the user is dragging to reorder pinned tabs, Space chips, or temporary tabs
+- **WHEN** they release the pointer while it is outside every drop zone (the drop
+  indicator hidden, `targetZone === null`)
+- **THEN** no `reorderPinned` / `reorderSpaces` / `reorderTemp` command SHALL be dispatched
+- **AND** the list SHALL be unchanged (the item returns to where it started)
+
+#### Scenario: pointercancel aborts like Escape
+
+- **WHEN** an in-progress drag receives a `pointercancel` (e.g. an OS gesture interrupt)
+- **THEN** the drag SHALL abort with no drop callback, exactly as `Escape` does
+
+#### Scenario: The favicon drag-out-to-remove exception is preserved
+
+- **GIVEN** the user drags a favourite out of the favicon row
+- **WHEN** they release outside the row
+- **THEN** the favourite SHALL still be removed (the spec'd intentional drag-out),
+  unaffected by the reorder-cancel rule above
+

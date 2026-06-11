@@ -372,6 +372,39 @@ describe('PinnedTabs drag dispatch (ADR 0006 Layer 1)', () => {
     });
   });
 
+  test('releasing a pinned-row drag outside every zone cancels (no reorderPinned)', async () => {
+    // cancellable-drag: an outside-all-zones release reports `targetZone: null`, so
+    // the reorder consumer's null-guard dispatches nothing and the list is untouched.
+    const store = makeStore();
+    store.state.savedTabs['st-1'] = savedTab({ id: 'st-1', currentURL: null });
+    store.state.savedTabs['st-2'] = savedTab({ id: 'st-2', currentURL: null });
+    store.state.tabBindings['st-1'] = {};
+    store.state.tabBindings['st-2'] = {};
+    store.state.pinnedBySpace.work = [
+      { kind: 'tab', id: 'st-1' },
+      { kind: 'tab', id: 'st-2' },
+    ];
+
+    const { container } = render(PinnedTabsHarness, {
+      props: { store, windowId: 100, spaceId: 'work' },
+    });
+    await Promise.resolve();
+
+    const zone = container.querySelector('[data-testid="pinned-tabs"]') as HTMLElement;
+    const rows = container.querySelectorAll('.row-wrap');
+    stubRect(zone, 0, 80);
+    stubRect(rows[0] as Element, 0, 40);
+    stubRect(rows[1] as Element, 40, 80);
+
+    // Grab row 0, then release far outside every registered zone.
+    await fireEvent.pointerDown(rows[0] as Element, { clientX: 50, clientY: 10, button: 0 });
+    window.dispatchEvent(pointer('pointermove', 50, 30)); // past threshold → drag starts
+    window.dispatchEvent(pointer('pointermove', 999, 999)); // outside every zone
+    window.dispatchEvent(pointer('pointerup', 999, 999));
+
+    expect(sendMock).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'reorderPinned' }));
+  });
+
   test('dragging a pinned tab into the favicon strip decouples it (favoriteSavedTab, no optimistic mutate)', async () => {
     const store = makeStore();
     store.state.savedTabs['st-1'] = savedTab({ id: 'st-1', currentURL: null });

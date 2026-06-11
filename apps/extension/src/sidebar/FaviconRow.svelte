@@ -319,7 +319,7 @@ function handleDrop(r: DropResult): void {
   // Only the centre carousel slide registers a pinned zone, so the target Space
   // is the active one. Parse the real spaceId (a folder child zone is
   // `pinned:<spaceId>:folder:<folderId>`); favorites couple at the top level.
-  if (!r.outsideAllZones && r.targetZone.startsWith('pinned:')) {
+  if (!r.outsideAllZones && r.targetZone?.startsWith('pinned:')) {
     const rest = r.targetZone.slice('pinned:'.length);
     const sep = rest.indexOf(':folder:');
     const spaceId = sep === -1 ? rest : rest.slice(0, sep);

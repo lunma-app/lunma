@@ -51,14 +51,16 @@ export interface DropOntoRow {
 
 export interface DropResult {
   data: DragData;
-  targetZone: string;
+  /** Zone under the cursor at release, or `null` when released outside every
+   * registered zone. A reorder/move consumer treats `null` as **cancel** (no
+   * commit); the favicon row removes the favourite on its fall-through default. */
+  targetZone: string | null;
   targetIndex: number;
   /** Non-null = a drop ONTO this row (folder/tab id); `targetIndex` is then
    * irrelevant. Null = a between-rows insertion at `targetIndex`. */
   targetOntoId: string | null;
-  /** True when the pointer was released over NO registered zone (`targetZone` then
-   * reflects the last in-zone position the drag passed through — the bounce-back
-   * fallback). Lets a source treat "dragged clean out of every zone" specially —
+  /** True when the pointer was released over NO registered zone (`targetZone` is
+   * then `null`). Lets a source treat "dragged clean out of every zone" specially —
    * e.g. the favicon row removes a favorite dragged outside it. */
   outsideAllZones: boolean;
 }
@@ -127,8 +129,6 @@ class DragController {
 
   #zones = new Map<string, ZoneReg>();
   #onDrop: ((r: DropResult) => void) | null = null;
-  /** Last in-zone target, committed on a drop that lands outside every zone. */
-  #lastValid: { zone: string; index: number; ontoId: string | null } | null = null;
   /** Set true at drop so a row's click handler can suppress the post-drag click. */
   #justDragged = false;
   /** Spring-load dwell tracking: the row currently being dwelled on + its timer. */
@@ -157,7 +157,6 @@ class DragController {
    */
   __resetForTest(): void {
     this.#onDrop = null;
-    this.#lastValid = null;
     this.#justDragged = false;
     this.#clearSpring();
     this.#zones.clear();
@@ -205,7 +204,6 @@ class DragController {
   ): void {
     const rect = rowEl.getBoundingClientRect();
     this.#onDrop = onDrop;
-    this.#lastValid = null;
     this.state = {
       active: true,
       data,
@@ -222,7 +220,10 @@ class DragController {
     document.body.style.userSelect = 'none';
     window.addEventListener('pointermove', this.#move);
     window.addEventListener('pointerup', this.#end, { once: true });
-    window.addEventListener('pointercancel', this.#end, { once: true });
+    // pointercancel (OS/gesture interrupt) and Escape both ABORT — teardown with no
+    // drop callback — so an interrupted or abandoned drag never commits a move.
+    window.addEventListener('pointercancel', this.#abort, { once: true });
+    window.addEventListener('keydown', this.#onKeyDown);
     this.#computeTarget(ev.clientX, ev.clientY);
   }
 
@@ -257,7 +258,6 @@ class DragController {
       this.state.targetZone = id;
       this.state.targetOntoId = onto.id;
       this.state.targetIndex = onto.index;
-      this.#lastValid = { zone: id, index: onto.index, ontoId: onto.id };
       this.#armSpring(id, onto.id, onto.springLoad ? zone : null);
       return;
     }
@@ -266,7 +266,6 @@ class DragController {
     this.state.targetZone = id;
     this.state.targetOntoId = null;
     this.state.targetIndex = index;
-    this.#lastValid = { zone: id, index, ontoId: null };
     this.#clearSpring();
   }
 
@@ -364,35 +363,57 @@ class DragController {
     this.#springRow = null;
   }
 
-  #end = (): void => {
+  /** Remove every drag-lifetime listener and clear transient timers/styles.
+   * Shared by the commit path (`#end`) and the abort path (`#abort`). */
+  #teardown(): void {
     window.removeEventListener('pointermove', this.#move);
     window.removeEventListener('pointerup', this.#end);
-    window.removeEventListener('pointercancel', this.#end);
+    window.removeEventListener('pointercancel', this.#abort);
+    window.removeEventListener('keydown', this.#onKeyDown);
     document.body.style.userSelect = '';
     this.#clearSpring();
+  }
+
+  /** Escape aborts a live drag (no commit). Scoped to the drag lifetime, so it
+   * never shadows another surface's Escape when no drag is active. */
+  #onKeyDown = (ev: KeyboardEvent): void => {
+    if (ev.key === 'Escape') {
+      ev.preventDefault();
+      this.#abort();
+    }
+  };
+
+  /** Tear down with NO drop callback: the dragged item snaps back to origin and
+   * nothing is dispatched. Used by Escape and `pointercancel`. */
+  #abort = (): void => {
+    this.#teardown();
+    this.#onDrop = null;
+    // Still a drag for click-suppression: the pointerup that may follow an Escape
+    // must not register as a click-to-focus on the origin row.
+    this.#justDragged = true;
+    this.state = initialState();
+  };
+
+  #end = (): void => {
+    this.#teardown();
 
     const data = this.state.data;
-    // Released over NO zone? (`targetZone === null` at release). We still commit the
-    // last in-zone target below so a stray release bounces back, but the flag lets a
-    // source act on the clean drag-out (e.g. the favicon row removes the favorite).
+    // Released over NO zone (`targetZone === null`)? Report the null target rather
+    // than committing a last-valid position: reorder/move consumers treat it as a
+    // cancel, while the favicon row removes the favourite on its fall-through default.
     const outsideAllZones = this.state.targetZone === null;
-    // Commit the current in-zone target, or the last one we had if released
-    // outside every zone (so a stray release keeps the last shown position).
-    const target =
-      this.state.targetZone !== null
-        ? {
-            zone: this.state.targetZone,
-            index: this.state.targetIndex,
-            ontoId: this.state.targetOntoId,
-          }
-        : this.#lastValid;
+    const target = {
+      zone: this.state.targetZone,
+      index: this.state.targetIndex,
+      ontoId: this.state.targetOntoId,
+    };
     const cb = this.#onDrop;
 
     this.#onDrop = null;
     this.#justDragged = true;
     this.state = initialState();
 
-    if (cb && data && target) {
+    if (cb && data) {
       cb({
         data,
         targetZone: target.zone,

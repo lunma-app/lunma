@@ -257,7 +257,11 @@ describe('DragController drop callback + cross-zone', () => {
     expect(drag.consumeJustDragged()).toBe(false); // one-shot
   });
 
-  test('releasing outside every zone commits the last in-zone target', () => {
+  test('releasing outside every zone reports a null target (cancel, not commit)', () => {
+    // cancellable-drag: an outside-all-zones release no longer commits the last
+    // in-zone target. The controller reports `targetZone: null` + `outsideAllZones`,
+    // so a reorder consumer's null-guard cancels (the favicon row still removes on
+    // its fall-through).
     let dropped: DropResult | undefined;
     const rowEl = el({ left: 0, right: 100, top: 0, bottom: 20 });
     registerZone('pinned:work', { left: 0, right: 100, top: 0, bottom: 60 }, [
@@ -267,12 +271,66 @@ describe('DragController drop callback + cross-zone', () => {
     drag.press(DATA, pointer('pointerdown', 50, 0), rowEl, (r) => {
       dropped = r;
     });
-    window.dispatchEvent(pointer('pointermove', 50, 10)); // start, in zone, index 1
+    window.dispatchEvent(pointer('pointermove', 50, 10)); // start, in zone
     window.dispatchEvent(pointer('pointermove', 999, 999)); // outside every zone
     window.dispatchEvent(pointer('pointerup', 999, 999));
 
-    expect(dropped?.targetZone).toBe('pinned:work');
+    expect(dropped?.targetZone).toBeNull();
+    expect(dropped?.outsideAllZones).toBe(true);
     expect(dropped?.targetOntoId).toBeNull();
+  });
+});
+
+describe('DragController cancellable drag (Escape / pointercancel)', () => {
+  test('Escape during a drag fires no drop callback and resets to no-drag state', () => {
+    const onDrop = vi.fn();
+    const rowEl = el({ left: 0, right: 100, top: 0, bottom: 20 });
+    registerZone('pinned:work', { left: 0, right: 100, top: 0, bottom: 60 }, [
+      { left: 0, right: 100, top: 0, bottom: 20 },
+    ]);
+
+    drag.press(DATA, pointer('pointerdown', 50, 0), rowEl, onDrop);
+    window.dispatchEvent(pointer('pointermove', 50, 10)); // start
+    expect(drag.state.active).toBe(true);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+    expect(onDrop).not.toHaveBeenCalled(); // no reorder/unpin/remove dispatched
+    expect(drag.state.active).toBe(false);
+    expect(drag.state.data).toBeNull();
+    expect(drag.state.targetZone).toBeNull();
+
+    // A pointermove after the abort is inert (the listener was torn down).
+    window.dispatchEvent(pointer('pointermove', 50, 30));
+    expect(drag.state.active).toBe(false);
+  });
+
+  test('pointercancel aborts like Escape — no drop callback, state reset', () => {
+    const onDrop = vi.fn();
+    const rowEl = el({ left: 0, right: 100, top: 0, bottom: 20 });
+    registerZone('pinned:work', { left: 0, right: 100, top: 0, bottom: 60 }, [
+      { left: 0, right: 100, top: 0, bottom: 20 },
+    ]);
+
+    drag.press(DATA, pointer('pointerdown', 50, 0), rowEl, onDrop);
+    window.dispatchEvent(pointer('pointermove', 50, 10)); // start
+    expect(drag.state.active).toBe(true);
+    window.dispatchEvent(pointer('pointercancel', 50, 10));
+
+    expect(onDrop).not.toHaveBeenCalled();
+    expect(drag.state.active).toBe(false);
+    expect(drag.state.data).toBeNull();
+  });
+
+  test('Escape before a drag starts is inert (no listener leaks across the threshold)', () => {
+    const onDrop = vi.fn();
+    const rowEl = el({ left: 0, right: 100, top: 0, bottom: 20 });
+    drag.press(DATA, pointer('pointerdown', 0, 0), rowEl, onDrop);
+    // No movement past the threshold → no drag, so the drag-lifetime keydown
+    // listener was never added; Escape must not touch controller state.
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(drag.state.active).toBe(false);
+    window.dispatchEvent(pointer('pointerup', 0, 0));
+    expect(onDrop).not.toHaveBeenCalled();
   });
 });
 

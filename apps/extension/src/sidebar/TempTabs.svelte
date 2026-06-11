@@ -106,6 +106,8 @@ function onRowPointerDown(e: PointerEvent, item: TempItem): void {
 
 function handleDrop(r: DropResult): void {
   if (r.data.zone !== ZONE) return; // only temp-sourced drags route through here
+  // Released outside every zone → cancel: snap back, dispatch nothing (cancellable-drag).
+  if (r.targetZone === null) return;
 
   // Temporary → favicon strip = FAVORITE this live tab (favicon-row-model
   // `favoriteTab`, non-destructive — the tab stays open). The drag controller routes

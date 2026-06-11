@@ -133,6 +133,8 @@ function onChipPointerDown(event: PointerEvent, space: Space): void {
 
 function handleDrop(r: DropResult): void {
   if (r.data.zone !== ZONE) return;
+  // Released outside every zone → cancel: snap back, dispatch nothing (cancellable-drag).
+  if (r.targetZone === null) return;
   const ids = spaces.map((s) => s.id);
   const from = ids.indexOf(r.data.id);
   if (from === -1) return; // chip vanished mid-drag (Space deleted elsewhere)

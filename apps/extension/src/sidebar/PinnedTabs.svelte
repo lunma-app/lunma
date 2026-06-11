@@ -314,6 +314,8 @@ function onFolderPointerDown(e: PointerEvent, row: FolderView): void {
 
 function handleDrop(r: DropResult): void {
   if (!isOurSource(r)) return;
+  // Released outside every zone → cancel: snap back, dispatch nothing (cancellable-drag).
+  if (r.targetZone === null) return;
 
   // Folder nodes have no temp equivalent and can't nest: a folder drag only ever
   // reorders at top level (its onto/child/temp drops are no-ops → bounce back).
