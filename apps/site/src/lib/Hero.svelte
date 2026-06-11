@@ -29,8 +29,15 @@ import StageWindow from '$lib/StageWindow.svelte';
 </header>
 
 <style>
+  /* The hero owns the first screen: fill the viewport below the sticky nav (82px),
+     content centred. min-height (not height) so short laptops grow and never clip
+     the mock; svh keeps mobile browser chrome from over-tallening it. */
   .hero {
-    padding: 40px 0 72px;
+    min-height: calc(100svh - 82px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 48px 0;
   }
 
   /* Flex, not grid: grid fr/minmax tracks left dead space beside the copy at wide
