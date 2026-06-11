@@ -200,7 +200,7 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
 }
 </script>
 
-<div class="page">
+<div class="page lunma-space-scope">
   <Aurora intensity="subtle" />
 
   <header class="topbar">
@@ -358,12 +358,12 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
     position: relative;
     isolation: isolate;
     min-height: 100vh;
-    /* Identity-hue token family — declared HERE (not at :root) the same way
-     * `.sidebar`/`.home` declare it for their scopes, so `--space-c` (the dot
-     * fill) resolves. This page has no active-Space context, so it reads the
-     * base identity hue via the `:root` `--space-h`. */
+    /* Identity-hue token family — `--space-chroma` is declared HERE (not at :root)
+     * the same way `.sidebar`/`.home` do, so the shared `.lunma-space-scope` recipe
+     * (`@lunma/tokens`, applied on the `.page` element) can compose `--space-c` (the
+     * dot fill). This page has no active-Space context, so it reads the base
+     * identity hue via the `:root` `--space-h`. */
     --space-chroma: 0.15;
-    --space-c: oklch(var(--space-l) var(--space-chroma) var(--space-h));
     /* `--glow-space` is declared at `:root` referencing `--space-chroma` with no
      * fallback; since `--space-chroma` is undefined at `:root`, that token is
      * invalid-at-computed-value where it is declared and inherits down EMPTY —

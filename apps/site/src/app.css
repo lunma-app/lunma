@@ -96,15 +96,11 @@ h3,
   padding: 0 24px;
 }
 
-/* Space-colour scope. A region that sets the three Space axes (--space-h /
- * --space-l / --space-chroma, inline) and adds this class derives the Space
- * colour family the product mocks read — the same formulas the extension's
- * sidebar uses, in one place so the staged hero and the chapters can't drift. */
-.space-scope {
-  --space-c: oklch(var(--space-l) var(--space-chroma) var(--space-h));
-  --space-c-soft: oklch(var(--space-l) var(--space-chroma) var(--space-h) / 0.22);
-  --space-c-dim: oklch(var(--space-l) var(--space-chroma) var(--space-h) / 0.5);
-}
+/* The Space colour-scope family (`--space-c` / `-soft` / `-dim`) is no longer
+ * declared here — a region that sets the three Space axes (`--space-h` /
+ * `--space-l` / `--space-chroma`, inline) now adds the shared `.lunma-space-scope`
+ * recipe from `@lunma/tokens`, the single cross-app formula, so the staged hero,
+ * the chapters, and the extension's sidebar can't drift. */
 
 /* The small upper-tracked kicker above a heading, in the active accent. */
 .kicker {

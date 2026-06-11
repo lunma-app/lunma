@@ -1,7 +1,7 @@
 <script lang="ts">
 // The sidebar's Space identity header — a Space-coloured icon tile + the Space
 // name in the display serif, mirroring the extension's SectionHeader. Reads the
-// Space colour family from the surrounding `.space-scope` (see app.css).
+// Space colour family from the surrounding `.lunma-space-scope` (@lunma/tokens).
 interface Props {
   icon: string;
   name: string;
@@ -30,7 +30,7 @@ let { icon, name }: Props = $props();
     height: 24px;
     border-radius: var(--r-sm);
     background: var(--space-c);
-    color: var(--space-on, oklch(0.99 0.02 var(--space-h)));
+    color: var(--space-on);
     font-size: 12px;
   }
 

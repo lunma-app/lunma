@@ -331,7 +331,7 @@ const faviconSrc = (result: LauncherResult): string => faviconFor(result.url);
 </script>
 
 <main
-  class="home"
+  class="home lunma-space-scope"
   class:searching={searching}
   data-testid="newtab-home"
   data-tint={tint}

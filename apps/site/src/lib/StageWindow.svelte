@@ -14,34 +14,27 @@ const favourites = [FAV.figma, FAV.linear, FAV.github, FAV.mail, FAV.calendar];
 // switcher) next to the new-tab identity. Switching a Space re-binds the Space
 // hue/lightness/chroma on this window's root only, so the window recolours
 // exactly as the product does — without recolouring the marketing page around
-// it. Colours are the real 9-colour palette from the extension.
+// it. Colours are the canonical Space palette, sourced from `@lunma/tokens`
+// (the per-colour `--space-<color>-l/-c/-h/-on` custom properties) — no
+// hand-copied L/C/H tuples or re-implemented ink() here.
+type SpaceColorName = 'blue' | 'purple' | 'green' | 'orange' | 'pink';
 interface SpaceDef {
   name: string;
   icon: string;
-  l: number;
-  c: number;
-  h: number;
-  on: 'dark' | 'light';
+  color: SpaceColorName;
 }
 
-// Real palette entries (apps/extension/src/shared/space-hue.ts), paired with
-// plausible user-chosen Space names.
+// Plausible user-chosen Space names paired with their canonical palette colour;
+// the L/C/H/on values come from the `@lunma/tokens` `--space-<color>-*` tokens.
 const spaces: SpaceDef[] = [
-  { name: 'Work', icon: '◐', l: 0.55, c: 0.16, h: 252, on: 'light' },
-  { name: 'Design', icon: '✦', l: 0.56, c: 0.17, h: 295, on: 'light' },
-  { name: 'Reading', icon: '❍', l: 0.74, c: 0.17, h: 150, on: 'dark' },
-  { name: 'Home', icon: '⌂', l: 0.73, c: 0.16, h: 55, on: 'dark' },
-  { name: 'Writing', icon: '✎', l: 0.7, c: 0.18, h: 350, on: 'dark' },
+  { name: 'Work', icon: '◐', color: 'blue' },
+  { name: 'Design', icon: '✦', color: 'purple' },
+  { name: 'Reading', icon: '❍', color: 'green' },
+  { name: 'Home', icon: '⌂', color: 'orange' },
+  { name: 'Writing', icon: '✎', color: 'pink' },
 ];
 
-// The Space's on-ink, mirroring the extension's ink() helper.
-function ink(s: SpaceDef): string {
-  return s.on === 'dark'
-    ? `oklch(0.21 ${Math.min(s.c * 0.25, 0.04)} ${s.h})`
-    : `oklch(0.99 ${Math.min(s.c * 0.1, 0.02)} ${s.h})`;
-}
-
-const FALLBACK: SpaceDef = { name: 'Work', icon: '◐', l: 0.55, c: 0.16, h: 252, on: 'light' };
+const FALLBACK: SpaceDef = { name: 'Work', icon: '◐', color: 'blue' };
 
 let active = $state(0);
 let autoplay = $state(false);
@@ -65,12 +58,12 @@ onMount(() => {
 </script>
 
 <div
-  class="stage space-scope"
+  class="stage lunma-space-scope"
   id="spaces"
-  style:--space-h={String(space.h)}
-  style:--space-l={String(space.l)}
-  style:--space-chroma={String(space.c)}
-  style:--space-on={ink(space)}
+  style:--space-h={`var(--space-${space.color}-h)`}
+  style:--space-l={`var(--space-${space.color}-l)`}
+  style:--space-chroma={`var(--space-${space.color}-c)`}
+  style:--space-on={`var(--space-${space.color}-on)`}
 >
   <div class="window">
     <div class="titlebar" aria-hidden="true">
@@ -115,8 +108,8 @@ onMount(() => {
               type="button"
               class="chip"
               class:on={active === i}
-              style:--chip-c={`oklch(${s.l} ${s.c} ${s.h})`}
-              style:--chip-on={ink(s)}
+              style:--chip-c={`oklch(var(--space-${s.color}-l) var(--space-${s.color}-c) var(--space-${s.color}-h))`}
+              style:--chip-on={`var(--space-${s.color}-on)`}
               aria-pressed={active === i}
               aria-label={`Switch to ${s.name}`}
               onclick={() => select(i, true)}
@@ -146,8 +139,8 @@ onMount(() => {
 </div>
 
 <style>
-  /* The Space colour family (--space-c…) comes from the shared `.space-scope`
-     utility (app.css); the three axes are bound inline above. */
+  /* The Space colour family (--space-c…) comes from the shared `.lunma-space-scope`
+     recipe (@lunma/tokens); the three axes are bound inline above. */
   .stage {
     display: flex;
     flex-direction: column;

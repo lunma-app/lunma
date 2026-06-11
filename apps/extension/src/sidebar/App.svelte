@@ -467,7 +467,7 @@ function onCancel(): void {
 </script>
 
 <main
-  class="sidebar"
+  class="sidebar lunma-space-scope"
   data-testid="sidebar"
   data-tint={tint}
   style:--space-h={String(spaceHue)}

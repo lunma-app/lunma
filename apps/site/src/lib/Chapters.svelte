@@ -41,8 +41,12 @@ import TabRowMock from '$lib/mocks/TabRowMock.svelte';
     </p>
   {/snippet}
   {#snippet visual()}
-    <!-- A "Design" Space pinned to the real purple palette colour. -->
-    <div class="space-panel space-scope" style="--space-h: 295; --space-l: 0.56; --space-chroma: 0.17">
+    <!-- A "Design" Space pinned to the canonical purple palette colour (sourced
+         from the @lunma/tokens --space-purple-* tokens, not hand-copied). -->
+    <div
+      class="space-panel lunma-space-scope"
+      style="--space-h: var(--space-purple-h); --space-l: var(--space-purple-l); --space-chroma: var(--space-purple-c); --space-on: var(--space-purple-on)"
+    >
       <SpaceHeader icon="✦" name="Design" />
       <FaviconGrid items={[FAV.figma, FAV.linear, FAV.notes, FAV.reader]} size={36} columns={4} />
       <TabRowMock title="Figma — product redesign" fav={FAV.figma} active />
@@ -61,7 +65,12 @@ import TabRowMock from '$lib/mocks/TabRowMock.svelte';
     </p>
   {/snippet}
   {#snippet visual()}
-    <div class="list-panel space-scope" style="--space-h: 252; --space-l: 0.55; --space-chroma: 0.16">
+    <!-- A "Work" Space pinned to the canonical blue palette colour (sourced from
+         the @lunma/tokens --space-blue-* tokens, not hand-copied). -->
+    <div
+      class="list-panel lunma-space-scope"
+      style="--space-h: var(--space-blue-h); --space-l: var(--space-blue-l); --space-chroma: var(--space-blue-c); --space-on: var(--space-blue-on)"
+    >
       <TabRowMock title="Spec — draft v3" fav={FAV.docs} active />
       <TabRowMock title="This cycle's plan" fav={FAV.linear} />
       <div class="rule"></div>
@@ -90,7 +99,7 @@ import TabRowMock from '$lib/mocks/TabRowMock.svelte';
 
 <style>
   /* A slice of the sidebar — Space-tinted column with identity + tab rows.
-     The Space colour family comes from the shared `.space-scope` utility. */
+     The Space colour family comes from the shared `.lunma-space-scope` recipe. */
   .space-panel {
     display: flex;
     flex-direction: column;

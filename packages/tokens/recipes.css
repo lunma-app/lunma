@@ -124,6 +124,38 @@
   border-radius: var(--r-lg);
 }
 
+/* ── Space fill + readable on-ink ─────────────────────────────────────────────
+ * Paint an element in a Space colour with WCAG-AA-readable on-colour text in one
+ * class, so a consumer NEVER re-derives the `ink()` formula. Reads the scoped
+ * Space axes (`--space-l/-chroma/-h`) for the fill and the per-colour on-ink token
+ * (`--space-on`) for the text. Set those on the element or an ancestor — inline,
+ * or by pointing them at the canonical per-colour tokens, e.g.
+ *   style="--space-l: var(--space-blue-l); --space-chroma: var(--space-blue-c);
+ *          --space-h: var(--space-blue-h); --space-on: var(--space-blue-on)"
+ * A `gray` Space (chroma 0) fills neutral. The token defaults (resting ember)
+ * apply when no Space is in scope.
+ */
+.lunma-space-fill {
+  background: oklch(var(--space-l) var(--space-chroma) var(--space-h));
+  color: var(--space-on);
+}
+
+/* ── Space colour-scope family ────────────────────────────────────────────────
+ * The derived per-Space colour tokens — the solid fill (`--space-c`) and its soft
+ * / dim translucent variants — composed ONCE from the scoped axes (`--space-l`,
+ * `--space-chroma`, `--space-h`) so the four surfaces that need them (the
+ * extension sidebar / new-tab / options page and the marketing-site mocks) share
+ * one formula instead of hand-copying it (which had already drifted: the site's
+ * `--space-c-dim` was 0.5 vs the extension's live 0.55). Add this class to the
+ * element that sets the three axes; a `gray` Space (chroma 0) resolves neutral.
+ * The hue-glow redeclarations stay per-surface — they depend on substitution
+ * timing the recipe can't capture. */
+.lunma-space-scope {
+  --space-c: oklch(var(--space-l) var(--space-chroma) var(--space-h));
+  --space-c-soft: oklch(var(--space-l) var(--space-chroma) var(--space-h) / 0.22);
+  --space-c-dim: oklch(var(--space-l) var(--space-chroma) var(--space-h) / 0.55);
+}
+
 /* ── Hue glow ────────────────────────────────────────────────────────────────
  * The active-Space coloured glow used on the highest-emphasis surfaces. `--soft`
  * is the larger, lower-opacity drop used behind panels.

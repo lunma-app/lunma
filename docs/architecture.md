@@ -462,8 +462,12 @@ dependency edge between the two app packages — and is additionally gated by a 
 `noRestrictedImports` rule both ways (`biome check` fails on a planted cross-app
 import, exactly like the intra-DAG planted violation). The single shared package,
 **`@lunma/tokens`** (`packages/tokens`), is **CSS-only** — design-token custom
-properties, the brand `@font-face` + woff2, and the aurora/glass/glow recipe classes,
-with **no JS/TS entry** — so it sits *outside* the import-layer DAG: a layer
+properties (including the canonical nine-colour Space palette as per-colour
+`--space-<color>-l/-c/-h` components + the resolved `--space-<color>-on` ink, the
+single cross-app source the extension's `shared/space-hue.ts` mirrors under a parity
+test), the brand `@font-face` + woff2, and the aurora/glass/glow + Space-fill +
+Space-scope (`--space-c` family) recipe classes, with **no JS/TS entry** — so it sits
+*outside* the import-layer DAG: a layer
 referencing `@lunma/tokens` via a stylesheet import is not a boundary violation. Both
 apps depend on it via `workspace:*`. The site composes the shared tokens/recipes
 directly and builds its own marketing components; it never reaches into the

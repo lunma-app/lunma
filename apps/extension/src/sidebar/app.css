@@ -88,10 +88,11 @@ body,
  * track the Space and wash neutral for a `gray` Space. The `:root` tokens keep their
  * base-hue fallback for surfaces with no per-Space scope (e.g. the options page). */
 .sidebar {
+  /* The `--space-c` / `--space-c-soft` / `--space-c-dim` family is supplied by the
+   * shared `.lunma-space-scope` recipe (`@lunma/tokens`), applied on the `<main>`
+   * element below — one formula, no per-surface drift. Only the glow
+   * redeclarations (substitution-timing-dependent) stay local here. */
   --space-chroma: 0.15;
-  --space-c: oklch(var(--space-l) var(--space-chroma) var(--space-h));
-  --space-c-soft: oklch(var(--space-l) var(--space-chroma) var(--space-h) / 0.22);
-  --space-c-dim: oklch(var(--space-l) var(--space-chroma) var(--space-h) / 0.55);
   --glow-space: 0 0 40px
     oklch(clamp(0, calc(var(--space-l) + 0.1), 1) var(--space-chroma) var(--space-h) / 0.35);
   --glow-space-soft: 0 8px 40px

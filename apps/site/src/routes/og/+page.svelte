@@ -1,18 +1,11 @@
 <script lang="ts">
 import Wordmark from '$lib/Wordmark.svelte';
 
-// The real 9-colour Space palette (apps/extension/src/shared/space-hue.ts),
-// shown as a row of dots — the colour identity, exactly as the product ships it.
-const palette = [
-  { l: 0.56, c: 0.18, h: 25 },
-  { l: 0.73, c: 0.16, h: 55 },
-  { l: 0.87, c: 0.16, h: 98 },
-  { l: 0.74, c: 0.17, h: 150 },
-  { l: 0.77, c: 0.12, h: 210 },
-  { l: 0.55, c: 0.16, h: 252 },
-  { l: 0.56, c: 0.17, h: 295 },
-  { l: 0.7, c: 0.18, h: 350 },
-];
+// The canonical Space palette shown as a row of dots — the colour identity,
+// exactly as the product ships it. Sourced from `@lunma/tokens` (the per-colour
+// `--space-<color>-l/-c/-h` custom properties); no hand-copied tuples here. The
+// eight saturated colours (gray, the neutral, is omitted from the brand row).
+const palette = ['red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink'];
 </script>
 
 <div class="og">
@@ -23,8 +16,8 @@ const palette = [
   <p class="sub">Colour-coded Spaces · a keyboard launcher · tabs that archive themselves</p>
   <div class="footer">
     <div class="hues" aria-hidden="true">
-      {#each palette as p (p.h)}
-        <i style="--l: {p.l}; --c: {p.c}; --h: {p.h}"></i>
+      {#each palette as color (color)}
+        <i style="--l: var(--space-{color}-l); --c: var(--space-{color}-c); --h: var(--space-{color}-h)"></i>
       {/each}
     </div>
     <p class="foot">Local-only · open source · lunma.app</p>

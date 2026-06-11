@@ -315,8 +315,8 @@ The accent, glass, glow, and aurora token *formulas* SHALL remain **parametric**
 they stay consistent with the scope-level re-declarations that read `--space-h`
 directly (the launcher overlay; the Space-editor accent preview), and so any scope
 that rebinds `--base-hue` to `--space-h` resolves the token against the active Space's
-hue. The eleven per-Space `--space-color-*` values SHALL be unaffected by this
-requirement.
+hue. The nine per-Space `--space-<color>-l/-c/-h` palette tokens (this capability's
+canonical palette) SHALL be unaffected by this requirement.
 
 #### Scenario: Surfaces with no active Space render the ember identity hue
 
@@ -328,7 +328,7 @@ requirement.
 
 - **WHEN** a Space is active
 - **THEN** the accent, aurora, and hue glow SHALL render at that Space's own hue
-- **AND** the eleven-colour Space palette SHALL be unchanged by this requirement
+- **AND** the nine-colour Space palette SHALL be unchanged by this requirement
 - **AND** a `gray` Space SHALL still wash neutral
 
 #### Scenario: Contrast holds at the ember hue
@@ -339,8 +339,21 @@ requirement.
 
 ### Requirement: Per-Space identity renders each colour at its canonical OKLCH
 
-Each `SpaceColor` SHALL have a canonical OKLCH lightness, chroma, and hue (from
-`colourToOklch` in `apps/extension/src/shared/space-hue.ts`), chosen so the colour reads **true to its
+Each `SpaceColor` SHALL have a canonical OKLCH lightness, chroma, and hue that is
+**canonical in the `@lunma/tokens` package** as CSS custom properties (per colour),
+the single cross-app source for the palette. Because `@lunma/tokens` is CSS-only
+and the service worker needs the numbers in TypeScript, the extension's
+`colourToOklch` / `PALETTE` in `apps/extension/src/shared/space-hue.ts` SHALL be a
+runtime **mirror** of those token values, held in lockstep with the tokens by an
+automated parity check (`vitest`) that fails on any drift — so although the palette
+is declared in two representations (CSS for consumers, TS for the runtime) they can
+never disagree. No app SHALL hand-duplicate the palette values or the on-ink
+formula. The derived per-Space colour-scope family — the solid fill `--space-c` and
+its translucent `--space-c-soft` / `--space-c-dim` variants — SHALL likewise be
+composed **once** by a shared `@lunma/tokens` recipe (`.lunma-space-scope`), applied
+on each surface that scopes a Space (the sidebar, new-tab, options page, and the
+marketing mocks), so no surface hand-copies that formula either. The values are
+chosen so the colour reads **true to its
 name** (e.g. `yellow` light, `blue` deep) rather than a single flat lightness across
 hues. The active Space's canonical lightness, chroma, and hue SHALL be exposed as the
 scoped custom properties `--space-l`, `--space-chroma`, and `--space-h`, and every
@@ -354,7 +367,9 @@ at chroma 0 on every surface.
 Text rendered on a Space colour (the chip count, on-accent labels) SHALL use a
 per-colour readable token `--space-on` (dark on light colours, light on dark colours)
 so it meets WCAG AA across the full light→dark range of the palette, asserted **per
-colour** by automated contrast tests.
+colour** by automated contrast tests. The on-ink SHALL be provided by `@lunma/tokens`
+(a per-colour `--space-<color>-on` custom property and/or a recipe), not re-derived by
+each consumer.
 
 #### Scenario: A colour renders true across the whole identity
 
@@ -374,4 +389,31 @@ colour** by automated contrast tests.
 
 - **WHEN** a `gray` Space is active
 - **THEN** every identity surface SHALL render at chroma 0 with no visible hue tint
+
+#### Scenario: The palette has one source — no hand-duplication
+
+- **WHEN** the marketing site (`apps/site`) renders Space colours (e.g. the staged
+  window mock or the OG image)
+- **THEN** it SHALL consume the `@lunma/tokens` palette custom properties / on-ink
+  recipe directly
+- **AND** it SHALL NOT carry its own copy of the L/C/H tuples or a re-implemented
+  `ink()` formula
+
+#### Scenario: The colour-scope family has one source — no per-surface drift
+
+- **WHEN** a surface scopes a Space and needs the derived colour family
+  (`--space-c` / `--space-c-soft` / `--space-c-dim`) — the sidebar, the new-tab home,
+  the options page, or a marketing mock
+- **THEN** it SHALL obtain that family from the shared `@lunma/tokens`
+  `.lunma-space-scope` recipe applied on its scope element
+- **AND** it SHALL NOT re-declare the `oklch(var(--space-l) var(--space-chroma)
+  var(--space-h) / …)` formula locally, so the variants' alphas cannot drift between
+  surfaces
+
+#### Scenario: The extension TS palette cannot drift from the tokens
+
+- **WHEN** the `@lunma/tokens` palette values and `apps/extension/src/shared/space-hue.ts`
+  disagree on any colour's lightness, chroma, hue, or on-ink
+- **THEN** the automated parity check SHALL fail (`vitest`), so the TS runtime
+  mirror stays locked to the canonical tokens
 

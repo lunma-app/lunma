@@ -37,6 +37,55 @@
   --space-l: 0.62;
   --space-on: oklch(0.21 0.038 62);
 
+  /* The nine canonical Space colours (promote-space-palette-to-tokens) — the
+   * single cross-app source for the palette. Per colour: the OKLCH lightness
+   * (`-l`), chroma (`-c`), and hue (`-h`) components (the extension needs the raw
+   * numbers for its `calc()` lightness offsets), plus the resolved on-colour ink
+   * (`-on`, authored to the extension's `.toFixed(3)` `ink()` form). A consumer
+   * composes the fill as `oklch(var(--space-<color>-l) var(--space-<color>-c)
+   * var(--space-<color>-h))` and reads `var(--space-<color>-on)` for readable
+   * text — or uses the `.lunma-space-fill` recipe. The extension's
+   * `shared/space-hue.ts` is the TS runtime mirror of these values, held in
+   * lockstep by a parity test (`space-palette-parity.test.ts`) that fails on any
+   * drift; no app hand-duplicates the tuples or the `ink()` formula. `gray` is
+   * the neutral (chroma 0) at the base hue. */
+  --space-red-l: 0.56;
+  --space-red-c: 0.18;
+  --space-red-h: 25;
+  --space-red-on: oklch(0.99 0.018 25);
+  --space-orange-l: 0.73;
+  --space-orange-c: 0.16;
+  --space-orange-h: 55;
+  --space-orange-on: oklch(0.21 0.040 55);
+  --space-yellow-l: 0.87;
+  --space-yellow-c: 0.16;
+  --space-yellow-h: 98;
+  --space-yellow-on: oklch(0.21 0.040 98);
+  --space-green-l: 0.74;
+  --space-green-c: 0.17;
+  --space-green-h: 150;
+  --space-green-on: oklch(0.21 0.040 150);
+  --space-cyan-l: 0.77;
+  --space-cyan-c: 0.12;
+  --space-cyan-h: 210;
+  --space-cyan-on: oklch(0.21 0.030 210);
+  --space-blue-l: 0.55;
+  --space-blue-c: 0.16;
+  --space-blue-h: 252;
+  --space-blue-on: oklch(0.99 0.016 252);
+  --space-purple-l: 0.56;
+  --space-purple-c: 0.17;
+  --space-purple-h: 295;
+  --space-purple-on: oklch(0.99 0.017 295);
+  --space-pink-l: 0.7;
+  --space-pink-c: 0.18;
+  --space-pink-h: 350;
+  --space-pink-on: oklch(0.21 0.040 350);
+  --space-gray-l: 0.66;
+  --space-gray-c: 0;
+  --space-gray-h: 62;
+  --space-gray-on: oklch(0.21 0.000 62);
+
   /* Dark theme neutrals — the base substrate stays pure grey (chroma 0). The
    * calmer tints (`subtle`/`standard`) keep it that way and let identity come
    * through coloured ELEMENTS (the edge stripe, chip tiles, section-label

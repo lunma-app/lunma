@@ -27,7 +27,9 @@ body,
 .home {
   --base-hue: var(--space-h);
   --space-chroma: 0.15;
-  --space-c: oklch(var(--space-l) var(--space-chroma) var(--space-h));
+  /* `--space-c` (and its `-soft`/`-dim` variants) come from the shared
+   * `.lunma-space-scope` recipe (`@lunma/tokens`), applied on the `.home` element
+   * (NewTab.svelte) — one formula across every surface, no hand-copied drift. */
   /* Hue glows belong to the per-Space family: declared HERE (not just at `:root`)
    * so they substitute against the active Space's canonical
    * `--space-l`/`--space-chroma`/`--space-h` and the Space name + icon-tile glows
