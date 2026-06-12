@@ -1,7 +1,7 @@
 {
   "name": "@lunma/site",
   "version": "0.0.0",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "private": true,
   "description": "Lunma marketing site — the static landing page at lunma.app",
   "type": "module",

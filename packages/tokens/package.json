@@ -1,7 +1,7 @@
 {
   "name": "@lunma/tokens",
   "version": "0.0.0",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "private": true,
   "description": "Lunma's shared design language — CSS design tokens, brand fonts, and atmosphere recipes. CSS-only, no runtime code.",
   "exports": {

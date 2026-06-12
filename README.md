@@ -71,6 +71,12 @@ Non-trivial work starts with an OpenSpec change under `openspec/changes/`
 (see the `openspec-*` skills); each capability has a living spec under
 `openspec/specs/`.
 
-## License (TBD)
+## License
 
-Arcify v4 is GPL-3.0 (author: Nisarg Kolhe). Lunma is an independent, clean-room reimplementation by a different author with no shared code, so the license choice is open — MIT for permissive, AGPL-3.0 for copyleft on a browser tool.
+Lunma is licensed under the **Apache License 2.0** — see [`LICENSE`](LICENSE). The
+Lunma name and logo are **not** covered by that license; see [`TRADEMARK.md`](TRADEMARK.md)
+(fork the code freely, but don't ship it as "Lunma"). Contributions are accepted under
+a Contributor License Agreement — see [`CLA.md`](CLA.md) and [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+Lunma is an independent, clean-room reimplementation by a different author, with no code
+shared from Arcify v4 (GPL-3.0, author: Nisarg Kolhe), which it credits as inspiration.

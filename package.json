@@ -1,7 +1,7 @@
 {
   "name": "lunma-workspace",
   "version": "0.0.0",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "private": true,
   "description": "Lunma — spatial tab/bookmark management for Chrome (apps/extension) and its marketing site (apps/site)",
   "type": "module",
