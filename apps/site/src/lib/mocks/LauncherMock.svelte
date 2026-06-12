@@ -79,8 +79,9 @@ let { query, placeholder, caret = false, results }: Props = $props();
   .row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
+    gap: var(--space-2);
+    height: var(--row-h);
+    padding: 0 var(--space-3);
     border-radius: var(--r-md);
     color: var(--text-2);
   }
@@ -95,21 +96,20 @@ let { query, placeholder, caret = false, results }: Props = $props();
   .kind {
     flex: none;
     padding: 2px 8px;
-    border-radius: var(--r-pill);
-    background: oklch(1 0 0 / 0.05);
-    border: 1px solid var(--border-soft);
-    font-size: var(--text-xs);
+    border-radius: var(--r-sm);
+    background: var(--surface-2);
+    font-size: var(--text-2xs);
+    font-weight: var(--weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
     color: var(--text-dim);
   }
 
+  /* Selection is the `--accent-soft` wash only — no leading accent bar, matching
+     the sidebar TabRow and the updated launcher overlay (wash-only selection). */
   .row.sel {
     background: var(--accent-soft);
     color: var(--text);
-  }
-
-  .row.sel .kind {
-    color: var(--accent-text);
-    border-color: oklch(0.685 0.15 var(--space-h, 62) / 0.4);
   }
 
   @keyframes blink {

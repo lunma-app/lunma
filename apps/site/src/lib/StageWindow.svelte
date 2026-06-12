@@ -1,13 +1,15 @@
 <script lang="ts">
 import { onMount } from 'svelte';
-import { FAV } from '$lib/mocks/apps';
+import { FAV, type FaviconSpec } from '$lib/mocks/apps';
 import FaviconGrid from '$lib/mocks/FaviconGrid.svelte';
 import SpaceHeader from '$lib/mocks/SpaceHeader.svelte';
 import TabRowMock from '$lib/mocks/TabRowMock.svelte';
 
-// The favourites shown at the top of the sidebar (real website favicons, no
-// selection state — they're shortcuts).
-const favourites = [FAV.figma, FAV.linear, FAV.github, FAV.mail, FAV.calendar];
+// The GLOBAL favourites at the top of the sidebar — common consumer apps, no
+// selection state (they're shortcuts). Declared ONCE and held constant across
+// Space switches: favourites are Space-independent in the product (only the tab
+// rows below the Space header are the per-Space part).
+const favourites = [FAV.whatsapp, FAV.gmail, FAV.ytmusic, FAV.gmaps, FAV.spotify];
 
 // A faithful mock of the real Lunma window: the vertical sidebar (search pill,
 // favicon grid, Space header, pinned + temporary tabs, the bottom Space
@@ -18,23 +20,111 @@ const favourites = [FAV.figma, FAV.linear, FAV.github, FAV.mail, FAV.calendar];
 // (the per-colour `--space-<color>-l/-c/-h/-on` custom properties) — no
 // hand-copied L/C/H tuples or re-implemented ink() here.
 type SpaceColorName = 'blue' | 'purple' | 'green' | 'orange' | 'pink';
+interface SpaceTab {
+  title: string;
+  fav: FaviconSpec;
+  active?: boolean;
+  drifted?: boolean;
+}
+interface SpaceTemp {
+  title: string;
+  fav: FaviconSpec;
+  fading?: boolean;
+  meta?: string;
+}
 interface SpaceDef {
   name: string;
   icon: string;
   color: SpaceColorName;
+  /** This Space's own pinned tab rows — each Space keeps its own tabs. */
+  tabs: SpaceTab[];
+  /** Temporary / archiving rows below the New Tab row. */
+  temp: SpaceTemp[];
+  /** The "N archived" count shown on the New Tab row. */
+  archived: number;
+  /** The new-tab pane caption ("18 tabs · 4 pinned"). */
+  count: string;
 }
 
-// Plausible user-chosen Space names paired with their canonical palette colour;
-// the L/C/H/on values come from the `@lunma/tokens` `--space-<color>-*` tokens.
+// Plausible user-chosen Space names paired with their canonical palette colour
+// (the L/C/H/on values come from the `@lunma/tokens` `--space-<color>-*` tokens)
+// AND each Space's own tab list — switching a Space swaps these rows, not just
+// the colour, so the demo shows that Spaces keep separate tabs.
+const work: SpaceDef = {
+  name: 'Work',
+  icon: '◐',
+  color: 'blue',
+  tabs: [
+    { title: 'Figma — product redesign', fav: FAV.figma, active: true },
+    { title: 'Linear — this cycle', fav: FAV.linear },
+    { title: 'GitHub — pull requests', fav: FAV.github },
+  ],
+  temp: [{ title: 'Standup notes', fav: FAV.notes }],
+  archived: 3,
+  count: '18 tabs · 4 pinned',
+};
+
 const spaces: SpaceDef[] = [
-  { name: 'Work', icon: '◐', color: 'blue' },
-  { name: 'Design', icon: '✦', color: 'purple' },
-  { name: 'Reading', icon: '❍', color: 'green' },
-  { name: 'Home', icon: '⌂', color: 'orange' },
-  { name: 'Writing', icon: '✎', color: 'pink' },
+  work,
+  {
+    name: 'Design',
+    icon: '✦',
+    color: 'purple',
+    tabs: [
+      { title: 'Figma — components', fav: FAV.figma, active: true },
+      { title: 'Moodboard — references', fav: FAV.reader, drifted: true },
+      { title: 'Linear — design tasks', fav: FAV.linear },
+    ],
+    temp: [{ title: 'Type specimens', fav: FAV.docs }],
+    archived: 2,
+    count: '11 tabs · 3 pinned',
+  },
+  {
+    name: 'Reading',
+    icon: '❍',
+    color: 'green',
+    tabs: [
+      { title: 'How OKLCH works', fav: FAV.docs, active: true },
+      { title: 'Newsletter — this week', fav: FAV.gmail },
+    ],
+    temp: [
+      { title: 'Saved thread', fav: FAV.reader },
+      // The one archiving example in the hero — a long read gone idle past the
+      // threshold (the auto-archive feature gets its own chapter below).
+      { title: 'A long read from lunch', fav: FAV.reader, fading: true, meta: 'archiving…' },
+    ],
+    archived: 5,
+    count: '9 tabs · 2 pinned',
+  },
+  {
+    name: 'Home',
+    icon: '⌂',
+    color: 'orange',
+    tabs: [
+      { title: 'Calendar — this week', fav: FAV.calendar, active: true },
+      { title: 'Maps — weekend route', fav: FAV.gmaps },
+      { title: 'Shopping list', fav: FAV.shop },
+    ],
+    temp: [{ title: 'Recipe — pasta', fav: FAV.reader }],
+    archived: 1,
+    count: '7 tabs · 3 pinned',
+  },
+  {
+    name: 'Writing',
+    icon: '✎',
+    color: 'pink',
+    tabs: [
+      { title: 'Essay — revisions', fav: FAV.docs, active: true },
+      { title: 'Notes — outline', fav: FAV.notes },
+      { title: 'Draft — chapter two', fav: FAV.reader },
+    ],
+    temp: [{ title: 'Research — sources', fav: FAV.reader }],
+    archived: 2,
+    count: '8 tabs · 3 pinned',
+  },
 ];
 
-const FALLBACK: SpaceDef = { name: 'Work', icon: '◐', color: 'blue' };
+const FALLBACK: SpaceDef = work;
 
 let active = $state(0);
 // Auto-rotation is GATED on four conditions (the-auto-rotating-space-demo-is-
@@ -153,9 +243,9 @@ onMount(() => {
           <SpaceHeader icon={space.icon} name={space.name} />
 
           <div class="rows">
-            <TabRowMock title="Figma — product redesign" fav={FAV.figma} active />
-            <TabRowMock title="Linear — this cycle" fav={FAV.linear} />
-            <TabRowMock title="Spec — draft v3" fav={FAV.docs} />
+            {#each space.tabs as t (t.title)}
+              <TabRowMock title={t.title} fav={t.fav} active={t.active} drifted={t.drifted} />
+            {/each}
           </div>
 
           <div class="divider"><span class="clear">Clear</span></div>
@@ -163,12 +253,13 @@ onMount(() => {
           <div class="newtab-row">
             <span class="plus">+</span>
             <span class="nt-label">New Tab</span>
-            <span class="arch">3 archived</span>
+            <span class="arch">{space.archived} archived</span>
           </div>
 
           <div class="rows">
-            <TabRowMock title="How OKLCH works" fav={FAV.reader} />
-            <TabRowMock title="A long read from lunch" fav={FAV.cloud} fading meta="archiving…" />
+            {#each space.temp as t (t.title)}
+              <TabRowMock title={t.title} fav={t.fav} fading={t.fading} meta={t.meta} />
+            {/each}
           </div>
         </div>
 
@@ -198,7 +289,7 @@ onMount(() => {
         <div class="nt-id">
           <span class="nt-icon">{space.icon}</span>
           <div class="nt-name">{space.name}</div>
-          <div class="nt-meta">12 tabs · 5 pinned</div>
+          <div class="nt-meta">{space.count}</div>
           <div class="nt-search">
             <span class="mag">⌕</span><span class="ph">Search tabs, bookmarks…</span>
           </div>
@@ -475,7 +566,9 @@ onMount(() => {
     display: flex;
     align-items: center;
     gap: 8px;
-    width: min(280px, 70%);
+    width: max-content;
+    max-width: 100%;
+    white-space: nowrap;
     margin-top: 22px;
     padding: 9px 14px;
     border-radius: var(--r-pill);

@@ -2,25 +2,24 @@
 import type { FaviconSpec } from './apps';
 import Favicon from './Favicon.svelte';
 
-// A favicon-row tile, mirroring the extension's FaviconTile: a soft rounded
-// plate holding a larger favicon. `live` rings it in the active Space's hue;
-// `active` washes the plate in the Space colour (a selected favorite).
+// A favicon-row tile, mirroring the extension's borderless FaviconTile: a soft
+// rounded --surface plate holding a larger favicon. `active` washes the plate in
+// the Space colour (a selected favorite) — no border or glow, matching the real
+// plate.
 interface Props {
   fav: FaviconSpec;
-  live?: boolean;
   active?: boolean;
   /** Plate size in px. Defaults to the `--favicon-tile` token (44). */
   size?: number;
 }
 
-let { fav, live = false, active = false, size }: Props = $props();
+let { fav, active = false, size }: Props = $props();
 
 const favPx = $derived(size ? Math.round(size * 0.55) : 24);
 </script>
 
 <div
   class="tile"
-  class:live
   class:active
   style:--tile-size={size ? `${size}px` : 'var(--favicon-tile)'}
   aria-hidden="true"
@@ -36,21 +35,12 @@ const favPx = $derived(size ? Math.round(size * 0.55) : 24);
     height: var(--tile-size);
     border-radius: var(--r-lg);
     background: var(--surface);
-    border: 1px solid var(--border-soft);
-    transition:
-      border-color var(--motion-base) var(--ease-emphasised),
-      box-shadow var(--motion-base) var(--ease-emphasised);
   }
 
-  /* --space-c is the active Space colour, supplied by the surrounding stage /
-     chapter scope (falls back to the resting ember accent outside one). */
-  .tile.live {
-    border-color: var(--space-c, var(--accent));
-  }
-
+  /* --space-c-soft is the active Space wash, supplied by the surrounding stage /
+     chapter scope (falls back to the resting ember accent outside one). The plate
+     stays borderless and glow-free, matching the extension's FaviconTile. */
   .tile.active {
     background: var(--space-c-soft, var(--accent-soft));
-    border-color: var(--space-c, var(--accent));
-    box-shadow: var(--glow-space-soft);
   }
 </style>

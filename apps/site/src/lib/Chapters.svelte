@@ -7,28 +7,7 @@ import SpaceHeader from '$lib/mocks/SpaceHeader.svelte';
 import TabRowMock from '$lib/mocks/TabRowMock.svelte';
 </script>
 
-<Chapter index={1} id="launcher" kicker="Launcher" title="Search everything from Alt+L." layout="left">
-  {#snippet copy()}
-    <p>
-      One overlay searches your open tabs, bookmarks, and history — from any page
-      or the new-tab page. Type a few letters and press Enter. It also runs a web
-      search, and Tab locks the query to a specific engine.
-    </p>
-  {/snippet}
-  {#snippet visual()}
-    <LauncherMock
-      query="figma"
-      caret
-      results={[
-        { title: 'Figma — product redesign', fav: FAV.figma, kind: 'open tab', selected: true },
-        { title: 'Figma community', fav: FAV.figma, kind: 'bookmark' },
-        { title: 'figma keyboard shortcuts', fav: FAV.docs, kind: 'history' },
-      ]}
-    />
-  {/snippet}
-</Chapter>
-
-<Chapter index={2} id="spaces" kicker="Spaces" title="Group tabs into colour-coded Spaces." layout="right">
+<Chapter index={1} id="spaces" kicker="Spaces" title="Group tabs into colour-coded Spaces." layout="left">
   {#snippet copy()}
     <p>
       Make a Space for each project or context. Each one keeps its own tabs, in
@@ -53,6 +32,27 @@ import TabRowMock from '$lib/mocks/TabRowMock.svelte';
       <TabRowMock title="Linear — this cycle" fav={FAV.linear} />
       <TabRowMock title="Moodboard — references" fav={FAV.reader} drifted />
     </div>
+  {/snippet}
+</Chapter>
+
+<Chapter index={2} id="launcher" kicker="Launcher" title="Search everything from Alt+L." layout="right">
+  {#snippet copy()}
+    <p>
+      One overlay searches your open tabs, bookmarks, and history — from any page
+      or the new-tab page. Type a few letters and press Enter. It also runs a web
+      search, and Tab locks the query to a specific engine.
+    </p>
+  {/snippet}
+  {#snippet visual()}
+    <LauncherMock
+      query="figma"
+      caret
+      results={[
+        { title: 'Figma — product redesign', fav: FAV.figma, kind: 'open tab', selected: true },
+        { title: 'Figma community', fav: FAV.figma, kind: 'bookmark' },
+        { title: 'figma keyboard shortcuts', fav: FAV.docs, kind: 'history' },
+      ]}
+    />
   {/snippet}
 </Chapter>
 
@@ -91,9 +91,25 @@ import TabRowMock from '$lib/mocks/TabRowMock.svelte';
     </p>
   {/snippet}
   {#snippet visual()}
-    <FaviconGrid
-      items={[FAV.figma, FAV.linear, FAV.github, FAV.mail, FAV.calendar, FAV.music, FAV.maps, FAV.shop]}
-    />
+    <!-- A favourites tray on a deeper substrate (`--bg`, like the real sidebar
+         behind the favicon row) so the borderless `--surface` tiles read as
+         raised plates — the real product's relationship — instead of faint holes
+         in the glass panel. -->
+    <div class="fav-tray">
+      <FaviconGrid
+        items={[
+          FAV.whatsapp,
+          FAV.gmail,
+          FAV.ytmusic,
+          FAV.gmaps,
+          FAV.spotify,
+          FAV.photos,
+          FAV.calendar,
+          FAV.reader,
+        ]}
+        columns={8}
+      />
+    </div>
   {/snippet}
 </Chapter>
 
@@ -118,6 +134,14 @@ import TabRowMock from '$lib/mocks/TabRowMock.svelte';
     flex-direction: column;
     gap: 2px;
     padding: 4px;
+  }
+
+  /* The favourites tray — a deeper `--bg` shelf the favicon tiles sit on, so the
+     borderless tiles read as raised plates (the real sidebar relationship). */
+  .fav-tray {
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--r-lg);
+    background: var(--bg);
   }
 
   .rule {

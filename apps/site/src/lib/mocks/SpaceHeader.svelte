@@ -1,7 +1,11 @@
 <script lang="ts">
-// The sidebar's Space identity header — a Space-coloured icon tile + the Space
-// name in the display serif, mirroring the extension's SectionHeader. Reads the
-// Space colour family from the surrounding `.lunma-space-scope` (@lunma/tokens).
+// The sidebar's Space identity header, mirroring the extension's real
+// SectionHeader (apps/extension/src/sidebar/SectionHeader.svelte): a quiet sans
+// ROW — a hue-tinted glyph at the favicon column + the Space name at title
+// weight/size, sentence-case — NOT a display-serif headline with a glow or a
+// filled colour tile. Reads the Space colour from the surrounding
+// `.lunma-space-scope` (@lunma/tokens); the hue tint uses the real component's
+// `max(l, 0.72)` lightness floor so the tinted text stays WCAG-AA over the wash.
 interface Props {
   icon: string;
   name: string;
@@ -10,34 +14,44 @@ interface Props {
 let { icon, name }: Props = $props();
 </script>
 
-<header class="space-head">
-  <span class="space-icon">{icon}</span>
-  <span class="space-name">{name}</span>
-</header>
+<div class="space-head">
+  <span class="glyph" aria-hidden="true">{icon}</span>
+  <span class="label">{name}</span>
+</div>
 
 <style>
+  /* A row mirroring TabRow / the real SectionHeader: full row height, a leading
+     glyph at the favicon column, the name at the title column. */
   .space-head {
     display: flex;
     align-items: center;
-    gap: 9px;
-    padding: 2px 6px 0;
+    height: var(--row-h);
+    padding: 0 var(--space-3);
+    border-radius: var(--r-md);
+    /* Per-Space hue tint with the real component's max(l, 0.72) lightness floor,
+       so the tinted header text clears WCAG-AA over the Space-coloured wash. */
+    color: oklch(from var(--space-c) max(l, 0.72) c h / 0.95);
   }
 
-  .space-icon {
-    display: inline-grid;
-    place-items: center;
-    width: 24px;
-    height: 24px;
-    border-radius: var(--r-sm);
-    background: var(--space-c);
-    color: var(--space-on);
-    font-size: 12px;
+  .glyph {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--favicon-size);
+    height: var(--favicon-size);
+    margin-right: var(--space-2);
+    font-size: var(--text-base);
+    opacity: 0.9;
   }
 
-  .space-name {
-    font-family: var(--font-display);
-    font-size: var(--text-xl);
-    color: var(--text);
-    text-shadow: var(--glow-space);
+  .label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    /* Title weight/size of a row — sentence case, not a serif headline. */
+    font: var(--weight-medium) var(--text-base) / 1 var(--font-sans);
   }
 </style>

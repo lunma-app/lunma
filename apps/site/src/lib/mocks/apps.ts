@@ -10,6 +10,7 @@ export interface FaviconSpec {
 }
 
 export const FAV = {
+  // Work / context tools — used by the per-Space tab rows in the demo.
   figma: { letter: 'F', hue: 30 },
   linear: { letter: 'L', hue: 286 },
   docs: { letter: 'D', hue: 250 },
@@ -22,4 +23,12 @@ export const FAV = {
   shop: { letter: 'S', hue: 200 },
   reader: { letter: 'R', hue: 320 },
   cloud: { letter: 'C', hue: 230 },
+  // Common consumer apps — the "my apps" set for the global favourites row
+  // (recognisable at a glance; letter-plate stand-ins, not real logos).
+  whatsapp: { letter: 'W', hue: 155 },
+  gmail: { letter: 'M', hue: 25 },
+  ytmusic: { letter: '▶', hue: 25 },
+  spotify: { letter: 'S', hue: 150 },
+  gmaps: { letter: '◆', hue: 250 },
+  photos: { letter: 'P', hue: 200 },
 } satisfies Record<string, FaviconSpec>;

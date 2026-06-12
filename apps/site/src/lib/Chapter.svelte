@@ -76,6 +76,14 @@ const label = $derived(String(index).padStart(2, '0'));
     width: 100%;
   }
 
+  /* A wide chapter's visual is a centred showcase, not a full-bleed band: the
+     panel hugs its content so it never reads as a near-empty box around a small
+     element (e.g. the favourites tray). */
+  .inner[data-layout='wide'] .panel {
+    width: fit-content;
+    margin-inline: auto;
+  }
+
   .num {
     display: block;
     font-family: var(--font-display);

@@ -42,11 +42,24 @@ The page SHALL explicitly communicate the product's trust posture — local-only
 
 The site SHALL render Lunma's visual identity by composing the shared `@lunma/tokens` package (the same design tokens, fonts, and atmospheric recipes the extension ships), NOT a hand-mirrored copy of token values. Brand stays in lockstep with the product by construction.
 
+The site's staged product previews (the mock components rendering sidebar tab rows, favourite tiles, and the launcher) SHALL render the same token-derived treatments as the extension components they mirror — the `--space-c-soft` selection wash, the borderless `--surface` tile plate, the drift dot ringed in the surrounding substrate, and the launcher's `--row-h` row geometry, `--accent-soft` wash-only selection (no accent bar, matching the launcher overlay and the sidebar tab row), and `--surface-2` source badge — and SHALL NOT hand-code a design literal where a shared token or a scoped substrate variable exists. Decorative browser chrome framing a preview (titlebar, omnibox, window proportions) is illustration, not product UI, and is exempt.
+
 #### Scenario: Tokens are imported, not mirrored
 
 - **WHEN** the site's styles are built
 - **THEN** colour, type, radii, motion, and the aurora/glass/glow atmosphere resolve from `@lunma/tokens`
 - **AND** the page contains no second, hand-maintained definition of those token values
+
+#### Scenario: Product previews match the real components' treatments
+
+- **WHEN** a staged preview renders a product element that exists in the extension (a tab row, a favourite tile, a launcher row or badge)
+- **THEN** its rendered-at-rest treatment (selection wash, borders, glow, ring, fill, type role, and token-derived spacing) matches the extension component it mirrors
+- **AND** no design value in that preview is a hand-coded literal where a `@lunma/tokens` token or a scoped substrate variable exists
+
+#### Scenario: The page's atmosphere inherits the shared default
+
+- **WHEN** the page renders the shared aurora recipe as its backdrop
+- **THEN** the aurora's opacity resolves from the `@lunma/tokens` default rather than a site-local override
 
 ### Requirement: The product's colour-coded Spaces are demonstrated live
 
