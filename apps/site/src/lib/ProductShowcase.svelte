@@ -1,93 +1,54 @@
 <script lang="ts">
 import { reveal } from '$lib/reveal';
 
-// "This is the real thing." — the two captured screenshots of the shipped
-// extension, staged the way they actually relate: the new-tab page inside a
-// browser window, with the sidebar (a Chrome side panel) floating beside it.
-// Real pixels, no mock. The aurora + glow read the resting `--base-hue` (the
-// moonlit identity), so it re-hues with the brand. Motion is the shared `reveal`
-// (staggered), reduced-motion safe.
+// "This is the real thing." — one coherent browser window of the shipped
+// extension: the sidebar (a Chrome side panel) docked flush beside the new-tab
+// page, both real captures at the same scale under a single title bar, so it
+// reads as one real browser with Lunma open — not two pasted screenshots. No
+// colour glow; a neutral shadow grounds the window. Motion is the shared
+// `reveal`, reduced-motion safe.
 </script>
 
 <section class="showcase" aria-labelledby="real-h">
-  <div class="aura" aria-hidden="true"></div>
-
   <div class="head wrap-narrow">
     <p class="kicker" use:reveal>No mockups</p>
     <h2 id="real-h" use:reveal={{ delay: 60 }}>This is the actual extension.</h2>
     <p class="lede" use:reveal={{ delay: 120 }}>
-      Both screenshots below are the shipped product, captured live in a browser. The
-      new-tab page and the sidebar, exactly as you'll use them.
+      One live capture, straight from the browser — the sidebar open beside the new-tab
+      page, exactly as you'll use them.
     </p>
   </div>
 
-  <div class="scene">
-    <div class="floor" aria-hidden="true"></div>
-
-    <!-- The new-tab page, framed as the browser window it fills. -->
-    <figure class="frame" use:reveal={{ delay: 140 }}>
-      <div class="bar" aria-hidden="true"><i></i><i></i><i></i></div>
+  <figure class="window" use:reveal={{ delay: 160 }}>
+    <div class="bar" aria-hidden="true"><i></i><i></i><i></i></div>
+    <div class="body">
       <img
-        class="shot"
+        class="side"
+        src="/shots/sidebar.webp"
+        width="760"
+        height="1900"
+        alt="The Lunma sidebar for a purple Design Space: a favourites row, three pinned tabs, and temporary tabs, all with real favicons."
+        loading="lazy"
+      />
+      <img
+        class="page"
         src="/shots/newtab.webp"
         width="1600"
         height="1031"
-        alt="The Lunma new-tab page for a purple Design Space, its colour filling the page behind the Space name and a row of favourites."
+        alt="The Lunma new-tab page for the Design Space, its colour filling the page behind the Space name and a row of favourites."
         loading="lazy"
       />
-    </figure>
-
-    <!-- The sidebar — a Chrome side panel, so it floats free of the window. -->
-    <img
-      class="side shot"
-      src="/shots/sidebar.webp"
-      width="760"
-      height="1900"
-      alt="The Lunma sidebar for the Design Space: a favourites row, three pinned tabs, and temporary tabs, all with real favicons."
-      loading="lazy"
-      use:reveal={{ delay: 260 }}
-    />
-  </div>
+    </div>
+  </figure>
 </section>
 
 <style>
   .showcase {
     position: relative;
     padding: 124px 24px 136px;
-    /* `clip` + a generous clip-margin lets the soft aura bleed up/down into the
-       neighbouring sections (no clear-cut band) while still containing any runaway
-       horizontal glow — so it never spawns a horizontal scrollbar. */
-    overflow: clip;
-    overflow-clip-margin: 140px;
-  }
-
-  /* Resting aurora — soft pools of the identity hue (moonlit blue) so the panels
-     read as lit objects in a room, not flat cutouts. Re-hues with `--base-hue`.
-     Kept low-chroma (moonlight, not a saturated stage-gel) and wide-feathered so
-     the pool melts into the page's own aurora with no clear-cut edge — the global
-     backdrop already carries the atmosphere; this is just a gentle local lift. */
-  .aura {
-    position: absolute;
-    inset: -22% -14% -16%;
-    z-index: 0;
-    pointer-events: none;
-    background:
-      radial-gradient(
-        56% 52% at 52% 28%,
-        oklch(0.62 0.085 var(--base-hue) / 0.12),
-        transparent 76%
-      ),
-      radial-gradient(
-        64% 56% at 30% 80%,
-        oklch(0.55 0.07 var(--base-hue) / 0.07),
-        transparent 78%
-      );
-    filter: blur(32px);
   }
 
   .head {
-    position: relative;
-    z-index: 1;
     text-align: center;
     margin-bottom: 60px;
   }
@@ -103,62 +64,23 @@ import { reveal } from '$lib/reveal';
     color: var(--text-muted);
   }
 
-  /* The staged scene — a fixed-ratio canvas the window + side panel sit within. */
-  .scene {
-    position: relative;
-    z-index: 1;
-    width: 100%;
-    max-width: 1060px;
+  /* One browser window: a slim title bar over a flush split of the two captures.
+     A neutral shadow (no hue) grounds it; the page's own aurora is the only
+     colour around it, so the window reads as a real object, not a lit cutout. */
+  .window {
+    max-width: 1080px;
     margin: 0 auto;
-    aspect-ratio: 1060 / 660;
-  }
-
-  /* A soft pool of identity light under the composition — the "lit room" floor. */
-  .floor {
-    position: absolute;
-    left: 50%;
-    bottom: -6%;
-    width: 78%;
-    height: 38%;
-    transform: translateX(-50%);
-    border-radius: var(--r-pill);
-    background: radial-gradient(
-      closest-side,
-      oklch(0.64 0.09 var(--base-hue) / 0.15),
-      transparent 76%
-    );
-    filter: blur(38px);
-    pointer-events: none;
-  }
-
-  .shot {
-    display: block;
-    height: auto;
-    border-radius: var(--r-md);
-    border: 1px solid var(--glass-border);
-    background: var(--bg);
-  }
-
-  /* The browser window: the new-tab page under a slim title bar with the three
-     lights — so the screenshot reads unmistakably as a real browser window. */
-  .frame {
-    position: absolute;
-    right: 0;
-    top: 8%;
-    width: 66%;
-    margin: 0;
-    z-index: 1;
     border-radius: var(--r-lg);
     border: 1px solid var(--glass-border);
     overflow: hidden;
     background: oklch(0.2 0.012 var(--base-hue));
-    box-shadow: var(--shadow-lg);
+    box-shadow: var(--shadow-pop);
   }
   .bar {
     display: flex;
     align-items: center;
     gap: 7px;
-    height: 30px;
+    height: 32px;
     padding: 0 14px;
     border-bottom: 1px solid var(--glass-border);
     background: oklch(0.22 0.014 var(--base-hue) / 0.7);
@@ -169,44 +91,35 @@ import { reveal } from '$lib/reveal';
     border-radius: var(--r-pill);
     background: var(--surface-3);
   }
-  .frame .shot {
-    width: 100%;
-    border: 0;
-    border-radius: 0;
-  }
 
-  /* The sidebar — a tall side panel floating in front-left, its natural portrait
-     extending above and below the window for depth. Strongest shadow + a breath
-     of hue glow, so it reads as nearest the viewer. */
+  /* Sidebar + page docked at the SAME height: the width split (≈20.5/79.5) matches
+     the two captures' aspect ratios (760:1900 and 1600:1031), so both render full
+     and exactly equal-height with no crop and no overlap — a real side panel sitting
+     beside the page, under one window chrome. */
+  .body {
+    display: flex;
+    align-items: flex-start;
+  }
+  .body img {
+    display: block;
+    height: auto;
+  }
   .side {
-    position: absolute;
-    left: 12%;
-    top: 2%;
-    width: 24%;
-    z-index: 2;
-    box-shadow: var(--shadow-pop), var(--glow-space-soft);
+    width: 20.5%;
+    border-right: 1px solid var(--glass-border);
+  }
+  .page {
+    width: 79.5%;
   }
 
-  @media (max-width: 900px) {
-    /* Unstack into a clean vertical gallery — window then sidebar, no overlap. */
-    .scene {
-      aspect-ratio: auto;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 28px;
-      max-width: 440px;
-    }
-    .frame,
+  @media (max-width: 640px) {
+    /* Too narrow to dock the side panel legibly — show just the new-tab page in
+       the window; the sidebar is shown large in the feature beats anyway. */
     .side {
-      position: static;
-      width: 100%;
-    }
-    .side {
-      width: 70%;
-    }
-    .floor {
       display: none;
+    }
+    .page {
+      width: 100%;
     }
   }
 </style>
