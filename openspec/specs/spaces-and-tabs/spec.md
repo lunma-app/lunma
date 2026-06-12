@@ -384,7 +384,12 @@ SHALL render nothing and the header SHALL NOT morph.
 **3. Pinned empty state.** When the active Space has zero pinned bookmarks, the sidebar
 SHALL render a two-line empty-state row: "No pinned tabs yet." + dim sub-line "Save tabs
 you want to keep open across sessions." Its text SHALL share the list's leading inset so
-it aligns with the header glyph and the favicon column.
+it aligns with the header glyph and the favicon column. **Exception:** while the
+consolidated welcome is showing (see Requirement: A fresh start renders one
+consolidated welcome — `state.faviconRow` empty AND the active Space has zero pinned
+bookmarks), this empty-state row SHALL NOT render — the pinned section header remains,
+with nothing beneath it until the divider, so the welcome is the single instructional
+block on screen.
 
 **4. Temporary divider + Clear.** In place of a "Temporary" section header, the sidebar
 SHALL render a thin horizontal **divider**. The divider SHALL carry a trailing **Clear**
@@ -405,15 +410,23 @@ the divider + New Tab row remain).
 null or the sidebar's window id cannot be resolved, the sidebar SHALL render the top
 search bar and the global favicon grid (both Space-independent) and the bottom switcher
 (so the user can pick a Space) but SHALL hide the pinned header, the divider/New
-Tab/Clear affordances, and the temp list.
+Tab/Clear affordances, and the temp list. (With no active Space the consolidated
+welcome's pinned-state condition cannot hold; an empty `faviconRow` here renders the
+grid's standard empty-state placeholder, not the welcome.)
 
 #### Scenario: Sidebar mounts with active Space and zero temp tabs → divider + New Tab, no empty copy
 
-- **GIVEN** the sidebar is mounted for window 1 with active Space `work` (0 pinned, 0 temp)
+- **GIVEN** the sidebar is mounted for window 1 with active Space `work` (0 pinned, 0 temp) and a non-empty `state.faviconRow`
 - **THEN** the rendered DOM SHALL contain, in order: a top search bar, a global favicon grid, a pinned section header showing the Space's icon + name as a row with a trailing kebab overflow menu (the `RowMenu` morph), a pinned empty-state row, a temporary divider, a New Tab row, and a space switcher
 - **AND** the pinned section header SHALL NOT render a count
 - **AND** SHALL NOT render any "No temporary tabs" empty-state copy
 - **AND** SHALL NOT render the Clear action (no temporary tabs)
+
+#### Scenario: Sidebar mounts with both favorites and pinned empty → the welcome, no per-area empty states
+
+- **GIVEN** the sidebar is mounted for window 1 with active Space `work` (0 pinned, 0 temp) and an empty `state.faviconRow`
+- **THEN** the rendered DOM SHALL contain, in order: a top search bar, the consolidated welcome (in the fixed grid region), a pinned section header, a temporary divider, a New Tab row, and a space switcher
+- **AND** SHALL NOT contain the pinned empty-state row or the grid's standard empty-state placeholder
 
 #### Scenario: Sidebar mounts with temp tabs → list plus Clear
 
@@ -1861,11 +1874,16 @@ decouple / lock affordances are specified in the `lunma-bookmark-bindings` capab
 
 When `state.faviconRow` is empty the grid SHALL render an **empty-state placeholder**
 (not a bare bar and not nothing): a quiet preview of the favorite shape — Space-tinted
-ghost-tile outlines — plus a short hint. The placeholder SHALL double as the drop
-target: while a pinned **or** temporary tab is dragged over it, it SHALL light up (the
-ghosts + hint brighten to read as "drop here"), so the FIRST favorite can be created by
-drag. The placeholder SHALL render no favorite tiles and SHALL carry the same ambient
-Space tint as the populated grid.
+ghost-tile outlines — plus a short hint, with **no dashed borders** (the soft
+ghost-outline treatment). The placeholder SHALL double as the drop target: while a
+pinned **or** temporary tab is dragged over it, it SHALL light up (the ghosts + hint
+brighten to read as "drop here"), so the FIRST favorite can be created by drag. The
+placeholder SHALL render no favorite tiles and SHALL carry the same ambient Space tint
+as the populated grid. **When additionally the active Space has zero pinned
+bookmarks**, this region SHALL render the **consolidated welcome** in place of the
+standard placeholder (see Requirement: A fresh start renders one consolidated
+welcome) — a richer block in the same fixed slot carrying the same drop-target
+contract; with no active Space, the standard placeholder renders (never the welcome).
 
 #### Scenario: The favicon strip renders fixed above the carousel
 
@@ -1894,10 +1912,74 @@ Space tint as the populated grid.
 
 #### Scenario: An empty favicon row shows an empty-state placeholder
 
-- **GIVEN** the sidebar is mounted with an empty `state.faviconRow`
-- **THEN** the grid SHALL render an empty-state placeholder (a ghost-tile preview + a hint) and zero favorite tiles
+- **GIVEN** the sidebar is mounted with an empty `state.faviconRow` and an active Space that HAS pinned bookmarks
+- **THEN** the grid SHALL render the standard empty-state placeholder (a ghost-tile preview + a hint, no dashed borders) and zero favorite tiles
 - **WHEN** a pinned **or** temporary tab is dragged over the placeholder
 - **THEN** the placeholder SHALL light up as the drop target (the first favorite can be created by drag)
+
+### Requirement: A fresh start renders one consolidated welcome
+
+The sidebar SHALL render a single consolidated **welcome block** when
+`state.faviconRow` is empty AND the window has a resolved active Space with zero
+pinned bookmarks. The welcome renders **in the fixed favicon-grid region** (the same
+slot as the grid's empty-state placeholder, which it replaces — it does not swipe
+with the Space carousel), while the pinned empty-state row inside the Space panel is
+suppressed (see the Sidebar shell composition requirement, point 3) — so a fresh
+user sees ONE instructional block, not two stacked boxes. The pinned section header,
+divider, New Tab row, and switcher render as usual.
+
+The welcome SHALL be one block in the brand voice — a ghost-tile preview (the soft
+ghost-outline treatment, no dashed borders), a display-serif headline, and a short
+hint covering both drag-to-favorite and pinning (`Option+D`) — implemented as the
+sidebar feature component `apps/extension/src/sidebar/Welcome.svelte`, composed by
+`FaviconRow.svelte` in the placeholder's slot. Its total height SHALL NOT exceed the
+two empty states it replaces.
+
+The welcome SHALL preserve the placeholder's drag contract: while a pinned or
+temporary tab is dragged over it, it SHALL brighten as the favorites drop target, and
+a drop SHALL create the first favorite. Dragging into the pinned area inside the
+Space panel continues to pin exactly as today (the welcome adds no pin drop zone of
+its own — pinning is taught by its copy). Once either area gains content (a first
+favorite, or a first pin via drag or `Option+D`), the sidebar SHALL return to the
+populated layout plus the remaining single-area empty state, if any. When only one of
+the two areas is empty, the existing per-area states render unchanged; with no active
+Space, the standard placeholder renders instead of the welcome.
+
+#### Scenario: A fresh user sees one block, not two
+
+- **GIVEN** `state.faviconRow` is empty and the active Space has zero pinned
+  bookmarks
+- **WHEN** the sidebar mounts
+- **THEN** the welcome block renders in the fixed favicon-grid region
+- **AND** neither the grid's standard placeholder nor the pinned empty-state row
+  renders
+
+#### Scenario: One empty area keeps its own state
+
+- **GIVEN** the user has favorites but the active Space has zero pinned
+  bookmarks
+- **WHEN** the sidebar mounts
+- **THEN** the favicon grid renders its tiles and the pinned area renders the
+  existing pinned empty-state row (no welcome block)
+
+#### Scenario: The welcome accepts the first favorite by drag
+
+- **GIVEN** the welcome block is showing
+- **WHEN** a temporary tab is dragged over it and dropped
+- **THEN** the block brightens during the drag and the drop creates the first
+  favorite, exactly as the grid placeholder's drop contract specifies
+
+#### Scenario: The welcome does not swipe with the carousel
+
+- **GIVEN** the welcome block is showing and the user swipes to switch Space
+- **THEN** the welcome SHALL NOT translate with the content region (it sits in the
+  fixed grid region)
+
+#### Scenario: First content dissolves the welcome
+
+- **WHEN** the user pins a tab (drag or `Option+D`) while the welcome shows
+- **THEN** the sidebar returns to the populated pinned layout, with the favorites
+  region showing the grid's standard empty-state placeholder
 
 ### Requirement: Per-Space auto-archive override (editor + backend contract)
 

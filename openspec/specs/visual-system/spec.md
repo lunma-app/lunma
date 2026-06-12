@@ -270,6 +270,15 @@ set in the display serif (`--font-display`) with an identity-hue glow dot, and t
 setting groups and the preview SHALL render on `Surface` panels over a subtle
 `Aurora` backdrop, without reducing form legibility below WCAG AA.
 
+The page SHALL carry an editorial hierarchy: setting-group headings SHALL be set
+in the display serif (`--font-display`) at the `--text-xl` stop in sentence case
+with the identity-hue treatment (serif carries identity; the body and controls
+stay in the sans — the established pairing rule), group descriptions SHALL render
+in the muted body style, and groups SHALL be separated by the `--space-6` rhythm
+so the page reads in three clear levels (wordmark → group headings → controls).
+Headings and descriptions SHALL read type and spacing from the token scale (no
+raw font sizes).
+
 The appearance preview SHALL reflect both the `density` and `tint` selections
 live: changing either control SHALL update the preview in place — the Density change
 reflowing the preview rows, and the Colour-intensity change re-treating the on-brand
@@ -283,6 +292,14 @@ set, without navigating away or reloading.
 - **WHEN** the options page renders
 - **THEN** the wordmark SHALL be set in the display serif with an identity-hue glow dot
 - **AND** the setting groups and preview SHALL render on `Surface` panels over a subtle aurora
+
+#### Scenario: Group headings carry the editorial serif
+
+- **WHEN** the options page renders its setting groups
+- **THEN** each group heading SHALL render in `--font-display` at `--text-xl`
+  in sentence case with the identity-hue treatment
+- **AND** descriptions and controls SHALL remain in the sans with token-scale
+  sizes only
 
 #### Scenario: Preview reflects tint and density live
 
