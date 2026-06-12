@@ -33,18 +33,26 @@ import StageWindow from '$lib/StageWindow.svelte';
     padding: 40px 0 72px;
   }
 
+  /* Flex, not grid: grid fr/minmax tracks left dead space beside the copy at wide
+     widths (the copy column resolved to its max while the text was narrower, and
+     the mock never filled its track). Flex is deterministic — the copy hugs its
+     text, the mock grows to fill the rest, and the visible gap is exactly `gap`. */
   .hero-inner {
-    display: grid;
-    /* Copy column hugs its text (driven by the headline width, capped at ~30rem)
-       so it doesn't leave dead space to the right of the copy; the mock takes the
-       rest and sits closer in. A modest gap, not the old stacked double-gap. */
-    grid-template-columns: minmax(0, 30rem) minmax(0, 1.16fr);
-    gap: clamp(28px, 3vw, 52px);
+    display: flex;
     align-items: center;
+    gap: clamp(36px, 4.5vw, 72px);
   }
 
   .copy {
+    flex: 0 1 auto;
     max-width: 30ch;
+  }
+
+  /* The mock takes all the space the copy doesn't, so it grows to the right edge
+     and the gap stays put. min-width:0 lets it shrink below content if needed. */
+  .stage-wrap {
+    flex: 1 1 0;
+    min-width: 0;
   }
 
   h1 {
@@ -116,13 +124,21 @@ import StageWindow from '$lib/StageWindow.svelte';
   }
 
   @media (max-width: 940px) {
+    /* Stack: reset the flex sizing so copy and mock fall into natural block flow. */
     .hero-inner {
-      grid-template-columns: 1fr;
+      flex-direction: column;
+      align-items: stretch;
       gap: 44px;
     }
 
     .copy {
+      flex: initial;
       max-width: 32ch;
+    }
+
+    .stage-wrap {
+      flex: initial;
+      width: 100%;
     }
 
     .lede {
