@@ -174,7 +174,19 @@ describe('App', () => {
   test('each slide shows the Space-name pinned header, a divider, and a New Tab row', () => {
     // The "Temporary" header is gone. Each slide now has ONE section header (the
     // pinned one, showing the Space name) + a divider + a New Tab row.
-    const { container } = render(AppHarness, { props: { store: makeStore('blue'), windowId: 1 } });
+    // A favorite is seeded so the favicon row is non-empty — otherwise the fresh-Space
+    // welcome would replace the favorites placeholder AND suppress the per-area pinned
+    // empty rows (sidebar-firstrun-options-polish; that case has its own test below).
+    const store = makeStore('blue');
+    store.state.faviconRow = ['fav'];
+    store.state.savedTabs.fav = {
+      id: 'fav',
+      spaceId: null,
+      title: 'Fav',
+      originalURL: 'https://fav/',
+      currentURL: null,
+    };
+    const { container } = render(AppHarness, { props: { store, windowId: 1 } });
     expect(container.querySelectorAll('[data-testid="section-header"]')).toHaveLength(2);
     expect(container.querySelectorAll('[data-testid="divider"]')).toHaveLength(2);
     expect(container.querySelectorAll('[data-testid="row-button"]')).toHaveLength(2);
@@ -189,6 +201,19 @@ describe('App', () => {
     expect(workSlide.textContent).not.toContain('No temporary tabs.');
     // No temp tabs → no Clear action.
     expect(workSlide.textContent).not.toContain('Clear');
+  });
+
+  test('both favorites and pinned empty → the consolidated welcome, no per-area empty states', () => {
+    // A fresh start (sidebar-firstrun-options-polish): empty favicon row AND the active
+    // Space has zero pinned bookmarks → ONE welcome in the fixed grid region, with the
+    // grid placeholder AND the pinned empty-state row both suppressed.
+    const { container } = render(AppHarness, { props: { store: makeStore('blue'), windowId: 1 } });
+    expect(container.querySelector('[data-testid="sidebar-welcome"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="favicon-empty"]')).toBeNull();
+    // The active slide's pinned empty-state row is suppressed (the header stays).
+    const workSlide = container.querySelector('[data-space-id="work"]') as HTMLElement;
+    expect(workSlide.textContent).not.toContain('No pinned tabs yet.');
+    expect(workSlide.textContent).toContain('Work'); // the pinned header remains
   });
 
   test('clicking New Tab dispatches newTab carrying the panel Space', async () => {
@@ -573,9 +598,7 @@ describe('App — first-run auto-archive notice (auto-archive)', () => {
     const set = (
       globalThis as unknown as { chrome: { storage: { sync: { set: ReturnType<typeof vi.fn> } } } }
     ).chrome.storage.sync.set;
-    await fireEvent.click(
-      container.querySelector('[data-testid="first-run-dismiss"]') as HTMLElement,
-    );
+    await fireEvent.click(noticeButton(container, 'Got it'));
     flushSync();
     expect(container.querySelector('[data-testid="first-run-notice"]')).toBeNull();
     expect(set).toHaveBeenCalledWith({ 'lunma.onboarding': { autoArchiveNoticeDismissed: true } });
@@ -595,9 +618,7 @@ describe('App — first-run auto-archive notice (auto-archive)', () => {
     const { container } = render(AppHarness, { props: { store: makeStore('blue'), windowId: 1 } });
     await settle();
     expect(sendMock).not.toHaveBeenCalled();
-    await fireEvent.click(
-      container.querySelector('[data-testid="first-run-dismiss"]') as HTMLElement,
-    );
+    await fireEvent.click(noticeButton(container, 'Got it'));
     flushSync();
     expect(sendMock).not.toHaveBeenCalled();
   });

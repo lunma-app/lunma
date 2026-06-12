@@ -13,6 +13,7 @@ import { type DropResult, drag } from './drag.svelte';
 import EmptyState from './EmptyState.svelte';
 import { useStore } from './store-context.svelte';
 import TabBoundaryEditor from './TabBoundaryEditor.svelte';
+import Welcome from './Welcome.svelte';
 
 interface Props {
   windowId: WindowId;
@@ -99,6 +100,21 @@ function projectFavorite(id: SavedTabId): FavView | null {
     boundAnywhere,
   };
 }
+
+// Fresh-Space welcome (sidebar-firstrun-options-polish D1): when the favicon row
+// is empty AND the window's active Space has zero pinned bookmarks, this fixed
+// region renders the consolidated `Welcome` in place of the standard placeholder
+// (the pinned panel suppresses its own empty-state row in turn — see
+// PinnedTabs.svelte), so a fresh user sees ONE instructional block. With no active
+// Space (or one that already has pins), the standard placeholder renders — never
+// the welcome. The active Space is read authoritatively from the store (it changes
+// at commit, not mid-swipe, so the fixed welcome never pops during a drag).
+const activeSpaceId = $derived(store.state.activeSpaceByWindow[windowId] ?? null);
+const showWelcome = $derived(
+  activeSpaceId !== null &&
+    store.state.faviconRow.length === 0 &&
+    (store.state.pinnedBySpace[activeSpaceId]?.length ?? 0) === 0,
+);
 
 // Pure projection of authoritative SW state: render `faviconRow` in array order.
 // Defensive de-dup so a duplicate id (corrupted / same-tick re-broadcast) can't
@@ -565,6 +581,12 @@ function onTileContextMenu(e: MouseEvent, fav: FavView): void {
         </div>
       {/each}
     </div>
+  {:else if showWelcome}
+    <!-- Fresh start: the favorites row is empty AND the active Space has zero pinned
+         bookmarks, so this fixed slot renders the consolidated Welcome instead of the
+         bare placeholder (and the pinned panel suppresses its own empty row). It keeps
+         the placeholder's drop contract — `over` brightens it as the favorites target. -->
+    <Welcome over={favoriteDropTargeted} />
   {:else}
     <!-- Empty-state placeholder — the SAME plated drop-zone card the pinned list uses
          (shared `EmptyState`), so favorites and pinned read as one language. It doubles

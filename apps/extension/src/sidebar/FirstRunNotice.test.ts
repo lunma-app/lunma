@@ -43,18 +43,12 @@ describe('FirstRunNotice', () => {
     expect(noticeText(0)).toContain('1 minute ');
   });
 
-  test('renders both actions and the dismiss control', () => {
-    const { getByText, getByTestId } = render(FirstRunNoticeHarness);
+  test('renders both inline text actions (the compact notice drops the corner ✕)', () => {
+    const { getByText, queryByTestId } = render(FirstRunNoticeHarness);
     expect(getByText('Got it')).not.toBeNull();
     expect(getByText('Manage in settings')).not.toBeNull();
-    expect(getByTestId('first-run-dismiss')).not.toBeNull();
-  });
-
-  test('the corner dismiss button fires onDismiss', async () => {
-    const onDismiss = vi.fn();
-    const { getByTestId } = render(FirstRunNoticeHarness, { props: { onDismiss } });
-    await fireEvent.click(getByTestId('first-run-dismiss'));
-    expect(onDismiss).toHaveBeenCalledTimes(1);
+    // The redundant corner ✕ is gone (D4) — "Got it" is the dismiss action.
+    expect(queryByTestId('first-run-dismiss')).toBeNull();
   });
 
   test('"Got it" fires onDismiss', async () => {

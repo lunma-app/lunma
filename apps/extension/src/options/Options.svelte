@@ -398,12 +398,15 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
     background: var(--bg-elev);
     border-bottom: 1px solid var(--divider);
   }
+  /* Masthead wordmark at brand presence (D5): the display serif at `--text-2xl`
+   * with the identity glow dot, so the page opens on the brand rather than a faint
+   * label. Fits the `--control-h-xl` topbar with room to spare. */
   .wordmark {
     display: inline-flex;
     align-items: center;
     gap: var(--space-2);
     font-family: var(--font-display);
-    font-size: var(--text-xl);
+    font-size: var(--text-2xl);
     font-weight: var(--weight-regular);
     line-height: 1;
     color: var(--text);
@@ -429,7 +432,9 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
     z-index: var(--z-raised);
     display: flex;
     flex-direction: column;
-    gap: var(--space-5);
+    /* `--space-6` inter-group rhythm (D5) so the page breathes between the serif
+     * group headings. */
+    gap: var(--space-6);
     max-width: 560px;
     margin: 0 auto;
     padding: var(--space-6) var(--space-5);
@@ -525,16 +530,27 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
   .group {
     padding: var(--space-4) var(--space-5);
   }
+  /* Editorial hierarchy (sidebar-firstrun-options-polish D5): the group heading
+   * carries identity in the display serif at `--text-xl`, sentence case (the
+   * registry already stores names sentence-cased) — NOT the old uppercased
+   * micro-label. Serif = identity, sans = information (the pairing rule). The
+   * `--space-4` margin sets the heading→controls rhythm; inter-group rhythm is the
+   * column's `--space-6` gap. */
   .group-label {
-    margin: 0 0 var(--space-3);
-    padding-bottom: var(--space-2);
-    border-bottom: 1px solid var(--divider);
-    font-size: var(--text-2xs);
-    font-weight: var(--weight-semibold);
-    line-height: 1;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-muted);
+    margin: 0 0 var(--space-4);
+    font-family: var(--font-display);
+    font-size: var(--text-xl);
+    font-weight: var(--weight-regular);
+    line-height: 1.1;
+    color: var(--text-2);
+  }
+  /* Identity-hue treatment under the immersive tints — the heading renders in the
+   * active Space's hue at the same `0.72` lightness floor the sidebar section
+   * headers use, so it stays ≥ WCAG AA over the glass card; `subtle`/off read
+   * neutral. `data-tint` is written on `:root` (`<html>`) by `applyTint`. */
+  :global(:root[data-tint='standard']) .group-label,
+  :global(:root[data-tint='vivid']) .group-label {
+    color: oklch(from var(--space-c) max(l, 0.72) c h);
   }
 
   .setting {

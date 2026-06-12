@@ -756,3 +756,101 @@ describe('FaviconRow couple / reorder drag', () => {
     );
   });
 });
+
+// Fresh-Space welcome composition (sidebar-firstrun-options-polish): when the
+// favicon row is empty AND the active Space has zero pinned bookmarks, the fixed
+// grid region renders the consolidated Welcome in place of the standard placeholder.
+describe('FaviconRow fresh-Space welcome', () => {
+  /** A store with an active Space; `pins` seeds its pinned list, `favs` the row. */
+  function freshStore(
+    opts: { favs?: string[]; pins?: number; activeSpace?: boolean } = {},
+  ): LunmaStore {
+    const store = new LunmaStore();
+    if (opts.activeSpace !== false) {
+      store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+      store.state.activeSpaceByWindow[100] = 'work';
+    }
+    for (const id of opts.favs ?? []) {
+      store.state.faviconRow.push(id);
+      store.state.savedTabs[id] = savedFavorite(id);
+    }
+    if (opts.pins && opts.pins > 0) {
+      store.state.pinnedBySpace.work = Array.from({ length: opts.pins }, (_, i) => ({
+        kind: 'tab' as const,
+        id: `p${i}`,
+      }));
+    }
+    return store;
+  }
+  const welcome = (c: HTMLElement) => c.querySelector('[data-testid="sidebar-welcome"]');
+  const placeholder = (c: HTMLElement) => c.querySelector('[data-testid="favicon-empty"]');
+  const tiles = (c: HTMLElement) => c.querySelectorAll('[data-testid="favicon-tile"]');
+
+  test('both areas empty → the welcome renders (no standard placeholder, no tiles)', () => {
+    const { container } = render(FaviconRowHarness, {
+      props: { store: freshStore({ favs: [], pins: 0 }), windowId: 100 },
+    });
+    expect(welcome(container)).not.toBeNull();
+    expect(placeholder(container)).toBeNull();
+    expect(tiles(container)).toHaveLength(0);
+  });
+
+  test('favorites only → tiles render, no welcome', () => {
+    const { container } = render(FaviconRowHarness, {
+      props: { store: freshStore({ favs: ['f1', 'f2'], pins: 0 }), windowId: 100 },
+    });
+    expect(welcome(container)).toBeNull();
+    expect(tiles(container)).toHaveLength(2);
+  });
+
+  test('pinned only (favicon row empty, Space HAS pins) → standard placeholder, no welcome', () => {
+    const { container } = render(FaviconRowHarness, {
+      props: { store: freshStore({ favs: [], pins: 2 }), windowId: 100 },
+    });
+    expect(welcome(container)).toBeNull();
+    expect(placeholder(container)).not.toBeNull();
+  });
+
+  test('no active Space → standard placeholder, never the welcome', () => {
+    const { container } = render(FaviconRowHarness, {
+      props: { store: freshStore({ favs: [], pins: 0, activeSpace: false }), windowId: 100 },
+    });
+    expect(welcome(container)).toBeNull();
+    expect(placeholder(container)).not.toBeNull();
+  });
+
+  test('the welcome brightens as the favorites drop target while a temp tab is dragged over it', async () => {
+    const store = freshStore({ favs: [], pins: 0 });
+    const { container } = render(FaviconRowHarness, { props: { store, windowId: 100 } });
+    await Promise.resolve();
+    const block = () => welcome(container) as HTMLElement;
+    expect(block().classList.contains('over')).toBe(false);
+
+    const root = container.querySelector('[data-testid="favicon-row"]') as HTMLElement;
+    stubRect(root, 0, 300, 200, 260);
+    const src = document.createElement('div');
+    stubRect(src, 0, 200, 200, 240);
+    drag.press(
+      { id: '17', zone: 'temp:100', title: 'A temp tab', faviconSrc: '' },
+      pointer('pointerdown', 50, 210) as unknown as PointerEvent,
+      src,
+      () => undefined, // the drop dispatch is routed to the temp source row (covered by e2e)
+    );
+    window.dispatchEvent(pointer('pointermove', 50, 230));
+    flushSync();
+    expect(block().classList.contains('over')).toBe(true);
+    window.dispatchEvent(pointer('pointerup', 50, 230));
+  });
+
+  test('dissolve: the first favorite returns the row to tiles (the welcome disappears)', async () => {
+    const store = freshStore({ favs: [], pins: 0 });
+    const { container } = render(FaviconRowHarness, { props: { store, windowId: 100 } });
+    expect(welcome(container)).not.toBeNull();
+    // A first favorite lands (as a broadcast would deliver it).
+    store.state.savedTabs.f1 = savedFavorite('f1');
+    store.state.faviconRow = ['f1'];
+    flushSync();
+    expect(welcome(container)).toBeNull();
+    expect(tiles(container)).toHaveLength(1);
+  });
+});

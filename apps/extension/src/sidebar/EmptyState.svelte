@@ -32,9 +32,10 @@ const { title, subtitle, icon, over = false, testid = 'empty-state' }: Props = $
 </div>
 
 <style>
-  /* A self-contained drop zone, not a stray line of text: a dashed Space-hue frame
-   * (the universal "drop target" affordance, echoing the favicon-row ghost tiles)
-   * around a glyph plate set BESIDE the title + hint — a compact, ~half-height row so
+  /* A self-contained drop zone, not a stray line of text: a SOFT ghost-outline frame
+   * (no dashed borders — dashed reads utilitarian; the soft outline reads like the
+   * product's own furniture awaiting use, echoing the favicon-row ghost tiles) around
+   * a glyph plate set BESIDE the title + hint — a compact, ~half-height row so
    * dropping the first item barely reflows. Calm at rest; a tab dragged over it lifts
    * the whole card to a solid, filled "drop here" treatment. */
   .empty {
@@ -43,7 +44,7 @@ const { title, subtitle, icon, over = false, testid = 'empty-state' }: Props = $
     align-items: center;
     gap: var(--space-3);
     padding: var(--space-2) var(--space-3);
-    border: 1px dashed var(--space-c-dim);
+    border: 1px solid var(--border-soft);
     border-radius: var(--r-lg);
     color: var(--text-dim);
     /* Tokenised from the former `400 11.5px`: `--weight-regular` + `--text-xs`

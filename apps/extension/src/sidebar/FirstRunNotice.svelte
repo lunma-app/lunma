@@ -1,15 +1,16 @@
 <script lang="ts">
-import type { IconName } from '../shared/types';
 import Button from '../ui/Button.svelte';
 import Icon from '../ui/Icon.svelte';
-import IconButton from '../ui/IconButton.svelte';
-import Stack from '../ui/Stack.svelte';
-import Surface from '../ui/Surface.svelte';
 
 /**
  * One-time, dismissible first-run notice that discloses auto-archive BEFORE it can
- * act (auto-archive). Informational, not a warning — a calm branded heads-up on a
- * frosted `Surface`, composed entirely from `ui/` primitives (no new primitive).
+ * act (auto-archive). Informational, not a warning — restyled to a calm, COMPACT
+ * notice (sidebar-firstrun-options-polish D4): a leading icon + a short body that
+ * still carries all three spec-mandated facts (idle archival, the live threshold,
+ * the 7-day retention window) + inline "Got it" / "Manage in settings" text actions,
+ * on a quiet `--surface` fill with no border/shadow emphasis. "Got it" is the
+ * dismiss action the spec mandates; the redundant corner ✕ is dropped. Semantics,
+ * gating, facts, and dismissal persistence are unchanged — only the visual weight.
  * The host (`App.svelte`) owns the gating (`autoArchiveEnabled && !dismissed`) and
  * persists the dismissal; this component is pure disclosure + two callbacks.
  */
@@ -43,32 +44,22 @@ const threshold = $derived(formatIdleThreshold(autoArchiveIdleMinutes));
 </script>
 
 <div class="first-run-notice" data-testid="first-run-notice">
-  <Surface variant="glass" radius="lg" glow>
-    <div class="notice-body">
-      <IconButton
-        icon={'x' as IconName}
-        ariaLabel="Dismiss"
-        title="Dismiss"
-        size={14}
-        onclick={onDismiss}
-        testid="first-run-dismiss"
-      />
-      <Stack gap="2">
-        <span class="notice-title">
-          <Icon name="archive" size={15} />
-          Auto-archive is on
-        </span>
-        <p class="notice-text">
-          Temporary tabs left idle for {threshold} are archived automatically so your
-          workspace stays tidy. Archived tabs remain restorable for 7 days.
-        </p>
-        <Stack direction="row" gap="2" align="center">
-          <Button variant="secondary" onclick={onDismiss}>Got it</Button>
-          <Button variant="ghost" onclick={onManage}>Manage in settings</Button>
-        </Stack>
-      </Stack>
+  <div class="notice">
+    <span class="notice-icon" aria-hidden="true">
+      <Icon name="archive" size={15} />
+    </span>
+    <div class="notice-main">
+      <p class="notice-text">
+        <span class="notice-lead">Auto-archive is on.</span>
+        Temporary tabs left idle for {threshold} are archived automatically so your
+        workspace stays tidy — restorable for 7 days.
+      </p>
+      <div class="notice-actions">
+        <Button variant="secondary" onclick={onDismiss}>Got it</Button>
+        <Button variant="ghost" onclick={onManage}>Manage in settings</Button>
+      </div>
     </div>
-  </Surface>
+  </div>
 </div>
 
 <style>
@@ -80,34 +71,56 @@ const threshold = $derived(formatIdleThreshold(autoArchiveIdleMinutes));
     animation: notice-in var(--motion-base) var(--ease-emphasised);
   }
 
-  .notice-body {
-    position: relative;
+  /* Compact notice (D4): a quiet `--surface` row with a leading icon — no glass
+   * card, no border, no shadow. Reads as a footnote, not a panel. */
+  .notice {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
     padding: var(--space-3);
+    border-radius: var(--r-md);
+    background: var(--surface);
   }
 
-  .notice-title {
+  /* Leading icon plate — a soft Space-tinted square, the visual anchor that keeps
+   * the notice recognisable at a glance. */
+  .notice-icon {
+    flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
+    width: calc(var(--favicon-tile) / 2);
+    height: calc(var(--favicon-tile) / 2);
+    border-radius: var(--r-md);
+    background: var(--space-c-soft);
+    color: var(--space-c);
+  }
+
+  .notice-main {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
     gap: var(--space-2);
-    /* Neutral text on glass — informational, never destructive colour. */
-    color: var(--text);
-    font: var(--weight-semibold) var(--text-md) / 1.2 var(--font-sans);
   }
 
   .notice-text {
     margin: 0;
-    /* Leave room for the corner dismiss button so the copy never runs under it. */
-    padding-right: var(--space-4);
     color: var(--text-muted);
     font: var(--weight-regular) var(--text-sm) / 1.45 var(--font-sans);
   }
+  /* The lead clause carries the on/off disclosure at full strength; the rest (the
+   * facts) stays muted. Neutral colour — informational, never destructive. */
+  .notice-lead {
+    color: var(--text);
+    font-weight: var(--weight-medium);
+  }
 
-  /* The dismiss IconButton sits in the top-right corner (the quick keyboard/mouse
-   * dismiss path); the Stack holds the title/body/actions below it. */
-  .notice-body :global(.icon-btn) {
-    position: absolute;
-    top: var(--space-2);
-    right: var(--space-2);
+  /* Inline text actions — "Got it" (the dismiss) leads, "Manage in settings" trails. */
+  .notice-actions {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-2);
   }
 
   @keyframes notice-in {

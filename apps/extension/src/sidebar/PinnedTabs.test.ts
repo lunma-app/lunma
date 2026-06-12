@@ -110,6 +110,31 @@ function makeStore(): LunmaStore {
   return store;
 }
 
+describe('PinnedTabs empty-state suppression (fresh-Space welcome)', () => {
+  test('suppresses the empty-state row while the consolidated welcome shows (faviconRow empty)', () => {
+    const store = makeStore(); // pinnedBySpace.work empty + faviconRow empty → welcome shows
+    const { container } = render(PinnedTabsHarness, {
+      props: { store, windowId: 100, spaceId: 'work' },
+    });
+    // The pinned panel renders no "No pinned tabs yet." card (the welcome owns the
+    // single instructional block) but keeps the registered drop zone (min-height band).
+    expect(container.textContent).not.toContain('No pinned tabs yet.');
+    const pinned = container.querySelector('[data-testid="pinned-tabs"]') as HTMLElement;
+    expect(pinned.classList.contains('welcome-suppressed')).toBe(true);
+  });
+
+  test('renders the empty-state row when the user has favorites (only pinned is empty)', () => {
+    const store = makeStore();
+    store.state.faviconRow = ['fav']; // favorites exist → no welcome → per-area state returns
+    const { container } = render(PinnedTabsHarness, {
+      props: { store, windowId: 100, spaceId: 'work' },
+    });
+    expect(container.textContent).toContain('No pinned tabs yet.');
+    const pinned = container.querySelector('[data-testid="pinned-tabs"]') as HTMLElement;
+    expect(pinned.classList.contains('welcome-suppressed')).toBe(false);
+  });
+});
+
 describe('PinnedTabs duplicate-id resilience', () => {
   test('renders a duplicate pinned id once and does not throw (each_key_duplicate guard)', () => {
     const store = makeStore();

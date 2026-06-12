@@ -369,6 +369,16 @@ describe('immersive surfaces — text on glass over aurora (WCAG AA per tint)', 
           wcagContrast(col(toRgba(rootToken('--text'))), col(auroraEff)),
         ).toBeGreaterThanOrEqual(3);
       });
+
+      test('the serif identity-tinted group heading meets AA Normal (4.5:1) on glass', () => {
+        // Options group headings + the sidebar section headers render in the active
+        // Space's hue at a `0.72` lightness FLOOR (sidebar-firstrun-options-polish D5;
+        // `oklch(from var(--space-c) max(l, 0.72) c h)`). Model the floored colour at
+        // the representative hue over the same glass-over-aurora and assert it stays
+        // legible (22px regular is not WCAG-large, so AA Normal applies).
+        const heading = `oklch(0.72 ${CHROMA} ${HUE})`;
+        expect(wcagContrast(col(toRgba(heading)), col(glassEff))).toBeGreaterThanOrEqual(4.5);
+      });
     });
   }
 });
