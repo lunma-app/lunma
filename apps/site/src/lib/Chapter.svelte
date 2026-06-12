@@ -13,16 +13,24 @@ interface Props {
   title: string;
   layout?: 'left' | 'right' | 'wide';
   id?: string;
+  /** A @lunma/tokens Space-palette colour name. Tints this beat's numeral, kicker,
+   * and the halo behind its art — so the feature list reads as a colour journey
+   * (and reinforces the colour-coded-Spaces story) rather than a uniform stack. */
+  color?: string;
   copy: Snippet;
   visual: Snippet;
 }
 
-let { index, kicker, title, layout = 'left', id, copy, visual }: Props = $props();
+let { index, kicker, title, layout = 'left', id, color = 'blue', copy, visual }: Props = $props();
 
 const label = $derived(String(index).padStart(2, '0'));
+const scope = $derived(
+  `--space-h: var(--space-${color}-h); --space-l: var(--space-${color}-l); ` +
+    `--space-chroma: var(--space-${color}-c); --space-on: var(--space-${color}-on)`,
+);
 </script>
 
-<section class="chapter" {id} use:reveal>
+<section class="chapter lunma-space-scope" {id} style={scope} use:reveal>
   <div class="inner wrap" data-layout={layout}>
     <div class="copy">
       <span class="num" aria-hidden="true">{label}</span>
@@ -84,14 +92,42 @@ const label = $derived(String(index).padStart(2, '0'));
     margin-inline: auto;
   }
 
+  /* The big serif numeral glows in this beat's Space colour — the strongest per-beat
+     accent, turning a uniform stack into a colour journey. */
   .num {
     display: block;
     font-family: var(--font-display);
     font-size: clamp(40px, 6vw, 64px);
     line-height: 1;
-    color: var(--text-faint);
-    opacity: 0.55;
+    color: var(--space-c);
+    opacity: 0.92;
+    text-shadow: 0 0 32px var(--space-c-soft);
     margin-bottom: 14px;
+  }
+
+  /* Kicker eyebrow + its leading dot ride the same Space colour. The text takes the
+     0.72 lightness FLOOR (the extension's SectionHeader technique) so every hue
+     clears WCAG-AA on the dark substrate; the decorative dot uses the raw colour. */
+  .copy :global(.kicker) {
+    color: oklch(from var(--space-c) max(l, 0.72) c h);
+  }
+  .copy :global(.kicker)::before {
+    background: var(--space-c);
+  }
+
+  /* A soft halo of the Space colour behind the product art — breaks the dark-on-dark
+     and lights each panel in its own hue. */
+  .visual {
+    position: relative;
+  }
+  .visual::before {
+    content: '';
+    position: absolute;
+    inset: -14% -10%;
+    z-index: -1;
+    background: radial-gradient(58% 56% at 50% 46%, var(--space-c-soft), transparent 72%);
+    filter: blur(34px);
+    pointer-events: none;
   }
 
   .inner[data-layout='wide'] .num {

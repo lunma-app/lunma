@@ -12,7 +12,7 @@ import TabRowMock from '$lib/mocks/TabRowMock.svelte';
 // in the ProductShowcase section above and the live interactive hero demo.
 </script>
 
-<Chapter index={1} id="spaces" kicker="Spaces" title="Group tabs into colour-coded Spaces." layout="left">
+<Chapter index={1} id="spaces" kicker="Spaces" title="Group tabs into colour-coded Spaces." layout="left" color="purple">
   {#snippet copy()}
     <p>
       Make a Space for each thing you're juggling. Each one holds its own tabs in
@@ -36,7 +36,7 @@ import TabRowMock from '$lib/mocks/TabRowMock.svelte';
   {/snippet}
 </Chapter>
 
-<Chapter index={2} id="launcher" kicker="Launcher" title="Search everything from Alt+L." layout="right">
+<Chapter index={2} id="launcher" kicker="Launcher" title="Search everything from Alt+L." layout="right" color="cyan">
   {#snippet copy()}
     <p>
       One overlay searches your open tabs, your bookmarks, and your history, from
@@ -58,7 +58,7 @@ import TabRowMock from '$lib/mocks/TabRowMock.svelte';
   {/snippet}
 </Chapter>
 
-<Chapter index={3} kicker="Auto-archive" title="Idle tabs archive themselves." layout="left">
+<Chapter index={3} kicker="Auto-archive" title="Idle tabs archive themselves." layout="left" color="blue">
   {#snippet copy()}
     <p>
       The tabs you didn't pin slip into an archive once they've sat idle past a
@@ -83,7 +83,7 @@ import TabRowMock from '$lib/mocks/TabRowMock.svelte';
   {/snippet}
 </Chapter>
 
-<Chapter index={4} kicker="Favourites" title="Favourites, one click away in every Space." layout="right">
+<Chapter index={4} kicker="Favourites" title="Favourites, one click away in every Space." layout="right" color="orange">
   {#snippet copy()}
     <p>
       Drag the sites you open all day up to the favourites row at the top of the
@@ -114,7 +114,7 @@ import TabRowMock from '$lib/mocks/TabRowMock.svelte';
   {/snippet}
 </Chapter>
 
-<Chapter index={5} kicker="Pinned tabs" title="Pinned tabs act like apps." layout="left">
+<Chapter index={5} kicker="Pinned tabs" title="Pinned tabs act like apps." layout="left" color="green">
   {#snippet copy()}
     <p>
       Pin a site and it acts like an app, not a bookmark. It holds its own page,

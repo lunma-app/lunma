@@ -26,10 +26,10 @@ import TrustBand from '$lib/TrustBand.svelte';
 <Nav />
 <main id="main" tabindex="-1">
   <Hero />
-  <ProductShowcase />
   <section id="features">
     <Chapters />
   </section>
+  <ProductShowcase />
   <FromArc />
   <TrustBand />
   <Faq />
