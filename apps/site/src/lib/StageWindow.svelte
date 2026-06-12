@@ -50,6 +50,11 @@ interface SpaceDef {
 // (the L/C/H/on values come from the `@lunma/tokens` `--space-<color>-*` tokens)
 // AND each Space's own tab list — switching a Space swaps these rows, not just
 // the colour, so the demo shows that Spaces keep separate tabs.
+//
+// The purple "Design" Space is deliberately ABSENT here: it's the one shown for
+// real in the ProductShowcase below, so reserving it keeps the interactive demo
+// and the real-pixels proof from showing the same Space twice. The demo carries
+// the colour *range* (blue/green/orange/pink); the showcase owns purple.
 const work: SpaceDef = {
   name: 'Work',
   icon: '◐',
@@ -66,19 +71,6 @@ const work: SpaceDef = {
 
 const spaces: SpaceDef[] = [
   work,
-  {
-    name: 'Design',
-    icon: '✦',
-    color: 'purple',
-    tabs: [
-      { title: 'Figma — components', fav: FAV.figma, active: true },
-      { title: 'Moodboard — references', fav: FAV.reader, drifted: true },
-      { title: 'Linear — design tasks', fav: FAV.linear },
-    ],
-    temp: [{ title: 'Type specimens', fav: FAV.docs }],
-    archived: 2,
-    count: '11 tabs · 3 pinned',
-  },
   {
     name: 'Reading',
     icon: '❍',
