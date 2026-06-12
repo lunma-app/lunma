@@ -49,10 +49,10 @@ function evalMath(s: string): string {
   );
 }
 
-/** Resolve an `oklch(...)` expression at the site's resting Space (ember, hue
- * 62): substitute the hue-axis custom properties to their `:root` defaults and
+/** Resolve an `oklch(...)` expression at the site's resting Space (moonlit blue,
+ * hue 235): substitute the hue-axis custom properties to their `:root` defaults and
  * drop the alpha (we test the opaque colour). */
-function resolveOklch(expr: string, hue = 62): string {
+function resolveOklch(expr: string, hue = 235): string {
   const stripped = expr.replace(/\s*\/\s*[\d.]+\s*\)/, ')');
   const substituted = stripped
     .replace(/var\(--base-hue\)/g, String(hue))

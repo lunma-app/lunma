@@ -77,11 +77,11 @@ function evalMath(s: string): string {
 }
 
 /** Resolve `oklch(L C H ...)` strings, substituting the hue-axis custom
- * properties to their documented `:root` defaults (`--base-hue`/`--space-h` → 62,
+ * properties to their documented `:root` defaults (`--base-hue`/`--space-h` → 235,
  * `--space-l` → 0.62, `--space-chroma` → 0.15) and evaluating the `calc()` /
  * `clamp()` the identity tokens use. Strip optional `/ alpha` since for contrast
  * we test the opaque colour. */
-function resolveOklch(expr: string, baseHue = 62): string {
+function resolveOklch(expr: string, baseHue = 235): string {
   // Drop trailing `/ <alpha>` — contrast for opacities folds into bg below
   // for borders/dividers, but for the text/bg pairs we test here we want
   // the opaque colour.

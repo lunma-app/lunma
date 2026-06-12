@@ -19,8 +19,10 @@
  */
 
 :root {
-  /* Hue axis — every neutral and accent reads from here. */
-  --base-hue: 62;
+  /* Hue axis — every neutral and accent reads from here. The resting identity is
+   * a calm moonlit blue (aligning the lunar name), deliberately NOT Arc's violet
+   * (~268). Per-Space palette colours are independent of this and unchanged. */
+  --base-hue: 235;
   --space-h: var(--base-hue);
 
   /* Per-Space canonical lightness + on-colour ink (space-palette-refresh).
