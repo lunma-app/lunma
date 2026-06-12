@@ -2,11 +2,14 @@ import { z } from 'zod';
 import type { AppState } from './types';
 
 // Pre-release clean baseline (rebrand-to-lunma): the placeholder-era v1→v11
-// schema history was collapsed to a single current shape. This IS the only
-// persisted schema version, so `CURRENT_SCHEMA_VERSION = 1` and the migration
-// list is empty (see `migrations.ts`). Future schema evolution re-introduces an
-// `AppStateV2Schema` + a migration the usual append-only way.
-export const CURRENT_SCHEMA_VERSION = 1;
+// schema history was collapsed to a single v1 shape. v2 (smart-folders) widens
+// the persisted `PinNode` union with the `smart` kind; v3 (github-connector)
+// widens the smart node's `source` to `'gitlab' | 'github'` — both pass-through
+// entries in the append-only `migrations` list (see `migrations.ts`). Each bump
+// is deliberate despite the pass-through: it makes a downgrade detectable (an
+// older build reading newer data quarantines on the version gate instead of
+// Zod-rejecting unfamiliar nodes with a confusing parse error).
+export const CURRENT_SCHEMA_VERSION = 3;
 
 const SpaceInstanceSchema = z.strictObject({
   spaceId: z.string(),
@@ -77,9 +80,11 @@ const ArchivedTabSchema = z.strictObject({
   archivedAt: z.number(),
 });
 
-// A pinned-tab placement node: a tab node or a single-level folder node. Folder
-// `icon`/`color` are plain strings on the record (as on `Space`); the narrow
-// `IconName`/`SpaceColor` unions live only at the bus boundary.
+// A pinned-tab placement node: a tab node, a single-level folder node, or a
+// smart-folder config node (smart-folders — configuration only; results are
+// ephemeral and never persisted). Folder `icon`/`color` are plain strings on
+// the record (as on `Space`); the narrow `IconName`/`SpaceColor` unions live
+// only at the bus boundary.
 const PinNodeSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('tab'), id: z.string() }),
   z.strictObject({
@@ -89,6 +94,16 @@ const PinNodeSchema = z.discriminatedUnion('kind', [
     icon: z.string(),
     color: z.string(),
     children: z.array(z.string()),
+  }),
+  z.strictObject({
+    kind: z.literal('smart'),
+    id: z.string(),
+    name: z.string(),
+    icon: z.string(),
+    source: z.enum(['gitlab', 'github']),
+    baseUrl: z.string(),
+    query: z.enum(['authored', 'assigned', 'review-requested']),
+    refreshMinutes: z.number(),
   }),
 ]);
 
@@ -111,7 +126,29 @@ const LiveTabSchema = z.strictObject({
 // coerced from their JSON string form.
 const TabBindingsSchema = z.record(z.string(), z.record(z.coerce.number(), z.number()));
 
-export const AppStateV1Schema = z.strictObject({
+// The smart-folder runtime slice (smart-folders, design D2). Ephemeral like
+// `liveTabsById`: the schema ACCEPTS it when present so a broadcast/runtime
+// state round-trips, but it is `.optional()` because `persist()` strips it —
+// on-disk envelopes never carry it (MR titles never touch disk).
+const SmartFolderItemSchema = z.strictObject({
+  id: z.string(),
+  title: z.string(),
+  url: z.string(),
+  status: z
+    .strictObject({
+      tone: z.enum(['ok', 'pending', 'warn', 'fail']),
+      label: z.string(),
+    })
+    .optional(),
+});
+
+const SmartFolderRuntimeSchema = z.strictObject({
+  state: z.enum(['pending', 'ok', 'signed-out', 'error']),
+  items: z.array(SmartFolderItemSchema),
+  fetchedAt: z.number().nullable(),
+});
+
+export const AppStateV3Schema = z.strictObject({
   schemaVersion: z.number(),
   spaces: z.array(SpaceSchema),
   activeSpaceByWindow: z.record(z.coerce.number(), z.string().nullable()),
@@ -128,22 +165,23 @@ export const AppStateV1Schema = z.strictObject({
   pinnedBySpace: z.record(z.string(), z.array(PinNodeSchema)),
   liveTabsById: z.record(z.coerce.number(), LiveTabSchema).optional(),
   faviconRow: z.array(z.string()),
+  smartFolders: z.record(z.string(), SmartFolderRuntimeSchema).optional(),
 });
 
 export const EnvelopeSchema = z.strictObject({
   schemaVersion: z.number(),
-  state: AppStateV1Schema,
+  state: AppStateV3Schema,
 });
 
-export type AppStateV1 = z.infer<typeof AppStateV1Schema>;
+export type AppStateV3 = z.infer<typeof AppStateV3Schema>;
 export type Envelope = z.infer<typeof EnvelopeSchema>;
 
 type AssertEqual<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
-// `liveTabsById` is ephemeral: required on the runtime `AppState`, optional on
-// the persisted schema (stripped before write). Compare the persisted shapes —
-// every NON-ephemeral field must still match exactly.
-type Persisted<T> = Omit<T, 'liveTabsById'>;
-const _schemaMatchesAppState: AssertEqual<Persisted<AppStateV1>, Persisted<AppState>> = true;
+// `liveTabsById` and `smartFolders` are ephemeral: required on the runtime
+// `AppState`, optional on the persisted schema (stripped before write). Compare
+// the persisted shapes — every NON-ephemeral field must still match exactly.
+type Persisted<T> = Omit<T, 'liveTabsById' | 'smartFolders'>;
+const _schemaMatchesAppState: AssertEqual<Persisted<AppStateV3>, Persisted<AppState>> = true;
 void _schemaMatchesAppState;

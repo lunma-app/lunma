@@ -20,6 +20,9 @@ interface Props {
    * digits-only field). Omitted when undefined; the field stays a text input
    * (parsing/validation is the caller's concern). */
   inputmode?: 'text' | 'numeric' | 'decimal' | undefined;
+  /** Input type. `'password'` masks the value (e.g. the Connectors token field
+   * — smart-folders D10); default `'text'`. */
+  type?: 'text' | 'password' | undefined;
   /** Fired on every input event with the new value. */
   oninput?: ((value: string) => void) | undefined;
   /** Fired when Enter is pressed (e.g. to submit the surrounding form). */
@@ -35,6 +38,7 @@ let {
   invalid = false,
   testid = 'text-input',
   inputmode,
+  type = 'text',
   oninput,
   onenter,
 }: Props = $props();
@@ -61,7 +65,7 @@ function handleKeydown(event: KeyboardEvent): void {
   <input
     class="input"
     class:invalid
-    type="text"
+    {type}
     {inputmode}
     {value}
     {placeholder}

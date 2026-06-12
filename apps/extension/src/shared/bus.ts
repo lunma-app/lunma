@@ -6,6 +6,8 @@ import type {
   IconName,
   PinNode,
   SavedTabId,
+  SmartQuery,
+  SmartSource,
   SpaceAutoArchive,
   SpaceColor,
   SpaceId,
@@ -84,6 +86,38 @@ export type SidebarCommand =
   | { kind: 'setFolderIcon'; payload: { spaceId: SpaceId; folderId: FolderId; icon: IconName } }
   | { kind: 'setFolderColor'; payload: { spaceId: SpaceId; folderId: FolderId; color: SpaceColor } }
   | { kind: 'deleteFolder'; payload: { spaceId: SpaceId; folderId: FolderId } }
+  // Smart-folder lifecycle (smart-folders). Flat payloads; update/delete/refresh
+  // address `{ spaceId, folderId }` like the sibling folder commands. The SW
+  // mints the node id + icon on create; `baseUrl` is normalized/validated SW-side
+  // (absolute http(s), trailing slash stripped — invalid throws, error ack) and
+  // `refreshMinutes` is clamped to the floor of 5.
+  | {
+      kind: 'createSmartFolder';
+      payload: {
+        spaceId: SpaceId;
+        source: SmartSource;
+        name: string;
+        baseUrl: string;
+        query: SmartQuery;
+        refreshMinutes: number;
+      };
+    }
+  | {
+      kind: 'updateSmartFolder';
+      payload: {
+        spaceId: SpaceId;
+        folderId: FolderId;
+        source: SmartSource;
+        name: string;
+        baseUrl: string;
+        query: SmartQuery;
+        refreshMinutes: number;
+      };
+    }
+  | { kind: 'deleteSmartFolder'; payload: { spaceId: SpaceId; folderId: FolderId } }
+  // Unconditional refresh; acks ok once underway — the fetch OUTCOME lands via
+  // the runtime slice and the state broadcast, never via the ack.
+  | { kind: 'refreshSmartFolder'; payload: { spaceId: SpaceId; folderId: FolderId } }
   | { kind: 'reorderTemp'; payload: { windowId: WindowId; tabIds: TabId[] } }
   | { kind: 'reorderSpaces'; payload: { spaceIds: SpaceId[] } }
   | { kind: 'renameTab'; payload: { savedTabId: SavedTabId; newName: string } }
@@ -154,6 +188,10 @@ export const SIDEBAR_COMMAND_KINDS: ReadonlySet<SidebarCommandKind> = new Set<Si
   'setFolderIcon',
   'setFolderColor',
   'deleteFolder',
+  'createSmartFolder',
+  'updateSmartFolder',
+  'deleteSmartFolder',
+  'refreshSmartFolder',
   'reorderTemp',
   'reorderSpaces',
   'renameTab',
@@ -200,6 +238,10 @@ const _kindExhaustiveness = {
   setFolderIcon: true,
   setFolderColor: true,
   deleteFolder: true,
+  createSmartFolder: true,
+  updateSmartFolder: true,
+  deleteSmartFolder: true,
+  refreshSmartFolder: true,
   reorderTemp: true,
   reorderSpaces: true,
   renameTab: true,
@@ -264,9 +306,18 @@ const SpaceAutoArchiveSchema = z.discriminatedUnion('mode', [
   z.strictObject({ mode: z.literal('custom'), idleMinutes: z.number().int().positive() }),
 ]);
 
-// A pinned-tab placement node — mirrors `PinNode` in `types.ts`. Folder
-// `icon`/`color` are plain strings on the record (the narrow unions live only on
-// the dedicated `setFolderIcon`/`setFolderColor` commands).
+// The canned smart-folder query set — mirrors `SmartQuery` in `types.ts`.
+const SmartQuerySchema = z.enum(['authored', 'assigned', 'review-requested']);
+
+// The shipped connector sources — mirrors `SmartSource` in `types.ts`. An
+// out-of-vocabulary source (e.g. 'jira') rejects at the bus boundary.
+const SmartSourceSchema = z.enum(['gitlab', 'github']);
+
+// A pinned-tab placement node — mirrors `PinNode` in `types.ts` (all three
+// kinds, so `reorderPinned` round-trips smart nodes losslessly with their
+// config fields intact). Folder `icon`/`color` are plain strings on the record
+// (the narrow unions live only on the dedicated `setFolderIcon`/`setFolderColor`
+// commands).
 const PinNodeSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('tab'), id: z.string() }),
   z.strictObject({
@@ -276,6 +327,16 @@ const PinNodeSchema = z.discriminatedUnion('kind', [
     icon: z.string(),
     color: z.string(),
     children: z.array(z.string()),
+  }),
+  z.strictObject({
+    kind: z.literal('smart'),
+    id: z.string(),
+    name: z.string(),
+    icon: z.string(),
+    source: SmartSourceSchema,
+    baseUrl: z.string(),
+    query: SmartQuerySchema,
+    refreshMinutes: z.number(),
   }),
 ]);
 
@@ -421,6 +482,37 @@ const COMMAND_SCHEMAS = {
     kind: z.literal('deleteFolder'),
     payload: z.strictObject({ spaceId: z.string(), folderId: z.string() }),
   }),
+  createSmartFolder: z.strictObject({
+    kind: z.literal('createSmartFolder'),
+    payload: z.strictObject({
+      spaceId: z.string(),
+      source: SmartSourceSchema,
+      name: z.string(),
+      baseUrl: z.string(),
+      query: SmartQuerySchema,
+      refreshMinutes: z.number(),
+    }),
+  }),
+  updateSmartFolder: z.strictObject({
+    kind: z.literal('updateSmartFolder'),
+    payload: z.strictObject({
+      spaceId: z.string(),
+      folderId: z.string(),
+      source: SmartSourceSchema,
+      name: z.string(),
+      baseUrl: z.string(),
+      query: SmartQuerySchema,
+      refreshMinutes: z.number(),
+    }),
+  }),
+  deleteSmartFolder: z.strictObject({
+    kind: z.literal('deleteSmartFolder'),
+    payload: z.strictObject({ spaceId: z.string(), folderId: z.string() }),
+  }),
+  refreshSmartFolder: z.strictObject({
+    kind: z.literal('refreshSmartFolder'),
+    payload: z.strictObject({ spaceId: z.string(), folderId: z.string() }),
+  }),
   reorderTemp: z.strictObject({
     kind: z.literal('reorderTemp'),
     payload: z.strictObject({ windowId: z.number(), tabIds: z.array(z.number()) }),
@@ -523,6 +615,10 @@ export const SidebarCommandSchema = z.discriminatedUnion('kind', [
   COMMAND_SCHEMAS.setFolderIcon,
   COMMAND_SCHEMAS.setFolderColor,
   COMMAND_SCHEMAS.deleteFolder,
+  COMMAND_SCHEMAS.createSmartFolder,
+  COMMAND_SCHEMAS.updateSmartFolder,
+  COMMAND_SCHEMAS.deleteSmartFolder,
+  COMMAND_SCHEMAS.refreshSmartFolder,
   COMMAND_SCHEMAS.reorderTemp,
   COMMAND_SCHEMAS.reorderSpaces,
   COMMAND_SCHEMAS.renameTab,

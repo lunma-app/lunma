@@ -21,6 +21,7 @@ import type {
 import { favoriteHandlers } from './handlers/favorites';
 import { folderHandlers } from './handlers/folders';
 import { pinnedTabHandlers } from './handlers/pinned-tabs';
+import { smartFolderHandlers } from './handlers/smart-folders';
 import { spaceHandlers } from './handlers/spaces';
 import { tempTabHandlers } from './handlers/temp-tabs';
 
@@ -126,6 +127,13 @@ export const EventPolicy: Record<PendingEventKind, EventPolicyEntry> = {
   setFolderIcon: {},
   setFolderColor: {},
   deleteFolder: {},
+  // Smart-folders (smart-folders): lifecycle commands are per-click distinct;
+  // results are per-folder and infrequent — no coalescing (design D3).
+  createSmartFolder: {},
+  updateSmartFolder: {},
+  deleteSmartFolder: {},
+  refreshSmartFolder: {},
+  'smartFolders.result': {},
   reorderTemp: {},
   reorderSpaces: {},
   focusTab: {},
@@ -262,6 +270,9 @@ export class Coordinator {
       ...pinnedTabHandlers(),
       ...favoriteHandlers(),
       ...folderHandlers(),
+      // Smart-folders: the lifecycle handlers start refreshes whose result
+      // events re-enter this coordinator's queue — hence the enqueue closure.
+      ...smartFolderHandlers({ enqueue: (ev) => this.enqueue(ev) }),
       ...tempTabHandlers(),
       ...autoArchiveHandlers(),
       ...boundaryHandlers(),

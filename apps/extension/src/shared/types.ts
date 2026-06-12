@@ -126,10 +126,28 @@ export interface SavedTab {
 }
 
 /**
+ * The canned smart-folder query set (smart-folders). Deliberately NOT a
+ * free-form query language — three queries each connector translates to
+ * documented REST params.
+ */
+export type SmartQuery = 'authored' | 'assigned' | 'review-requested';
+
+/**
+ * The shipped smart-folder connector sources (github-connector). A closed
+ * union — the `CONNECTORS` registry in `background/smart-folders.ts` holds
+ * exactly these two; widening it is a schema-version bump (the v2→v3
+ * precedent).
+ */
+export type SmartSource = 'gitlab' | 'github';
+
+/**
  * A pinned-tab placement node. The pinned list for a Space is an ordered tree
  * of these: a `tab` node points at a `SavedTab` record; a `folder` node groups
- * tab ids. Folders are single-level — `children` holds `SavedTabId` values
- * only, never nested folders. `icon`/`color` are plain strings on the record
+ * tab ids; a `smart` node is connector configuration (smart-folders) whose
+ * displayed children are ephemeral query results in `AppState.smartFolders`,
+ * never persisted on the node. Folders are single-level — `children` holds
+ * `SavedTabId` values only, never nested folders; a smart node has no
+ * `children` field at all. `icon`/`color` are plain strings on the record
  * (as on `Space`); the narrow `IconName`/`SpaceColor` unions are applied only
  * at the bus boundary.
  */
@@ -142,7 +160,45 @@ export type PinNode =
       icon: string;
       color: string;
       children: SavedTabId[];
+    }
+  | {
+      kind: 'smart';
+      id: FolderId;
+      name: string;
+      icon: string;
+      source: SmartSource;
+      /** Absolute http(s) instance URL, stored without a trailing slash. */
+      baseUrl: string;
+      query: SmartQuery;
+      /** Poll cadence in minutes; default 10, floor 5 (SW-clamped). */
+      refreshMinutes: number;
     };
+
+/**
+ * One smart-folder result row (smart-folders, design D2) — link-shaped, not
+ * tab-shaped: no `SavedTab` record, no binding. `status` is the MR's pipeline
+ * state as a semantic tone the renderer maps to tokens; absent means the MR
+ * has no pipeline (or an unmapped status) and the row shows no glyph.
+ */
+export interface SmartFolderItem {
+  id: string;
+  title: string;
+  url: string;
+  status?: { tone: 'ok' | 'pending' | 'warn' | 'fail'; label: string } | undefined;
+}
+
+/**
+ * A smart folder's ephemeral fetch state (smart-folders, design D2). Lives only
+ * in the broadcast `AppState.smartFolders` slice — stripped in `persist()` like
+ * `liveTabsById`, rebuilt by connector polls after a SW restart. A refresh that
+ * begins while items exist keeps `items` (the list never blinks) and flips
+ * `state` to `'pending'`.
+ */
+export interface SmartFolderRuntime {
+  state: 'pending' | 'ok' | 'signed-out' | 'error';
+  items: SmartFolderItem[];
+  fetchedAt: number | null;
+}
 
 /**
  * Per-pinned-tab domain boundary (pinned-tab-domain-boundary). `{ mode: 'off' }`
@@ -241,6 +297,14 @@ export interface AppState {
    * (stripped in `persist()`); rebuilt at SW boot from `chrome.tabs.query`.
    */
   liveTabsById: { [tabId: TabId]: LiveTab };
+  /**
+   * Ephemeral smart-folder runtime results keyed by folder id (smart-folders,
+   * design D2). Never persisted (stripped in `persist()` exactly like
+   * `liveTabsById`); written only by the coordinator drain via
+   * `setSmartFolderRuntime`, rebuilt by connector polls after a SW restart —
+   * work-sensitive MR titles never touch disk.
+   */
+  smartFolders: { [folderId: FolderId]: SmartFolderRuntime };
 }
 
 /**

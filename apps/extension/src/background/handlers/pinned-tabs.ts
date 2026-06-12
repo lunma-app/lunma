@@ -222,8 +222,9 @@ export function pinnedTabHandlers(): Pick<
       // tab leaves Temporary exactly when it gains a visible placement (D3). The
       // fallbacks above make "not placed" unreachable; if it ever happens, undo
       // the mint and leave the tab in Temporary rather than orphan either.
-      const placed = (ctx.store.state.pinnedBySpace[spaceId] ?? []).some((n) =>
-        n.kind === 'tab' ? n.id === id : n.children.includes(id),
+      const placed = (ctx.store.state.pinnedBySpace[spaceId] ?? []).some(
+        (n) =>
+          (n.kind === 'tab' && n.id === id) || (n.kind === 'folder' && n.children.includes(id)),
       );
       if (placed) {
         ctx.store.bindSavedTab(id, windowId, tabId, liveTab.url);

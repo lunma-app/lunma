@@ -6,7 +6,7 @@ Defines the versioned local-storage envelope, the append-only migration pipeline
 ## Requirements
 ### Requirement: Versioned local-storage envelope
 
-The persisted `AppState` SHALL live in `chrome.storage.local` under the key `lunma.state` as an envelope of shape `{ schemaVersion: number; state: AppState }`. The envelope's `schemaVersion` SHALL equal the `CURRENT_SCHEMA_VERSION` constant exported from `apps/extension/src/shared/schemas.ts` at write time. The current version SHALL be `1`.
+The persisted `AppState` SHALL live in `chrome.storage.local` under the key `lunma.state` as an envelope of shape `{ schemaVersion: number; state: AppState }`. The envelope's `schemaVersion` SHALL equal the `CURRENT_SCHEMA_VERSION` constant exported from `apps/extension/src/shared/schemas.ts` at write time. The current version SHALL be `3` (raised from `2` by the `github-connector` change, which widened the persisted smart `PinNode`'s `source` to `'gitlab' | 'github'`).
 
 The `state.schemaVersion` field on `AppState` itself SHALL match the envelope's `schemaVersion` whenever both are present. The envelope-level field is the value the migration runner reads; the in-state field is informational.
 
@@ -21,26 +21,33 @@ The `migrations: Migration[]` array exported from `apps/extension/src/shared/mig
 
 A new entry MAY only be added at the end of the array, and its `toVersion` SHALL equal `CURRENT_SCHEMA_VERSION` after it is added. **Once the product has shipped**, existing entries SHALL NOT be modified, reordered, or removed in any subsequent change.
 
-The product is **pre-release** at the time of this change, so the accumulated placeholder-era chain (`v1Tov2 … v10Tov11`) is reset **once** to a clean empty baseline (`migrations = []`, `CURRENT_SCHEMA_VERSION = 1`). This one-time reset is permitted precisely because there are no released installs and no persisted data to upgrade; it SHALL NOT recur after the first public release.
+The product is **pre-release** at the time of this change, so the accumulated placeholder-era chain (`v1Tov2 … v10Tov11`) was reset **once** to a clean empty baseline (`migrations = []`, `CURRENT_SCHEMA_VERSION = 1`). This one-time reset was permitted precisely because there are no released installs and no persisted data to upgrade; it SHALL NOT recur after the first public release.
 
-#### Scenario: The v1 baseline has no migrations
+The list holds two real entries: the `smart-folders` migration `{ toVersion: 2 }` (a pure pass-through — v1 data cannot contain `smart` nodes) and the `github-connector` migration `{ toVersion: 3 }` (likewise a pass-through — v2 data cannot contain `source: 'github'` nodes and no field changes shape; the v3 schema simply admits the value). Each bump is deliberate despite being a pass-through: it makes a downgrade detectable (an older build reading newer data quarantines on the version gate instead of Zod-rejecting unfamiliar nodes with a confusing parse error).
 
-- **WHEN** this baseline ships
-- **THEN** `migrations` SHALL be an empty array `[]`
-- **AND** `CURRENT_SCHEMA_VERSION` SHALL equal `1`
+#### Scenario: The chain holds exactly the v2 and v3 pass-through entries
+
+- **WHEN** this change ships
+- **THEN** `migrations` SHALL equal a two-entry list — `{ toVersion: 2 }` then `{ toVersion: 3 }`, both pass-throughs
+- **AND** `CURRENT_SCHEMA_VERSION` SHALL equal `3`
+
+#### Scenario: A v1 envelope migrates to the current version losslessly
+
+- **WHEN** the storage layer loads an envelope with `schemaVersion: 1`
+- **THEN** the runner applies the `toVersion: 2` pass-through, then the `toVersion: 3` pass-through, validation succeeds against the v3 schema, and the envelope is written back as `{ schemaVersion: 3, state }` with the state content unchanged
 
 #### Scenario: A future change adds a migration
 
 - **WHEN** a future change introduces migration `M` producing version `N`
 - **THEN** `M` SHALL be appended as the last entry in `migrations` with `toVersion: N`
 - **AND** `CURRENT_SCHEMA_VERSION` SHALL be raised to `N` in the same change
-- **AND** existing entries SHALL NOT be modified, reordered, or removed (the append-only rule binds from this baseline forward)
+- **AND** existing entries SHALL NOT be modified, reordered, or removed (the append-only rule binds from the v1 baseline forward)
 
 ### Requirement: Migration runner applies pending migrations in order
 
 On every SW boot, the storage layer SHALL invoke `runMigrations(raw, persistedVersion)` which iterates `migrations` in array order, applies the `migrate` function of every entry whose `toVersion > persistedVersion`, threading each output as the input to the next, and stops when there are no more entries to apply.
 
-After the runner returns, the resulting object SHALL be validated against the Zod schema for the **current** schema version, `AppStateV<CURRENT_SCHEMA_VERSION>Schema`. At the clean v1 baseline `CURRENT_SCHEMA_VERSION = 1`, so the validator is `AppStateV1Schema` (the new baseline) and the `migrations` array is empty — the runner is a pass-through. Because the runner migrates the payload UP to `CURRENT_SCHEMA_VERSION` before validation, the validator MUST be the current-version schema; validating against any older-version schema SHALL be treated as a defect — it would reject the current nested-instance / `PinNode` shape and corrupt every restart. If (in a future multi-version state) `persistedVersion < CURRENT_SCHEMA_VERSION` and validation succeeds, the storage layer SHALL write the new envelope `{ schemaVersion: CURRENT_SCHEMA_VERSION, state }` back to `lunma.state` before returning.
+After the runner returns, the resulting object SHALL be validated against the Zod schema for the **current** schema version, `AppStateV<CURRENT_SCHEMA_VERSION>Schema`. At `CURRENT_SCHEMA_VERSION = 3` the validator is `AppStateV3Schema` (the v2 schema with the smart node's `source` widened to `'gitlab' | 'github'`). Because the runner migrates the payload UP to `CURRENT_SCHEMA_VERSION` before validation, the validator MUST be the current-version schema; validating against any older-version schema SHALL be treated as a defect — it would reject the current nested-instance / `PinNode` shape and corrupt every restart. If `persistedVersion < CURRENT_SCHEMA_VERSION` and validation succeeds, the storage layer SHALL write the new envelope `{ schemaVersion: CURRENT_SCHEMA_VERSION, state }` back to `lunma.state` before returning.
 
 If `persistedVersion === CURRENT_SCHEMA_VERSION`, no write-back SHALL occur on boot.
 
@@ -50,26 +57,24 @@ If `persistedVersion === CURRENT_SCHEMA_VERSION`, no write-back SHALL occur on b
 - **THEN** `runMigrations` SHALL return the input unchanged
 - **AND** no write to `lunma.state` SHALL occur
 
-#### Scenario: Pending migrations apply in order (runner contract, when migrations are non-empty)
+#### Scenario: Pending migrations apply in order (runner contract)
 
-- **GIVEN** the runner's forward contract — at the v1 baseline `migrations = []`, so this exercises the runner mechanism for a future multi-version state, not the current data
-- **WHEN** `persistedVersion = 1`, a future `CURRENT_SCHEMA_VERSION = 3`, and `migrations` contains entries with `toVersion: 2` and `toVersion: 3`
+- **WHEN** `persistedVersion = 1`, `CURRENT_SCHEMA_VERSION = 3`, and `migrations` contains entries with `toVersion: 2` and `toVersion: 3`
 - **THEN** the runner SHALL invoke the `toVersion: 2` migration first, then feed its output to the `toVersion: 3` migration
 - **AND** the final result SHALL be validated against the current schema
 - **AND** the migrated envelope SHALL be written back to `lunma.state` before `loadState` returns
 
 #### Scenario: Migrations skip entries already at or below persisted version (runner contract)
 
-- **GIVEN** the same forward contract (empty at the v1 baseline)
 - **WHEN** `persistedVersion = 2` and `migrations` contains entries with `toVersion: 2` and `toVersion: 3`
 - **THEN** the runner SHALL skip the `toVersion: 2` entry
 - **AND** apply only the `toVersion: 3` entry
 
 #### Scenario: Current-shape state round-trips without spurious corruption
 
-- **GIVEN** a persisted state at `CURRENT_SCHEMA_VERSION` containing a Space with a materialized nested `spaceInstancesByWindow[windowId][spaceId]` instance and a pinned tab (`pinnedBySpace[spaceId]` holding a `PinNode`)
+- **GIVEN** a persisted state at `CURRENT_SCHEMA_VERSION` containing a Space with a materialized nested `spaceInstancesByWindow[windowId][spaceId]` instance and a pinned tab (`pinnedBySpace[spaceId]` holding a `PinNode`, including a `smart` node of either source)
 - **WHEN** `readPersistedState` validates it after migration
-- **THEN** validation SHALL succeed and `readPersistedState` SHALL return `{ kind: 'ok', state }` with the Space, the nested instance, and the pin intact
+- **THEN** validation SHALL succeed and `readPersistedState` SHALL return `{ kind: 'ok', state }` with the Space, the nested instance, and the pins intact
 - **AND** no `__corrupt_backup_*` record SHALL be written
 
 ### Requirement: Corruption quarantine and fallback
@@ -88,7 +93,7 @@ If the migration runner throws, the resulting payload fails Zod validation, or t
    ```
 2. Log at `error` level with the stable error code `STORAGE_CORRUPT`, including the `reason` and `backupKey` but not the raw payload.
 
-For the **Zod-validation-failure** branch only (a clean migration chain whose output fails `AppStateV1Schema`), the layer SHALL FIRST attempt `salvagePersistedState(migrated)` (see Requirement: Partial-corruption salvage preserves valid Space identities). When salvage returns a non-null state, the layer SHALL still write the quarantine record above and SHALL return `{ kind: 'salvaged'; state }`. When salvage returns `null`, the layer SHALL return `{ kind: 'corrupt' }`. The **migration-threw** and **invalid-`schemaVersion`** branches SHALL NOT attempt salvage and SHALL return `{ kind: 'corrupt' }`.
+For the **Zod-validation-failure** branch only (a clean migration chain whose output fails the current-version schema, `AppStateV3Schema`), the layer SHALL FIRST attempt `salvagePersistedState(migrated)` (see Requirement: Partial-corruption salvage preserves valid Space identities). When salvage returns a non-null state, the layer SHALL still write the quarantine record above and SHALL return `{ kind: 'salvaged'; state }`. When salvage returns `null`, the layer SHALL return `{ kind: 'corrupt' }`. The **migration-threw** and **invalid-`schemaVersion`** branches SHALL NOT attempt salvage and SHALL return `{ kind: 'corrupt' }`.
 
 On `{ kind: 'corrupt' }`, `loadState` SHALL call `createInitialState()` and return `{ state: <initial>, outcome: 'recovered' }` (see Requirement: loadState surface). No write to `lunma.state` SHALL occur inside `readPersistedState` during the fallback; the recovered or salvaged state is persisted by the boot chain / the first subsequent store mutation as today.
 
@@ -111,14 +116,14 @@ The `QuarantineRecord` shape is shape-distinguishable from a live envelope (it h
 
 #### Scenario: Schema validation fails and nothing is salvageable
 
-- **WHEN** all migrations run without throwing but the resulting object fails validation against the current-version schema (`AppStateV1Schema`)
+- **WHEN** all migrations run without throwing but the resulting object fails validation against the current-version schema (`AppStateV3Schema`)
 - **AND** `salvagePersistedState(migrated)` returns `null`
 - **THEN** a `QuarantineRecord` SHALL be written to `__corrupt_backup_<ts>` with `reason: 'schema parse failed'`, `zodIssues` set to `parsed.error.issues`, and `rawBytes` set to the original payload
 - **AND** `loadState` SHALL return `{ state: createInitialState(), outcome: 'recovered' }`
 
 #### Scenario: Schema validation fails but valid slices are salvaged
 
-- **WHEN** all migrations run without throwing but the resulting object fails validation against `AppStateV1Schema`
+- **WHEN** all migrations run without throwing but the resulting object fails validation against `AppStateV3Schema`
 - **AND** `salvagePersistedState(migrated)` returns a non-null state
 - **THEN** a `QuarantineRecord` SHALL be written to `__corrupt_backup_<ts>` with `reason: 'schema parse failed'` and `rawBytes` set to the original payload
 - **AND** `readPersistedState` SHALL return `{ kind: 'salvaged', state }`
@@ -207,17 +212,17 @@ When the boot read outcome is `'unavailable'`, the SW boot chain SHALL preserve 
 
 ### Requirement: Partial-corruption salvage preserves valid Space identities
 
-The storage layer SHALL export a pure function `salvagePersistedState(migrated: unknown): AppStateV1 | null` that attempts to recover a valid `AppStateV1` from a payload that failed whole-state validation, preserving as much real data as possible instead of discarding all of it.
+The storage layer SHALL export a pure function `salvagePersistedState(migrated: unknown): AppStateV3 | null` that attempts to recover a valid `AppStateV3` from a payload that failed whole-state validation, preserving as much real data as possible instead of discarding all of it.
 
 `salvagePersistedState` SHALL:
 
 1. Return `null` when `migrated` is not a non-null object.
 2. Start from a valid empty base equal in shape to `createInitialState()` at `CURRENT_SCHEMA_VERSION`.
-3. Salvage the `spaces` array **element-wise**: when the input's `spaces` value is an array, keep each element that individually validates against the Space element schema (`AppStateV1Schema.shape.spaces.element`), preserving array order and dropping only the invalid elements; otherwise keep `[]`. A single malformed Space SHALL NOT cost the other Spaces.
-4. Salvage every other top-level slice (`schemaVersion`, `activeSpaceByWindow`, `spaceInstancesByWindow`, `tabBindings`, `savedTabs`, `lastActivatedSpaceId`, `tabLastActivity`, `archivedTabs`, `trash`, `pinnedBySpace`, `faviconRow`) **slice-wise**: validate the input's value against that slice's own schema (`AppStateV1Schema.shape.<field>`); on success the validated value SHALL be kept, on failure the empty-base default SHALL be kept.
-5. Validate the assembled object against `AppStateV1Schema` and return it on success, or `null` on failure.
+3. Salvage the `spaces` array **element-wise**: when the input's `spaces` value is an array, keep each element that individually validates against the Space element schema (`AppStateV3Schema.shape.spaces.element`), preserving array order and dropping only the invalid elements; otherwise keep `[]`. A single malformed Space SHALL NOT cost the other Spaces.
+4. Salvage every other top-level slice (`schemaVersion`, `activeSpaceByWindow`, `spaceInstancesByWindow`, `tabBindings`, `savedTabs`, `lastActivatedSpaceId`, `tabLastActivity`, `archivedTabs`, `trash`, `pinnedBySpace`, `faviconRow`) **slice-wise**: validate the input's value against that slice's own schema (`AppStateV3Schema.shape.<field>`); on success the validated value SHALL be kept, on failure the empty-base default SHALL be kept.
+5. Validate the assembled object against `AppStateV3Schema` and return it on success, or `null` on failure.
 
-Because the `spaces` array is salvaged element-wise, a payload SHALL preserve every individually-valid Space's `id`, `name`, `color`, and `icon`, even when other Spaces in the same array are malformed and even when unrelated slices (e.g. `savedTabs`) are malformed. Because `faviconRow` is salvaged slice-wise, a valid `faviconRow` SHALL be preserved rather than reset whenever it individually validates. Dangling references that result from a dropped Space or slice (e.g. a `pinnedBySpace` entry pointing at a reset `savedTabs`, or `activeSpaceByWindow` referencing a dropped Space) are tolerated by the existing load-path de-duplication and the sidebar projections (see the *Loaded state has unique ids per keyed collection* requirement).
+Because the `spaces` array is salvaged element-wise, a payload SHALL preserve every individually-valid Space's `id`, `name`, `color`, and `icon`, even when other Spaces in the same array are malformed and even when unrelated slices (e.g. `savedTabs`) are malformed. Because `faviconRow` is salvaged slice-wise, a valid `faviconRow` SHALL be preserved rather than reset whenever it individually validates. Because `pinnedBySpace` is validated against the current-version slice schema (which admits all three `PinNode` kinds and both smart `source` values), a pinned tree containing `smart` nodes SHALL survive salvage intact rather than being reset. Dangling references that result from a dropped Space or slice (e.g. a `pinnedBySpace` entry pointing at a reset `savedTabs`, or `activeSpaceByWindow` referencing a dropped Space) are tolerated by the existing load-path de-duplication and the sidebar projections (see the *Loaded state has unique ids per keyed collection* requirement).
 
 A salvaged state SHALL flow through the existing `dedupePersistedState` step and SHALL be eligible for the existing write-back self-heal, exactly as a migrated/de-duplicated `ok` state is.
 
@@ -225,7 +230,7 @@ A salvaged state SHALL flow through the existing `dedupePersistedState` step and
 
 - **GIVEN** a migrated payload whose `spaces` slice is `[{ id: 'a', name: 'Work', color: 'blue', icon: 'star' }, { id: 'b', name: 'Personal', color: 'red', icon: 'star' }]` but whose `savedTabs` slice contains a record missing its required `originalURL`
 - **WHEN** whole-state validation fails and `salvagePersistedState` runs
-- **THEN** it SHALL return a valid `AppStateV1` whose `spaces` equals the two input Spaces unchanged
+- **THEN** it SHALL return a valid `AppStateV3` whose `spaces` equals the two input Spaces unchanged
 - **AND** `savedTabs` SHALL be reset to `{}`
 - **AND** `readPersistedState` SHALL return `{ kind: 'salvaged', state }`
 
@@ -234,7 +239,7 @@ A salvaged state SHALL flow through the existing `dedupePersistedState` step and
 - **GIVEN** a migrated payload whose `spaces` slice is `[{ id: 'a', name: 'Work', color: 'blue', icon: 'star' }, { id: 'b', color: 'red', icon: 'star' }]` (the second Space is missing its required `name`)
 - **WHEN** `salvagePersistedState` runs
 - **THEN** the element-wise `spaces` salvage SHALL keep `{ id: 'a', name: 'Work', color: 'blue', icon: 'star' }` and drop the nameless element
-- **AND** the assembled object SHALL validate against `AppStateV1Schema` with `spaces` equal to `[{ id: 'a', name: 'Work', color: 'blue', icon: 'star' }]`
+- **AND** the assembled object SHALL validate against `AppStateV3Schema` with `spaces` equal to `[{ id: 'a', name: 'Work', color: 'blue', icon: 'star' }]`
 - **AND** `readPersistedState` SHALL return `{ kind: 'salvaged', state }`
 
 #### Scenario: A valid faviconRow survives an unrelated slice failure
@@ -242,6 +247,13 @@ A salvaged state SHALL flow through the existing `dedupePersistedState` step and
 - **GIVEN** a migrated payload whose `faviconRow` slice is a valid `SavedTabId[]` but whose `savedTabs` slice is malformed
 - **WHEN** whole-state validation fails and `salvagePersistedState` runs
 - **THEN** the assembled object's `faviconRow` SHALL equal the input `faviconRow` (favourites are not reset)
+- **AND** `readPersistedState` SHALL return `{ kind: 'salvaged', state }`
+
+#### Scenario: A pinned tree containing a smart node survives salvage
+
+- **GIVEN** a migrated payload whose `pinnedBySpace` slice is valid and contains a `smart` node (of either source), but whose `savedTabs` slice is malformed
+- **WHEN** whole-state validation fails and `salvagePersistedState` runs
+- **THEN** the assembled object's `pinnedBySpace` SHALL equal the input slice intact, the smart node's config fields included
 - **AND** `readPersistedState` SHALL return `{ kind: 'salvaged', state }`
 
 #### Scenario: A non-object payload is unsalvageable
@@ -252,7 +264,7 @@ A salvaged state SHALL flow through the existing `dedupePersistedState` step and
 
 ### Requirement: ArchivedTab record shape on AppState
 
-`AppState.archivedTabs` SHALL be typed as `ArchivedTab[]` in [apps/extension/src/shared/types.ts](../../../apps/extension/src/shared/types.ts) and validated by `ArchivedTabSchema` (a `z.strictObject`) inside `AppStateV1Schema` in [apps/extension/src/shared/schemas.ts](../../../apps/extension/src/shared/schemas.ts).
+`AppState.archivedTabs` SHALL be typed as `ArchivedTab[]` in [apps/extension/src/shared/types.ts](../../../apps/extension/src/shared/types.ts) and validated by `ArchivedTabSchema` (a `z.strictObject`) inside the current-version `AppState` schema (`AppStateV3Schema`) in [apps/extension/src/shared/schemas.ts](../../../apps/extension/src/shared/schemas.ts).
 
 The `ArchivedTab` type SHALL be:
 
@@ -283,19 +295,19 @@ The **behavior** of populating, pruning, and consuming `archivedTabs` is owned b
 - **WHEN** a fresh `LunmaStore` is constructed with no persisted state
 - **THEN** `state.archivedTabs` SHALL equal `[]`
 
-#### Scenario: ArchivedTabSchema is part of AppStateV1Schema
+#### Scenario: ArchivedTabSchema is part of the current-version schema
 
 - **WHEN** an envelope with `state.archivedTabs` containing an entry with an unknown extra field is loaded
-- **THEN** `AppStateV1Schema.parse` SHALL fail validation (strict mode)
+- **THEN** `AppStateV3Schema.parse` SHALL fail validation (strict mode)
 - **AND** the storage layer SHALL quarantine per the corruption-quarantine requirement
 
 ### Requirement: Schema-to-type coherence
 
-`apps/extension/src/shared/schemas.ts` SHALL include a compile-time assertion that `z.infer<typeof AppStateV1Schema>` and `AppState` (from `apps/extension/src/shared/types.ts`) are structurally equivalent. A drift between the two SHALL cause `pnpm exec tsc --noEmit` to fail.
+`apps/extension/src/shared/schemas.ts` SHALL include a compile-time assertion that `z.infer<typeof AppStateV3Schema>` and `AppState` (from `apps/extension/src/shared/types.ts`) are structurally equivalent. A drift between the two SHALL cause `pnpm exec tsc --noEmit` to fail.
 
 #### Scenario: Type drift fails the build
 
-- **WHEN** a developer adds a field to `AppState` without updating `AppStateV1Schema`
+- **WHEN** a developer adds a field to `AppState` without updating `AppStateV3Schema`
 - **THEN** `pnpm exec tsc --noEmit` SHALL fail with a type-equivalence error in `apps/extension/src/shared/schemas.ts`
 
 ### Requirement: liveTabsById is ephemeral and excluded from persistence
@@ -370,17 +382,17 @@ keyed render.
 
 ### Requirement: Spaces persist an optional auto-archive override
 
-The persisted `Space` record SHALL carry an optional `autoArchive` field of type `SpaceAutoArchive = { mode: 'off' } | { mode: 'custom'; idleMinutes: number }`, validated by `SpaceAutoArchiveSchema` inside `AppStateV1Schema`. This field is part of the **clean v1 baseline shape** — it is present in the baseline `Space` schema directly and is NOT introduced by a migration (the placeholder-era `v10Tov11` migration that originally added it is deleted with the rest of the collapsed chain). The behavior of resolving and applying the override is owned by the `auto-archive` capability; this requirement is limited to the persisted-shape contract.
+The persisted `Space` record SHALL carry an optional `autoArchive` field of type `SpaceAutoArchive = { mode: 'off' } | { mode: 'custom'; idleMinutes: number }`, validated by `SpaceAutoArchiveSchema` inside the current-version `AppState` schema (`AppStateV3Schema`). This field is part of the **clean v1 baseline shape** — it is present in the baseline `Space` schema directly and is NOT introduced by a migration (the placeholder-era `v10Tov11` migration that originally added it is deleted with the rest of the collapsed chain). The behavior of resolving and applying the override is owned by the `auto-archive` capability; this requirement is limited to the persisted-shape contract.
 
 An **absent** `autoArchive` SHALL mean *inherit the global auto-archive setting* — the durable, on-disk representation of "this Space follows the `autoArchiveEnabled` / `autoArchiveIdleMinutes` settings". A `{ mode: 'off' }` value SHALL mean *never auto-archive this Space*; a `{ mode: 'custom'; idleMinutes }` value SHALL carry a positive-integer threshold (validated `z.number().int().positive()`, so `0`/negatives are rejected at the storage boundary; the resolver additionally clamps to a floor of 1).
 
-The baseline schemas SHALL include `SpaceAutoArchiveSchema`; the baseline `Space` schema (carrying the optional `autoArchive`); the baseline trashed-Space schema (carrying the optional `autoArchive` — REQUIRED because `TrashedSpace extends Space`, so leaving `trash` validated by a Space schema without the field would break the `AssertEqual` schema-to-type guard once `Space` carries it); and `AppStateV1Schema` (whose `spaces` validate the Space shape and `trash` the trashed-Space shape). An absent `autoArchive` is valid, so no record requires rewriting on load.
+The baseline schemas SHALL include `SpaceAutoArchiveSchema`; the baseline `Space` schema (carrying the optional `autoArchive`); the baseline trashed-Space schema (carrying the optional `autoArchive` — REQUIRED because `TrashedSpace extends Space`, so leaving `trash` validated by a Space schema without the field would break the `AssertEqual` schema-to-type guard once `Space` carries it); and the current-version `AppState` schema (whose `spaces` validate the Space shape and `trash` the trashed-Space shape). An absent `autoArchive` is valid, so no record requires rewriting on load.
 
 #### Scenario: A fresh baseline Space has no override
 
 - **WHEN** a Space is created with no `autoArchive` set
 - **THEN** the persisted Space SHALL omit `autoArchive`
-- **AND** validation against `AppStateV1Schema` SHALL succeed (absent = inherit the global setting)
+- **AND** validation against `AppStateV3Schema` SHALL succeed (absent = inherit the global setting)
 
 #### Scenario: A custom override round-trips through storage
 
@@ -395,7 +407,7 @@ The baseline schemas SHALL include `SpaceAutoArchiveSchema`; the baseline `Space
 #### Scenario: A trashed Space's override round-trips through storage
 
 - **WHEN** a trashed Space (in `state.trash`) carrying `autoArchive: { mode: 'custom', idleMinutes: 20 }` is persisted and re-read
-- **THEN** validation against `AppStateV1Schema` (whose `trash` carries the optional `autoArchive`) SHALL succeed
+- **THEN** validation against `AppStateV3Schema` (whose `trash` carries the optional `autoArchive`) SHALL succeed
 - **AND** the override SHALL survive the round-trip intact
 
 #### Scenario: A malformed override is rejected, then salvaged
@@ -403,3 +415,18 @@ The baseline schemas SHALL include `SpaceAutoArchiveSchema`; the baseline `Space
 - **WHEN** a Space's stored `autoArchive` fails `SpaceAutoArchiveSchema` validation
 - **THEN** whole-state validation SHALL fail and the existing salvage path SHALL apply (the original bytes are quarantined under a `__corrupt_backup_*` key)
 
+### Requirement: smartFolders is ephemeral and excluded from persistence
+
+The `smartFolders` slice of `AppState` (smart-folder runtime results — see the `smart-folders` capability) SHALL be treated as ephemeral runtime state and SHALL NOT be written to `chrome.storage.local`. The `persist(state)` function SHALL exclude `smartFolders` before serializing, exactly as it excludes `liveTabsById`. The slice itself SHALL NOT trigger a `schemaVersion` increment and SHALL NOT require a migration (the v1→v2 bump in this change is caused by the widened persisted `PinNode` union, not by this slice). On service-worker boot the slice SHALL start empty and be populated only by connector fetches, never read back from storage — smart-folder result data (work-sensitive MR titles) never touches disk.
+
+#### Scenario: persist omits smartFolders
+
+- **WHEN** `persist(state)` runs with a populated `state.smartFolders`
+- **THEN** the object written under the storage key SHALL NOT contain a `smartFolders` field
+- **AND** the rest of the persisted state SHALL be byte-for-byte what it would be without the slice present
+
+#### Scenario: Loaded state has no smartFolders until fetched
+
+- **WHEN** `loadState()` reads persisted state at boot
+- **THEN** the loaded state SHALL NOT contain a `smartFolders` field from disk
+- **AND** `smartFolders` SHALL only be populated by connector result events

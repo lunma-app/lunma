@@ -1,16 +1,43 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { assertMigrationsTerminal, type Migration, migrations, runMigrations } from './migrations';
+import { CURRENT_SCHEMA_VERSION } from './schemas';
 
-// The persisted migration list is empty at the v1 baseline (rebrand-to-lunma),
-// so these tests exercise the migration *runner* in isolation: clear the array
-// around each test, then each case sets up its own minimal migration list to
-// drive the runner / terminal-guard mechanics.
+// Snapshot of the REAL migration chain, captured at module load (before the
+// runner suites below clear the array to exercise the mechanics in isolation).
+const realMigrations = [...migrations];
+
+describe('the real migration chain', () => {
+  test('holds exactly the v2 and v3 pass-through entries', () => {
+    expect(realMigrations).toHaveLength(2);
+    expect(realMigrations[0]?.toVersion).toBe(2);
+    expect(realMigrations[1]?.toVersion).toBe(3);
+    expect(CURRENT_SCHEMA_VERSION).toBe(3);
+    // Pass-throughs: v1 data cannot contain smart nodes (v2), v2 data cannot
+    // contain `source: 'github'` nodes (v3); no field changes shape.
+    const input = { schemaVersion: 1, pinnedBySpace: { work: [{ kind: 'tab', id: 'a' }] } };
+    expect(realMigrations[0]?.migrate(input)).toBe(input);
+    expect(realMigrations[1]?.migrate(input)).toBe(input);
+  });
+
+  test('a v1 payload chains through both pass-throughs unchanged', () => {
+    // The file-level beforeEach clears the live array for the runner suites —
+    // restore the real chain so this exercises it, not an empty list.
+    migrations.push(...realMigrations);
+    const input = { schemaVersion: 1, pinnedBySpace: { work: [{ kind: 'tab', id: 'a' }] } };
+    expect(runMigrations(input, 1)).toBe(input);
+  });
+});
+
+// The runner suites clear the array around each test, then each case sets up
+// its own minimal migration list to drive the runner / terminal-guard
+// mechanics. The real chain is restored after the last test.
 beforeEach(() => {
   migrations.length = 0;
 });
 
 afterEach(() => {
   migrations.length = 0;
+  migrations.push(...realMigrations);
 });
 
 describe('runMigrations', () => {

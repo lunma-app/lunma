@@ -204,6 +204,37 @@ describe('installBusAdapter', () => {
     errSpy.mockRestore();
   });
 
+  test('an unknown smart-folder source is bus-rejected: error ack, never reaches the handler', () => {
+    const { chrome, deliver } = installChromeStub();
+    const { coordinator, enqueue } = makeFakeCoordinator();
+    const errSpy = vi.spyOn(log, 'error').mockImplementation(() => undefined);
+    installBusAdapter(coordinator);
+
+    deliver({
+      type: 'lunma/command',
+      id: 'bad:src',
+      cmd: {
+        kind: 'createSmartFolder',
+        payload: {
+          spaceId: 'work',
+          source: 'jira', // not a shipped connector — the z.enum rejects
+          name: 'X',
+          baseUrl: 'https://jira.example.com',
+          query: 'authored',
+          refreshMinutes: 10,
+        },
+      },
+    });
+
+    expect(enqueue).not.toHaveBeenCalled();
+    const invalidCall = errSpy.mock.calls.find((c) => c[0] === 'BUS_INVALID_PAYLOAD');
+    expect(invalidCall?.[1]).toMatchObject({ id: 'bad:src', kind: 'createSmartFolder' });
+    const ack = chrome.runtime.sendMessage.mock.calls[0]?.[0] as CommandAck;
+    expect(ack.id).toBe('bad:src');
+    expect(ack.result).toMatchObject({ error: expect.any(String) });
+    errSpy.mockRestore();
+  });
+
   test('a valid payload still enqueues after full-payload validation is added', async () => {
     const { deliver } = installChromeStub();
     const { coordinator, enqueue } = makeFakeCoordinator();

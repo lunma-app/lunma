@@ -140,7 +140,8 @@ const pinnedCount = $derived.by(() => {
   if (!activeSpace) return 0;
   let count = 0;
   for (const node of appState?.pinnedBySpace[activeSpace.id] ?? []) {
-    count += node.kind === 'tab' ? 1 : node.children.length;
+    // Smart folders hold connector results, not pinned saved tabs — count 0.
+    count += node.kind === 'tab' ? 1 : node.kind === 'folder' ? node.children.length : 0;
   }
   return count;
 });

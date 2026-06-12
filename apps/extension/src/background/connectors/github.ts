@@ -1,0 +1,285 @@
+import { z } from 'zod';
+import { readConnectors } from '../../shared/connectors';
+import type { SmartFolderItem, SmartFolderRuntime, SmartQuery } from '../../shared/types';
+import {
+  boundedFetch,
+  type ConnectorCaches,
+  type SmartFolderNode,
+  type SourceConnector,
+} from './connector';
+
+/**
+ * The GitHub connector (github-connector, design D3–D5): pull requests over
+ * the search API — github.com AND GitHub Enterprise Server via the same
+ * per-folder `baseUrl`.
+ *
+ *   - queries: the three canned queries → `GET {apiRoot}/search/issues` with
+ *     `@me` qualifiers (server-side resolution — NO me-resolution call);
+ *   - auth: token-only (`Authorization: Bearer`, `credentials: 'omit'`) —
+ *     api.github.com ignores browser sessions, so there is no cookie rung and
+ *     a missing token short-circuits to `signed-out` without a request;
+ *   - status: bounded check-run enrichment aggregated onto the four tones
+ *     (fail > pending > ok > warn; unmapped conclusions ignored).
+ */
+
+/** Results cap — mirrors the GitLab connector's review-queue bound. */
+const RESULTS_CAP = 20;
+
+/** Check-run-enrichment fan-out bound (≤2 extra requests per listed PR). */
+const ENRICH_CONCURRENCY = 5;
+
+/** The per-host token lookup key: hostname plus any explicit port. */
+function hostOf(baseUrl: string): string {
+  return new URL(baseUrl).host;
+}
+
+/**
+ * The folder's REST root: `https://api.github.com` for github.com itself,
+ * else `{baseUrl}/api/v3` (GitHub Enterprise Server's documented REST root —
+ * a nonstandard proxy degrades to the calm `error` note, never a crash).
+ */
+export function apiRootOf(baseUrl: string): string {
+  return new URL(baseUrl).host === 'github.com' ? 'https://api.github.com' : `${baseUrl}/api/v3`;
+}
+
+/** The search qualifier per canned query — `@me` resolves server-side under
+ * token auth. */
+function qualifierFor(query: SmartQuery): string {
+  switch (query) {
+    case 'authored':
+      return 'author:@me';
+    case 'assigned':
+      return 'assignee:@me';
+    case 'review-requested':
+      return 'review-requested:@me';
+  }
+}
+
+// ── fetch (token-only; interpretation deliberately NOT GitLab's) ───────────────
+
+type GetOutcome = { kind: 'ok'; json: unknown } | { kind: 'signed-out' } | { kind: 'error' };
+
+/**
+ * One authenticated GET. A 401 (revoked/malformed token) resolves
+ * `signed-out`; ANY other non-2xx — 403 in all its shapes (rate limit,
+ * SAML-unauthorized org, fine-grained-PAT scope gaps), 5xx — plus network
+ * failures and timeouts resolve `error`. Authenticated GitHub API answers are
+ * always JSON, so there is no non-JSON→signed-out heuristic here (that is
+ * GitLab's cookie-session-specific rule).
+ */
+async function githubGet(url: string, token: string): Promise<GetOutcome> {
+  let response: Response;
+  try {
+    // Bounded: a timeout rejects (AbortError) into the catch below → 'error'.
+    response = await boundedFetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+      },
+      credentials: 'omit',
+    });
+  } catch {
+    return { kind: 'error' };
+  }
+  if (response.status === 401) return { kind: 'signed-out' };
+  if (!response.ok) return { kind: 'error' };
+  let json: unknown;
+  try {
+    json = await response.json();
+  } catch {
+    return { kind: 'error' };
+  }
+  return { kind: 'ok', json };
+}
+
+// ── response shapes (lenient: unknown keys stripped, never rejected) ───────────
+
+const SearchItemSchema = z.object({
+  id: z.union([z.number(), z.string()]),
+  title: z.string(),
+  html_url: z.string(),
+  pull_request: z.object({ url: z.string() }).optional(),
+});
+
+const SearchResponseSchema = z.object({ items: z.array(z.unknown()) });
+
+const PrDetailSchema = z.object({
+  draft: z.boolean().optional(),
+  head: z.object({ sha: z.string() }).optional(),
+  base: z.object({ repo: z.object({ full_name: z.string() }) }).optional(),
+});
+
+const CheckRunsSchema = z.object({
+  check_runs: z.array(
+    z.object({
+      status: z.string(),
+      conclusion: z.string().nullable().optional(),
+    }),
+  ),
+});
+
+type CheckRun = z.infer<typeof CheckRunsSchema>['check_runs'][number];
+
+// ── check-run aggregation (D5) ─────────────────────────────────────────────────
+
+const FAIL_CONCLUSIONS = new Set(['failure', 'timed_out', 'action_required']);
+const WARN_CONCLUSIONS = new Set(['skipped', 'cancelled']);
+
+/**
+ * Aggregate a commit's check runs onto one tone, by precedence: any failing
+ * conclusion → `fail`; else any incomplete run → `pending`; else any success →
+ * `ok`; else any skipped/cancelled → `warn`. Unmapped conclusions (`neutral`,
+ * `stale`, anything GitHub adds later) are ignored — when only unmapped
+ * conclusions remain, or there are zero runs, the item carries no status
+ * (absence over guessing, the GitLab unmapped-pipeline precedent).
+ */
+export function aggregateCheckRuns(runs: CheckRun[]): SmartFolderItem['status'] {
+  if (runs.some((r) => FAIL_CONCLUSIONS.has(r.conclusion ?? ''))) {
+    return { tone: 'fail', label: 'Checks failed' };
+  }
+  if (runs.some((r) => r.status !== 'completed')) {
+    return { tone: 'pending', label: 'Checks running' };
+  }
+  if (runs.some((r) => r.conclusion === 'success')) {
+    return { tone: 'ok', label: 'Checks passed' };
+  }
+  if (runs.some((r) => WARN_CONCLUSIONS.has(r.conclusion ?? ''))) {
+    return { tone: 'warn', label: 'Checks skipped' };
+  }
+  return undefined;
+}
+
+/** Map items through `fn` with at most `limit` in flight at once. */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (;;) {
+      const index = next;
+      next += 1;
+      if (index >= items.length) return;
+      const item = items[index] as T;
+      results[index] = await fn(item);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+interface Enrichment {
+  draft: boolean;
+  status: SmartFolderItem['status'];
+}
+
+/**
+ * Bounded per-PR enrichment (≤2 extra requests each): the search item's
+ * `pull_request.url` → PR detail (carries `head.sha` and `draft`), then that
+ * commit's check-runs at `per_page=100` (one page — the default 30 could hide
+ * a failing run on check-heavy repos; 100 covers realistic suites without
+ * pagination). Any failure leaves the item glyph-less, never failing the
+ * folder.
+ */
+async function enrich(
+  prUrl: string | undefined,
+  apiRoot: string,
+  token: string,
+): Promise<Enrichment> {
+  const none: Enrichment = { draft: false, status: undefined };
+  if (prUrl === undefined) return none;
+  const detailOutcome = await githubGet(prUrl, token);
+  if (detailOutcome.kind !== 'ok') return none;
+  const detail = PrDetailSchema.safeParse(detailOutcome.json);
+  if (!detail.success) return none;
+  const draft = detail.data.draft === true;
+  const sha = detail.data.head?.sha;
+  const repo = detail.data.base?.repo.full_name;
+  if (sha === undefined || repo === undefined) return { draft, status: undefined };
+  const runsOutcome = await githubGet(
+    `${apiRoot}/repos/${repo}/commits/${sha}/check-runs?per_page=100`,
+    token,
+  );
+  if (runsOutcome.kind !== 'ok') return { draft, status: undefined };
+  const runs = CheckRunsSchema.safeParse(runsOutcome.json);
+  if (!runs.success) return { draft, status: undefined };
+  return { draft, status: aggregateCheckRuns(runs.data.check_runs) };
+}
+
+/**
+ * Fetch one GitHub smart folder's results. Never throws — every failure shape
+ * resolves to a runtime state. No token for the folder's host short-circuits
+ * to `signed-out` WITHOUT a request (the `@me` queries require auth, so the
+ * request could only fail; not sending it is honest and rate-limit kind).
+ */
+async function fetchRuntime(
+  node: Pick<SmartFolderNode, 'baseUrl' | 'query'>,
+  _caches?: ConnectorCaches,
+): Promise<SmartFolderRuntime> {
+  const fetchedAt = Date.now();
+  const fail = (state: 'signed-out' | 'error'): SmartFolderRuntime => ({
+    state,
+    items: [],
+    fetchedAt,
+  });
+
+  let host: string;
+  let apiRoot: string;
+  try {
+    host = hostOf(node.baseUrl);
+    apiRoot = apiRootOf(node.baseUrl);
+  } catch {
+    // A malformed persisted baseUrl (defensive — the SW validates on
+    // create/update) degrades to the quiet error state, never a throw.
+    return fail('error');
+  }
+  const connectors = await readConnectors();
+  const token = connectors[host];
+  if (token === undefined) return fail('signed-out');
+
+  // `advanced_search=true` rides GitHub's issue-search migration — becoming
+  // required on github.com, ignored by GHE versions that predate it.
+  const url =
+    `${apiRoot}/search/issues?q=is:pr+is:open+${qualifierFor(node.query)}` +
+    `&per_page=${RESULTS_CAP}&sort=updated&order=desc&advanced_search=true`;
+  const outcome = await githubGet(url, token);
+  if (outcome.kind !== 'ok') return fail(outcome.kind);
+  const parsed = SearchResponseSchema.safeParse(outcome.json);
+  if (!parsed.success) return fail('error');
+
+  // Element-wise parse: one malformed item never costs the rest of the list.
+  const prs = parsed.data.items
+    .flatMap((element) => {
+      const item = SearchItemSchema.safeParse(element);
+      return item.success ? [item.data] : [];
+    })
+    .slice(0, RESULTS_CAP);
+
+  const enrichments = await mapWithConcurrency(prs, ENRICH_CONCURRENCY, (pr) =>
+    enrich(pr.pull_request?.url, apiRoot, token),
+  );
+
+  const items: SmartFolderItem[] = prs.map((pr, index) => {
+    const enrichment = enrichments[index] ?? { draft: false, status: undefined };
+    return {
+      id: String(pr.id),
+      // GitHub does not bake draft-ness into the title the way GitLab does —
+      // the prefix restores at-a-glance parity.
+      title: enrichment.draft ? `Draft: ${pr.title}` : pr.title,
+      url: pr.html_url,
+      ...(enrichment.status !== undefined ? { status: enrichment.status } : {}),
+    };
+  });
+
+  return { state: 'ok', items, fetchedAt };
+}
+
+/** The GitHub `SourceConnector` — the registry's `github` entry. */
+export const githubConnector: SourceConnector = {
+  source: 'github',
+  defaultBaseUrl: 'https://github.com',
+  mintedIcon: 'folder-git-2',
+  fetchRuntime,
+};

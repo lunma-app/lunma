@@ -294,6 +294,31 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
     payload: { spaceId: 'sp', folderId: 'f', color: 'red' },
   },
   deleteFolder: { kind: 'deleteFolder', payload: { spaceId: 'sp', folderId: 'f' } },
+  createSmartFolder: {
+    kind: 'createSmartFolder',
+    payload: {
+      spaceId: 'sp',
+      source: 'gitlab',
+      name: 'Review requests',
+      baseUrl: 'https://gitlab.example.com',
+      query: 'review-requested',
+      refreshMinutes: 10,
+    },
+  },
+  updateSmartFolder: {
+    kind: 'updateSmartFolder',
+    payload: {
+      spaceId: 'sp',
+      folderId: 'sf',
+      source: 'github',
+      name: 'Assigned to me',
+      baseUrl: 'https://github.com',
+      query: 'assigned',
+      refreshMinutes: 30,
+    },
+  },
+  deleteSmartFolder: { kind: 'deleteSmartFolder', payload: { spaceId: 'sp', folderId: 'sf' } },
+  refreshSmartFolder: { kind: 'refreshSmartFolder', payload: { spaceId: 'sp', folderId: 'sf' } },
   reorderTemp: { kind: 'reorderTemp', payload: { windowId: 1, tabIds: [1, 2, 3] } },
   reorderSpaces: { kind: 'reorderSpaces', payload: { spaceIds: ['a', 'b'] } },
   renameTab: { kind: 'renameTab', payload: { savedTabId: 'st', newName: 'N' } },
@@ -427,6 +452,191 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
       payload: { spaceId: 'sp', autoArchive: { mode: 'custom', idleMinutes: 0 } },
     });
     expect(parsed.success).toBe(false);
+  });
+
+  test('rejects an out-of-vocabulary smart-folder query', () => {
+    expect(
+      SidebarCommandSchema.safeParse({
+        kind: 'createSmartFolder',
+        payload: {
+          spaceId: 'sp',
+          source: 'gitlab',
+          name: 'X',
+          baseUrl: 'https://gitlab.com',
+          query: 'merged-by-me', // not in the canned enum
+          refreshMinutes: 10,
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  test('createSmartFolder and updateSmartFolder round-trip with each source', () => {
+    for (const source of ['gitlab', 'github'] as const) {
+      const create = {
+        kind: 'createSmartFolder',
+        payload: {
+          spaceId: 'sp',
+          source,
+          name: 'X',
+          baseUrl: 'https://forge.example.com',
+          query: 'authored',
+          refreshMinutes: 10,
+        },
+      };
+      const update = {
+        kind: 'updateSmartFolder',
+        payload: { ...create.payload, folderId: 'sf-1' },
+      };
+      const parsedCreate = SidebarCommandSchema.safeParse(create);
+      expect(parsedCreate.success, `create with ${source}`).toBe(true);
+      if (parsedCreate.success) expect(parsedCreate.data).toEqual(create);
+      const parsedUpdate = SidebarCommandSchema.safeParse(update);
+      expect(parsedUpdate.success, `update with ${source}`).toBe(true);
+      if (parsedUpdate.success) expect(parsedUpdate.data).toEqual(update);
+    }
+  });
+
+  test('rejects an out-of-vocabulary smart-folder source', () => {
+    for (const kind of ['createSmartFolder', 'updateSmartFolder'] as const) {
+      expect(
+        SidebarCommandSchema.safeParse({
+          kind,
+          payload: {
+            spaceId: 'sp',
+            ...(kind === 'updateSmartFolder' ? { folderId: 'sf-1' } : {}),
+            source: 'jira', // not a shipped connector
+            name: 'X',
+            baseUrl: 'https://jira.example.com',
+            query: 'authored',
+            refreshMinutes: 10,
+          },
+        }).success,
+        `${kind} with source jira`,
+      ).toBe(false);
+    }
+  });
+
+  test('rejects a createSmartFolder missing its source', () => {
+    expect(
+      SidebarCommandSchema.safeParse({
+        kind: 'createSmartFolder',
+        payload: {
+          spaceId: 'sp',
+          name: 'X',
+          baseUrl: 'https://gitlab.com',
+          query: 'authored',
+          refreshMinutes: 10,
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  test('rejects a createSmartFolder carrying a sidebar-minted folderId', () => {
+    // The SW mints the id — a `folderId` on create is an extra key (strict).
+    expect(
+      SidebarCommandSchema.safeParse({
+        kind: 'createSmartFolder',
+        payload: {
+          spaceId: 'sp',
+          folderId: 'sf-1',
+          source: 'gitlab',
+          name: 'X',
+          baseUrl: 'https://gitlab.com',
+          query: 'authored',
+          refreshMinutes: 10,
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  test('rejects an updateSmartFolder missing its folderId', () => {
+    expect(
+      SidebarCommandSchema.safeParse({
+        kind: 'updateSmartFolder',
+        payload: {
+          spaceId: 'sp',
+          source: 'gitlab',
+          name: 'X',
+          baseUrl: 'https://gitlab.com',
+          query: 'authored',
+          refreshMinutes: 10,
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  test('a reorderPinned tree containing a smart node round-trips losslessly', () => {
+    const smartNode = {
+      kind: 'smart',
+      id: 'sf-1',
+      name: 'Review requests',
+      icon: 'folder-git-2',
+      source: 'gitlab',
+      baseUrl: 'https://gitlab.example.com',
+      query: 'review-requested',
+      refreshMinutes: 5,
+    };
+    const cmd = {
+      kind: 'reorderPinned',
+      payload: {
+        spaceId: 'sp',
+        nodes: [
+          { kind: 'tab', id: 't1' },
+          smartNode,
+          { kind: 'folder', id: 'f1', name: 'F', icon: 'folder', color: 'gray', children: ['t2'] },
+        ],
+      },
+    };
+    const parsed = SidebarCommandSchema.safeParse(cmd);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data).toEqual(cmd);
+  });
+
+  test('a reorderPinned tree containing a github smart node round-trips losslessly', () => {
+    const cmd = {
+      kind: 'reorderPinned',
+      payload: {
+        spaceId: 'sp',
+        nodes: [
+          {
+            kind: 'smart',
+            id: 'sf-1',
+            name: 'My pull requests',
+            icon: 'folder-git-2',
+            source: 'github',
+            baseUrl: 'https://github.com',
+            query: 'authored',
+            refreshMinutes: 10,
+          },
+        ],
+      },
+    };
+    const parsed = SidebarCommandSchema.safeParse(cmd);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data).toEqual(cmd);
+  });
+
+  test('rejects a smart PinNode with an out-of-vocabulary source', () => {
+    expect(
+      SidebarCommandSchema.safeParse({
+        kind: 'reorderPinned',
+        payload: {
+          spaceId: 'sp',
+          nodes: [
+            {
+              kind: 'smart',
+              id: 'sf-1',
+              name: 'X',
+              icon: 'folder-git-2',
+              source: 'jira',
+              baseUrl: 'https://jira.example.com',
+              query: 'authored',
+              refreshMinutes: 10,
+            },
+          ],
+        },
+      }).success,
+    ).toBe(false);
   });
 });
 

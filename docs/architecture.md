@@ -93,7 +93,7 @@ The new-tab page (`launcher/newtab/`) is its own page and a full Svelte app. It 
 import type { AppState, SpaceId, WindowId } from './types';
 
 const initial: AppState = {
-  schemaVersion: 5,
+  schemaVersion: 3,
   spaces: [],                  // Space records: { id, name, color, icon } — Lunma-owned (ADR 0005)
   activeSpaceByWindow: {},
   spaceInstancesByWindow: {},  // { [windowId]: { [spaceId]: SpaceInstance } } — nested per (window, Space) (ADR 0007)
@@ -103,14 +103,19 @@ const initial: AppState = {
   tabLastActivity: {},
   archivedTabs: [],
   trash: {},
-  pinnedBySpace: {},           // { [spaceId]: PinNode[] } — ordered tree of tab|folder nodes
+  pinnedBySpace: {},           // { [spaceId]: PinNode[] } — ordered tree of tab|folder|smart nodes
                                //   PinNode = { kind:'tab'; id }
                                //           | { kind:'folder'; id; name; icon; color; children: savedTabId[] }
-                               //   single-level (folder children are tab ids, never nested folders)
+                               //           | { kind:'smart'; id; name; icon; source:'gitlab'|'github'; baseUrl; query; refreshMinutes }
+                               //   single-level (folder children are tab ids, never nested folders);
+                               //   a smart node is connector CONFIG only — its displayed children are
+                               //   ephemeral query results in smartFolders, never persisted on the node
   faviconRow: [],              // SavedTabId[] — flat, GLOBAL favicon-row favorites (ADR 0010):
                                //   the ids whose SavedTab.spaceId === null (decoupled). Sibling to
                                //   pinnedBySpace, NOT keyed by Space; a record is in one XOR the other.
   liveTabsById: {},            // { [tabId]: LiveTab } — EPHEMERAL, stripped before persist
+  smartFolders: {},            // { [folderId]: SmartFolderRuntime } — EPHEMERAL connector results
+                               //   (smart-folders), stripped before persist like liveTabsById
 };
 
 export class LunmaStore {
@@ -149,7 +154,7 @@ Key properties:
 - Tests instantiate `new LunmaStore()` and call methods directly without `await`. Coverage is method-by-method.
 - The file uses the `.svelte.ts` extension because Svelte 5's `$state` rune is only compiled outside `.svelte` files when the filename ends in `.svelte.ts` or `.svelte.js`.
 
-**Ephemeral state slice — `liveTabsById`.** `AppState.liveTabsById: { [tabId]: LiveTab }` mirrors live Chrome-tab metadata (`title`, `url`, `active`, `status: 'loading' | 'complete'`) so surfaces can render a tab list from the broadcast state alone. It is maintained entirely by the SW via `syncLiveTab` (create/update), `removeLiveTab` (remove), and `setActiveTab` (activate), and is **never persisted**: `persist()` strips it before writing, so the on-disk shape is unchanged and there is **no schema-version bump**. It is rebuilt from `chrome.tabs.query({})` via `store.rebuildLiveTabs(tabs)` at SW boot (after load/recovery, before listener registration), never read back from disk. The persisted-state schema (the **current-version** schema — `AppStateV5Schema` at `CURRENT_SCHEMA_VERSION = 5`) accepts the slice as `.optional()` so reads tolerate its absence; the runtime `AppState` type keeps it required. (`readPersistedState` migrates the stored state up to the current version, then validates against that current-version schema — never a hardcoded older one, which would reject the current nested-instance / `PinNode` shape and spuriously quarantine every restart.) The temp list renders in `tempTabIds` array order and is user-reorderable via the `reorderTemp` command (ADR 0006); no `chrome.tabs.onMoved` listener is needed.
+**Ephemeral state slices — `liveTabsById` and `smartFolders`.** `AppState.liveTabsById: { [tabId]: LiveTab }` mirrors live Chrome-tab metadata (`title`, `url`, `active`, `status: 'loading' | 'complete'`) so surfaces can render a tab list from the broadcast state alone. It is maintained entirely by the SW via `syncLiveTab` (create/update), `removeLiveTab` (remove), and `setActiveTab` (activate), and is **never persisted**: `persist()` strips it before writing, so the on-disk shape is unchanged and there is **no schema-version bump**. It is rebuilt from `chrome.tabs.query({})` via `store.rebuildLiveTabs(tabs)` at SW boot (after load/recovery, before listener registration), never read back from disk. `AppState.smartFolders: { [folderId]: SmartFolderRuntime }` (smart-folders) follows the same pattern: each smart folder's live query results + fetch state (`pending | ok | signed-out | error`), written only by the coordinator drain via `setSmartFolderRuntime`, stripped by `persist()` alongside `liveTabsById` (work-sensitive MR titles never touch disk), and rebuilt by connector polls after a SW restart — a cold start costs one quiet pending beat. The persisted-state schema (the **current-version** schema — `AppStateV3Schema` at `CURRENT_SCHEMA_VERSION = 3`) accepts both slices as `.optional()` so reads tolerate their absence; the runtime `AppState` type keeps them required. (`readPersistedState` migrates the stored state up to the current version, then validates against that current-version schema — never a hardcoded older one, which would reject the current nested-instance / `PinNode` shape and spuriously quarantine every restart.) The temp list renders in `tempTabIds` array order and is user-reorderable via the `reorderTemp` command (ADR 0006); no `chrome.tabs.onMoved` listener is needed.
 
 ## The event coordinator (single sequencer)
 
@@ -196,7 +201,7 @@ class Coordinator {
     }
     if (this.dirty) {
       this.dirty = false;
-      await persist(store.state);     // persist() strips the ephemeral liveTabsById slice
+      await persist(store.state);     // persist() strips the ephemeral liveTabsById + smartFolders slices
       broadcastState('<batched>', store.state);
     }
   }
@@ -369,15 +374,15 @@ foundation for a future user-customisable base colour.
 
 ## Storage schema + migrations
 
-State is persisted to `chrome.storage.local` under the key `lunma.state` as a versioned envelope `{ schemaVersion, state }`. The current baseline is **schema v1** (`CURRENT_SCHEMA_VERSION = 1` in `apps/extension/src/shared/schemas.ts`). The placeholder-era v1–v11 migration chain was collapsed to a single schema at the pre-release rebrand; the migration list is **empty** today. The migration shape is `{ toVersion: number; migrate: (raw: unknown) => unknown }` (see `apps/extension/src/shared/migrations.ts`).
+State is persisted to `chrome.storage.local` under the key `lunma.state` as a versioned envelope `{ schemaVersion, state }`. The current version is **schema v3** (`CURRENT_SCHEMA_VERSION = 3` in `apps/extension/src/shared/schemas.ts`). The migration list holds two real entries, both pure pass-throughs: the smart-folders change widened the persisted `PinNode` union with the `smart` kind and bumped v1 → v2 (`{ toVersion: 2, migrate: (raw) => raw }` — v1 data cannot contain smart nodes), and the github-connector change widened the smart node's `source` to `'gitlab' | 'github'` and bumped v2 → v3 (`{ toVersion: 3, migrate: (raw) => raw }` — v2 data cannot contain `github` nodes and no field changes shape). Each bump is deliberate despite the pass-through: it makes a DOWNGRADE detectable — an older build reading newer data quarantines on the version gate instead of Zod-rejecting unfamiliar nodes with a confusing parse error. The v1 baseline itself dates from the pre-release rebrand, where the placeholder-era v1–v11 chain was collapsed to a single schema; the list is append-only from that baseline forward. The migration shape is `{ toVersion: number; migrate: (raw: unknown) => unknown }` (see `apps/extension/src/shared/migrations.ts`).
 
 `readPersistedState()` (`apps/extension/src/shared/chrome/storage.ts`) handles every read:
 
 1. Reads `lunma.state` with bounded retry (up to 3 attempts); a sustained read failure returns `{ kind: 'unavailable' }` — this path **never** overwrites on-disk state.
 2. An absent key returns `{ kind: 'empty' }` (first install).
 3. Validates the envelope's `schemaVersion`; an invalid version quarantines the raw bytes and returns `{ kind: 'corrupt' }`.
-4. Runs `runMigrations(persistedState, persistedVersion)` (a no-op today); a thrown migration quarantines and returns `{ kind: 'corrupt' }`.
-5. Runs `AppStateV1Schema.safeParse(migrated)`. On **success**, de-duplicates ids (`dedupePersistedState`) and self-heals: writes the cleaned envelope back when the version migrated up or duplicates were removed. Returns `{ kind: 'ok', state }`.
+4. Runs `runMigrations(persistedState, persistedVersion)` (today: the v2 + v3 pass-throughs for older envelopes); a thrown migration quarantines and returns `{ kind: 'corrupt' }`.
+5. Runs `AppStateV3Schema.safeParse(migrated)`. On **success**, de-duplicates ids (`dedupePersistedState`) and self-heals: writes the cleaned envelope back when the version migrated up or duplicates were removed. Returns `{ kind: 'ok', state }`.
 6. On **parse failure**, attempts **per-slice salvage** (`salvagePersistedState`): `spaces` is salvaged element-wise (each individually-valid Space is kept; corrupt entries are dropped); every other top-level slice is salvaged slice-wise (kept when valid, defaulted otherwise). The raw bytes are **always** quarantined regardless of salvage outcome. If salvage succeeds, the salvaged state is de-duped, written back (self-heal), and returned as `{ kind: 'salvaged', state }`. If salvage returns null, returns `{ kind: 'corrupt' }`.
 
 ### Quarantine contract
@@ -404,7 +409,7 @@ The captured `rawBytes` is always the original envelope read from disk, before a
 | Sidebar | DOM, user interaction, drag-drop | yes (subscriber via state broadcast) | yes (calls store methods through SW message bridge) |
 | Launcher overlay | `Alt+L` page injection, search UI | no (queries the suggestions channel) | no — dispatches `focusTab`/`focusSavedTab`/`openSavedTab`/`openUrl` over the bus |
 | Launcher newtab | Empty-Space home (Space identity) + inline search | yes (read-only: snapshot + `state-broadcast`, like the sidebar) + queries the suggestions channel | no — dispatches result actions over the bus |
-| Options | Settings UI | reads `chrome.storage.sync` directly | writes `chrome.storage.sync` |
+| Options | Settings UI + Connectors (per-host PATs) | reads `chrome.storage.sync` directly; reads `chrome.storage.local` for archived tabs + the `lunma.connectors` record | writes `chrome.storage.sync`; writes `lunma.connectors` in `chrome.storage.local` via `shared/connectors.ts` |
 | Onboarding | Static content + open links | no | no |
 
 Sidebar and SW are the only two surfaces that mutate the store. Everything else is read-only or settings-only.

@@ -890,7 +890,7 @@ describe('Coordinator handlers: pinTab', () => {
     for (const node of store.state.pinnedBySpace[spaceId] ?? []) {
       if (node.kind === 'tab') {
         if (node.id === savedTabId) count += 1;
-      } else if (node.children.includes(savedTabId)) {
+      } else if (node.kind === 'folder' && node.children.includes(savedTabId)) {
         count += 1;
       }
     }

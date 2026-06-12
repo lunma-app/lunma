@@ -47,9 +47,31 @@ interface Props {
   canMoveDown?: boolean | undefined;
   /** The colour palette for the inline swatch row. */
   colors?: readonly SpaceColor[];
+  /** Optional trailing badge (e.g. a smart folder's quiet item count). Absent →
+   * no badge element renders, the prior layout byte-for-byte. */
+  badge?: string | undefined;
+  /** Menu override: when provided, REPLACES the built-in folder action morph
+   * (rename / Icon & colour / Move / two-step Delete) wholesale — for rows
+   * whose actions are not folder-shaped (e.g. a smart folder). */
+  menuItems?: RowMenuItem[] | undefined;
+  /** Spins the glyph at the established 0.8s-linear cadence while an in-flight
+   * refresh runs; static `--text-dim` under reduced motion (a refresh indicator
+   * is decoration, not information — calmer than a loading spinner). */
+  busy?: boolean | undefined;
+  /** Pass-throughs to RowMenu's drill-in API: a titled `panel` replaces the
+   * action list with `‹ panelTitle` + the panel (e.g. a smart folder's Edit…
+   * editor). Absent → the built-in Icon & colour panel behavior, unchanged. */
+  panel?: Snippet | undefined;
+  panelTitle?: string | undefined;
+  onPanelBack?: (() => void) | undefined;
+  /** Optional bindable kebab-menu open state (the `SectionHeader` precedent):
+   * lets a host close the menu programmatically — e.g. a smart folder's
+   * editor confirm dismissing the whole morph. Unbound callers keep the
+   * prior internal open/close behavior unchanged. */
+  menuOpen?: boolean;
 }
 
-const {
+let {
   name,
   icon,
   color,
@@ -69,19 +91,28 @@ const {
   canMoveUp = false,
   canMoveDown = false,
   colors = [],
+  badge,
+  menuItems,
+  busy = false,
+  panel,
+  panelTitle,
+  onPanelBack,
+  // Action-morph open state — bindable so hosts can dismiss; defaults to the
+  // same internal `false` the previous private $state held.
+  menuOpen = $bindable(false),
 }: Props = $props();
 
 const hue = $derived(colourToHue(color));
 
-// Action-morph state + the in-drawer icon/colour panel toggle.
-let menuOpen = $state(false);
+// The in-drawer icon/colour panel toggle.
 let showAppearance = $state(false);
 // Two-step Delete arm — Delete folder arms into a danger confirm before dispatching.
 let confirmingDelete = $state(false);
 
 // Move entries are plain text (no icon) per the change's visual language; the
-// destructive Delete stays last and arms before firing.
-const menuItems = $derived<RowMenuItem[]>([
+// destructive Delete stays last and arms before firing. A caller-provided
+// `menuItems` override replaces this list wholesale.
+const builtinMenuItems = $derived<RowMenuItem[]>([
   { id: 'rename', label: 'Rename', icon: 'pencil', onSelect: () => onStartRename?.() },
   {
     id: 'appearance',
@@ -132,31 +163,37 @@ function onMenuOpenChange(open: boolean): void {
   if (!open) {
     showAppearance = false;
     confirmingDelete = false; // closing / Escape disarms a pending Delete
+    // A forwarded drill-in is dismissed with the menu, so the parent's flag
+    // resets and the next open lands on the action list, not a stale panel.
+    if (panel) onPanelBack?.();
   }
 }
 </script>
 
 <RowMenu
-  items={menuItems}
+  items={menuItems ?? builtinMenuItems}
   label="Folder actions"
   bind:open={menuOpen}
   onOpenChange={onMenuOpenChange}
   testidPrefix="folder-row-menu"
   header={folderHeader}
->
-  {#snippet panel()}
-    {#if showAppearance}
-      <div class="appearance" data-testid="folder-appearance">
-        <div class="swatch-row" role="radiogroup" aria-label="Folder colour">
-          {#each colors as c (c)}
-            <ColorSwatch color={c} selected={c === color} onclick={() => onSetColor?.(c)} />
-          {/each}
-        </div>
-        <IconPicker value={icon} onselect={(i) => onSetIcon?.(i)} />
+  panel={panel ?? appearancePanel}
+  {panelTitle}
+  {onPanelBack}
+/>
+
+{#snippet appearancePanel()}
+  {#if showAppearance}
+    <div class="appearance" data-testid="folder-appearance">
+      <div class="swatch-row" role="radiogroup" aria-label="Folder colour">
+        {#each colors as c (c)}
+          <ColorSwatch color={c} selected={c === color} onclick={() => onSetColor?.(c)} />
+        {/each}
       </div>
-    {/if}
-  {/snippet}
-</RowMenu>
+      <IconPicker value={icon} onselect={(i) => onSetIcon?.(i)} />
+    </div>
+  {/if}
+{/snippet}
 
 {#snippet folderHeader({ trigger }: { trigger: Snippet; expanded: boolean })}
   <div
@@ -170,7 +207,7 @@ function onMenuOpenChange(open: boolean): void {
       <span class="chevron" class:expanded aria-hidden="true">
         <Icon name="chevron-right" size={12} />
       </span>
-      <span class="glyph" aria-hidden="true">
+      <span class="glyph" class:busy aria-hidden="true">
         <Icon name={icon} size={16} />
       </span>
       <EditableLabel
@@ -192,10 +229,13 @@ function onMenuOpenChange(open: boolean): void {
         <span class="chevron" class:expanded aria-hidden="true">
           <Icon name="chevron-right" size={12} />
         </span>
-        <span class="glyph" aria-hidden="true">
+        <span class="glyph" class:busy aria-hidden="true">
           <Icon name={icon} size={16} />
         </span>
         <span class="name">{name}</span>
+        {#if badge !== undefined}
+          <span class="badge" data-testid="folder-row-badge">{badge}</span>
+        {/if}
       </button>
     {/if}
     <span class="trailing">{@render trigger()}</span>
@@ -283,6 +323,24 @@ function onMenuOpenChange(open: boolean): void {
     color: var(--folder-c);
   }
 
+  /* In-flight refresh — TabRow's 0.8s-linear spinner cadence. Under reduced
+   * motion the indicator holds STATIC at --text-dim (a refresh indicator is
+   * decoration, not information — calmer than FaviconTile's slowed spin). */
+  .glyph.busy {
+    animation: folder-row-busy 0.8s linear infinite;
+  }
+  @keyframes folder-row-busy {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .glyph.busy {
+      animation: none;
+      color: var(--text-dim);
+    }
+  }
+
   .name {
     flex: 1;
     min-width: 0;
@@ -290,6 +348,17 @@ function onMenuOpenChange(open: boolean): void {
     white-space: nowrap;
     text-overflow: ellipsis;
     font: var(--weight-regular) var(--text-base) / 1 var(--font-sans);
+  }
+
+  /* Quiet trailing count badge — a soft pill that never competes with the name. */
+  .badge {
+    flex-shrink: 0;
+    margin-left: var(--space-2);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--r-pill);
+    background: var(--surface-2);
+    color: var(--text-faint);
+    font: var(--weight-medium) var(--text-2xs) / 1 var(--font-sans);
   }
 
   /* Trailing kebab — quiet until row hover or the menu is open. */

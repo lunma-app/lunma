@@ -1214,3 +1214,166 @@ describe('PinnedTabs keyboard reorder (Move up/down)', () => {
     });
   });
 });
+
+describe('PinnedTabs smart-folder node (smart-folders, design D13)', () => {
+  const SMART_NODE = {
+    kind: 'smart',
+    id: 'sf-1',
+    name: 'Review requests',
+    icon: 'folder-git-2',
+    source: 'gitlab',
+    baseUrl: 'https://gitlab.example.com',
+    query: 'review-requested',
+    refreshMinutes: 10,
+  } as const;
+
+  /** A top-level tab st-1 plus the smart node, in the given order. */
+  function withSmart(order: 'tab-first' | 'smart-first' = 'tab-first'): LunmaStore {
+    const store = makeStore();
+    store.state.savedTabs['st-1'] = savedTab({ id: 'st-1', currentURL: null });
+    store.state.tabBindings['st-1'] = {};
+    store.state.pinnedBySpace.work =
+      order === 'tab-first'
+        ? [{ kind: 'tab', id: 'st-1' }, { ...SMART_NODE }]
+        : [{ ...SMART_NODE }, { kind: 'tab', id: 'st-1' }];
+    return store;
+  }
+
+  test('renders the smart row via SmartFolder (folder-row chrome, no TabRow)', async () => {
+    const store = withSmart();
+    const { container } = render(PinnedTabsHarness, {
+      props: { store, windowId: 100, spaceId: 'work' },
+    });
+    const wrap = container.querySelector('[data-row-id="sf-1"]') as HTMLElement;
+    expect(wrap.getAttribute('data-row-kind')).toBe('smart');
+    expect(wrap.querySelector('[data-testid="folder-row"]')).not.toBeNull();
+    expect(wrap.querySelector('[data-testid="tab-row"]')).toBeNull();
+    expect(wrap.textContent).toContain('Review requests');
+  });
+
+  test('a smart node drag-reorders among pins as one unit (full-tree round-trip)', async () => {
+    const store = withSmart('smart-first');
+    const { container } = render(PinnedTabsHarness, {
+      props: { store, windowId: 100, spaceId: 'work' },
+    });
+    await Promise.resolve();
+
+    const zone = container.querySelector('[data-testid="pinned-tabs"]') as HTMLElement;
+    const rows = container.querySelectorAll('.row-wrap');
+    stubRect(zone, 0, 80);
+    stubRect(rows[0] as Element, 0, 40); // sf-1
+    stubRect(rows[1] as Element, 40, 80); // st-1
+
+    // Grab the smart row (via its folder-row chrome, where the press handler
+    // lives) and drag it below the tab row.
+    const grabEl = (rows[0] as Element).querySelector('[data-testid="folder-row"]') as HTMLElement;
+    await fireEvent.pointerDown(grabEl, { clientX: 50, clientY: 10, button: 0 });
+    window.dispatchEvent(pointer('pointermove', 50, 70));
+    window.dispatchEvent(pointer('pointermove', 50, 75));
+    window.dispatchEvent(pointer('pointerup', 50, 75));
+
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'reorderPinned',
+      payload: {
+        spaceId: 'work',
+        // The smart node round-trips losslessly with all config fields intact.
+        nodes: [{ kind: 'tab', id: 'st-1' }, { ...SMART_NODE }],
+      },
+    });
+  });
+
+  test('a tab dropped ONTO a smart row inserts at the nearest edge — never files, never mints', async () => {
+    const store = withSmart('tab-first');
+    const { container } = render(PinnedTabsHarness, {
+      props: { store, windowId: 100, spaceId: 'work' },
+    });
+    await Promise.resolve();
+
+    const zone = container.querySelector('[data-testid="pinned-tabs"]') as HTMLElement;
+    const rows = container.querySelectorAll('.row-wrap');
+    stubRect(zone, 0, 80);
+    stubRect(rows[0] as Element, 0, 40); // st-1
+    stubRect(rows[1] as Element, 40, 80); // sf-1
+
+    // Drag the tab directly onto the smart row's MIDDLE band (y≈65 — inside the
+    // would-be onto band). Smart rows are never reported via targetOntoId, so
+    // the drop degrades to a nearest-edge top-level insertion.
+    await fireEvent.pointerDown(rows[0] as Element, { clientX: 50, clientY: 10, button: 0 });
+    window.dispatchEvent(pointer('pointermove', 50, 30));
+    window.dispatchEvent(pointer('pointermove', 50, 65));
+    window.dispatchEvent(pointer('pointerup', 50, 65));
+
+    // No folder minted, nothing filed "into" the smart node — a plain reorder.
+    expect(sendMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'createFolderFromTabs' }),
+    );
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'reorderPinned',
+      payload: {
+        spaceId: 'work',
+        nodes: [{ ...SMART_NODE }, { kind: 'tab', id: 'st-1' }],
+      },
+    });
+  });
+
+  test('dragging a smart folder onto the temporary zone bounces (no dispatch)', async () => {
+    const store = withSmart('tab-first');
+    const { container } = render(PinnedTabsHarness, {
+      props: { store, windowId: 100, spaceId: 'work' },
+    });
+    await Promise.resolve();
+    const rows = container.querySelectorAll('.row-wrap');
+
+    const tempEl = document.createElement('div');
+    tempEl.setAttribute('data-testid', 'temp');
+    document.body.appendChild(tempEl);
+    const restore = installLayout({
+      'pinned-tabs': [0, 80],
+      'st-1': [0, 40],
+      'sf-1': [40, 80],
+      temp: [100, 200],
+    });
+    const unregister = drag.registerZone('temp:100', { el: tempEl, itemEls: () => [] });
+
+    const grabEl = (rows[1] as Element).querySelector('[data-testid="folder-row"]') as HTMLElement;
+    await fireEvent.pointerDown(grabEl, { clientX: 50, clientY: 50, button: 0 });
+    window.dispatchEvent(pointer('pointermove', 50, 70));
+    window.dispatchEvent(pointer('pointermove', 50, 150)); // into temp
+    window.dispatchEvent(pointer('pointerup', 50, 150));
+    restore();
+    unregister();
+    tempEl.remove();
+
+    // Rejected exactly like a folder: no state change, no unpin, no reorder.
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  test('menu Move up dispatches the full post-move tree; Move down disabled at the end', async () => {
+    const store = withSmart('tab-first'); // smart node is LAST
+    const { container } = render(PinnedTabsHarness, {
+      props: { store, windowId: 100, spaceId: 'work' },
+    });
+    const wrap = container.querySelector('[data-row-id="sf-1"]') as HTMLElement;
+    await fireEvent.click(
+      wrap.querySelector('[data-testid="folder-row-menu-trigger"]') as HTMLButtonElement,
+    );
+    const item = (id: string): HTMLButtonElement =>
+      [...wrap.querySelectorAll('[data-testid="folder-row-menu-item"]')].find(
+        (el) => el.getAttribute('data-menu-id') === id,
+      ) as HTMLButtonElement;
+
+    // At the bottom of the list: Move down is inert.
+    expect(item('move-down').getAttribute('aria-disabled')).toBe('true');
+    await fireEvent.click(item('move-down'));
+    expect(sendMock).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'reorderPinned' }));
+
+    await fireEvent.click(item('move-up'));
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'reorderPinned',
+      payload: {
+        spaceId: 'work',
+        nodes: [{ ...SMART_NODE }, { kind: 'tab', id: 'st-1' }],
+      },
+    });
+  });
+});

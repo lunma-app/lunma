@@ -58,6 +58,12 @@ function installChromeMock(): ChromeStorageMock {
 
 let chromeMock: ChromeStorageMock;
 
+// The REAL migration chain (the smart-folders v1→v2 and github-connector v2→v3
+// pass-throughs), captured at module load and restored around every test so
+// cases that push a synthetic migration never leak it — and never wipe the
+// real chain for later tests.
+const realMigrations = [...migrations];
+
 beforeEach(() => {
   chromeMock = installChromeMock();
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -66,6 +72,7 @@ beforeEach(() => {
 
 afterEach(() => {
   migrations.length = 0;
+  migrations.push(...realMigrations);
   vi.restoreAllMocks();
 });
 
@@ -335,6 +342,151 @@ describe('readPersistedState', () => {
     expect(chromeMock.set).not.toHaveBeenCalled();
   });
 
+  test('a v1 envelope chains through both pass-throughs and writes back as v3', async () => {
+    // A faithful pre-smart-folders envelope: in-state schemaVersion 1, no
+    // ephemeral slices on disk, a Space with a pinned tab.
+    const state = createInitialState();
+    state.schemaVersion = 1;
+    state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    state.savedTabs['st-1'] = {
+      id: 'st-1',
+      spaceId: 'work',
+      title: 'Pinned',
+      originalURL: 'https://x/',
+      currentURL: null,
+    };
+    state.pinnedBySpace.work = [{ kind: 'tab', id: 'st-1' }];
+    const { liveTabsById: _l, smartFolders: _s, ...persistable } = state;
+    chromeMock.data['lunma.state'] = { schemaVersion: 1, state: persistable };
+    chromeMock.set.mockClear();
+
+    const result = await readPersistedState();
+
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+    // Lossless: both pass-throughs change no content.
+    expect(result.state).toEqual(persistable);
+    // The envelope is written back at the current (v3) version.
+    expect(chromeMock.set).toHaveBeenCalledWith({
+      'lunma.state': { schemaVersion: 3, state: persistable },
+    });
+    const backupKey = Object.keys(chromeMock.data).find((k) => k.startsWith('__corrupt_backup_'));
+    expect(backupKey).toBeUndefined();
+  });
+
+  test('a v2 envelope (gitlab smart node) migrates losslessly and writes back as v3', async () => {
+    // A faithful pre-github-connector envelope: in-state schemaVersion 2, a
+    // gitlab smart node among the pins (the only smart source v2 admits).
+    const state = createInitialState();
+    state.schemaVersion = 2;
+    state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    state.pinnedBySpace.work = [
+      {
+        kind: 'smart',
+        id: 'sf-1',
+        name: 'Review requests',
+        icon: 'folder-git-2',
+        source: 'gitlab',
+        baseUrl: 'https://gitlab.example.com',
+        query: 'review-requested',
+        refreshMinutes: 10,
+      },
+    ];
+    const { liveTabsById: _l, smartFolders: _s, ...persistable } = state;
+    chromeMock.data['lunma.state'] = { schemaVersion: 2, state: persistable };
+    chromeMock.set.mockClear();
+
+    const result = await readPersistedState();
+
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+    // Lossless: the pass-through changes no content — the smart node included.
+    expect(result.state).toEqual(persistable);
+    expect(chromeMock.set).toHaveBeenCalledWith({
+      'lunma.state': { schemaVersion: 3, state: persistable },
+    });
+    const backupKey = Object.keys(chromeMock.data).find((k) => k.startsWith('__corrupt_backup_'));
+    expect(backupKey).toBeUndefined();
+  });
+
+  test('a v3 state with a gitlab smart node round-trips without quarantine', async () => {
+    const state = createInitialState();
+    state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    state.pinnedBySpace.work = [
+      {
+        kind: 'smart',
+        id: 'sf-1',
+        name: 'Review requests',
+        icon: 'folder-git-2',
+        source: 'gitlab',
+        baseUrl: 'https://gitlab.example.com',
+        query: 'review-requested',
+        refreshMinutes: 10,
+      },
+      { kind: 'tab', id: 'st-1' },
+    ];
+    state.savedTabs['st-1'] = {
+      id: 'st-1',
+      spaceId: 'work',
+      title: 'Pinned',
+      originalURL: 'https://x/',
+      currentURL: null,
+    };
+    await persist(state);
+
+    const result = await readPersistedState();
+
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+    expect(result.state.pinnedBySpace.work?.[0]).toEqual({
+      kind: 'smart',
+      id: 'sf-1',
+      name: 'Review requests',
+      icon: 'folder-git-2',
+      source: 'gitlab',
+      baseUrl: 'https://gitlab.example.com',
+      query: 'review-requested',
+      refreshMinutes: 10,
+    });
+    const backupKey = Object.keys(chromeMock.data).find((k) => k.startsWith('__corrupt_backup_'));
+    expect(backupKey).toBeUndefined();
+  });
+
+  test('a v3 state with a github smart node round-trips without quarantine', async () => {
+    const state = createInitialState();
+    state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    state.pinnedBySpace.work = [
+      {
+        kind: 'smart',
+        id: 'sf-gh',
+        name: 'My pull requests',
+        icon: 'folder-git-2',
+        source: 'github',
+        baseUrl: 'https://github.com',
+        query: 'authored',
+        refreshMinutes: 10,
+      },
+    ];
+    await persist(state);
+
+    const result = await readPersistedState();
+
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+    expect(result.state.pinnedBySpace.work?.[0]).toEqual({
+      kind: 'smart',
+      id: 'sf-gh',
+      name: 'My pull requests',
+      icon: 'folder-git-2',
+      source: 'github',
+      baseUrl: 'https://github.com',
+      query: 'authored',
+      refreshMinutes: 10,
+    });
+    const backupKey = Object.keys(chromeMock.data).find((k) => k.startsWith('__corrupt_backup_'));
+    expect(backupKey).toBeUndefined();
+  });
+
   test('de-dupes a duplicate pinned id on load and heals it back to disk', async () => {
     const state = createInitialState();
     state.savedTabs.a = {
@@ -541,12 +693,61 @@ describe('salvagePersistedState', () => {
     expect(out).not.toBeNull();
     expect(out?.spaces).toEqual([]);
   });
+
+  test('a pinned tree containing a smart node survives slice-wise salvage intact (either source)', () => {
+    // The scenario admits BOTH shipped sources — run the same salvage for each.
+    for (const source of ['gitlab', 'github'] as const) {
+      const smartNode = {
+        kind: 'smart',
+        id: 'sf-1',
+        name: 'Assigned to me',
+        icon: 'folder-git-2',
+        source,
+        baseUrl: 'https://forge.example.com',
+        query: 'assigned',
+        refreshMinutes: 5,
+      };
+      const out = salvagePersistedState({
+        ...validPersistedState(),
+        spaces: [{ id: 'work', name: 'Work', color: 'blue', icon: 'star' }],
+        pinnedBySpace: { work: [smartNode, { kind: 'tab', id: 'st-1' }] },
+        savedTabs: { bad: { id: 'bad' } }, // malformed → whole-state validation fails
+      });
+      expect(out, `salvage with source ${source}`).not.toBeNull();
+      expect(out?.pinnedBySpace.work).toEqual([smartNode, { kind: 'tab', id: 'st-1' }]);
+      expect(out?.savedTabs).toEqual({});
+    }
+  });
+
+  test('a pinned tree containing a smart node survives slice-wise salvage intact', () => {
+    const smartNode = {
+      kind: 'smart',
+      id: 'sf-1',
+      name: 'Assigned to me',
+      icon: 'folder-git-2',
+      source: 'gitlab',
+      baseUrl: 'https://gitlab.example.com',
+      query: 'assigned',
+      refreshMinutes: 5,
+    };
+    const out = salvagePersistedState({
+      ...validPersistedState(),
+      spaces: [{ id: 'work', name: 'Work', color: 'blue', icon: 'star' }],
+      pinnedBySpace: { work: [smartNode, { kind: 'tab', id: 'st-1' }] },
+      savedTabs: { bad: { id: 'bad' } }, // malformed → whole-state validation fails
+    });
+    expect(out).not.toBeNull();
+    // The valid pinnedBySpace slice — smart node config included — is preserved,
+    // not reset by stale v1 slice validation.
+    expect(out?.pinnedBySpace.work).toEqual([smartNode, { kind: 'tab', id: 'st-1' }]);
+    expect(out?.savedTabs).toEqual({});
+  });
 });
 
 describe('persist', () => {
-  test('writes envelope to lunma.state (without the ephemeral liveTabsById slice)', async () => {
+  test('writes envelope to lunma.state (without the ephemeral liveTabsById/smartFolders slices)', async () => {
     const state = createInitialState();
-    const { liveTabsById: _drop, ...persistable } = state;
+    const { liveTabsById: _drop, smartFolders: _drop2, ...persistable } = state;
     await persist(state);
     expect(chromeMock.data['lunma.state']).toEqual({
       schemaVersion: CURRENT_SCHEMA_VERSION,
@@ -567,6 +768,21 @@ describe('persist', () => {
     await persist(state);
     const envelope = chromeMock.data['lunma.state'] as { state: Record<string, unknown> };
     expect(envelope.state).not.toHaveProperty('liveTabsById');
+  });
+
+  test('strips a populated smartFolders before writing; the rest is unchanged', async () => {
+    const state = createInitialState();
+    state.smartFolders['sf-1'] = {
+      state: 'ok',
+      items: [{ id: 'mr-1', title: 'Fix the build', url: 'https://gitlab.com/g/p/-/mr/1' }],
+      fetchedAt: 1234,
+    };
+    await persist(state);
+    const envelope = chromeMock.data['lunma.state'] as { state: Record<string, unknown> };
+    expect(envelope.state).not.toHaveProperty('smartFolders');
+    // The rest of the persisted state is exactly what it would be without the slice.
+    const { liveTabsById: _l, smartFolders: _s, ...persistable } = createInitialState();
+    expect(envelope.state).toEqual(persistable);
   });
 
   test('persisted shape does not bump CURRENT_SCHEMA_VERSION', async () => {

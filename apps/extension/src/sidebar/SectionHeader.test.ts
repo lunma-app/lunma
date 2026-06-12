@@ -1,4 +1,4 @@
-import { render } from '@testing-library/svelte';
+import { fireEvent, render } from '@testing-library/svelte';
 import { describe, expect, test, vi } from 'vitest';
 import SectionHeaderHarness from './SectionHeader.test.harness.svelte';
 
@@ -45,5 +45,33 @@ describe('SectionHeader', () => {
     // the tab / folder rows — not an Arc-style uppercase section label.
     expect(header.querySelector('.glyph')).not.toBeNull();
     expect(header.querySelector('.label')?.textContent).toBe('Reading');
+  });
+});
+
+describe('SectionHeader drill-in pass-through (smart-folders)', () => {
+  test('a forwarded titled panel replaces the actions with a back-header', async () => {
+    const onPanelBack = vi.fn();
+    const { container } = render(SectionHeaderHarness, {
+      props: {
+        icon: 'pin' as const,
+        label: 'Pinned',
+        menu: [{ id: 'new-smart-folder', label: 'New smart folder…', onSelect: vi.fn() }],
+        panelContent: 'editor fields',
+        panelTitle: 'New smart folder',
+        onPanelBack,
+      },
+    });
+    await fireEvent.click(
+      container.querySelector('[data-testid="section-header-menu-trigger"]') as HTMLButtonElement,
+    );
+    expect(container.querySelector('[data-testid="header-forwarded-panel"]')?.textContent).toBe(
+      'editor fields',
+    );
+    const back = container.querySelector(
+      '[data-testid="section-header-menu-back"]',
+    ) as HTMLButtonElement;
+    expect(back.textContent).toContain('New smart folder');
+    await fireEvent.click(back);
+    expect(onPanelBack).toHaveBeenCalledTimes(1);
   });
 });

@@ -25,6 +25,7 @@ import TabRow from '../ui/TabRow.svelte';
 import { boundaryDefault } from './boundary-default.svelte';
 import { type DropResult, drag, reorderFlipMs } from './drag.svelte';
 import EmptyState from './EmptyState.svelte';
+import SmartFolder from './SmartFolder.svelte';
 import { useStore } from './store-context.svelte';
 import TabBoundaryEditor from './TabBoundaryEditor.svelte';
 
@@ -110,7 +111,15 @@ interface FolderView {
   expanded: boolean;
   children: TabView[];
 }
-type TopRow = TabView | FolderView;
+interface SmartRowView {
+  kind: 'smart';
+  id: FolderId;
+  /** The config node itself — `SmartFolder.svelte` reads its runtime results
+   * from the store's ephemeral `smartFolders` slice. */
+  node: Extract<PinNode, { kind: 'smart' }>;
+  expanded: boolean;
+}
+type TopRow = TabView | FolderView | SmartRowView;
 
 /** Project a saved-tab id into a renderable tab view, or null on drift (no record). */
 function projectTab(id: SavedTabId): TabView | null {
@@ -182,7 +191,11 @@ const rows = $derived.by<TopRow[]>(() => {
     if (node.kind === 'tab') {
       const view = projectTab(node.id);
       if (view) out.push(view);
-    } else {
+    } else if (node.kind === 'smart') {
+      // A smart folder reuses the folder expand/collapse mechanism, keyed by
+      // node id; its children are connector results owned by SmartFolder.svelte.
+      out.push({ kind: 'smart', id: node.id, node, expanded: isExpanded(node.id) });
+    } else if (node.kind === 'folder') {
       const children: TabView[] = [];
       for (const childId of node.children) {
         if (seen.has(childId)) continue;
@@ -219,6 +232,9 @@ const FOLDER_ZONE = (folderId: FolderId): string => `${ZONE}:folder:${folderId}`
 let containerEl = $state<HTMLElement>();
 let rowEls = $state<HTMLElement[]>([]);
 let childZoneEls = $state<Record<FolderId, HTMLElement>>({});
+// Smart-folder component refs — the wrapper's contextmenu routes to the
+// component's own ContextMenu (the smart row's right-click menu).
+let smartFolderRefs = $state<Record<FolderId, { onContextMenu: (e: MouseEvent) => void }>>({});
 // Folder child rows, keyed by the child's SavedTabId (a saved tab lives in
 // exactly one place, so a flat record is unambiguous and avoids the per-folder
 // nested-array bind that would require a render-time mutation).
@@ -240,8 +256,14 @@ $effect(() => {
       rows.map((row) =>
         row.kind === 'folder'
           ? { id: row.id, onto: true, springLoad: !row.expanded }
-          : // A tab accepts a drop-onto (→ create folder) only from another tab.
-            { id: row.id, onto: true, springLoad: false },
+          : row.kind === 'smart'
+            ? // A smart row is an INERT onto target (design D13): never reported
+              // via targetOntoId, so a drop on it degrades to nearest-edge
+              // top-level insertion — it has no children to file into, and
+              // folder-minting drops apply to pinned tab targets only.
+              { id: row.id, onto: false, springLoad: false }
+            : // A tab accepts a drop-onto (→ create folder) only from another tab.
+              { id: row.id, onto: true, springLoad: false },
       ),
     onSpringLoad: (folderId) => store.setFolderExpanded(windowId, folderId, true),
   });
@@ -324,33 +346,48 @@ function onFolderPointerDown(e: PointerEvent, row: FolderView): void {
   );
 }
 
+function onSmartPointerDown(e: PointerEvent, row: SmartRowView): void {
+  // A smart node drags/reorders among pins as ONE unit, exactly like a folder
+  // (design D13). Its result rows stop their own pointerdown (activate-only,
+  // never drag sources), so a press here is always the node drag.
+  const wrap = (e.currentTarget as HTMLElement).closest('.row-wrap') as HTMLElement | null;
+  drag.press(
+    { id: row.id, zone: ZONE, title: row.node.name, faviconSrc: '' },
+    e,
+    wrap ?? (e.currentTarget as HTMLElement),
+    handleDrop,
+  );
+}
+
 function handleDrop(r: DropResult): void {
   if (!isOurSource(r)) return;
   // Released outside every zone → cancel: snap back, dispatch nothing (cancellable-drag).
   if (r.targetZone === null) return;
 
-  // Folder nodes have no temp equivalent and can't nest: a folder drag only ever
-  // reorders at top level (its onto/child/temp drops are no-ops → bounce back).
-  const draggingFolder = (store.state.pinnedBySpace[spaceId] ?? []).some(
-    (n) => n.kind === 'folder' && n.id === r.data.id,
+  // Folder and smart nodes have no temp equivalent and can't nest: a unit drag
+  // only ever reorders at top level (its onto/child/temp drops are no-ops →
+  // bounce back). Design D5 (folders) + D13 (smart nodes drag as one unit).
+  const draggingUnit = (store.state.pinnedBySpace[spaceId] ?? []).some(
+    (n) => n.kind !== 'tab' && n.id === r.data.id,
   );
 
   // Pinned tab → favicon strip = DECOUPLE into a global favorite (favicon-row-model
   // `favoriteSavedTab`). The drag controller routes a drop to the SOURCE row's
-  // handler, so a pinned-sourced decouple lands here. A FOLDER dropped on the
-  // favicon zone bounces (no-op) — folders have no favorite equivalent. No
-  // optimistic mutation; the authoritative broadcast defines the result.
+  // handler, so a pinned-sourced decouple lands here. A FOLDER or SMART node
+  // dropped on the favicon zone bounces (no-op) — neither has a favorite
+  // equivalent. No optimistic mutation; the broadcast defines the result.
   if (r.targetZone === 'favicon') {
-    if (!draggingFolder) {
+    if (!draggingUnit) {
       dispatch({ kind: 'favoriteSavedTab', payload: { savedTabId: r.data.id } });
     }
     return;
   }
 
-  // Pinned tab → Temporary = unpin (keeps the live tab). A FOLDER dropped on the
-  // temp zone bounces (no-op) — folders have no temporary equivalent (design D5).
+  // Pinned tab → Temporary = unpin (keeps the live tab). A FOLDER or SMART node
+  // dropped on the temp zone bounces (no-op) — no temporary equivalent
+  // (design D5; smart-to-temporary rejected exactly like a folder, D13).
   if (r.targetZone.startsWith('temp:')) {
-    if (!draggingFolder) {
+    if (!draggingUnit) {
       dispatch({ kind: 'unpinTab', payload: { savedTabId: r.data.id, windowId } });
     }
     return;
@@ -359,8 +396,9 @@ function handleDrop(r: DropResult): void {
   const inThisSpace = r.targetZone === ZONE || r.targetZone.startsWith(`${ZONE}:folder:`);
   if (!inThisSpace) return;
 
-  // Drop ONTO a row in the top-level zone: into a folder, or create one.
-  if (r.targetZone === ZONE && r.targetOntoId !== null && !draggingFolder) {
+  // Drop ONTO a row in the top-level zone: into a folder, or create one. Only
+  // TAB drags file or mint — a folder/smart unit never lands "into" anything.
+  if (r.targetZone === ZONE && r.targetOntoId !== null && !draggingUnit) {
     const ontoFolder = (store.state.pinnedBySpace[spaceId] ?? []).find(
       (n) => n.kind === 'folder' && n.id === r.targetOntoId,
     );
@@ -392,7 +430,7 @@ function handleDrop(r: DropResult): void {
   }
 
   // Drop INTO an expanded folder's child zone (insertion at index).
-  if (r.targetZone.startsWith(`${ZONE}:folder:`) && !draggingFolder) {
+  if (r.targetZone.startsWith(`${ZONE}:folder:`) && !draggingUnit) {
     const folderId = r.targetZone.slice(`${ZONE}:folder:`.length);
     const nodes = removeId(clone(store.state.pinnedBySpace[spaceId] ?? []), r.data.id);
     for (const n of nodes) {
@@ -408,8 +446,8 @@ function handleDrop(r: DropResult): void {
   // Between-rows in the top-level zone = reorder/move-out to top level.
   if (r.targetZone === ZONE) {
     const nodes = removeId(clone(store.state.pinnedBySpace[spaceId] ?? []), r.data.id);
-    const reinsert: PinNode = draggingFolder
-      ? findFolderNode(store.state.pinnedBySpace[spaceId] ?? [], r.data.id)
+    const reinsert: PinNode = draggingUnit
+      ? findUnitNode(store.state.pinnedBySpace[spaceId] ?? [], r.data.id)
       : { kind: 'tab', id: r.data.id };
     const at = Math.max(0, Math.min(r.targetIndex, nodes.length));
     nodes.splice(at, 0, reinsert);
@@ -424,30 +462,33 @@ function isOurSource(r: DropResult): boolean {
 
 /** Deep-ish clone of the node list so we never mutate the reactive `$state`. */
 function clone(list: PinNode[]): PinNode[] {
-  return list.map((n) =>
-    n.kind === 'tab' ? { kind: 'tab', id: n.id } : { ...n, children: n.children.slice() },
-  );
+  return list.map((n) => (n.kind === 'folder' ? { ...n, children: n.children.slice() } : { ...n }));
 }
-/** Remove a tab id from anywhere in a (cloned) node list — top level or a
- * folder's children. Folder nodes themselves are matched by `findFolderNode`. */
+/** Remove `id` from anywhere in a (cloned) node list — a top-level node of any
+ * kind, or a folder child. Removing the dragged folder/smart node here matters:
+ * the SW's tree sanitizer de-dups FIRST-occurrence-wins, so leaving the
+ * original in place would make the reinserted copy lose and a unit drag
+ * DOWNWARD silently no-op. Tab and folder/smart ids never collide (UUIDs), so
+ * the exact-id match is unambiguous. */
 function removeId(list: PinNode[], id: string): PinNode[] {
   const out: PinNode[] = [];
   for (const n of list) {
-    if (n.kind === 'tab') {
-      if (n.id === id) continue;
-      out.push(n);
-    } else {
+    if (n.id === id) continue;
+    if (n.kind === 'folder') {
       out.push({ ...n, children: n.children.filter((c) => c !== id) });
+    } else {
+      out.push(n);
     }
   }
   return out;
 }
-/** The folder node with `id`, cloned (for reinsertion during a folder reorder). */
-function findFolderNode(list: PinNode[], id: string): PinNode {
-  const found = list.find((n) => n.kind === 'folder' && n.id === id);
-  return found && found.kind === 'folder'
-    ? { ...found, children: found.children.slice() }
-    : { kind: 'tab', id }; // defensive fallback (shouldn't happen)
+/** The folder/smart node with `id`, cloned (for reinsertion during a unit
+ * reorder) — a smart node round-trips with its config fields intact (D13). */
+function findUnitNode(list: PinNode[], id: string): PinNode {
+  const found = list.find((n) => n.kind !== 'tab' && n.id === id);
+  if (found?.kind === 'folder') return { ...found, children: found.children.slice() };
+  if (found?.kind === 'smart') return { ...found };
+  return { kind: 'tab', id }; // defensive fallback (shouldn't happen)
 }
 
 // --- keyboard/touch reorder via the menu (Move up/down) -----------------------
@@ -608,7 +649,8 @@ const allTabViews = $derived.by<TabView[]>(() => {
   const out: TabView[] = [];
   for (const row of rows) {
     if (row.kind === 'tab') out.push(row);
-    else out.push(...row.children);
+    else if (row.kind === 'folder') out.push(...row.children);
+    // Smart rows carry no tab views — their results are not tabs.
   }
   return out;
 });
@@ -812,6 +854,28 @@ function tabMenuItems(row: TabView): MenuItem[] {
             oncancelName={cancelTabRename}
             onclick={() => onTabClick(row)}
             trailing={row.dormant ? undefined : closeButton}
+          />
+        </div>
+      {:else if row.kind === 'smart'}
+        <!-- A smart folder: folder-row chrome + live connector results. The
+             wrapper arms the smart node's unit drag; the result rows inside
+             SmartFolder stop their own pointerdown (activate-only). -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          onpointerdown={(e) => onSmartPointerDown(e, row)}
+          oncontextmenu={(e) => smartFolderRefs[row.id]?.onContextMenu(e)}
+        >
+          <SmartFolder
+            bind:this={smartFolderRefs[row.id]}
+            {windowId}
+            {spaceId}
+            node={row.node}
+            expanded={row.expanded}
+            canMoveUp={moveBounds(row.id).up}
+            canMoveDown={moveBounds(row.id).down}
+            onMoveUp={() => moveNode(row.id, -1)}
+            onMoveDown={() => moveNode(row.id, 1)}
+            onToggle={() => toggleFolder(row.id)}
           />
         </div>
       {:else}

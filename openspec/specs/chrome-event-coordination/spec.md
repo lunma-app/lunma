@@ -247,8 +247,8 @@ This channel is independent of the coordinator queue. The queue invariants state
 #### Scenario: Handler does not enqueue on the coordinator queue
 
 - **WHEN** the SW receives `{ type: 'lunma/state-request' }`
-- **THEN** `coordinator.enqueue` SHALL NOT be called
-- **AND** the response SHALL be emitted synchronously (without awaiting any queue drain)
+- **THEN** the snapshot handler SHALL NOT call `coordinator.enqueue` (the parallel smart-folders refresh-kick listener — a separate listener on the same message, see Requirement: A parallel smart-folders refresh kick on state-request — may schedule connector work whose result event enqueues on a later drain)
+- **AND** the snapshot response SHALL be emitted synchronously (without awaiting any queue drain)
 
 #### Scenario: Handler does not call any store mutator
 
@@ -270,7 +270,7 @@ This channel is independent of the coordinator queue. The queue invariants state
 - **WHEN** comparing the `state` field of a `'lunma/state-snapshot'` response to the `state` field of a `'lunma/state-broadcast'` emission
 - **THEN** both SHALL be obtained via `store.snapshot()`
 - **AND** both SHALL serialise cleanly through `structuredClone` (no `$state` proxy references)
-- **AND** both SHALL pass `AppStateV1Schema.parse` validation in the receiving sidebar
+- **AND** both SHALL pass `AppStateV3Schema.parse` (the current-version schema) validation in the receiving sidebar
 
 ### Requirement: Sidebar-source handlers for recolourSpace and changeSpaceIcon
 
@@ -326,7 +326,7 @@ The coordinator's `PendingEvent` union SHALL include `pinTab`, `unpinTab`, `reor
 
 - `pinTab` → `store.registerSavedTab(...)` + `store.bindSavedTab(...)` + `store.addPinned(...)`.
 - `unpinTab` → `store.removePinned(...)` + `store.removeSavedTab(...)` + return the bound tab id to `tempTabIds`.
-- `reorderPinned` → `store.setPinned(spaceId, ids)`.
+- `reorderPinned` → `store.setPinned(spaceId, nodes)` — the full post-drop `PinNode[]` tree, all three node kinds (`tab`, `folder`, `smart`) included.
 - `reorderTemp` → `store.reorderTemp(windowId, tabIds)`.
 
 #### Scenario: pinTab handler mints and pins within one drain cycle
@@ -434,3 +434,45 @@ not interact with the queue at all.
 - **WHEN** a suggestions request arrives while a coordinator drain is in flight
 - **THEN** the handler SHALL respond without waiting for the drain to complete (it reads the store as observed at handler-invocation time)
 
+### Requirement: A parallel smart-folders refresh kick on state-request
+
+`apps/extension/src/background/smart-folders.ts` SHALL register its own
+`chrome.runtime.onMessage` listener for `'lunma/state-request'` (the sidebar's
+boot/open signal) whose only effect is to kick the smart-folders refresh-due
+check (see the `smart-folders` capability's "Polling and refresh scheduling"
+requirement). This listener:
+
+- SHALL NOT call `sendResponse` and SHALL NOT return `true` — it never claims
+  the message's response channel, which belongs to the pure-read snapshot
+  handler.
+- SHALL NOT block, delay, or otherwise interact with the snapshot response.
+- SHALL NOT mutate the store or call any coordinator method directly from the
+  listener: the kick only schedules connector work, whose fetches run off-drain
+  and whose results ride the `smartFolders.result` event through the normal
+  drain (single-writer discipline).
+
+The pure-read snapshot handler module
+`apps/extension/src/background/state-snapshot-handler.ts` and its contract
+(Requirement: Pure-read state-snapshot channel) are NOT modified by this
+change — `'lunma/state-request'` simply gains a second, independent listener.
+
+The `PendingEvent` union extension this capability's extension rule requires —
+the new `source: 'connector'` member with the `smartFolders.result` kind and
+its matching handlers-map and `EventPolicy` entries — is specified in the
+`smart-folders` capability spec and ships in the same change.
+
+#### Scenario: The snapshot path is untouched by the kick
+
+- **WHEN** a sidebar sends `{ type: 'lunma/state-request' }` while a smart folder is past its cadence
+- **THEN** the snapshot handler responds with `{ type: 'lunma/state-snapshot', state }` exactly as before, without awaiting any connector work
+- **AND** the refresh-kick listener triggers the due folder's refresh independently
+
+#### Scenario: The kick listener never claims the response channel
+
+- **WHEN** the smart-folders listener receives `'lunma/state-request'`
+- **THEN** it SHALL NOT call `sendResponse` and SHALL NOT return `true`
+
+#### Scenario: state-snapshot-handler.ts stays smart-folder-free
+
+- **WHEN** `apps/extension/src/background/state-snapshot-handler.ts` is statically analyzed
+- **THEN** it SHALL contain no reference to the smart-folders module, the refresh-due check, or the `smartFolders` slice beyond what `store.snapshot()` already carries

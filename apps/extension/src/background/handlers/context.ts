@@ -9,6 +9,7 @@
 
 import type { SidebarCommand } from '../../shared/bus';
 import type { LunmaStore } from '../../shared/store.svelte';
+import type { FolderId, SmartFolderRuntime } from '../../shared/types';
 import type { BoundaryController } from '../boundary-controller';
 import type { GroupOrchestrator } from '../group-orchestrator';
 
@@ -80,6 +81,10 @@ export type PendingEvent =
   | SidebarVariant<'setFolderIcon'>
   | SidebarVariant<'setFolderColor'>
   | SidebarVariant<'deleteFolder'>
+  | SidebarVariant<'createSmartFolder'>
+  | SidebarVariant<'updateSmartFolder'>
+  | SidebarVariant<'deleteSmartFolder'>
+  | SidebarVariant<'refreshSmartFolder'>
   | SidebarVariant<'reorderTemp'>
   | SidebarVariant<'reorderSpaces'>
   | SidebarVariant<'focusTab'>
@@ -96,7 +101,19 @@ export type PendingEvent =
   // Auto-archive (auto-archive, design D2): the `chrome.alarms`-driven idle-tab
   // sweep. A new `source: 'alarm'` — not a Chrome event, not a sidebar command —
   // carrying no payload and no `correlationId` (fire-and-forget; nobody awaits it).
-  | { source: 'alarm'; kind: 'autoArchiveSweep' };
+  | { source: 'alarm'; kind: 'autoArchiveSweep' }
+  // Smart-folders (smart-folders, design D3): a connector fetch's outcome,
+  // enqueued OFF-drain by `background/smart-folders.ts` so only the drain's
+  // handler writes the `smartFolders` runtime slice (single-writer). A new
+  // `source: 'connector'` — results also arrive from manual refresh and the
+  // sidebar-open kick, so reusing `'alarm'` would dilute what it means. No
+  // `correlationId` (fire-and-forget; the refresh ack never carries the
+  // fetch outcome).
+  | {
+      source: 'connector';
+      kind: 'smartFolders.result';
+      payload: { folderId: FolderId; runtime: SmartFolderRuntime };
+    };
 
 export type PendingEventKind = PendingEvent['kind'];
 

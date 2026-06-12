@@ -31,8 +31,10 @@ import ArchivedChip from './ArchivedChip.svelte';
 import DragClone from './DragClone.svelte';
 import FaviconRow from './FaviconRow.svelte';
 import FirstRunNotice from './FirstRunNotice.svelte';
+import { openOptionsAt } from './open-options';
 import PinnedTabs from './PinnedTabs.svelte';
 import SectionHeader from './SectionHeader.svelte';
+import SmartFolderEditor from './SmartFolderEditor.svelte';
 import SpaceSwitcher from './SpaceSwitcher.svelte';
 import { setStore } from './store-context.svelte';
 import { swipe } from './swipe';
@@ -420,27 +422,9 @@ function onUndoClear(tabIds: number[]): void {
 
 // Recently archived (auto-archive): the chip on the New Tab row opens the options
 // "Recently archived" subpage (a roomy management view), rather than an inline
-// popover — archived tabs are secondary, so they live out of the sidebar. Reuse an
-// existing options tab if one is open (deep-linked via the `#recently-archived`
-// hash), else open one.
-async function openOptionsAt(hash: string): Promise<void> {
-  const base = chrome.runtime.getURL('src/options/index.html');
-  const url = `${base}${hash}`;
-  try {
-    const tabs = await chrome.tabs.query({});
-    const existing = tabs.find((t) => t.id !== undefined && t.url?.startsWith(base));
-    if (existing?.id !== undefined) {
-      await chrome.tabs.update(existing.id, { active: true, url });
-      if (existing.windowId !== undefined) {
-        await chrome.windows.update(existing.windowId, { focused: true });
-      }
-      return;
-    }
-  } catch (err) {
-    log.debug('openOptionsAt: reuse query failed; creating fresh', { err, hash });
-  }
-  await chrome.tabs.create({ url });
-}
+// popover — archived tabs are secondary, so they live out of the sidebar.
+// `openOptionsAt` lives in `open-options.ts` (extracted by github-connector so
+// SmartFolder's Connectors row composes the same deep-link).
 function openArchivedOptions(): void {
   void openOptionsAt('#recently-archived');
 }
@@ -457,6 +441,12 @@ function onNewFolder(spaceId: SpaceId): void {
   store.setAutoRenameNextFolder(windowId, true);
   dispatch({ kind: 'createFolder', payload: { spaceId } });
 }
+
+// "New smart folder…" (smart-folders, design D9): the header kebab drills in
+// place into the SmartFolderEditor panel for the Space whose id is held here.
+// Confirm closes the morph (via the bindable open); back/close just dismisses.
+let newSmartFolderSpaceId = $state<SpaceId | null>(null);
+let headerMenuOpenBySpace = $state<Record<SpaceId, boolean>>({});
 
 // ── swipe action callbacks ──────────────────────────────────────────────────
 
@@ -578,6 +568,15 @@ function onCancel(): void {
             style:--space-l={String(panel.l)}
             style:--space-on={panel.on}
           >
+            {#snippet newSmartFolderPanel()}
+              <SmartFolderEditor
+                spaceId={panel.space.id}
+                onDone={() => {
+                  newSmartFolderSpaceId = null;
+                  headerMenuOpenBySpace[panel.space.id] = false;
+                }}
+              />
+            {/snippet}
             <SectionHeader
               icon={panel.space.icon}
               label={panel.space.name}
@@ -588,7 +587,28 @@ function onCancel(): void {
                   icon: 'folder-plus',
                   onSelect: () => onNewFolder(panel.space.id),
                 },
+                {
+                  id: 'new-smart-folder',
+                  label: 'New smart folder…',
+                  icon: 'folder-git-2',
+                  keepOpen: true,
+                  submenu: true,
+                  onSelect: () => {
+                    newSmartFolderSpaceId = panel.space.id;
+                  },
+                },
               ]}
+              panel={newSmartFolderSpaceId === panel.space.id ? newSmartFolderPanel : undefined}
+              panelTitle={newSmartFolderSpaceId === panel.space.id ? 'New smart folder' : undefined}
+              onPanelBack={() => {
+                newSmartFolderSpaceId = null;
+              }}
+              bind:open={
+                () => headerMenuOpenBySpace[panel.space.id] ?? false,
+                (v) => {
+                  headerMenuOpenBySpace[panel.space.id] = v;
+                }
+              }
             />
             <PinnedTabs {windowId} spaceId={panel.space.id} active={i === activeIndex} />
             {#if temps > 0}

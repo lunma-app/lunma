@@ -13,10 +13,33 @@ interface Props {
    * empty (e.g. the Temporary header) the trailing edge renders nothing and the
    * header does not morph. The header shows NO count — the list below carries it. */
   menu?: RowMenuItem[] | undefined;
+  /** Pass-throughs to RowMenu's drill-in API (smart-folders): a titled `panel`
+   * replaces the action list with `‹ panelTitle` + the panel — the "New smart
+   * folder…" editor drills the header kebab in place (design D9). */
+  panel?: Snippet | undefined;
+  panelTitle?: string | undefined;
+  onPanelBack?: (() => void) | undefined;
+  /** Bindable menu-open state, so a host can close the morph after a panel
+   * confirm (e.g. the editor's Add) without waiting for an outside click. */
+  open?: boolean | undefined;
 }
 
-const { icon, label, menu }: Props = $props();
+let {
+  icon,
+  label,
+  menu,
+  panel,
+  panelTitle,
+  onPanelBack,
+  open = $bindable(false),
+}: Props = $props();
 const hasMenu = $derived(!!menu && menu.length > 0);
+
+function onOpenChange(isOpen: boolean): void {
+  // Closing dismisses an active drill-in, so the next open lands on the
+  // actions (mirrors FolderRow's forwarded-panel treatment).
+  if (!isOpen && panel) onPanelBack?.();
+}
 </script>
 
 <div class="section-header">
@@ -26,6 +49,11 @@ const hasMenu = $derived(!!menu && menu.length > 0);
       label={`${label} actions`}
       testidPrefix="section-header-menu"
       header={headerRow}
+      {panel}
+      {panelTitle}
+      {onPanelBack}
+      bind:open
+      {onOpenChange}
     />
   {:else}
     {@render headerRow({ trigger: undefined, expanded: false })}

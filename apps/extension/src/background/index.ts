@@ -25,6 +25,13 @@ import { backfillOverlayIntoOpenTabs, injectOverlay } from './overlay-injection'
 import { resolvePinActiveTab } from './pin-active-tab';
 import { seedExistingTabs } from './seed-existing-tabs';
 import { seedExistingWindows } from './seed-existing-windows';
+import {
+  handleSmartFoldersAlarm,
+  refreshDueSmartFolders,
+  registerSmartFoldersRefreshKick,
+  type SmartFolderDeps,
+  syncSmartFoldersAlarm,
+} from './smart-folders';
 import { resolveSpaceTint } from './space-tint';
 import { registerStateSnapshotHandler } from './state-snapshot-handler';
 import { coordinator, loadState, store } from './store-singleton';
@@ -146,6 +153,33 @@ const bootReady: Promise<void> = loadState()
 // handler is the exception — it registers post-boot, inside the chain above.
 registerChromeListeners();
 installBusAdapter(coordinator, bootReady);
+
+// Smart-folders connector seams (smart-folders, design D4): the alarm tick,
+// the state-request kick, and handler-started refreshes all enqueue
+// `smartFolders.result` events through the coordinator, deferred to bootReady
+// like every other event source.
+const smartFolderDeps: SmartFolderDeps = { store, enqueue: enqueueAfterBoot };
+
+// The parallel `'lunma/state-request'` refresh-kick listener — a SECOND,
+// independent listener on the sidebar's boot/open signal (the pure-read
+// snapshot handler in `state-snapshot-handler.ts` is untouched and keeps the
+// response channel). Registered SYNCHRONOUSLY: a sidebar opening can be the
+// message that wakes a dormant SW; the due-check itself defers to `bootReady`
+// so it never reads a half-loaded store.
+registerSmartFoldersRefreshKick(smartFolderDeps, bootReady);
+
+// Initial poll-alarm sync from the loaded pinned trees (the alarm may have been
+// cleared by a browser restart; create/update/delete handlers retune it live),
+// plus a post-boot refresh-due kick: the runtime slice dies with the SW (never
+// persisted), so after EVERY restart each smart folder's fetchedAt is gone and
+// every folder is due — refetching now heals an already-open sidebar's results
+// in seconds instead of leaving ghosts until the next alarm tick (which is the
+// only other freshness path an open sidebar gets: it never re-sends its
+// state-request, so the sidebar-open kick can't fire for it).
+void bootReady.then(() => {
+  void syncSmartFoldersAlarm(store);
+  void refreshDueSmartFolders(smartFolderDeps);
+});
 
 // Seed the boundary default + arm every currently-bound saved tab
 // (pinned-tab-domain-boundary) — AFTER boot, fire-and-forget, so it NEVER gates
@@ -350,6 +384,9 @@ function registerChromeListeners(): void {
   // so it is not created here.
   chrome.alarms?.onAlarm.addListener((alarm) => {
     void handleAutoArchiveAlarm({ enqueue: enqueueAfterBoot }, alarm);
+    // Smart-folders poll (smart-folders, design D4): same first-turn listener
+    // rationale; the due-check reads the store, so it defers to bootReady.
+    void bootReady.then(() => handleSmartFoldersAlarm(smartFolderDeps, alarm));
   });
 }
 

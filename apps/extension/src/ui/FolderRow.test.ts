@@ -170,4 +170,117 @@ describe('FolderRow', () => {
       expect(item('delete-folder').textContent).not.toContain('confirm');
     });
   });
+
+  describe('smart-folders extensions (badge / menuItems / busy / forwarded panel)', () => {
+    const TRIGGER = '[data-testid="folder-row-menu-trigger"]';
+
+    test('no badge element renders by default; a provided badge renders its value', () => {
+      const without = render(FolderRowHarness, { props: base });
+      expect(without.container.querySelector('[data-testid="folder-row-badge"]')).toBeNull();
+
+      const withBadge = render(FolderRowHarness, { props: { ...base, badge: '20+' } });
+      const badge = withBadge.container.querySelector('[data-testid="folder-row-badge"]');
+      expect(badge?.textContent).toBe('20+');
+    });
+
+    test('a menuItems override replaces the built-in folder actions wholesale', async () => {
+      const onRefresh = vi.fn();
+      const { container } = render(FolderRowHarness, {
+        props: {
+          ...base,
+          menuItems: [
+            { id: 'refresh', label: 'Refresh now', icon: 'rotate-cw', onSelect: onRefresh },
+            { id: 'edit', label: 'Edit…', onSelect: () => undefined },
+          ],
+        },
+      });
+      await fireEvent.click(container.querySelector(TRIGGER) as HTMLButtonElement);
+      const ids = [...document.querySelectorAll('[data-testid="folder-row-menu-item"]')].map((e) =>
+        e.getAttribute('data-menu-id'),
+      );
+      expect(ids).toEqual(['refresh', 'edit']); // no rename/appearance/move/delete built-ins
+      await fireEvent.click(
+        document.querySelector('[data-menu-id="refresh"]') as HTMLButtonElement,
+      );
+      expect(onRefresh).toHaveBeenCalledTimes(1);
+    });
+
+    test('busy spins the glyph via the busy class (reduced-motion holds it static in CSS)', () => {
+      const idle = render(FolderRowHarness, { props: base });
+      expect(idle.container.querySelector('.glyph.busy')).toBeNull();
+
+      const busy = render(FolderRowHarness, { props: { ...base, busy: true } });
+      // The 0.8s-linear spin and the reduced-motion static --text-dim treatment
+      // both hang off this class (see the component's scoped CSS — jsdom cannot
+      // evaluate @media, so the class is the observable contract).
+      expect(busy.container.querySelector('.glyph.busy')).not.toBeNull();
+    });
+
+    test('a forwarded panel drills in with a back-header that fires onPanelBack', async () => {
+      const onPanelBack = vi.fn();
+      const { container } = render(FolderRowHarness, {
+        props: {
+          ...base,
+          menuItems: [{ id: 'noop', label: 'Noop', onSelect: () => undefined }],
+          panelContent: 'editor fields',
+          panelTitle: 'Edit smart folder',
+          onPanelBack,
+        },
+      });
+      await fireEvent.click(container.querySelector(TRIGGER) as HTMLButtonElement);
+      // Drilled in: the forwarded panel + its back-header replace the actions.
+      expect(document.querySelector('[data-testid="forwarded-panel"]')?.textContent).toBe(
+        'editor fields',
+      );
+      const back = document.querySelector(
+        '[data-testid="folder-row-menu-back"]',
+      ) as HTMLButtonElement;
+      expect(back.textContent).toContain('Edit smart folder');
+      expect(document.querySelector('[data-menu-id="noop"]')).toBeNull(); // actions replaced
+      await fireEvent.click(back);
+      expect(onPanelBack).toHaveBeenCalledTimes(1);
+    });
+
+    test('default behavior unchanged: built-in actions + appearance panel still work', async () => {
+      const onStartRename = vi.fn();
+      const { container } = render(FolderRowHarness, { props: { ...base, onStartRename } });
+      await fireEvent.click(container.querySelector(TRIGGER) as HTMLButtonElement);
+      const ids = [...document.querySelectorAll('[data-testid="folder-row-menu-item"]')].map((e) =>
+        e.getAttribute('data-menu-id'),
+      );
+      expect(ids).toEqual(['rename', 'appearance', 'move-up', 'move-down', 'delete-folder']);
+      await fireEvent.click(document.querySelector('[data-menu-id="rename"]') as HTMLButtonElement);
+      expect(onStartRename).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('bindable menuOpen (smart-folder-editor-dismissal pass-through)', () => {
+    const TRIGGER = '[data-testid="folder-row-menu-trigger"]';
+    const boundProps = {
+      ...base,
+      bindMenuOpen: true,
+      menuItems: [{ id: 'edit', label: 'Edit…', onSelect: () => undefined }],
+    };
+
+    test('a bound host observes the kebab opening', async () => {
+      const { container } = render(FolderRowHarness, { props: boundProps });
+      expect(container.querySelector('[data-testid="host-menu-open"]')?.textContent).toBe('false');
+      await fireEvent.click(container.querySelector(TRIGGER) as HTMLButtonElement);
+      expect(container.querySelector('[data-testid="host-menu-open"]')?.textContent).toBe('true');
+      expect(document.querySelector('[data-testid="folder-row-menu-item"]')).not.toBeNull();
+    });
+
+    test('a bound host closes the menu by writing false (the editor-confirm path)', async () => {
+      const { container } = render(FolderRowHarness, { props: boundProps });
+      await fireEvent.click(container.querySelector(TRIGGER) as HTMLButtonElement);
+      expect(document.querySelector('[data-testid="folder-row-menu-item"]')).not.toBeNull();
+
+      await fireEvent.click(
+        container.querySelector('[data-testid="host-close-menu"]') as HTMLButtonElement,
+      );
+
+      expect(container.querySelector('[data-testid="host-menu-open"]')?.textContent).toBe('false');
+      expect(document.querySelector('[data-testid="folder-row-menu-item"]')).toBeNull();
+    });
+  });
 });

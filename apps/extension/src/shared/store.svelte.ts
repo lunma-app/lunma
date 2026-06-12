@@ -10,6 +10,7 @@ import type {
   SavedTab,
   SavedTabId,
   SidebarLocalState,
+  SmartFolderRuntime,
   Space,
   SpaceAutoArchive,
   SpaceId,
@@ -65,6 +66,7 @@ export const createInitialState = (): AppState => ({
   pinnedBySpace: {},
   faviconRow: [],
   liveTabsById: {},
+  smartFolders: {},
 });
 
 const defaultIdFactory: IdFactory = () =>
@@ -876,6 +878,117 @@ export class LunmaStore {
     folder.color = color;
   }
 
+  /**
+   * Insert a smart-folder node at the top of a Space's pinned list
+   * (smart-folders, design D12 — matching {@link createFolder}'s top
+   * insertion). The COORDINATOR mints the node (id via `crypto.randomUUID`,
+   * `icon: 'folder-git-2'`, normalized `baseUrl`, clamped `refreshMinutes`)
+   * because the immediate first fetch needs the new id and mutators are
+   * void-returning; the store only places it.
+   */
+  addSmartFolder(spaceId: SpaceId, node: Extract<PinNode, { kind: 'smart' }>): void {
+    const list = this.state.pinnedBySpace[spaceId] ?? [];
+    list.unshift({ ...node });
+    this.state.pinnedBySpace[spaceId] = list;
+  }
+
+  /**
+   * Edit a smart folder's config in place (smart-folders, design D12). A
+   * `baseUrl`, `query`, or `source` change also invalidates the folder's
+   * runtime `fetchedAt` (the results belong to the OLD query/instance/source),
+   * making it immediately due — the coordinator triggers the refetch.
+   */
+  updateSmartFolder(
+    spaceId: SpaceId,
+    folderId: FolderId,
+    config: {
+      source: Extract<PinNode, { kind: 'smart' }>['source'];
+      name: string;
+      baseUrl: string;
+      query: Extract<PinNode, { kind: 'smart' }>['query'];
+      refreshMinutes: number;
+    },
+  ): void {
+    const node = this.findSmartFolder(spaceId, folderId);
+    if (!node) {
+      log.error('updateSmartFolder: unknown smart folder', { spaceId, folderId });
+      return;
+    }
+    const resultsInvalidated =
+      node.baseUrl !== config.baseUrl ||
+      node.query !== config.query ||
+      node.source !== config.source;
+    node.source = config.source;
+    node.name = config.name;
+    node.baseUrl = config.baseUrl;
+    node.query = config.query;
+    node.refreshMinutes = config.refreshMinutes;
+    const runtime = this.state.smartFolders[folderId];
+    if (resultsInvalidated && runtime) {
+      runtime.fetchedAt = null;
+    }
+  }
+
+  /** Remove a smart-folder node AND drop its runtime entry (smart-folders,
+   * design D12) — both are store state. Closes no tabs, spills no children
+   * (a smart node has none). */
+  deleteSmartFolder(spaceId: SpaceId, folderId: FolderId): void {
+    const list = this.state.pinnedBySpace[spaceId];
+    if (!list) {
+      log.error('deleteSmartFolder: unknown smart folder', { spaceId, folderId });
+      return;
+    }
+    const idx = list.findIndex((n) => n.kind === 'smart' && n.id === folderId);
+    if (idx === -1) {
+      log.error('deleteSmartFolder: unknown smart folder', { spaceId, folderId });
+      return;
+    }
+    list.splice(idx, 1);
+    delete this.state.smartFolders[folderId];
+  }
+
+  /**
+   * Write a smart folder's runtime slice entry (smart-folders, design D3) —
+   * called ONLY by the coordinator drain's `smartFolders.result` handler
+   * (single-writer discipline). A `pending` write preserves the last-known
+   * `items` and `fetchedAt` (the list never blinks and dueness isn't reset by
+   * the in-flight mark); an `error` write preserves last-known `items` while
+   * taking the attempt's `fetchedAt` (rate-limit kindness — the retry waits a
+   * cadence). `ok` and `signed-out` replace wholesale.
+   */
+  setSmartFolderRuntime(folderId: FolderId, runtime: SmartFolderRuntime): void {
+    const prev = this.state.smartFolders[folderId];
+    if (prev && runtime.state === 'pending') {
+      this.state.smartFolders[folderId] = {
+        state: 'pending',
+        items: prev.items,
+        fetchedAt: prev.fetchedAt,
+      };
+      return;
+    }
+    if (prev && runtime.state === 'error') {
+      this.state.smartFolders[folderId] = {
+        state: 'error',
+        items: prev.items,
+        fetchedAt: runtime.fetchedAt,
+      };
+      return;
+    }
+    this.state.smartFolders[folderId] = runtime;
+  }
+
+  private findSmartFolder(
+    spaceId: SpaceId,
+    folderId: FolderId,
+  ): Extract<PinNode, { kind: 'smart' }> | undefined {
+    const list = this.state.pinnedBySpace[spaceId];
+    if (!list) return undefined;
+    for (const node of list) {
+      if (node.kind === 'smart' && node.id === folderId) return node;
+    }
+    return undefined;
+  }
+
   /** Remove a folder, spilling its children back to top-level tab nodes at the
    * folder's former position (children are neither unpinned nor trashed). */
   deleteFolder(spaceId: SpaceId, folderId: FolderId): void {
@@ -1245,7 +1358,9 @@ export class LunmaStore {
    * Validate a pinned tree for `setPinned`: drop tab ids with no `savedTabs`
    * record, de-duplicate any id seen more than once across the whole tree (top
    * level and every folder's children), and rebuild folder children as plain id
-   * lists (single-level). Empty folders are preserved. Returns a fresh array.
+   * lists (single-level). Empty folders are preserved; smart nodes round-trip
+   * as one unit with their config fields intact (de-duplicated by node id).
+   * Returns a fresh array.
    */
   private sanitizePinned(nodes: PinNode[]): PinNode[] {
     const seen = new Set<SavedTabId>();
@@ -1255,6 +1370,10 @@ export class LunmaStore {
         if (!this.state.savedTabs[node.id] || seen.has(node.id)) continue;
         seen.add(node.id);
         out.push({ kind: 'tab', id: node.id });
+      } else if (node.kind === 'smart') {
+        if (seen.has(node.id)) continue;
+        seen.add(node.id);
+        out.push({ ...node });
       } else {
         const children: SavedTabId[] = [];
         for (const id of node.children) {
@@ -1275,12 +1394,13 @@ export class LunmaStore {
     return out;
   }
 
-  /** Whether `id` is placed anywhere in `list` (top level or a folder child). */
+  /** Whether `id` is placed anywhere in `list` (top level or a folder child).
+   * Smart nodes hold no saved-tab ids, so they never match. */
   private pinnedContains(list: PinNode[], id: SavedTabId): boolean {
     for (const node of list) {
       if (node.kind === 'tab') {
         if (node.id === id) return true;
-      } else if (node.children.includes(id)) {
+      } else if (node.kind === 'folder' && node.children.includes(id)) {
         return true;
       }
     }
@@ -1288,7 +1408,8 @@ export class LunmaStore {
   }
 
   /** Remove the first occurrence of `id` from `list` (top level or a folder
-   * child). Mutates in place; an emptied folder is left in place. */
+   * child). Mutates in place; an emptied folder is left in place. Smart nodes
+   * hold no saved-tab ids, so they never match. */
   private removeIdFromNodes(list: PinNode[], id: SavedTabId): void {
     for (let i = 0; i < list.length; i += 1) {
       const node = list[i];
@@ -1298,7 +1419,7 @@ export class LunmaStore {
           list.splice(i, 1);
           return;
         }
-      } else {
+      } else if (node.kind === 'folder') {
         const ci = node.children.indexOf(id);
         if (ci !== -1) {
           node.children.splice(ci, 1);
