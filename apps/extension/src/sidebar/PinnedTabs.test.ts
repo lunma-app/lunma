@@ -110,28 +110,26 @@ function makeStore(): LunmaStore {
   return store;
 }
 
-describe('PinnedTabs empty-state suppression (fresh-Space welcome)', () => {
-  test('suppresses the empty-state row while the consolidated welcome shows (faviconRow empty)', () => {
-    const store = makeStore(); // pinnedBySpace.work empty + faviconRow empty → welcome shows
-    const { container } = render(PinnedTabsHarness, {
-      props: { store, windowId: 100, spaceId: 'work' },
-    });
-    // The pinned panel renders no "No pinned tabs yet." card (the welcome owns the
-    // single instructional block) but keeps the registered drop zone (min-height band).
-    expect(container.textContent).not.toContain('No pinned tabs yet.');
-    const pinned = container.querySelector('[data-testid="pinned-tabs"]') as HTMLElement;
-    expect(pinned.classList.contains('welcome-suppressed')).toBe(true);
-  });
-
-  test('renders the empty-state row when the user has favorites (only pinned is empty)', () => {
-    const store = makeStore();
-    store.state.faviconRow = ['fav']; // favorites exist → no welcome → per-area state returns
+describe('PinnedTabs empty state (always renders when the Space has zero pins)', () => {
+  // revert-firstrun-welcome: the pinned empty-state row is no longer suppressed in any
+  // first-run state — it renders whenever the active Space has zero pinned bookmarks,
+  // whether or not the favicon row is empty (there is no consolidated welcome to defer to).
+  test('renders the two-line empty-state row when the favicon row is also empty', () => {
+    const store = makeStore(); // pinnedBySpace.work empty + faviconRow empty
     const { container } = render(PinnedTabsHarness, {
       props: { store, windowId: 100, spaceId: 'work' },
     });
     expect(container.textContent).toContain('No pinned tabs yet.');
-    const pinned = container.querySelector('[data-testid="pinned-tabs"]') as HTMLElement;
-    expect(pinned.classList.contains('welcome-suppressed')).toBe(false);
+    expect(container.textContent).toContain('Drag a tab up here, or press Option+D, to pin it.');
+  });
+
+  test('renders the empty-state row when favorites exist (only pinned is empty)', () => {
+    const store = makeStore();
+    store.state.faviconRow = ['fav'];
+    const { container } = render(PinnedTabsHarness, {
+      props: { store, windowId: 100, spaceId: 'work' },
+    });
+    expect(container.textContent).toContain('No pinned tabs yet.');
   });
 });
 

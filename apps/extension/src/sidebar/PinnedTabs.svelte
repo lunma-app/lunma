@@ -205,14 +205,6 @@ const rows = $derived.by<TopRow[]>(() => {
 });
 
 const isEmpty = $derived(rows.length === 0);
-// Suppress this pinned empty-state row while the consolidated fresh-Space welcome
-// shows (sidebar-firstrun-options-polish, shell composition point 3 exception): the
-// welcome renders in the fixed favicon-grid region exactly when the favicon row is
-// empty AND this (active) Space has zero pinned bookmarks, so a fresh user sees ONE
-// instructional block, not two stacked boxes. The pinned section header stays; the
-// `.pinned` drop zone stays registered (keeping a min-height band — see CSS) so
-// drag-into-panel pinning works exactly as today, just without the visible card.
-const welcomeSuppressesEmpty = $derived(isEmpty && store.state.faviconRow.length === 0);
 
 // --- drag zones --------------------------------------------------------------
 // The top-level zone's item elements are the top-level row wrappers, so its drop
@@ -754,11 +746,10 @@ function tabMenuItems(row: TabView): MenuItem[] {
 <div
   class="pinned"
   class:empty={isEmpty}
-  class:welcome-suppressed={welcomeSuppressesEmpty}
   data-testid="pinned-tabs"
   bind:this={containerEl}
 >
-  {#if isEmpty && !welcomeSuppressesEmpty}
+  {#if isEmpty}
     <!-- The empty state lives INSIDE the registered drop zone (`.pinned` is the
          zone el), so the drop-zone card is itself the hit target — dragging a tab
          over the card lights it up (`over`) instead of a thin strip beneath it. -->
@@ -951,13 +942,6 @@ function tabMenuItems(row: TabView): MenuItem[] {
     display: flex;
     flex-direction: column;
     padding: var(--space-1) var(--list-pad);
-  }
-  /* While the consolidated welcome shows, the empty-state card is suppressed (one
-   * block on screen) but the `.pinned` drop zone stays registered — keep a quiet
-   * min-height band so drag-into-panel pinning has the same hit area it has today,
-   * just with no visible card (nothing reads between the header and the divider). */
-  .pinned.welcome-suppressed {
-    min-height: calc(var(--favicon-tile) + var(--space-2));
   }
 
   .row-wrap {

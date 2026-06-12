@@ -174,9 +174,9 @@ describe('App', () => {
   test('each slide shows the Space-name pinned header, a divider, and a New Tab row', () => {
     // The "Temporary" header is gone. Each slide now has ONE section header (the
     // pinned one, showing the Space name) + a divider + a New Tab row.
-    // A favorite is seeded so the favicon row is non-empty — otherwise the fresh-Space
-    // welcome would replace the favorites placeholder AND suppress the per-area pinned
-    // empty rows (sidebar-firstrun-options-polish; that case has its own test below).
+    // A favorite is seeded so the favicon row is non-empty (it renders tiles, not the
+    // grid placeholder) — keeping this test focused on the per-slide pinned header +
+    // divider + New Tab structure. The both-areas-empty case has its own test below.
     const store = makeStore('blue');
     store.state.faviconRow = ['fav'];
     store.state.savedTabs.fav = {
@@ -203,16 +203,16 @@ describe('App', () => {
     expect(workSlide.textContent).not.toContain('Clear');
   });
 
-  test('both favorites and pinned empty → the consolidated welcome, no per-area empty states', () => {
-    // A fresh start (sidebar-firstrun-options-polish): empty favicon row AND the active
-    // Space has zero pinned bookmarks → ONE welcome in the fixed grid region, with the
-    // grid placeholder AND the pinned empty-state row both suppressed.
+  test('both favorites and pinned empty → both per-area empty states, no welcome block', () => {
+    // A fresh start (revert-firstrun-welcome): empty favicon row AND the active Space
+    // with zero pinned bookmarks → BOTH per-area empty states render (the grid
+    // placeholder + the pinned empty-state row). There is no consolidated welcome.
     const { container } = render(AppHarness, { props: { store: makeStore('blue'), windowId: 1 } });
-    expect(container.querySelector('[data-testid="sidebar-welcome"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="favicon-empty"]')).toBeNull();
-    // The active slide's pinned empty-state row is suppressed (the header stays).
+    expect(container.querySelector('[data-testid="sidebar-welcome"]')).toBeNull();
+    expect(container.querySelector('[data-testid="favicon-empty"]')).not.toBeNull();
+    // The active slide's pinned empty-state row renders (and the header stays too).
     const workSlide = container.querySelector('[data-space-id="work"]') as HTMLElement;
-    expect(workSlide.textContent).not.toContain('No pinned tabs yet.');
+    expect(workSlide.textContent).toContain('No pinned tabs yet.');
     expect(workSlide.textContent).toContain('Work'); // the pinned header remains
   });
 
