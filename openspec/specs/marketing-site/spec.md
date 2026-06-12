@@ -42,7 +42,7 @@ The page SHALL explicitly communicate the product's trust posture — local-only
 
 The site SHALL render Lunma's visual identity by composing the shared `@lunma/tokens` package (the same design tokens, fonts, and atmospheric recipes the extension ships), NOT a hand-mirrored copy of token values. Brand stays in lockstep with the product by construction.
 
-The site's staged product previews (the mock components rendering sidebar tab rows, favourite tiles, and the launcher) SHALL render the same token-derived treatments as the extension components they mirror — the `--space-c-soft` selection wash, the borderless `--surface` tile plate, the drift dot ringed in the surrounding substrate, and the launcher's `--row-h` row geometry, `--accent-soft` wash-only selection (no accent bar, matching the launcher overlay and the sidebar tab row), and `--surface-2` source badge — and SHALL NOT hand-code a design literal where a shared token or a scoped substrate variable exists. Decorative browser chrome framing a preview (titlebar, omnibox, window proportions) is illustration, not product UI, and is exempt.
+The site's staged product previews (the mock components rendering sidebar tab rows, favourite tiles, the Space header, and the launcher) SHALL render the same token-derived treatments as the extension components they mirror — the `--space-c-soft` selection wash, the borderless `--surface` tile plate, the drift dot ringed in the surrounding substrate, the **Space header rendered as the real `SectionHeader` row** (a hue-tinted glyph at the favicon column and the name at `--weight-medium`/`--text-base`/`--font-sans` sentence-case, tinted `oklch(from var(--space-c) max(l, 0.72) c h / 0.95)` — NOT a display-serif headline, glow, or filled colour tile), and the launcher's `--row-h` row geometry, `--accent-soft` wash-only selection (no accent bar, matching the launcher overlay and the sidebar tab row), and `--surface-2` source badge — and SHALL NOT hand-code a design literal where a shared token or a scoped substrate variable exists. Decorative browser chrome framing a preview (titlebar, omnibox, window proportions) is illustration, not product UI, and is exempt.
 
 #### Scenario: Tokens are imported, not mirrored
 
@@ -52,8 +52,9 @@ The site's staged product previews (the mock components rendering sidebar tab ro
 
 #### Scenario: Product previews match the real components' treatments
 
-- **WHEN** a staged preview renders a product element that exists in the extension (a tab row, a favourite tile, a launcher row or badge)
+- **WHEN** a staged preview renders a product element that exists in the extension (a tab row, a favourite tile, the Space header, a launcher row or badge)
 - **THEN** its rendered-at-rest treatment (selection wash, borders, glow, ring, fill, type role, and token-derived spacing) matches the extension component it mirrors
+- **AND** the Space header reads as a hue-tinted sans row (the real `SectionHeader` treatment), not a display-serif headline with a glow or a filled colour tile
 - **AND** no design value in that preview is a hand-coded literal where a `@lunma/tokens` token or a scoped substrate variable exists
 
 #### Scenario: The page's atmosphere inherits the shared default
@@ -67,7 +68,11 @@ The landing page SHALL demonstrate Lunma's colour-coded Spaces interactively wit
 first viewport: a control to switch between example Spaces SHALL recolour a staged preview of
 the product (the sidebar and new-tab identity) through the shared Space hue/lightness/chroma,
 so the colour identity is shown rather than only described. The example Spaces and their
-colours SHALL be drawn from the product's real Space palette. This live demonstration is
+colours SHALL be drawn from the product's real Space palette. Switching an example Space SHALL
+also swap that Space's own tab list (its pinned and temporary rows) in the staged sidebar, so
+the demonstration shows that each Space keeps its own tabs and not only its own colour. The
+staged sidebar's global favourites row SHALL stay constant across Spaces, reflecting that
+favourites are Space-independent in the product. This live demonstration is
 decorative motion and SHALL obey the page's reduced-motion contract (no auto-advancing loop
 when reduced; switching remains available and the end state is identical), and it SHALL NOT
 reduce any text below WCAG-AA contrast.
@@ -77,6 +82,12 @@ reduce any text below WCAG-AA contrast.
 - **WHEN** a visitor selects a different example Space
 - **THEN** the staged product preview (the sidebar and the new-tab identity) recolours to that
   Space's colour from the real palette
+
+#### Scenario: Switching an example Space swaps that Space's tabs but not the favourites
+
+- **WHEN** a visitor selects a different example Space
+- **THEN** the staged sidebar's tab rows change to that Space's own pinned and temporary tabs
+- **AND** the global favourites row above the Space header stays the same across Spaces
 
 #### Scenario: The live demo honors reduced motion
 
@@ -142,12 +153,14 @@ brand font files used at first paint (the display serif the `<h1>` renders
 and the body sans), eliminating the first-paint serif reflow; (e) nav links
 that remain reachable at viewport widths ≤720px (a compact link row — links
 are never `display: none` without a replacement); (f) a
-`<meta name="theme-color">` matching the dark substrate; and (g) the "Spaces"
-nav anchor targeting the Spaces chapter (the chapter owns `id="spaces"`),
-with the hero demo keeping a distinct id. The decorative mock content inside
-the staged preview SHALL be hidden from assistive technology (the caption and
-the functional Space switcher stay exposed), and ARIA labels SHALL NOT be
-placed on generic elements without a role.
+`<meta name="theme-color">` matching the dark substrate; and (g) a single
+"Features" nav anchor targeting the features section (the chapters band, which
+owns `id="features"`), with the individual feature chapters keeping their own
+ids (`id="spaces"`, `id="launcher"`) for deep-linking and the hero demo keeping
+a distinct id. The decorative mock content inside the staged preview SHALL be
+hidden from assistive technology (the caption and the functional Space switcher
+stay exposed), and ARIA labels SHALL NOT be placed on generic elements without
+a role.
 
 #### Scenario: Skip link bypasses the nav
 
@@ -157,7 +170,7 @@ placed on generic elements without a role.
 
 #### Scenario: Anchored sections clear the sticky nav
 
-- **WHEN** the visitor clicks a nav anchor (e.g. "Launcher")
+- **WHEN** the visitor clicks a nav anchor (e.g. "Features")
 - **THEN** the target section's heading lands fully below the sticky nav bar
 
 #### Scenario: Nav links survive mobile widths
@@ -166,14 +179,51 @@ placed on generic elements without a role.
 - **THEN** every nav destination remains reachable from the nav (no link is
   hidden without a replacement)
 
-#### Scenario: The Spaces anchor reaches the Spaces chapter
+#### Scenario: The Features anchor reaches the features section
 
-- **WHEN** the visitor clicks "Spaces" in the nav from the bottom of the page
-- **THEN** the page scrolls to the Spaces chapter, not the hero demo
+- **WHEN** the visitor clicks "Features" in the nav from the bottom of the page
+- **THEN** the page scrolls to the features section (the first feature chapter), not the hero demo
 
 #### Scenario: Mock content is not read as page content
 
 - **WHEN** a screen reader traverses the staged preview
 - **THEN** the mock sidebar's tab titles and labels are not announced; the
   caption and the functional Space switcher are
+
+### Requirement: Crawlable with machine-readable metadata
+
+The site SHALL be fully crawlable and SHALL emit machine-readable metadata so search engines and social platforms can index and richly render it. It SHALL serve a `robots.txt` that permits crawling and declares the sitemap, an XML `sitemap.xml` listing the site's canonical URLs, a `<link rel="canonical">` on every page resolving from a single canonical origin, and a web manifest. Each page SHALL carry a complete Open Graph + Twitter card set (title, description, type, url, image with dimensions and alt, site name, locale) and SHALL embed JSON-LD structured data describing the product as a `SoftwareApplication`, the site as a `WebSite`, and the on-page FAQ as a `FAQPage`. The structured data SHALL describe only content the page actually renders, and SHALL NOT assert fabricated ratings or review counts.
+
+#### Scenario: Crawl directives and sitemap are served
+
+- **WHEN** a crawler requests `/robots.txt`
+- **THEN** crawling is permitted and the response declares the `sitemap.xml` location
+- **AND** `/sitemap.xml` is valid XML listing the site's canonical URLs under the single canonical origin
+
+#### Scenario: Pages declare a canonical and complete social metadata
+
+- **WHEN** a page is built
+- **THEN** its `<head>` contains a `<link rel="canonical">` to its canonical URL
+- **AND** a complete Open Graph + Twitter card set (title, description, type, url, image with dimensions + alt, site name, locale)
+
+#### Scenario: Structured data matches visible content
+
+- **WHEN** the page emits JSON-LD
+- **THEN** it includes `SoftwareApplication`, `WebSite`, and a `FAQPage` whose questions and answers are the same ones the on-page FAQ renders
+- **AND** it asserts no rating or review count the product does not have
+
+### Requirement: Honest positioning for alternative-seekers
+
+The site SHALL position Lunma within its category for people arriving from Arc (and Arc-style tools) by naming the lineage in the brand voice and answering the alternative-seeker's questions factually, rather than by a competitor comparison matrix. It SHALL include a positioning section that names Arc and states Lunma's own footing (an extension for the Chrome/Edge you already use, open source, no account, nothing locked in), and FAQ entries answering how Lunma differs from Arc and how it relates to the Arc-style extension it credits. Every claim SHALL be factual (what Lunma is, not a value-judgement or disparagement of another tool), and the tool Lunma credits as its inspiration SHALL be credited, not ranked against. The positioning content SHALL render at the page's visual bar and hold WCAG-AA contrast.
+
+#### Scenario: The page positions Lunma for people coming from Arc
+
+- **WHEN** a visitor reaches the positioning section
+- **THEN** it names Arc and states Lunma's own footing (a Chrome/Edge extension, open source, no account, no lock-in) in the brand voice
+- **AND** the FAQ answers "how is Lunma different from Arc?" and the relation to the Arc-style extension, factually
+
+#### Scenario: The credited tool is credited, not ranked
+
+- **WHEN** the site references the Arc-style extension it was inspired by
+- **THEN** it appears as a credit and a gracious factual FAQ mention, not as a competitor ranked against Lunma
 
