@@ -9,11 +9,11 @@ import { reveal } from '$lib/reveal';
   <p class="kicker">Get started</p>
   <h2>Add Lunma to Chrome or Edge.</h2>
   <p class="sub">
-    Free, local-only, and open source. Install it once and organize your tabs
+    Free, local-only, and open source. Install it once, and your tabs settle
     into Spaces.
   </p>
   <div class="ctas">
-    <InstallCta href={CHROME_WEB_STORE_URL}>Add to Chrome — it's free</InstallCta>
+    <InstallCta href={CHROME_WEB_STORE_URL}>Add to Chrome, it's free</InstallCta>
     <InstallCta href={EDGE_ADDONS_URL} variant="ghost">Add to Edge</InstallCta>
   </div>
 </section>

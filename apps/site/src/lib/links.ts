@@ -5,5 +5,14 @@ export const CHROME_WEB_STORE_URL = 'https://chromewebstore.google.com/'; // [VE
 export const EDGE_ADDONS_URL = 'https://microsoftedge.microsoft.com/addons/'; // [VERIFY] Lunma listing
 export const GITHUB_URL = 'https://github.com/lunma-app/lunma'; // [VERIFY] public repo URL
 
+/**
+ * Launch gate. While `false` (pre-launch), the install CTAs render an honest
+ * "coming soon" state instead of linking to a store listing that doesn't exist
+ * yet. Flip to `true` with the real store URLs above at launch (tracked in
+ * the release notes) and every CTA becomes a live install button
+ * with no other change. [VERIFY] set true at launch.
+ */
+export const LAUNCHED = false;
+
 /** Minimum supported Chromium version, mirrored from the extension manifest. */
 export const MIN_CHROMIUM = 123;

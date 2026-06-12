@@ -11,11 +11,12 @@ import { reveal } from '$lib/reveal';
   <p class="kicker">Coming from Arc</p>
   <h2>Arc's Spaces, in the browser you already use.</h2>
   <p class="body">
-    Colour-coded Spaces, vertical tabs, and a keyboard launcher — without a new
-    browser or an account. Lunma is an open-source extension for Chrome and Edge,
-    and it stays out of the way: your favourites and pinned tabs are ordinary
-    bookmarks, so nothing is locked in, and the same Space can be open in as many
-    windows as you like.
+    You came here from Arc, and you want what it did with Spaces. You can have
+    that without changing browsers. Lunma puts a vertical, colour-coded sidebar
+    inside the Chrome or Edge you already run, with the launcher a keystroke away.
+    You won't learn a new browser or make an account. It's open source, and
+    everything runs on the device in front of you. One Space can be open in as
+    many windows as you've got.
   </p>
 </section>
 

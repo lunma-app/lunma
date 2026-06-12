@@ -1,29 +1,41 @@
 <script lang="ts">
 import type { Snippet } from 'svelte';
+import { LAUNCHED } from '$lib/links';
 
 // The install call-to-action, composed from shared tokens. `fill` is the
 // single highest-emphasis action (accent fill + hue glow); `ghost` is the
 // quieter secondary. Hover lifts + intensifies the glow, active presses, and
 // the global focus-visible ring applies.
+//
+// Pre-launch (`LAUNCHED === false`): there is no store listing to point at, so
+// the primary (`fill`) CTA renders a non-interactive "coming soon" pill instead
+// of a dead link, and the secondary (`ghost`, the Edge button) is omitted. At
+// launch the flag flips and these become live install links with no edit here.
 interface Props {
   href: string;
   variant?: 'fill' | 'ghost';
   compact?: boolean;
+  /** Label shown in the pre-launch state (fill variant only). */
+  soonLabel?: string;
   children: Snippet;
 }
 
-let { href, variant = 'fill', compact = false, children }: Props = $props();
+let {
+  href,
+  variant = 'fill',
+  compact = false,
+  soonLabel = 'Coming to the Chrome Web Store',
+  children,
+}: Props = $props();
 </script>
 
-<a
-  class="cta {variant}"
-  class:compact
-  {href}
-  target="_blank"
-  rel="noopener"
->
-  {@render children()}
-</a>
+{#if LAUNCHED}
+  <a class="cta {variant}" class:compact {href} target="_blank" rel="noopener">
+    {@render children()}
+  </a>
+{:else if variant === 'fill'}
+  <span class="cta fill soon" class:compact aria-disabled="true">{soonLabel}</span>
+{/if}
 
 <style>
   .cta {
@@ -64,6 +76,20 @@ let { href, variant = 'fill', compact = false, children }: Props = $props();
 
   .fill:active {
     transform: scale(var(--press-scale));
+  }
+
+  /* Pre-launch state: a quiet, non-interactive pill — reads as "coming", not as a
+   * broken button. No accent fill, no glow, default cursor. */
+  .soon {
+    background: var(--surface);
+    color: var(--text-2);
+    border: 1px solid var(--border);
+    box-shadow: none;
+    cursor: default;
+  }
+  .soon:hover {
+    transform: none;
+    box-shadow: none;
   }
 
   .ghost {

@@ -6,15 +6,16 @@ import { reveal } from '$lib/reveal';
 <section class="trust wrap" id="trust" use:reveal>
   <div class="head">
     <p class="kicker">Privacy</p>
-    <h2>Local-only. No account. Open source.</h2>
+    <h2>Your data stays put, and the code is public.</h2>
   </div>
   <div class="cells">
     <div class="cell lunma-glass">
       <span class="cell-mark" aria-hidden="true">⌂</span>
       <h3>Your data stays on your device</h3>
       <p>
-        Spaces, settings, and pinned tabs live in your browser's local extension
-        storage — on this device only. No Lunma account, no Lunma server.
+        Your Spaces, favourites, pinned tabs, and settings sit in your browser's
+        local extension storage, on this device only. There's no Lunma account
+        and no Lunma server behind them.
       </p>
     </div>
     <div class="cell lunma-glass">
@@ -22,18 +23,18 @@ import { reveal } from '$lib/reveal';
       <h3>Open source</h3>
       <p>
         The full source is
-        <a href={GITHUB_URL} target="_blank" rel="noopener">public</a> — read
-        exactly what it does, and the permissions it asks for, before you install
-        it.
+        <a href={GITHUB_URL} target="_blank" rel="noopener">public</a> and
+        Apache-2.0 licensed, and we build it in the open. Read exactly what it
+        does, and the permissions it asks for, before you install.
       </p>
     </div>
     <div class="cell lunma-glass">
       <span class="cell-mark" aria-hidden="true">⊘</span>
       <h3>Nothing is sent anywhere</h3>
       <p>
-        Fonts and code are bundled in. Lunma makes no network requests of its own
-        and no analytics calls. It
-        works the same with the network unplugged.
+        Fonts and code ship inside the extension. Lunma makes no network calls of
+        its own and no analytics calls. Unplug the network and it works exactly
+        the same.
       </p>
     </div>
   </div>

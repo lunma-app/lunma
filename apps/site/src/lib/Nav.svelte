@@ -29,7 +29,7 @@ onMount(() => {
       <a class="navlink" href="#features">Features</a>
       <a class="navlink" href="#trust">Privacy</a>
       <a class="navlink" href={GITHUB_URL} target="_blank" rel="noopener">GitHub</a>
-      <InstallCta href={CHROME_WEB_STORE_URL} compact>Add to Chrome</InstallCta>
+      <InstallCta href={CHROME_WEB_STORE_URL} compact soonLabel="Coming soon">Add to Chrome</InstallCta>
     </div>
   </div>
 </nav>

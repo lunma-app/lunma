@@ -8,18 +8,18 @@ import StageWindow from '$lib/StageWindow.svelte';
   <div class="hero-inner wrap">
     <div class="copy">
       <p class="kicker kindle k0">A Chrome &amp; Edge extension</p>
-      <h1 class="kindle k1">Your tabs, organized into Spaces.</h1>
+      <h1 class="kindle k1">Your tabs, organised into Spaces.</h1>
       <p class="lede kindle k2">
-        Lunma is a vertical sidebar for Chrome and Edge. Group your tabs into
-        colour-coded Spaces, jump to anything with a launcher on
+        Lunma is a vertical sidebar for Chrome and Edge. Give each project its own
+        colour-coded Space, jump to anything with the launcher on
         <kbd class="key">Alt</kbd> <kbd class="key">L</kbd>, and let the tabs you
-        don't pin archive themselves.
+        never pinned archive themselves once they go quiet.
       </p>
       <div class="ctas kindle k3">
-        <InstallCta href={CHROME_WEB_STORE_URL}>Add to Chrome — it's free</InstallCta>
+        <InstallCta href={CHROME_WEB_STORE_URL}>Add to Chrome, it's free</InstallCta>
         <InstallCta href={EDGE_ADDONS_URL} variant="ghost">Add to Edge</InstallCta>
       </div>
-      <p class="hint kindle k3">No account. No server. Open source.</p>
+      <p class="hint kindle k3">Free, and it never phones home.</p>
     </div>
 
     <div class="stage-wrap kindle k2">

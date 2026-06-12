@@ -12,7 +12,7 @@ import Wordmark from '$lib/Wordmark.svelte';
       <a href={EDGE_ADDONS_URL} target="_blank" rel="noopener">Edge Add-ons</a>
     </p>
   </div>
-  <p class="tagline">Free, local-only, open source. For Chrome and Edge (Chromium 123+).</p>
+  <p class="tagline">Free and open source. For Chrome and Edge (Chromium 123+).</p>
   <p class="credit">
     Built from scratch, with thanks to
     <a

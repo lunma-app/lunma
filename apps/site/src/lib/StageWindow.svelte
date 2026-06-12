@@ -293,6 +293,12 @@ onMount(() => {
           <div class="nt-search">
             <span class="mag">⌕</span><span class="ph">Search tabs, bookmarks…</span>
           </div>
+          <!-- The home's global favourites row — the same shortcuts the sidebar
+               shows, here on the new-tab page (it fills the page the way the real
+               home does, rather than leaving the lower half empty). -->
+          <div class="nt-favs">
+            <FaviconGrid items={favourites} size={38} columns={5} />
+          </div>
         </div>
       </div>
     </div>
@@ -581,6 +587,11 @@ onMount(() => {
   }
   .mag {
     color: var(--text-dim);
+  }
+  /* The home favourites row, sitting under the search — closes the empty lower
+     half of the page area so the new-tab identity reads as a full page. */
+  .nt-favs {
+    margin-top: 26px;
   }
 
   .caption {

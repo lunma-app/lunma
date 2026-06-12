@@ -12,8 +12,8 @@ const palette = ['red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', '
   <div class="hearth" aria-hidden="true"></div>
   <p class="eyebrow">A Chrome &amp; Edge extension</p>
   <div class="mark"><Wordmark href="#" size={148} /></div>
-  <h1>Your tabs, organized into Spaces.</h1>
-  <p class="sub">Colour-coded Spaces · a keyboard launcher · tabs that archive themselves</p>
+  <h1>Your tabs, organised into Spaces.</h1>
+  <p class="sub">A vertical sidebar with colour-coded Spaces, for Chrome and Edge</p>
   <div class="footer">
     <div class="hues" aria-hidden="true">
       {#each palette as color (color)}

@@ -5,18 +5,19 @@ import FaviconGrid from '$lib/mocks/FaviconGrid.svelte';
 import LauncherMock from '$lib/mocks/LauncherMock.svelte';
 import SpaceHeader from '$lib/mocks/SpaceHeader.svelte';
 import TabRowMock from '$lib/mocks/TabRowMock.svelte';
+
+// The feature beats use token-faithful mocks (composed from @lunma/tokens, so they
+// re-hue with the brand and can show states a static screenshot can't — an
+// idle/archiving fade, the pinned-app divider). The real product is shown for real
+// in the ProductShowcase section above and the live interactive hero demo.
 </script>
 
 <Chapter index={1} id="spaces" kicker="Spaces" title="Group tabs into colour-coded Spaces." layout="left">
   {#snippet copy()}
     <p>
-      Make a Space for each project or context. Each one keeps its own tabs, in
-      the order you set, and has a colour from a nine-colour palette. Switch
-      Spaces and the sidebar shows only that Space's tabs and recolours to match.
-    </p>
-    <p class="fine">
-      A colour-intensity setting (subtle, standard, vivid) dials the tint up or
-      down. Reduced motion is honoured throughout.
+      Make a Space for each thing you're juggling. Each one holds its own tabs in
+      the order you left them, with a colour pulled from a palette of nine. Switch
+      Spaces and the whole sidebar swaps to that work and recolours to match.
     </p>
   {/snippet}
   {#snippet visual()}
@@ -38,9 +39,10 @@ import TabRowMock from '$lib/mocks/TabRowMock.svelte';
 <Chapter index={2} id="launcher" kicker="Launcher" title="Search everything from Alt+L." layout="right">
   {#snippet copy()}
     <p>
-      One overlay searches your open tabs, bookmarks, and history — from any page
-      or the new-tab page. Type a few letters and press Enter. It also runs a web
-      search, and Tab locks the query to a specific engine.
+      One overlay searches your open tabs, your bookmarks, and your history, from
+      any page or the new-tab screen. Type a few letters, press Enter, and you're
+      there. It runs web searches too, and a tap of Tab switches which engine
+      answers: Google, DuckDuckGo, or one you set yourself.
     </p>
   {/snippet}
   {#snippet visual()}
@@ -59,9 +61,9 @@ import TabRowMock from '$lib/mocks/TabRowMock.svelte';
 <Chapter index={3} kicker="Auto-archive" title="Idle tabs archive themselves." layout="left">
   {#snippet copy()}
     <p>
-      Tabs you didn't pin move to an archive once they've sat idle past a
-      threshold you set. Nothing is deleted — the archive keeps them, and you can
-      restore any of them later. Your tab list stays short on its own.
+      The tabs you didn't pin slip into an archive once they've sat idle past a
+      limit you choose. Nothing's deleted. The archive holds onto them, and you
+      can pull any of them back later. Your list stays short without you tending it.
     </p>
   {/snippet}
   {#snippet visual()}
@@ -84,10 +86,9 @@ import TabRowMock from '$lib/mocks/TabRowMock.svelte';
 <Chapter index={4} kicker="Favourites" title="Favourites, one click away in every Space." layout="right">
   {#snippet copy()}
     <p>
-      Drag the sites you open all the time up to the favourites row at the top of
-      the sidebar — they stay there in every Space. Favourites and pinned tabs are
-      ordinary browser bookmarks underneath, so they sync across your devices and
-      survive restarts.
+      Drag the sites you open all day up to the favourites row at the top of the
+      sidebar. They stay put in every Space. Everything's saved locally and
+      survives a restart.
     </p>
   {/snippet}
   {#snippet visual()}
@@ -116,13 +117,9 @@ import TabRowMock from '$lib/mocks/TabRowMock.svelte';
 <Chapter index={5} kicker="Pinned tabs" title="Pinned tabs act like apps." layout="left">
   {#snippet copy()}
     <p>
-      Pin a site and it behaves like an app, not a bookmark: it stays on its own
-      page. Click a link that leads elsewhere and it opens in a new tab beside it —
-      your pinned view never wanders off.
-    </p>
-    <p class="fine">
-      Nothing is blocked or trapped; the link just opens as an ordinary tab next
-      door.
+      Pin a site and it acts like an app, not a bookmark. It holds its own page,
+      and a link that heads somewhere else opens in a new tab next to it instead
+      of dragging your pinned view along.
     </p>
   {/snippet}
   {#snippet visual()}

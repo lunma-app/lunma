@@ -6,6 +6,7 @@ import Footer from '$lib/Footer.svelte';
 import FromArc from '$lib/FromArc.svelte';
 import Hero from '$lib/Hero.svelte';
 import Nav from '$lib/Nav.svelte';
+import ProductShowcase from '$lib/ProductShowcase.svelte';
 import Seo from '$lib/Seo.svelte';
 import { SITE_DESCRIPTION, SITE_TITLE } from '$lib/seo';
 import TrustBand from '$lib/TrustBand.svelte';
@@ -25,6 +26,7 @@ import TrustBand from '$lib/TrustBand.svelte';
 <Nav />
 <main id="main" tabindex="-1">
   <Hero />
+  <ProductShowcase />
   <section id="features">
     <Chapters />
   </section>
