@@ -47,9 +47,10 @@ html {
   --nav-offset: calc(64px + var(--space-4));
 }
 
-/* Every section-level nav anchor target (the hero, each chapter, the trust band,
- * the staged demo) clears the sticky nav when jumped to. */
+/* Every section-level nav anchor target (the hero, the features band, each
+ * chapter, the trust band, the staged demo) clears the sticky nav when jumped to. */
 .hero,
+#features,
 .chapter,
 .trust,
 .stage {

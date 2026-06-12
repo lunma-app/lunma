@@ -3,27 +3,21 @@ import Chapters from '$lib/Chapters.svelte';
 import CloseCta from '$lib/CloseCta.svelte';
 import Faq from '$lib/Faq.svelte';
 import Footer from '$lib/Footer.svelte';
+import FromArc from '$lib/FromArc.svelte';
 import Hero from '$lib/Hero.svelte';
 import Nav from '$lib/Nav.svelte';
+import Seo from '$lib/Seo.svelte';
+import { SITE_DESCRIPTION, SITE_TITLE } from '$lib/seo';
 import TrustBand from '$lib/TrustBand.svelte';
 </script>
 
 <svelte:head>
-  <title>Lunma — Spaces, a launcher, and tabs that archive themselves</title>
-  <meta
-    name="description"
-    content="Lunma is a vertical sidebar for Chrome and Edge: group tabs into colour-coded Spaces, search everything with a keyboard launcher, and let idle tabs archive themselves. Local-only and open source."
-  />
-  <meta property="og:type" content="website" />
-  <meta property="og:title" content="Lunma — Spaces, a launcher, and tabs that archive themselves" />
-  <meta
-    property="og:description"
-    content="A vertical sidebar for Chrome and Edge: colour-coded Spaces, a keyboard launcher, and tabs that archive themselves. No account, no server, open source."
-  />
-  <meta property="og:url" content="https://lunma.app/" />
-  <meta property="og:image" content="https://lunma.app/og.png" />
-  <meta name="twitter:card" content="summary_large_image" />
+  <title>{SITE_TITLE}</title>
+  <meta name="description" content={SITE_DESCRIPTION} />
 </svelte:head>
+
+<!-- Canonical, the full Open Graph + Twitter set, and JSON-LD structured data. -->
+<Seo />
 
 <!-- Skip link: the FIRST focusable element, visually hidden until focused, so a
      keyboard user can jump straight past the sticky nav to the main content. -->
@@ -31,7 +25,10 @@ import TrustBand from '$lib/TrustBand.svelte';
 <Nav />
 <main id="main" tabindex="-1">
   <Hero />
-  <Chapters />
+  <section id="features">
+    <Chapters />
+  </section>
+  <FromArc />
   <TrustBand />
   <Faq />
   <CloseCta />

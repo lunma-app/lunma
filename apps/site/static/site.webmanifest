@@ -1,0 +1,15 @@
+{
+  "name": "Lunma",
+  "short_name": "Lunma",
+  "description": "An Arc-style vertical sidebar with colour-coded Spaces, a keyboard launcher, and tabs that archive themselves — for Chrome & Edge.",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#181818",
+  "background_color": "#181818",
+  "icons": [
+    { "src": "/icons/icon-32.png", "type": "image/png", "sizes": "32x32", "purpose": "any" },
+    { "src": "/icons/icon-48.png", "type": "image/png", "sizes": "48x48", "purpose": "any" },
+    { "src": "/icons/icon-128.png", "type": "image/png", "sizes": "128x128", "purpose": "any" },
+    { "src": "/favicon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any" }
+  ]
+}

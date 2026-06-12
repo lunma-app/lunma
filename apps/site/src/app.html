@@ -7,7 +7,17 @@
     <!-- Matches the dark substrate (--bg: oklch(0.155 0 0)) so the browser chrome
          tints to the page instead of flashing a light bar. -->
     <meta name="theme-color" content="#181818" />
-    <link rel="icon" href="%sveltekit.assets%/favicon.svg" />
+    <!-- The brand mark, shared with the extension (canonical source: favicon.svg).
+         Sized PNGs (icon-N.png are the extension's exact files) drive the favicon
+         so the tab follows the same small-size rule the extension does — the clean
+         ember dot at 16px, the full alcove-arch mark at 32px+ — instead of the SVG
+         smudging the arch at tab size. The SVG stays as the crisp Safari mask icon. -->
+    <link rel="icon" type="image/png" sizes="16x16" href="%sveltekit.assets%/icons/icon-16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="%sveltekit.assets%/icons/icon-32.png" />
+    <link rel="icon" type="image/png" sizes="48x48" href="%sveltekit.assets%/icons/icon-48.png" />
+    <link rel="apple-touch-icon" sizes="128x128" href="%sveltekit.assets%/icons/icon-128.png" />
+    <link rel="mask-icon" href="%sveltekit.assets%/favicon.svg" color="#181818" />
+    <link rel="manifest" href="%sveltekit.assets%/site.webmanifest" />
     %sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="hover">

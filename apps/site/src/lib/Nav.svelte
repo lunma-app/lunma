@@ -26,8 +26,7 @@ onMount(() => {
   <div class="nav-inner wrap">
     <Wordmark href="#top" />
     <div class="links">
-      <a class="navlink" href="#spaces">Spaces</a>
-      <a class="navlink" href="#launcher">Launcher</a>
+      <a class="navlink" href="#features">Features</a>
       <a class="navlink" href="#trust">Privacy</a>
       <a class="navlink" href={GITHUB_URL} target="_blank" rel="noopener">GitHub</a>
       <InstallCta href={CHROME_WEB_STORE_URL} compact>Add to Chrome</InstallCta>

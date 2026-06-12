@@ -1,39 +1,20 @@
 <script lang="ts">
 import { reveal } from '$lib/reveal';
+import { FAQ_ENTRIES } from '$lib/seo';
+
+// The questions render from the shared `FAQ_ENTRIES` data so the visible FAQ and
+// the `FAQPage` JSON-LD (in Seo.svelte) stay in lockstep — Google requires the
+// structured data to match what the page shows.
 </script>
 
 <section class="faq wrap-narrow" use:reveal>
   <h2>Questions</h2>
-  <details>
-    <summary>Does it change my browser?</summary>
-    <p>
-      No. Lunma is an extension: it adds a vertical sidebar, a new-tab page, and
-      the Alt+L launcher. It can't redraw the browser's own window or tab strip,
-      and it doesn't try to — it works on top of the browser you already have.
-    </p>
-  </details>
-  <details>
-    <summary>Why does it need those permissions?</summary>
-    <p>
-      The launcher reads your tabs, bookmarks, and history so it can search them,
-      and the overlay renders on the page you're on. All of it is read locally,
-      nothing is transmitted, and the source is public so you can verify it.
-    </p>
-  </details>
-  <details>
-    <summary>Where is my data stored?</summary>
-    <p>
-      On your device. Spaces and settings live in local extension storage;
-      pinned tabs and favourites are ordinary bookmarks, so they sync wherever
-      your browser profile syncs. There is no Lunma server.
-    </p>
-  </details>
-  <details>
-    <summary>Does it work on Edge?</summary>
-    <p>
-      Yes — Edge is Chromium, so it's the same extension. Chromium 123 or newer.
-    </p>
-  </details>
+  {#each FAQ_ENTRIES as entry (entry.q)}
+    <details>
+      <summary>{entry.q}</summary>
+      <p>{entry.a}</p>
+    </details>
+  {/each}
 </section>
 
 <style>
