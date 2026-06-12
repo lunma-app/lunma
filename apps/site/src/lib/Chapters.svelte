@@ -81,7 +81,7 @@ import TabRowMock from '$lib/mocks/TabRowMock.svelte';
   {/snippet}
 </Chapter>
 
-<Chapter index={4} kicker="Favourites" title="Favourites, one click away in every Space." layout="wide">
+<Chapter index={4} kicker="Favourites" title="Favourites, one click away in every Space." layout="right">
   {#snippet copy()}
     <p>
       Drag the sites you open all the time up to the favourites row at the top of
@@ -107,8 +107,37 @@ import TabRowMock from '$lib/mocks/TabRowMock.svelte';
           FAV.calendar,
           FAV.reader,
         ]}
-        columns={8}
+        columns={4}
       />
+    </div>
+  {/snippet}
+</Chapter>
+
+<Chapter index={5} kicker="Pinned tabs" title="Pinned tabs act like apps." layout="left">
+  {#snippet copy()}
+    <p>
+      Pin a site and it behaves like an app, not a bookmark: it stays on its own
+      page. Click a link that leads elsewhere and it opens in a new tab beside it —
+      your pinned view never wanders off.
+    </p>
+    <p class="fine">
+      Nothing is blocked or trapped; the link just opens as an ordinary tab next
+      door.
+    </p>
+  {/snippet}
+  {#snippet visual()}
+    <!-- A "Work" Space pinned to the canonical green palette colour (sourced from
+         the @lunma/tokens --space-green-* tokens, not hand-copied). The pinned/temp
+         divider is the story: the pinned app stays above the line; the clicked
+         off-site link lands below it as a new temporary tab. -->
+    <div
+      class="space-panel lunma-space-scope"
+      style="--space-h: var(--space-green-h); --space-l: var(--space-green-l); --space-chroma: var(--space-green-c); --space-on: var(--space-green-on)"
+    >
+      <SpaceHeader icon="◆" name="Work" />
+      <TabRowMock title="Mail — Inbox" fav={FAV.gmail} active />
+      <div class="rule"></div>
+      <TabRowMock title="Newsletter — example.com" fav={FAV.reader} meta="opened from a link" />
     </div>
   {/snippet}
 </Chapter>

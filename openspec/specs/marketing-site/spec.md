@@ -227,3 +227,44 @@ The site SHALL position Lunma within its category for people arriving from Arc (
 - **WHEN** the site references the Arc-style extension it was inspired by
 - **THEN** it appears as a credit and a gracious factual FAQ mention, not as a competitor ranked against Lunma
 
+### Requirement: Pinned tabs are positioned as app-like and demonstrated
+
+The features section SHALL include a beat that presents Lunma's pinned tabs as
+**app-like** — a pinned site stays on its own page, and a link that leads off that
+site opens in a **new tab** beside it rather than carrying the pinned view away. The
+beat SHALL render in the shared editorial-chapter form (a numbered chapter with a
+kicker, a display heading, copy, and a staged product visual) and compose the shared
+design language (`@lunma/tokens` + the site's own mock components), not re-roll
+primitives.
+
+The claim SHALL be **factual** and stated in the brand voice: it describes the
+product's actual click-time behaviour and SHALL NOT overclaim a hard sandbox (it is
+a click-time affordance, not a guarantee against every navigation). To avoid
+colliding with the site's "nothing is locked in" trust message, the beat SHALL NOT
+use the word **"lock"** (or "locking"/"locked") to name the behaviour; it SHALL
+frame it as pinned-tabs-as-apps / staying-in-place instead. The beat SHALL hold
+WCAG-AA contrast and SHALL introduce no motion that violates the page's
+reduced-motion contract.
+
+The staged visual SHALL show the behaviour rather than only assert it: a pinned tab
+that stays put alongside a separate, freshly-opened tab representing the off-site
+link that was diverted.
+
+#### Scenario: The features section presents pinned tabs as app-like
+
+- **WHEN** a visitor reaches the features section
+- **THEN** a chapter SHALL present pinned tabs as app-like — a pinned site stays on its page, and an off-site link opens in a new tab beside it
+- **AND** the chapter SHALL render in the shared editorial-chapter form composing the shared design language
+
+#### Scenario: The beat is factual and avoids the "lock" framing
+
+- **WHEN** the pinned-tabs beat renders its copy
+- **THEN** the copy SHALL describe the product's actual click-time behaviour without overclaiming a hard sandbox
+- **AND** it SHALL NOT use the word "lock" / "locking" / "locked" to name the behaviour (so it does not collide with the "nothing is locked in" trust message)
+
+#### Scenario: The staged visual shows the stay-put behaviour
+
+- **WHEN** the pinned-tabs beat renders its visual
+- **THEN** it SHALL show a pinned tab that stays put alongside a separate freshly-opened tab standing in for the diverted off-site link
+- **AND** all text in the visual SHALL hold WCAG-AA contrast
+
