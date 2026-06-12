@@ -54,28 +54,35 @@ import { reveal } from '$lib/reveal';
   .showcase {
     position: relative;
     padding: 124px 24px 136px;
-    overflow: hidden;
+    /* `clip` + a generous clip-margin lets the soft aura bleed up/down into the
+       neighbouring sections (no clear-cut band) while still containing any runaway
+       horizontal glow — so it never spawns a horizontal scrollbar. */
+    overflow: clip;
+    overflow-clip-margin: 140px;
   }
 
   /* Resting aurora — soft pools of the identity hue (moonlit blue) so the panels
-     read as lit objects in a room, not flat cutouts. Re-hues with `--base-hue`. */
+     read as lit objects in a room, not flat cutouts. Re-hues with `--base-hue`.
+     Kept low-chroma (moonlight, not a saturated stage-gel) and wide-feathered so
+     the pool melts into the page's own aurora with no clear-cut edge — the global
+     backdrop already carries the atmosphere; this is just a gentle local lift. */
   .aura {
     position: absolute;
-    inset: -10% -8% -4%;
+    inset: -22% -14% -16%;
     z-index: 0;
     pointer-events: none;
     background:
       radial-gradient(
-        48% 44% at 52% 22%,
-        oklch(0.58 0.13 var(--base-hue) / 0.2),
-        transparent 70%
+        56% 52% at 52% 28%,
+        oklch(0.62 0.085 var(--base-hue) / 0.12),
+        transparent 76%
       ),
       radial-gradient(
-        58% 50% at 30% 78%,
-        oklch(0.5 0.12 var(--base-hue) / 0.12),
-        transparent 72%
+        64% 56% at 30% 80%,
+        oklch(0.55 0.07 var(--base-hue) / 0.07),
+        transparent 78%
       );
-    filter: blur(20px);
+    filter: blur(32px);
   }
 
   .head {
@@ -117,10 +124,10 @@ import { reveal } from '$lib/reveal';
     border-radius: var(--r-pill);
     background: radial-gradient(
       closest-side,
-      oklch(0.6 0.13 var(--base-hue) / 0.22),
-      transparent 72%
+      oklch(0.64 0.09 var(--base-hue) / 0.15),
+      transparent 76%
     );
-    filter: blur(34px);
+    filter: blur(38px);
     pointer-events: none;
   }
 
