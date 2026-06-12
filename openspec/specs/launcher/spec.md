@@ -514,18 +514,21 @@ message (command shortcut) SHALL carry the hue and chroma, and the
 `lunma/current-window` response used by the `Alt+L` keydown fallback SHALL carry
 them alongside the window id.
 
-The overlay SHALL tint its card wash, its accent, and its selected-row bar with the
-provided hue. When the hue is unavailable — no active Space for the window, a
-neutral (`gray`) Space, or a service worker that does not provide it — the overlay
-SHALL fall back to its default accent. The overlay SHALL NOT request the full
-application state nor import the state-message module to derive the hue itself; it
-SHALL consume only the two numeric values the service worker provides.
+The overlay SHALL tint its card wash and its accent with the provided hue. The
+selected result row SHALL be indicated by the `--accent-soft` wash alone — no
+leading accent bar — matching the sidebar tab row's wash-only selection. When the
+hue is unavailable — no active Space for the window, a neutral (`gray`) Space, or a
+service worker that does not provide it — the overlay SHALL fall back to its
+default accent. The overlay SHALL NOT request the full application state nor import
+the state-message module to derive the hue itself; it SHALL consume only the two
+numeric values the service worker provides.
 
 #### Scenario: Overlay glows in the active Space's colour
 
 - **WHEN** the overlay opens in a window whose active Space has a non-neutral colour
 - **THEN** the service worker SHALL include the Space's hue and chroma on the open message
-- **AND** the overlay's card wash, accent, and selected-row bar SHALL be tinted with that hue
+- **AND** the overlay's card wash and accent SHALL be tinted with that hue
+- **AND** the selected row SHALL show the `--accent-soft` wash with no accent bar
 
 #### Scenario: Keydown-opened overlay receives the hue with its window id
 

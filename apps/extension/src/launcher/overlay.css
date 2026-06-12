@@ -280,9 +280,10 @@
   outline: var(--focus-width) solid var(--focus-color);
   outline-offset: calc(-1 * var(--focus-offset));
 }
+/* Selection is the `--accent-soft` wash only — no leading accent bar, matching
+ * the sidebar TabRow's wash-only selection (consistent selection across surfaces). */
 .row.selected {
   background: var(--accent-soft);
-  box-shadow: inset 3px 0 0 -0.5px var(--accent);
 }
 
 /* Comfort — the two-line scanning row mirroring ResultRow: the title (+ type) on
