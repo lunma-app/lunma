@@ -35,8 +35,11 @@ import StageWindow from '$lib/StageWindow.svelte';
 
   .hero-inner {
     display: grid;
-    grid-template-columns: minmax(0, 0.86fr) minmax(0, 1.14fr);
-    gap: clamp(32px, 5vw, 76px);
+    /* Copy column hugs its text (driven by the headline width, capped at ~30rem)
+       so it doesn't leave dead space to the right of the copy; the mock takes the
+       rest and sits closer in. A modest gap, not the old stacked double-gap. */
+    grid-template-columns: minmax(0, 30rem) minmax(0, 1.16fr);
+    gap: clamp(28px, 3vw, 52px);
     align-items: center;
   }
 
