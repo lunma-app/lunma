@@ -144,11 +144,11 @@ import { altKeyLabel } from '$lib/platform.svelte';
 <Chapter index={6} kicker="Smart folders" title="Pin a live queue, not just a page." layout="right" color="pink">
   {#snippet copy()}
     <p>
-      A smart folder fills itself from a service you keep checking. The first one talks
-      to GitLab and shows your open merge requests with the reviews waiting on you, each
-      with its pipeline status, and refreshes on its own. It works with self-hosted
-      GitLab, and like everything in Lunma it stays on your device. More connectors are
-      on the way.
+      A smart folder fills itself from a service you keep checking. Point one at GitLab
+      or GitHub and your review queue lands in the Space: the merge requests and pull
+      requests waiting on you, each with its pipeline status, kept current on its own. It
+      works with your self-hosted instance, and like everything in Lunma it stays on your
+      device. More connectors are on the way.
     </p>
   {/snippet}
   {#snippet visual()}
