@@ -8,6 +8,9 @@ interface Props {
   source?: ResultSource;
   faviconSrc?: string | undefined;
   selected?: boolean;
+  alreadyOpen?: boolean;
+  spaceName?: string | undefined;
+  spaceColor?: string | undefined;
   onclick?: () => void;
   onhover?: () => void;
 }
@@ -22,9 +25,23 @@ const {
   source = 'tab',
   faviconSrc,
   selected = false,
+  alreadyOpen = false,
+  spaceName,
+  spaceColor,
   onclick = noop,
   onhover = noop,
 }: Props = $props();
 </script>
 
-<ResultRow {title} {url} {source} {faviconSrc} {selected} {onclick} {onhover} />
+<ResultRow
+  {title}
+  {url}
+  {source}
+  {faviconSrc}
+  {selected}
+  {alreadyOpen}
+  {spaceName}
+  {spaceColor}
+  {onclick}
+  {onhover}
+/>

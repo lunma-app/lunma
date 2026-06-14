@@ -354,6 +354,7 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
   clearTempTabs: { kind: 'clearTempTabs', payload: { windowId: 1 } },
   undoClearTempTabs: { kind: 'undoClearTempTabs', payload: { windowId: 1, tabIds: [1, 2] } },
   openUrl: { kind: 'openUrl', payload: { url: 'https://example.com', windowId: 1 } },
+  duplicateTab: { kind: 'duplicateTab', payload: { tabId: 42 } },
   setTabBoundary: {
     kind: 'setTabBoundary',
     payload: { savedTabId: 'st', boundary: { mode: 'locked', allow: ['*.example.com'] } },

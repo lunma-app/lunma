@@ -4,12 +4,13 @@
 // drive the store, so a single source maintains liveTabsById. Verbatim moves of
 // the former coordinator closures.
 
+import { TAB_DEDUP_FLASH } from '../../shared/bus';
 import { log } from '../../shared/logger';
 import type { ArchivedTab } from '../../shared/types';
 import { handleRestoreArchivedTab } from '../auto-archive';
 import { activateTab } from '../tab-groups';
 import type { HandlersMap } from './context';
-import { spaceExists } from './queries';
+import { findTabInActiveSpace, spaceExists } from './queries';
 
 export function tempTabHandlers(): Pick<
   HandlersMap,
@@ -22,6 +23,7 @@ export function tempTabHandlers(): Pick<
   | 'clearTempTabs'
   | 'undoClearTempTabs'
   | 'openUrl'
+  | 'duplicateTab'
 > {
   return {
     renameTab: (ctx, event) => {
@@ -171,12 +173,12 @@ export function tempTabHandlers(): Pick<
       }
       ctx.markDirty();
     },
-    // Launcher: open a bookmark/history result's URL in the target window. No
-    // direct state mutation — the resulting tabs.onCreated adopts + groups it
-    // into the window's active Space (like focusTab/closeTab/newTab). A
-    // create failure throws so the drain tail acks `{ error }` to the client.
-    openUrl: async (_ctx, event) => {
-      const { url, windowId } = event.payload;
+    // Launcher: open a bookmark/history result's URL in the target window. When
+    // `force` is falsy, checks if the URL is already open in the active Space
+    // and focuses it instead of creating a new tab (tab-dedup). A create failure
+    // throws so the drain tail acks `{ error }` to the client.
+    openUrl: async (ctx, event) => {
+      const { url, windowId, force } = event.payload;
       // Re-validate scheme here: launcher bookmark/history providers can surface
       // javascript: bookmarklets or chrome:// history entries that bypass the
       // boundary content script's sanitization. Only http(s) are safe to pass to
@@ -193,7 +195,32 @@ export function tempTabHandlers(): Pick<
         log.warn('openUrl: blocked non-http(s) scheme', { url, scheme });
         return;
       }
+
+      if (!force) {
+        const existingTabId = findTabInActiveSpace(ctx.store.state, windowId, url);
+        if (existingTabId !== null) {
+          try {
+            await chrome.tabs.update(existingTabId, { active: true });
+            await chrome.windows.update(windowId, { focused: true });
+            const tabId = existingTabId;
+            ctx.runSideEffect(async () => {
+              await chrome.runtime.sendMessage({ type: TAB_DEDUP_FLASH, tabId });
+            });
+            return;
+          } catch {
+            // Tab closed between dedup lookup and update — fall through to create.
+          }
+        }
+      }
+
       await chrome.tabs.create({ url, windowId });
+    },
+    // Duplicate a temp tab via chrome.tabs.duplicate; the cloned tab is adopted
+    // into the active Space by the existing tabs.onCreated path — no direct state
+    // mutation here. Throws on failure so bus.send rejects with a descriptive error.
+    duplicateTab: async (_ctx, event) => {
+      const { tabId } = event.payload;
+      await chrome.tabs.duplicate(tabId);
     },
   };
 }

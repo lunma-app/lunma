@@ -4,11 +4,13 @@
 // group/boundary helpers → `ctx.groups.*` / `ctx.boundary.*`, read predicates →
 // `./queries`.
 
+import { TAB_DEDUP_FLASH } from '../../shared/bus';
+import { log } from '../../shared/logger';
 import { isNewTabUrl } from '../../shared/new-tab';
 import { resolveBoundaryAllow } from '../../shared/url-boundary';
 import { closeTab } from '../tab-groups';
 import type { HandlersMap } from './context';
-import { isTrackedTab, savedTabIdForBoundTab } from './queries';
+import { findTabInActiveSpace, isTrackedTab, savedTabIdForBoundTab } from './queries';
 
 export function chromeTabHandlers(): Pick<
   HandlersMap,
@@ -88,8 +90,40 @@ export function chromeTabHandlers(): Pick<
         !isNewTabUrl(changeInfo.url) &&
         !isTrackedTab(ctx.store.state, tabId)
       ) {
+        const navigatedUrl = changeInfo.url;
         const windowId = ctx.store.state.liveTabsById[tabId]?.windowId;
         if (windowId !== undefined) {
+          // Navigation dedup (navigation-tab-dedup): the address-bar counterpart
+          // to the launcher's `openUrl` dedup. A blank new tab committing its
+          // FIRST real URL that is already open in this window's active Space
+          // focuses the existing tab and closes this one, instead of adopting a
+          // duplicate. Gated by the cached `dedupNewTabNavigations` mirror; reuses
+          // `findTabInActiveSpace` + the `tab-dedup` flash (current window, active
+          // Space, exact match — never cross-window/Space). Wrapped in try/catch
+          // so any failure (existing tab just closed, focus rejected) falls
+          // through to normal adoption — a tab is never lost. No `markDirty` on the
+          // hit path: the focus/close fire `tabs.onActivated`/`onRemoved`, which
+          // reconcile state, exactly like the `openUrl` dedup.
+          if (ctx.dedupNewTabNavigations()) {
+            const found = findTabInActiveSpace(ctx.store.state, windowId, navigatedUrl);
+            if (found !== null && found !== tabId) {
+              try {
+                await chrome.tabs.update(found, { active: true });
+                await chrome.windows.update(windowId, { focused: true });
+                await chrome.tabs.remove(tabId);
+                ctx.runSideEffect(async () => {
+                  await chrome.runtime.sendMessage({ type: TAB_DEDUP_FLASH, tabId: found });
+                });
+                return;
+              } catch (err) {
+                log.debug('navigation dedup: focus/close failed, adopting normally', {
+                  tabId,
+                  found,
+                  err,
+                });
+              }
+            }
+          }
           ctx.store.onTabCreated({ id: tabId, windowId });
           await ctx.groups.groupNewTab(tabId, windowId);
         }

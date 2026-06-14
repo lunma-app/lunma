@@ -4,9 +4,11 @@ import ResultList from './ResultList.svelte';
 
 interface Props {
   results?: LauncherResult[];
-  onact?: (result: LauncherResult, index: number) => void;
+  onact?: (result: LauncherResult, index: number, modifiers?: { shiftKey: boolean }) => void;
   onescape?: () => void;
   onactivedescendant?: (id: string | null) => void;
+  alreadyOpen?: (result: LauncherResult) => boolean;
+  onfocuschange?: (result: LauncherResult | null) => void;
 }
 
 function noop(): void {
@@ -19,7 +21,14 @@ const sample: LauncherResult[] = [
   { id: 'history:3', source: 'history', title: 'Third', url: 'https://third/', score: 0.2 },
 ];
 
-const { results = sample, onact = noop, onescape = noop, onactivedescendant }: Props = $props();
+const {
+  results = sample,
+  onact = noop,
+  onescape = noop,
+  onactivedescendant,
+  alreadyOpen,
+  onfocuschange,
+}: Props = $props();
 </script>
 
-<ResultList {results} {onact} {onescape} {onactivedescendant} />
+<ResultList {results} {onact} {onescape} {onactivedescendant} {alreadyOpen} {onfocuschange} />

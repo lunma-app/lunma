@@ -17,12 +17,20 @@ interface Props {
    * here, and each option's id is derived from it (`<listboxId>-opt-<index>`) so
    * the input can carry `aria-activedescendant`. */
   listboxId?: string;
-  /** Act on a result (Enter or click) — the surface maps it to a bus command. */
-  onact?: ((result: LauncherResult, index: number) => void) | undefined;
+  /** Act on a result (Enter or click) — the surface maps it to a bus command.
+   * `modifiers.shiftKey` is set for Shift+Enter so the surface can force a new
+   * tab on an already-open result (tab-dedup). */
+  onact?:
+    | ((result: LauncherResult, index: number, modifiers?: { shiftKey: boolean }) => void)
+    | undefined;
   /** Escape pressed — the surface closes (overlay) or clears to idle (new-tab). */
   onescape?: (() => void) | undefined;
   /** Resolve a favicon URL per result (e.g. `faviconFor`). Globe fallback when absent. */
   faviconSrc?: ((result: LauncherResult) => string | undefined) | undefined;
+  /** Tab-dedup: is this result's URL already open in the active Space? When it
+   * returns true the row shows an "already open" line and Shift+Enter forces a
+   * new tab. Absent → no row is ever flagged. */
+  alreadyOpen?: ((result: LauncherResult) => boolean) | undefined;
   /** Hands the surface this list's keyboard model so a focused `<input>` can
    * forward its keydown without stealing focus (the new-tab page). */
   onready?: ((api: ResultListApi) => void) | undefined;
@@ -30,6 +38,9 @@ interface Props {
    * roving selection moves — the surface mirrors it onto the input's
    * `aria-activedescendant` so screen readers track the highlighted result. */
   onactivedescendant?: ((id: string | null) => void) | undefined;
+  /** Reports the focused result (or `null` when empty) whenever the roving
+   * selection moves — the surface uses it to drive the footer action hint. */
+  onfocuschange?: ((result: LauncherResult | null) => void) | undefined;
 }
 
 const {
@@ -38,8 +49,10 @@ const {
   onact,
   onescape,
   faviconSrc,
+  alreadyOpen,
   onready,
   onactivedescendant,
+  onfocuschange,
 }: Props = $props();
 
 const optionId = (index: number): string => `${listboxId}-opt-${index}`;
@@ -60,6 +73,12 @@ $effect(() => {
 // `aria-activedescendant` (combobox a11y). Null when there is nothing to point at.
 $effect(() => {
   onactivedescendant?.(results.length > 0 ? optionId(selected) : null);
+});
+
+// Surface the focused result so the owning surface can drive the footer action
+// hint (tab-dedup: "↵ Switch  ⇧↵ New tab" when the focused row is already open).
+$effect(() => {
+  onfocuschange?.(results[selected] ?? null);
 });
 
 function move(delta: number): void {
@@ -85,7 +104,7 @@ export function handleKeydown(e: KeyboardEvent): void {
     const result = results[selected];
     if (result) {
       e.preventDefault();
-      onact?.(result, selected);
+      onact?.(result, selected, { shiftKey: e.shiftKey });
     }
   } else if (e.key === 'Escape') {
     e.preventDefault();
@@ -108,12 +127,15 @@ export function handleKeydown(e: KeyboardEvent): void {
       url={result.url}
       source={result.source}
       faviconSrc={faviconSrc?.(result)}
+      alreadyOpen={alreadyOpen?.(result)}
+      spaceName={result.spaceName}
+      spaceColor={result.spaceColor}
       id={optionId(i)}
       selected={i === selected}
       onhover={() => {
         selected = i;
       }}
-      onclick={() => onact?.(result, i)}
+      onclick={() => onact?.(result, i, { shiftKey: false })}
     />
   {/each}
 </div>

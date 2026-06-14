@@ -16,6 +16,16 @@ interface Props {
   faviconSrc?: string | undefined;
   /** Roving keyboard selection: soft accent wash + leading accent marker. */
   selected?: boolean | undefined;
+  /** Tab-dedup: the result's URL is already open in the active Space. Renders a
+   * muted "already open" line beneath the title (Enter switches to that tab,
+   * Shift+Enter forces a new one). Only set for dedup-eligible sources. */
+  alreadyOpen?: boolean | undefined;
+  /** Cross-Space marker (launcher-fuzzy-smart-folders): the foreign Space's name,
+   * set only when the result lives in a Space other than the one being viewed.
+   * Its presence renders the colour-dot + name chip. */
+  spaceName?: string | undefined;
+  /** The foreign Space's colour as an `oklch(…)` string — paints the chip's dot. */
+  spaceColor?: string | undefined;
   /** Stable DOM id for the option — the combobox input points its
    * `aria-activedescendant` here when this row is the roving selection. */
   id?: string | undefined;
@@ -25,19 +35,33 @@ interface Props {
   onhover?: (() => void) | undefined;
 }
 
-const { title, url, source, faviconSrc, selected = false, id, onclick, onhover }: Props = $props();
+const {
+  title,
+  url,
+  source,
+  faviconSrc,
+  selected = false,
+  alreadyOpen = false,
+  spaceName,
+  spaceColor,
+  id,
+  onclick,
+  onhover,
+}: Props = $props();
 </script>
 
 <button
   type="button"
   class="result-row"
   class:selected
+  class:already-open={alreadyOpen}
   {id}
   role="option"
   aria-selected={selected}
   data-testid="result-row"
   data-source={source}
   data-selected={selected}
+  data-already-open={alreadyOpen}
   title={url}
   onclick={() => onclick?.()}
   onmouseenter={() => onhover?.()}
@@ -45,8 +69,24 @@ const { title, url, source, faviconSrc, selected = false, id, onclick, onhover }
   <span class="favicon">
     <Favicon src={faviconSrc} size={16} />
   </span>
-  <span class="title">{title}</span>
-  <span class="badge" data-testid="result-badge">{sourceBadgeLabel(source)}</span>
+  <span class="title-block">
+    <span class="title">{title}</span>
+    {#if alreadyOpen}
+      <!-- Secondary metadata (tab-dedup): plain muted text, not a chip. -->
+      <span class="already-open" data-testid="result-already-open">already open</span>
+    {/if}
+  </span>
+  <span class="meta">
+    {#if spaceName}
+      <!-- Cross-Space marker: a dot in the foreign Space's colour + its name. The
+           name carries the meaning (colour is a secondary cue), so AA holds. -->
+      <span class="space-chip" data-testid="result-space" title={`In ${spaceName}`}>
+        <span class="space-dot" style:background={spaceColor}></span>
+        <span class="space-name">{spaceName}</span>
+      </span>
+    {/if}
+    <span class="badge" data-testid="result-badge">{sourceBadgeLabel(source)}</span>
+  </span>
   <span class="url">{url}</span>
 </button>
 
@@ -74,6 +114,15 @@ const { title, url, source, faviconSrc, selected = false, id, onclick, onhover }
     cursor: pointer;
     transition: background var(--motion-fast) var(--ease-standard),
       color var(--motion-fast) var(--ease-standard);
+  }
+
+  /* An "already open" row carries a second (secondary) line beneath its title, so
+   * the fixed single-line --row-h would clip it — let it grow with light vertical
+   * padding (the Comfort layout below is already auto-height + padded). */
+  .result-row.already-open {
+    height: auto;
+    padding-top: var(--space-1);
+    padding-bottom: var(--space-1);
   }
 
   /* Comfort — a roomy two-line row built for scanning: the title (+ type badge)
@@ -142,8 +191,19 @@ const { title, url, source, faviconSrc, selected = false, id, onclick, onhover }
     opacity: 0.9;
   }
 
-  .title {
+  /* The title cell stacks the title over the optional "already open" line. A
+   * single-line row (no secondary text) reads identically to before — the column
+   * collapses to just the title. */
+  .title-block {
     grid-area: title;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1px;
+  }
+
+  .title {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -152,9 +212,54 @@ const { title, url, source, faviconSrc, selected = false, id, onclick, onhover }
     color: inherit;
   }
 
+  /* Secondary metadata for a deduped result — same muted/size register as the
+   * url line (the list's other secondary text), never a chip. */
+  .already-open {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font: var(--weight-regular) var(--text-sm) / 1 var(--font-sans);
+    color: var(--text-muted);
+  }
+
+  /* The trailing meta cluster: an optional cross-Space chip, then the source badge. */
+  .meta {
+    grid-area: badge;
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  /* Cross-Space marker — a colour dot in the foreign Space's identity colour plus
+   * its name. Quieter than the source badge (no filled background) so it reads as
+   * a location hint, not a second source label. */
+  .space-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+  .space-dot {
+    flex: 0 0 auto;
+    width: 7px;
+    height: 7px;
+    border-radius: var(--r-pill);
+    /* `background` is the Space's resolved `oklch(…)`, set inline from data. */
+  }
+  .space-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font: var(--weight-semibold) var(--text-2xs) / 1 var(--font-sans);
+    color: var(--text-dim);
+  }
+
   /* Tiny uppercased source chip — quiet identity for where the result came from. */
   .badge {
-    grid-area: badge;
     align-self: center;
     text-transform: uppercase;
     letter-spacing: 0.04em;

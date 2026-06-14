@@ -73,6 +73,46 @@ describe('ResultRow', () => {
     expect(onclick).toHaveBeenCalledTimes(1);
   });
 
+  test('renders the "already open" secondary line only when alreadyOpen is set', () => {
+    const { container, rerender } = render(ResultRowHarness, {
+      props: { title: 'Docs', url: 'https://docs.example/', source: 'bookmark' },
+    });
+    expect(container.querySelector('[data-testid="result-already-open"]')).toBeNull();
+    expect(row(container).getAttribute('data-already-open')).toBe('false');
+    return rerender({
+      title: 'Docs',
+      url: 'https://docs.example/',
+      source: 'bookmark',
+      alreadyOpen: true,
+    }).then(() => {
+      const label = container.querySelector('[data-testid="result-already-open"]');
+      expect(label?.textContent?.trim()).toBe('already open');
+      expect(row(container).classList.contains('already-open')).toBe(true);
+      expect(row(container).getAttribute('data-already-open')).toBe('true');
+    });
+  });
+
+  test('renders a cross-Space chip (dot + name) only when spaceName is set', () => {
+    const { container, rerender } = render(ResultRowHarness, {
+      props: { title: 'Fix the parser', url: 'https://g/', source: 'smart' },
+    });
+    // No marker for an in-Space / global row.
+    expect(container.querySelector('[data-testid="result-space"]')).toBeNull();
+    return rerender({
+      title: 'Fix the parser',
+      url: 'https://g/',
+      source: 'smart',
+      spaceName: 'Home',
+      spaceColor: 'oklch(0.7 0.15 150)',
+    }).then(() => {
+      const chip = container.querySelector('[data-testid="result-space"]');
+      expect(chip?.textContent?.trim()).toBe('Home');
+      // The dot paints the Space's resolved colour from the data.
+      const dot = chip?.querySelector('.space-dot') as HTMLElement;
+      expect(dot?.style.background).toBe('oklch(0.7 0.15 150)');
+    });
+  });
+
   test('renders the same four parts under Comfort density (two-line reflow)', () => {
     // The Comfort row reflows to two lines via a grid-template swap keyed on the
     // ambient `:root[data-density='comfort']` — no element is added or removed,

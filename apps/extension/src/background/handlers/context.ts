@@ -98,6 +98,7 @@ export type PendingEvent =
   | SidebarVariant<'clearTempTabs'>
   | SidebarVariant<'undoClearTempTabs'>
   | SidebarVariant<'openUrl'>
+  | SidebarVariant<'duplicateTab'>
   | SidebarVariant<'setTabBoundary'>
   | SidebarVariant<'restoreArchivedTab'>
   | SidebarVariant<'setSpaceAutoArchive'>
@@ -175,6 +176,13 @@ export interface HandlerContext {
   runSideEffect(fn: () => Promise<void>): void;
   /** Enqueue a PendingEvent into this coordinator's queue. */
   enqueue(ev: PendingEvent): void;
+  /**
+   * Read the cached `dedupNewTabNavigations` setting (navigation-tab-dedup),
+   * pushed by the SW settings watcher onto the coordinator (like
+   * `pinnedTabBoundaryDefault`) so the tab handler reads it SYNCHRONOUSLY on the
+   * drain — no per-navigation `readSettings()`. Defaults to `true` until seeded.
+   */
+  dedupNewTabNavigations(): boolean;
   readonly groups: GroupOrchestrator;
   readonly boundary: BoundaryController;
 }

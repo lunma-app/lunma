@@ -1,5 +1,6 @@
 import { fireEvent, render } from '@testing-library/svelte';
 import { describe, expect, test, vi } from 'vitest';
+import type { LauncherResult } from '../shared/launcher-contract';
 import ResultListHarness from './ResultList.test.harness.svelte';
 
 function list(container: HTMLElement): HTMLElement {
@@ -84,5 +85,37 @@ describe('ResultList', () => {
     const onactivedescendant = vi.fn();
     render(ResultListHarness, { props: { results: [], onactivedescendant } });
     expect(onactivedescendant).toHaveBeenLastCalledWith(null);
+  });
+
+  test('Enter forwards the Shift modifier so a surface can force a new tab', async () => {
+    const onact = vi.fn();
+    const { container } = render(ResultListHarness, { props: { onact } });
+    await fireEvent.keyDown(list(container), { key: 'Enter', shiftKey: true });
+    expect(onact.mock.calls[0]?.[2]).toEqual({ shiftKey: true });
+    await fireEvent.keyDown(list(container), { key: 'Enter' });
+    expect(onact.mock.calls[1]?.[2]).toEqual({ shiftKey: false });
+  });
+
+  test('passes the alreadyOpen predicate through to the matching rows', () => {
+    const { container } = render(ResultListHarness, {
+      props: { alreadyOpen: (r: LauncherResult) => r.id === 'history:3' },
+    });
+    const flagged = container.querySelectorAll('[data-testid="result-already-open"]');
+    expect(flagged).toHaveLength(1);
+    expect(rows(container)[2]?.classList.contains('already-open')).toBe(true);
+  });
+
+  test('reports the focused result as the roving selection moves', async () => {
+    const onfocuschange = vi.fn();
+    const { container } = render(ResultListHarness, { props: { onfocuschange } });
+    expect(onfocuschange).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'tab:1' }));
+    await fireEvent.keyDown(list(container), { key: 'ArrowDown' });
+    expect(onfocuschange).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'saved:2' }));
+  });
+
+  test('reports null focused result when there are no results', () => {
+    const onfocuschange = vi.fn();
+    render(ResultListHarness, { props: { results: [], onfocuschange } });
+    expect(onfocuschange).toHaveBeenLastCalledWith(null);
   });
 });

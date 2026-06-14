@@ -93,9 +93,28 @@ mutating Lunma state directly:
 - a `saved` result SHALL dispatch `focusSavedTab` when the saved tab is bound to a
   live tab (i.e. the result carries a `tabId`), else `openSavedTab`;
 - a `bookmark`, `history`, `websearch`, or `navigate` result SHALL dispatch
-  `openUrl { url, windowId }`. The `websearch`/`navigate` results carry a pre-built
-  search/target `url`, so they reuse this branch and require **no new dispatch
-  logic** in either surface's `act()`.
+  `openUrl { url, windowId }` on a plain Enter press (primary action);
+- a `bookmark`, `history`, `websearch`, or `navigate` result whose URL is already
+  open in the active Space (detected by `isUrlOpenInActiveSpace`) SHALL dispatch
+  `openUrl { url, windowId, force: true }` when Shift+Enter is pressed (secondary
+  action — force a new tab regardless of dedup).
+
+`isUrlOpenInActiveSpace(state, windowId, url): boolean` is a pure helper in
+`apps/extension/src/launcher/shared/already-open.ts` that mirrors the logic of
+`findTabInActiveSpace` in `handlers/queries.ts` (same scope: current window, active
+Space, exact URL, temp + pinned tabs). The one-way import DAG forbids `launcher/`
+from importing `background/`, so the scan is re-stated rather than shared.
+
+The two launcher surfaces detect "already open" differently because their access to
+state differs:
+
+- the **new-tab surface** holds a read-only `AppState` mirror and calls
+  `isUrlOpenInActiveSpace(state, windowId, url)` directly per row;
+- the **in-page overlay is stateless** (no `AppState`), so the suggestions response
+  carries `openUrls?: string[]` — the subset of `results[].url` the SW computed as
+  already open (via the same helper, over dedup-eligible sources only) — and the
+  overlay flags a row by membership. `SuggestionsResult` and
+  `LauncherSuggestionsResponseMessage` carry this optional field.
 
 #### Scenario: Selecting an open-tab result focuses that tab
 
@@ -124,6 +143,13 @@ mutating Lunma state directly:
 
 - **WHEN** the user acts on a `navigate` result whose `url` is `https://react.dev` in window 100
 - **THEN** the surface SHALL dispatch `openUrl { url: 'https://react.dev', windowId: 100 }`
+
+#### Scenario: Shift+Enter on an already-open result forces a new tab
+
+- **GIVEN** a `navigate` result for `https://example.com/` whose URL is already open in the active Space
+- **WHEN** the user presses Shift+Enter on that result
+- **THEN** the surface SHALL dispatch `openUrl { url: 'https://example.com/', windowId, force: true }`
+- **AND** the handler SHALL create a new tab regardless of the existing open tab
 
 ### Requirement: New-tab page inline launcher surface
 
@@ -1119,4 +1145,38 @@ Space, per the existing no-Space neutral-substrate behaviour.
 
 - **WHEN** the active Space has 0 tabs and 0 pinned
 - **THEN** the caption shows the brand empty line, not "0 tabs · 0 pinned"
+
+### Requirement: Launcher result rows show an "already open" indicator
+
+The launcher SHALL render a secondary "already open" label beneath any `bookmark`, `history`, `websearch`, or `navigate` result whose URL matches a tab already open in the current window's active Space. The detection uses `isUrlOpenInActiveSpace(state,
+windowId, url)` — directly on the new-tab surface (live `AppState` mirror), and via
+the SW-computed `openUrls` membership on the stateless overlay. Either way the
+indicator reflects the latest state/query — it updates as the Space's open tabs
+change while the results panel is visible.
+
+A footer action hint (newly introduced by this change — no launcher footer existed
+before) SHALL show `↵ Open` by default and SHALL change to `↵ Switch   ⇧↵ New tab`
+when the focused result row is "already open".
+
+The indicator SHALL use `var(--text-muted)` colour (the result `.url` line's
+secondary register; `@lunma/tokens` has no `--text-secondary` token) and
+`var(--text-sm)` size. It SHALL NOT be a chip or pill. `tab` and `saved` results are
+NOT affected — they already carry their own action semantics.
+
+#### Scenario: Already-open bookmark result shows the indicator
+
+- **GIVEN** `https://example.com/` is open as a temp tab in the active Space
+- **AND** the launcher shows a `bookmark` result for `https://example.com/`
+- **THEN** the result row SHALL render "already open" as secondary text beneath the title
+
+#### Scenario: Footer hint updates when an already-open result is focused
+
+- **GIVEN** the focused result is "already open"
+- **THEN** the footer SHALL show `↵ Switch   ⇧↵ New tab` instead of the default action hint
+
+#### Scenario: Indicator clears when the tab is closed
+
+- **GIVEN** the "already open" indicator is showing for a result
+- **WHEN** the tab at that URL is closed (state broadcast updates)
+- **THEN** the indicator SHALL disappear and the footer hint SHALL revert to the default
 

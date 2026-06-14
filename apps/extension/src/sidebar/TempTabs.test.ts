@@ -26,6 +26,14 @@ function pointer(type: string, clientX: number, clientY: number): MouseEvent {
   return new MouseEvent(type, { clientX, clientY, button: 0, bubbles: true });
 }
 
+/** jsdom has no `AnimationEvent`; fake one carrying the `animationName` the
+ * flash-reset handler reads. */
+function animationEnd(animationName: string): Event {
+  const ev = new Event('animationend', { bubbles: true });
+  Object.defineProperty(ev, 'animationName', { value: animationName });
+  return ev;
+}
+
 const { sendMock } = vi.hoisted(() => ({ sendMock: vi.fn(() => Promise.resolve()) }));
 
 // The surface dispatches fire-and-forget via `dispatch`; route it to the same
@@ -33,11 +41,26 @@ const { sendMock } = vi.hoisted(() => ({ sendMock: vi.fn(() => Promise.resolve()
 vi.mock('../shared/bus', () => ({
   bus: { send: sendMock },
   dispatch: sendMock,
+  TAB_DEDUP_FLASH: 'lunma/tab-dedup-flash',
 }));
 
+/** The most-recent `chrome.runtime.onMessage` listener TempTabs registered. */
+let flashListener: ((msg: unknown) => void) | null = null;
+
 function installChrome(): void {
+  flashListener = null;
   (globalThis as unknown as { chrome: unknown }).chrome = {
-    runtime: { getURL: (path: string) => `chrome-extension://abc${path}` },
+    runtime: {
+      getURL: (path: string) => `chrome-extension://abc${path}`,
+      onMessage: {
+        addListener: (fn: (msg: unknown) => void) => {
+          flashListener = fn;
+        },
+        removeListener: () => {
+          flashListener = null;
+        },
+      },
+    },
   };
 }
 
@@ -251,6 +274,50 @@ describe('TempTabs', () => {
     expect(menuItem(items, 'move-up').getAttribute('aria-disabled')).toBe('true');
     await fireEvent.click(menuItem(items, 'move-up'));
     expect(sendMock).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'reorderTemp' }));
+  });
+
+  test('the right-click menu Duplicate dispatches duplicateTab for that row', async () => {
+    const { container } = render(TempTabsHarness, { props: { store: makeStore(), windowId: 100 } });
+    const items = await openRowMenu(container, 0); // first row (tab 17)
+    await fireEvent.click(menuItem(items, 'duplicate'));
+    expect(sendMock).toHaveBeenCalledWith({ kind: 'duplicateTab', payload: { tabId: 17 } });
+  });
+
+  test('a tab-dedup-flash message flashes the matching row (and only that row)', async () => {
+    const { container } = render(TempTabsHarness, { props: { store: makeStore(), windowId: 100 } });
+    flushSync();
+    // The component registered an onMessage listener on mount.
+    expect(flashListener).not.toBeNull();
+    flashListener?.({ type: 'lunma/tab-dedup-flash', tabId: 22 });
+    flushSync();
+    const flashed = container.querySelectorAll('.row-wrap.flash');
+    expect(flashed).toHaveLength(1);
+    // tempTabIds order is [17, 22], so the flashed row is the second (tab 22).
+    expect(container.querySelectorAll('.row-wrap')[1]).toBe(flashed[0]);
+  });
+
+  test('animationend on the flash clears the pulse so it can re-fire', async () => {
+    const { container } = render(TempTabsHarness, { props: { store: makeStore(), windowId: 100 } });
+    flushSync();
+    flashListener?.({ type: 'lunma/tab-dedup-flash', tabId: 17 });
+    flushSync();
+    const row = container.querySelectorAll('.row-wrap')[0] as HTMLElement;
+    expect(row.classList.contains('flash')).toBe(true);
+    // Svelte scopes the keyframe name; the handler matches on the `tab-flash` substring.
+    row.dispatchEvent(animationEnd('svelte-x-tab-flash'));
+    flushSync();
+    expect(row.classList.contains('flash')).toBe(false);
+  });
+
+  test('an unrelated animationend does not clear an active flash', async () => {
+    const { container } = render(TempTabsHarness, { props: { store: makeStore(), windowId: 100 } });
+    flushSync();
+    flashListener?.({ type: 'lunma/tab-dedup-flash', tabId: 17 });
+    flushSync();
+    const row = container.querySelectorAll('.row-wrap')[0] as HTMLElement;
+    row.dispatchEvent(animationEnd('temp-row-in'));
+    flushSync();
+    expect(row.classList.contains('flash')).toBe(true);
   });
 
   test('a secondary (right) button press does not start a drag', async () => {

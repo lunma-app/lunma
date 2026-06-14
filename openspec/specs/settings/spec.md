@@ -316,3 +316,34 @@ invalid.
 - **THEN** it SHALL be `''`
 - **AND** an out-of-type stored value SHALL fall back to `''` without failing the read
 
+### Requirement: Switch-to-an-already-open-tab setting
+
+The settings registry SHALL declare a `dedupNewTabNavigations` boolean toggle
+(`type: 'toggle'`, `default: true`, group `'Tabs'`) on the `Settings` interface. It
+governs the navigation-dedup behaviour in the `tab-dedup` capability: when `true`, a
+blank new tab navigating to a URL already open in the active Space focuses the existing
+tab instead of duplicating; when `false`, that navigation produces a duplicate as
+before.
+
+As an ordinary toggle declaration, its default, the derived Zod
+(`z.boolean().catch(true)`), persistence, change notification, and options-page
+rendering SHALL follow from the single declaration with no additional read/write/render
+code. The options page SHALL render it as the standard `SegmentedControl` (Off | On)
+under a "Tabs" group, with label "Switch to an already-open tab" and a description
+explaining the behaviour.
+
+#### Scenario: The toggle defaults to On
+
+- **WHEN** settings are read with no stored value for `dedupNewTabNavigations`
+- **THEN** it SHALL resolve to `true`
+
+#### Scenario: A malformed stored value degrades to the default
+
+- **WHEN** the stored `dedupNewTabNavigations` value is not a boolean
+- **THEN** the field-level Zod fallback SHALL resolve it to `true` (the declared default), without failing the whole settings read
+
+#### Scenario: The toggle renders on the options page
+
+- **WHEN** the options page is rendered from the settings declarations
+- **THEN** a two-segment Off | On `SegmentedControl` for "Switch to an already-open tab" SHALL appear under the "Tabs" group
+

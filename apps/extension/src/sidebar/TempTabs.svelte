@@ -1,9 +1,9 @@
 <script lang="ts">
 import '../ui/drop-line.css';
 import { flip } from 'svelte/animate';
-import { dispatch } from '../shared/bus';
+import { dispatch, TAB_DEDUP_FLASH } from '../shared/bus';
 import { labelFor } from '../shared/label-for';
-import type { IconName, LiveTab, SpaceId, TabId, WindowId } from '../shared/types';
+import type { LiveTab, SpaceId, TabId, WindowId } from '../shared/types';
 import ContextMenu from '../ui/ContextMenu.svelte';
 import { faviconCacheKey, faviconFor, faviconUrl } from '../ui/favicon';
 import IconButton from '../ui/IconButton.svelte';
@@ -84,6 +84,31 @@ $effect(() => {
 
 const isDragSource = (item: TempItem): boolean =>
   drag.state.active && drag.state.data?.zone === ZONE && drag.state.data?.id === item.id;
+
+// --- tab-dedup flash ----------------------------------------------------------
+// The SW broadcasts a `lunma/tab-dedup-flash` runtime message after a launcher
+// open dedups onto an existing tab (rather than spawning a duplicate). The row
+// whose `tabId` matches pulses once so the eye is drawn to the focused tab. The
+// pulse self-resets on `animationend` so a repeat dedup onto the same tab can
+// re-fire (null → id re-adds the class, restarting the animation).
+let flashTabId = $state<TabId | null>(null);
+
+$effect(() => {
+  const api = chrome?.runtime?.onMessage;
+  if (!api) return;
+  const listener = (msg: unknown): void => {
+    if (
+      typeof msg === 'object' &&
+      msg !== null &&
+      (msg as { type?: unknown }).type === TAB_DEDUP_FLASH
+    ) {
+      const id = (msg as { tabId?: unknown }).tabId;
+      if (typeof id === 'number') flashTabId = id;
+    }
+  };
+  api.addListener(listener);
+  return () => api.removeListener(listener);
+});
 
 function lineTop(index: number): number {
   const els = rowEls.filter(Boolean);
@@ -188,6 +213,13 @@ function closeTab(tabId: TabId): void {
   dispatch({ kind: 'closeTab', payload: { tabId } });
 }
 
+// Duplicate a temporary tab (chrome.tabs.duplicate, SW-side). The clone is
+// adopted into this Space by the existing tabs.onCreated path — no optimistic
+// mutation here; the authoritative broadcast adds the new row.
+function duplicateTab(item: TempItem): void {
+  dispatch({ kind: 'duplicateTab', payload: { tabId: item.tabId } });
+}
+
 // Favorite the live tab non-destructively (favicon-row-model `favoriteTab`): mint
 // a global favorite from this open tab; the tab STAYS open (it is not closed or
 // moved). Surfaced in the row's overflow menu (sidebar-favicon-row D5 / D7).
@@ -247,6 +279,11 @@ function tabMenuItems(item: TempItem): MenuItem[] {
       label: 'Move down',
       disabled: !bounds.down,
       onSelect: () => moveTemp(item, 1),
+    },
+    {
+      id: 'duplicate',
+      label: 'Duplicate',
+      onSelect: () => duplicateTab(item),
     },
     {
       id: 'close',
@@ -313,10 +350,18 @@ function commitRename(item: TempItem, newName: string): void {
     <div
       class="row-wrap"
       class:dragging={isDragSource(item)}
+      class:flash={item.tabId === flashTabId}
       bind:this={rowEls[i]}
       onpointerdown={(e) => onRowPointerDown(e, item)}
       oncontextmenu={(e) => onRowContextMenu(e, item)}
       ondblclick={() => startRename(item)}
+      onanimationend={(e) => {
+        // Reset only the flash pulse (not the mount/flip animations that also
+        // bubble animationend) so the row can flash again on a repeat dedup.
+        if (e.animationName.includes('tab-flash') && item.tabId === flashTabId) {
+          flashTabId = null;
+        }
+      }}
       animate:flip={{ duration: () => reorderFlipMs() }}
     >
       {#snippet closeButton()}
@@ -326,7 +371,7 @@ function commitRename(item: TempItem, newName: string): void {
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <span class="close-slot" onpointerdown={(e) => e.stopPropagation()}>
           <IconButton
-            icon={'x' as IconName}
+            icon="x"
             ariaLabel="Close tab"
             title="Close tab"
             size={14}
@@ -395,6 +440,33 @@ function commitRename(item: TempItem, newName: string): void {
   /* Source row stays in place but dims while dragged. */
   .row-wrap.dragging {
     opacity: 0.4;
+  }
+
+  /* tab-dedup flash: a single background pulse drawing the eye to the tab a
+   * launcher open just focused (instead of duplicating). Starts on the row's
+   * hover wash (`--surface-2`) and fades to transparent; rounded to match the
+   * TabRow's own corners so the pulse reads as the row, not a full-bleed bar. */
+  .row-wrap.flash {
+    border-radius: var(--r-md);
+    animation: tab-flash var(--motion-base) var(--ease-emphasised) 1;
+  }
+
+  @keyframes tab-flash {
+    from {
+      background-color: var(--surface-2);
+    }
+    to {
+      background-color: transparent;
+    }
+  }
+
+  /* Reduced motion: collapse the pulse to an instant (no perceptible fade). The
+   * animation still runs for 0ms, so `animationend` fires and clears `flashTabId`
+   * — the row never gets stuck in the flashed state. */
+  @media (prefers-reduced-motion: reduce) {
+    .row-wrap.flash {
+      animation-duration: 0ms;
+    }
   }
 
   /* Insertion line — glowing bar + leading dot, zero-height so it never reflows

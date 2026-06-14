@@ -163,7 +163,8 @@ export type SidebarCommand =
   // whereas `archivedAt` never returns through the (void) bus ack. The coordinator
   // restores the most-recent archived entry per `tabId` into `windowId`.
   | { kind: 'undoClearTempTabs'; payload: { windowId: WindowId; tabIds: TabId[] } }
-  | { kind: 'openUrl'; payload: { url: string; windowId: WindowId } }
+  | { kind: 'openUrl'; payload: { url: string; windowId: WindowId; force?: boolean } }
+  | { kind: 'duplicateTab'; payload: { tabId: TabId } }
   | {
       kind: 'setTabBoundary';
       payload: { savedTabId: SavedTabId; boundary: TabBoundary | null };
@@ -245,6 +246,7 @@ export const SIDEBAR_COMMAND_KINDS: ReadonlySet<SidebarCommandKind> = new Set<Si
   'clearTempTabs',
   'undoClearTempTabs',
   'openUrl',
+  'duplicateTab',
   'setTabBoundary',
   'restoreArchivedTab',
   'setSpaceAutoArchive',
@@ -302,6 +304,7 @@ const _kindExhaustiveness = {
   clearTempTabs: true,
   undoClearTempTabs: true,
   openUrl: true,
+  duplicateTab: true,
   setTabBoundary: true,
   restoreArchivedTab: true,
   setSpaceAutoArchive: true,
@@ -653,7 +656,15 @@ const COMMAND_SCHEMAS = {
   }),
   openUrl: z.strictObject({
     kind: z.literal('openUrl'),
-    payload: z.strictObject({ url: z.string(), windowId: z.number() }),
+    payload: z.strictObject({
+      url: z.string(),
+      windowId: z.number(),
+      force: z.boolean().optional(),
+    }),
+  }),
+  duplicateTab: z.strictObject({
+    kind: z.literal('duplicateTab'),
+    payload: z.strictObject({ tabId: z.number() }),
   }),
   setTabBoundary: z.strictObject({
     kind: z.literal('setTabBoundary'),
@@ -745,6 +756,7 @@ export const SidebarCommandSchema = z.discriminatedUnion('kind', [
   COMMAND_SCHEMAS.clearTempTabs,
   COMMAND_SCHEMAS.undoClearTempTabs,
   COMMAND_SCHEMAS.openUrl,
+  COMMAND_SCHEMAS.duplicateTab,
   COMMAND_SCHEMAS.setTabBoundary,
   COMMAND_SCHEMAS.restoreArchivedTab,
   COMMAND_SCHEMAS.setSpaceAutoArchive,
@@ -951,6 +963,9 @@ export const bus: Bus = new Proxy({} as Bus, {
     return Reflect.get(_bus, prop);
   },
 });
+
+/** Runtime message type for the sidebar flash when dedup focuses an existing tab. */
+export const TAB_DEDUP_FLASH = 'lunma/tab-dedup-flash' as const;
 
 /**
  * Fire-and-forget command dispatch (Task 3.x). The single sanctioned path for
