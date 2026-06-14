@@ -369,13 +369,20 @@ function onMenuOpenChange(open: boolean): void {
     grid-area: 1 / 1; /* stack badge + kebab in the same cell */
   }
 
-  /* Quiet trailing count badge — a soft pill that never competes with the name. */
+  /* Quiet trailing count badge — a soft pill that never competes with the name.
+   * pointer-events: none is load-bearing, not cosmetic: the badge shares the
+   * kebab's grid cell, and on hover it fades to opacity 0 — which creates a
+   * stacking context that paints ABOVE the (opacity-1, in-flow) kebab. An
+   * invisible-but-hit-testable badge would then swallow every click on the ⋮.
+   * The count is never interactive, so opting it out of hit-testing lets clicks
+   * fall through to the kebab beneath in every state. */
   .badge {
     padding: var(--space-1) var(--space-2);
     border-radius: var(--r-pill);
     background: var(--surface-2);
     color: var(--text-faint);
     font: var(--weight-medium) var(--text-2xs) / 1 var(--font-sans);
+    pointer-events: none;
     transition: opacity var(--motion-fast) var(--ease-standard);
   }
 
