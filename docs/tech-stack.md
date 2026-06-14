@@ -102,7 +102,6 @@ uFuzzy runs only in the service worker. `scoring.ts` and `search-engine.ts` are 
 - **Redux Toolkit / Zustand / Jotai** — Svelte runes already give signals.
 - **webextension-polyfill** — only worth it for a Firefox build; Chrome-only uses `chrome.*` with `@types/chrome` directly.
 - **tRPC / message libraries** — a 30-line typed `sendMessage<T>` wrapper covers SW-to-sidebar messaging.
-- **Nx / Turborepo** — the repo is a pnpm workspace (`apps/extension`, `apps/site`, `packages/tokens`) and stops there. Nx enforces module boundaries through an ESLint rule, which fights the Biome-only enforcement; Turborepo's task-graph caching pays off only at a scale this repo is not at, and bolts on later with no lock-in ([ADR 0004](adr/0004-workspace-and-marketing-site.md)).
 
 ## Versions pinned
 
