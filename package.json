@@ -10,6 +10,7 @@
     "node": ">=24"
   },
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks || true",
     "pack": "pnpm --filter @lunma/extension pack",
     "verify": "pnpm -r --workspace-concurrency=1 verify",
     "test": "pnpm --filter @lunma/extension test:run",

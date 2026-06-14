@@ -101,16 +101,21 @@ those proposals MUST flow through the same CI gate as any other change.
 
 ### Requirement: The repository ships contributor intake scaffolding
 
-The repository SHALL ship the standard contributor-intake scaffolding — a pull
-request template, issue templates, and a `CODEOWNERS` file — so that when it is
-later opened to the public (the `open-source-public-launch` change), external
-pull requests and issues arrive in a consistent, reviewable shape.
+The repository SHALL contain the standard contributor-intake scaffolding files —
+a pull request template, bug-report and feature-request issue templates (with
+blank issues disabled), and a `CODEOWNERS` file — so that when it is later opened
+to the public (the `open-source-public-launch` change), GitHub renders consistent
+intake forms and routes review automatically. This requirement governs the
+*presence and shape* of these repository files; the public-facing intake
+*behaviour* they enable is owned by `open-source-public-launch`.
 
-#### Scenario: Pull requests use the template
-- **WHEN** a contributor opens a pull request
-- **THEN** the pull request body is pre-filled from `.github/pull_request_template.md`
+#### Scenario: Intake scaffolding files are present
+- **WHEN** the repository tree is inspected
+- **THEN** `.github/pull_request_template.md`, `.github/ISSUE_TEMPLATE/bug_report.md`,
+  `.github/ISSUE_TEMPLATE/feature_request.md`, `.github/ISSUE_TEMPLATE/config.yml`
+  (with `blank_issues_enabled: false`), and `.github/CODEOWNERS` all exist
 
-#### Scenario: Issues offer structured templates
-- **WHEN** a contributor opens a new issue
-- **THEN** they are offered the bug-report and feature-request templates rather
-  than a blank issue
+#### Scenario: CODEOWNERS names a valid owner
+- **WHEN** `.github/CODEOWNERS` is read
+- **THEN** every pattern maps to a GitHub account/team that exists, so review
+  routing is not silently a no-op

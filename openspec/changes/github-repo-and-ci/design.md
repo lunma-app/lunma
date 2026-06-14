@@ -108,22 +108,39 @@ Install Chromium with `pnpm --filter @lunma/extension exec playwright install
 GitHub so the config applies its single retry.
 
 - **Why:** Mandated by the headed-MV3 constraint above; it is the project's own
-  prescribed approach, not a new invention.
-- **`--headless=new` instead of xvfb — rejected (for now):** plausible, but the
-  fixture and config are written around a headed context and the config comment
-  commits to xvfb; changing the launch mode is a fixture change outside this
-  change's scope. If e2e proves flaky under xvfb, switching launch mode is a
-  follow-up, not a blocker here.
+  prescribed approach, not a new invention. Note the fixture
+  (`apps/extension/e2e/fixtures.ts`) currently hardcodes `headless: false` and
+  does **not** read any env switch (its `PWHEADLESS=new` comment is presently
+  inaccurate — the code ignores it), so xvfb is not merely *preferred* for CI: it
+  is the *only* path without a fixture change. This strengthens, rather than
+  weakens, the decision.
+- **`--headless=new` instead of xvfb — rejected (for now):** plausible, but it
+  would require editing the fixture to actually honour a headless switch (it
+  doesn't today), which is out of this change's scope. If e2e proves flaky under
+  xvfb, making the fixture honour `--headless=new` is a follow-up, not a blocker.
+- **Note on the `xvfb-run` command:** `pnpm test:e2e` is `pnpm build && playwright
+  test`, so the Vite build also runs inside `xvfb-run` — harmless (the build needs
+  no display) and it keeps the project's single `test:e2e` entry point as the one
+  source of truth for how e2e runs. The job uses `xvfb-run -a` (auto servernum).
 
-### D5 — Imperative branch protection via `gh api`
+### D5 — Imperative `main` protection via a repository ruleset (`gh api`)
 
-Configure `main` protection (require `verify` + `e2e` checks, require a PR) with
-a `gh api` call documented in `tasks.md`.
+Configure `main` protection (require the `verify` + `e2e` checks, require a PR)
+with a `gh api` call documented in `tasks.md`, using a **repository ruleset**
+(`POST /repos/lunma-app/lunma/rulesets`) rather than classic branch protection.
 
-- **Why:** GitHub branch protection / rulesets are *account state*, not a file in
-  the repo, so they cannot be committed. Capturing the exact `gh api` invocation
-  makes the state reproducible and reviewable, and keeps the check names in lock
-  step with the workflow's job names.
+- **Why a ruleset, not classic protection:** classic branch protection on a
+  *private* repo requires a paid plan (Pro/Team/Enterprise), whereas repository
+  **rulesets** are available on **Free** for private repos. Since the repo is Free
+  + private now, the ruleset is the only no-cost mechanism that meets the
+  "merges gated on green CI" requirement. *(GitHub plan limits move — re-verify
+  current availability at execution time; if classic protection is free by then,
+  it is an equivalent substitute, the spec being mechanism-agnostic.)*
+- **Why imperative `gh api`:** rulesets / branch protection are *account state*,
+  not a file in the repo, so they cannot be committed. Capturing the exact
+  `gh api` invocation in `tasks.md` makes the state reproducible and keeps the
+  required check contexts in lockstep with the workflow's job names (`verify`,
+  `e2e`).
 - **A third-party "settings as code" app (e.g. Probot Settings) — rejected:** it
   adds an external GitHub App + a config file for one branch's rules; overkill,
   and it wants broad repo permissions this private solo repo shouldn't grant.
@@ -155,13 +172,18 @@ and `CODEOWNERS` in this change though their real consumer is
   account's included Actions minutes. The two-job-per-push cost is modest;
   `concurrency: cancel-in-progress` curbs waste from rapid pushes. Re-verify the
   current free-tier minute allowance before relying on it (figures move).
-- **[Pushing 244 commits with old-codename refs to GitHub]** → Acceptable while
-  **private**; the references live only in `openspec/changes/archive/**` and are
-  removed by the squash in `open-source-public-launch` *before* the public flip.
-  This change MUST NOT make the repo public.
-- **[Lockfile-drift false failures]** → `--frozen-lockfile` will fail CI if
-  `pnpm-lock.yaml` lags the manifests; this is intended (it is a spec
-  requirement), and dependabot PRs keep the lockfile current.
+- **[Pushing the full history (≈231 commits on `main`) with old-codename refs to
+  GitHub]** → Acceptable while **private**; the references live only in
+  `openspec/changes/archive/**` and are removed by the squash in
+  `open-source-public-launch` *before* the public flip. This change MUST NOT make
+  the repo public. (The CI work is pushed from a `chore/ci-bootstrap` branch off
+  `main`, not from the in-flight `smart-folder-connectors` WIP branch.)
+- **[Lockfile-drift failures]** → `--frozen-lockfile` fails CI when
+  `pnpm-lock.yaml` is out of sync with the `package.json` manifests' declared
+  specifiers (or is missing) — this is intended and is the spec requirement. It
+  does *not* fail merely because a transitive dependency has a newer publish
+  available; keeping deps fresh is dependabot's job (it bumps the manifest *and*
+  the lockfile together in one PR, which then runs the same frozen install).
 - **[Branch-protection check-name coupling]** → The required check names in the
   `gh api` ruleset must exactly match the workflow job names (`verify`, `e2e`).
   If a job is renamed, the protection must be updated in the same change — called
@@ -172,9 +194,12 @@ and `CODEOWNERS` in this change though their real consumer is
 This is additive infrastructure; there is nothing to roll back in `src/`.
 
 1. Create the `lunma-app` org (manual web UI).
-2. `gh repo create lunma-app/lunma --private --source=. --remote=origin`.
-3. Land `.github/**` (workflow + hygiene files) on a branch, open a PR, and
-   confirm both `verify` and `e2e` checks run and pass.
+2. `gh repo create lunma-app/lunma --private` (no `--source`/`--push` — we control
+   what gets pushed and when), then `git remote add origin
+   git@github.com:lunma-app/lunma.git`.
+3. Land `.github/**` (workflow + hygiene files) + docs on a `chore/ci-bootstrap`
+   branch off `main`, push that branch, open a PR, and confirm both `verify` and
+   `e2e` checks run and pass.
 4. After the first green run, apply branch protection via `gh api` (the required
    check contexts must exist first, which is why this step follows the first run).
 5. Push `main`.
@@ -186,5 +211,5 @@ repo settings) and remove the branch-protection ruleset; no code is affected.
 
 - **None blocking.** Whether to later shard `verify` into a matrix (D3) or switch
   e2e to `--headless=new` (D4) are explicitly deferred and reversible without spec
-  changes. The next free ADR number (after `0015`) is assigned when the ADR file
-  is written in this change.
+  changes. The new ADR is `docs/adr/0016-ci-on-github-actions.md` (`0016` is the
+  next free number; 0001–0015 exist).

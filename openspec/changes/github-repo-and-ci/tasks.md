@@ -1,9 +1,11 @@
 ## 1. GitHub org and private repository (guided-manual + gh)
 
-- [ ] 1.1 **(manual gate)** Create the `lunma-app` organization at
-  `https://github.com/organizations/new` (Free plan). `gh` cannot create orgs.
-  Verify it exists and you own it: `gh api orgs/lunma-app --jq '.login'` returns
-  `lunma-app`.
+- [ ] 1.1 **(manual gate)** First confirm the handle is still free
+  (`gh api orgs/lunma-app` / `gh api users/lunma-app` → both 404), then create the
+  `lunma-app` organization at `https://github.com/organizations/new` (Free plan).
+  `gh` cannot create orgs. Verify it exists and you own it:
+  `gh api orgs/lunma-app --jq '.login'` returns `lunma-app`. (The unhyphenated
+  `lunma` is already a taken GitHub user — verified — hence `lunma-app`.)
 - [ ] 1.2 Create the **private** repo without pushing yet:
   `gh repo create lunma-app/lunma --private --description "Lunma — spatial tab/bookmark management for Chrome (extension) + its marketing site"`.
   Confirm: `gh repo view lunma-app/lunma --json visibility,isPrivate` shows
@@ -19,16 +21,29 @@
 
 - [ ] 2.1 Workflow skeleton: `on: [pull_request]` + `push: { branches: [main] }`;
   top-level `permissions: { contents: read }`; `concurrency: { group: "${{ github.workflow }}-${{ github.ref }}", cancel-in-progress: true }`.
-- [ ] 2.2 `verify` job (ubuntu-latest): `actions/checkout` → `actions/setup-node@v4`
-  (`node-version: 24`) → `corepack enable` (activates the `packageManager`-pinned
-  `pnpm@11.3.0`; do **not** specify a pnpm version anywhere else) → cache the pnpm
-  store via `actions/cache` keyed on `hashFiles('**/pnpm-lock.yaml')` (path from
-  `pnpm store path`) → `pnpm install --frozen-lockfile` → `pnpm -r verify`.
-- [ ] 2.3 `e2e` job (ubuntu-latest, parallel to `verify`): same setup/install
-  steps, then `pnpm --filter @lunma/extension exec playwright install --with-deps chromium`,
+- [ ] 2.2 `verify` job (ubuntu-latest), in this exact step order (the cache step
+  needs a real store path, which only exists after corepack activates pnpm):
+  1. `actions/checkout@v4`
+  2. `actions/setup-node@v4` with `node-version: 24`
+  3. `run: corepack enable` (activates the `packageManager`-pinned `pnpm@11.3.0`;
+     do **not** specify a pnpm version anywhere else — no `pnpm/action-setup` with
+     a hardcoded version). Set `COREPACK_ENABLE_DOWNLOAD_PROMPT: 0` in the job
+     `env` so corepack fetches the pinned pnpm non-interactively.
+  4. `id: pnpm-store` → `run: echo "dir=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"`
+     (resolve the store path into a step output — `actions/cache` `path:` is a
+     static string, not a shell substitution).
+  5. `actions/cache@v4` with `path: ${{ steps.pnpm-store.outputs.dir }}`,
+     `key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}`,
+     `restore-keys: ${{ runner.os }}-pnpm-`.
+  6. `run: pnpm install --frozen-lockfile`
+  7. `run: pnpm -r verify`
+- [ ] 2.3 `e2e` job (ubuntu-latest, parallel to `verify`): same setup steps 1–6 as
+  2.2 (checkout → setup-node 24 → corepack → store cache → frozen install), then
+  `pnpm --filter @lunma/extension exec playwright install --with-deps chromium`,
   then `xvfb-run -a pnpm test:e2e` (the root `test:e2e` filters to the extension,
-  which runs `pnpm build && playwright test`; `CI=true` is set by GitHub so the
-  config's single retry applies).
+  which runs `pnpm build && playwright test` — the build runs under `xvfb-run`,
+  which is harmless; `CI=true` is set by GitHub so the config's single retry
+  applies).
 - [ ] 2.4 Pin every third-party action to a major tag (or SHA). Confirm the two
   job names are exactly `verify` and `e2e` (the names §5.4 will require in branch
   protection — keep them in lockstep).
@@ -40,7 +55,10 @@
 - [ ] 3.2 `.github/ISSUE_TEMPLATE/bug_report.md` and
   `.github/ISSUE_TEMPLATE/feature_request.md`, plus
   `.github/ISSUE_TEMPLATE/config.yml` with `blank_issues_enabled: false`.
-- [ ] 3.3 `.github/CODEOWNERS` — route all paths to the owner (`* @lunma-app/maintainers`).
+- [ ] 3.3 `.github/CODEOWNERS` — route all paths to the owner: `* @lunma-app/maintainers`
+  (the authenticated `gh` account — verified). If the org is owned by a different
+  account/team, use that handle instead, since GitHub silently no-ops an unknown
+  owner (see spec scenario "CODEOWNERS names a valid owner").
 - [ ] 3.4 `.github/dependabot.yml` — two ecosystems at `/`: `npm` (pnpm) and
   `github-actions`, weekly, grouped where sensible.
 
@@ -49,7 +67,9 @@
 - [ ] 4.1 `docs/02-tech-stack.md` — add a CI/release-engineering note: CI runs the
   same pinned toolchain (Node 24, corepack-pinned `pnpm@11.3.0`) and the same
   `pnpm -r verify` gate as local; the e2e smoke runs under `xvfb-run` (headed-MV3
-  requirement); devbox remains the local-dev story only.
+  requirement); devbox remains the local-dev story only. Cross-reference the
+  existing corepack/`packageManager` toolchain rows rather than restating the pin
+  (avoid two statements of the same fact drifting apart).
 - [ ] 4.2 `docs/03-architecture.md` — add a short "Continuous integration"
   subsection: CI enforces the `architecture-integrity` layer-DAG rules (via
   `biome check` inside `pnpm -r verify`) on every PR, not just locally; merge to
@@ -62,8 +82,9 @@
 ## 5. First CI run + branch protection
 
 - [ ] 5.1 Commit §2–§4 on the `chore/ci-bootstrap` branch and push it; open a PR
-  (`gh pr create --base main`). Confirm **both** `verify` and `e2e` checks appear
-  and run.
+  (`gh pr create --base main`). The checks run from the **`pull_request`** event,
+  not the branch push (the workflow's `push` trigger is `branches: [main]` only),
+  so confirm **both** `verify` and `e2e` checks appear on the PR.
 - [ ] 5.2 Iterate until both checks are green on the PR (fix any CI-only failures —
   e.g. Playwright deps, lockfile, xvfb).
 - [ ] 5.3 Merge the PR to `main`.

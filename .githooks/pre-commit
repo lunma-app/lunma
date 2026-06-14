@@ -1,0 +1,37 @@
+#!/usr/bin/env sh
+# Lunma pre-commit hook — committed in .githooks/ and wired via
+# `core.hooksPath=.githooks` (set by the root package.json "prepare" script,
+# so every clone shares it). Paths here are RELATIVE on purpose — nothing in
+# this file is machine-specific, so it never leaks a local absolute path.
+#
+# Two stages:
+#   1. Guard — archived OpenSpec changes are immutable history; never let a
+#      commit touch them (mirrors the CLAUDE.md rule).
+#   2. Gate  — the workspace must pass `pnpm verify` before the commit lands.
+#      Skippable for in-progress work with `SKIP_VERIFY=1 git commit …`; the
+#      guard above still runs. (Use this instead of `--no-verify`, which would
+#      bypass the guard too.)
+set -eu
+
+# 1) Guard: openspec/changes/archive/** is append-only.
+archived=$(git diff --cached --name-only --diff-filter=ACMRD -- 'openspec/changes/archive/')
+if [ -n "$archived" ]; then
+  echo "✖ pre-commit guard: refusing to commit changes under openspec/changes/archive/** (immutable history):" >&2
+  echo "$archived" | sed 's/^/    /' >&2
+  echo "  Archived changes are history — propose a NEW change instead of editing one." >&2
+  exit 1
+fi
+
+# 2) Gate: the workspace quality bar (tsc, biome, svelte-check, stylelint, tests, site build).
+if [ "${SKIP_VERIFY:-}" = "1" ]; then
+  echo "• pre-commit gate: SKIP_VERIFY=1 set — skipping pnpm verify (guard still ran)." >&2
+  exit 0
+fi
+
+if ! command -v pnpm >/dev/null 2>&1; then
+  echo "✖ pre-commit gate: pnpm not on PATH (enter the devbox shell, or set SKIP_VERIFY=1 to bypass)." >&2
+  exit 1
+fi
+
+echo "• pre-commit gate: running pnpm verify …" >&2
+pnpm verify

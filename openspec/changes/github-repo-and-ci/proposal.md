@@ -83,10 +83,11 @@ component-library and visual-quality policies by explicit exemption).
   - `docs/03-architecture.md` — a short "Continuous integration" subsection
     noting CI runs the same `pnpm -r verify` gate the layer-DAG rules are checked
     by, so architecture-integrity is enforced on every PR, not just locally.
-  - `docs/adr/` — a new ADR recording the CI tooling choices (setup-node+corepack
-    over devbox-in-CI; xvfb for MV3 e2e; single `pnpm -r verify` job over a
-    per-package matrix; imperative branch protection). ADR number assigned at
-    authoring time (next free after 0015).
+  - `docs/adr/0016-ci-on-github-actions.md` — a new ADR recording the CI tooling
+    choices (setup-node+corepack over devbox-in-CI; xvfb for MV3 e2e; single
+    `pnpm -r verify` job over a per-package matrix; imperative branch protection
+    via a ruleset). `0016` is the next free number (0001–0015 exist); also added
+    to `docs/adr/README.md`.
 - **Docs explicitly left untouched:** `docs/01-vision.md`, `docs/04-capabilities.md`,
   `docs/05-roadmap.md`, `docs/06-migration.md`, `the distribution notes`,
   `docs/08-brand-identity.md` (no product behaviour, roadmap, or brand surface
