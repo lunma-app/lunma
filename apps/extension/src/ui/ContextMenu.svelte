@@ -125,9 +125,12 @@ $effect(() => {
 });
 
 async function place(): Promise<void> {
+  // Capture before the await so we don't read a $derived after its parent
+  // effect is destroyed (derived_inert) if the component tears down mid-tick.
+  const wasDrilled = drilledIn;
   await tick();
   // Focus the back affordance when drilled in, else the first action.
-  const target = drilledIn
+  const target = wasDrilled
     ? panelEl?.querySelector<HTMLButtonElement>(`[data-testid="${testid}-back"]`)
     : panelEl?.querySelector<HTMLButtonElement>('[role="menuitem"]');
   target?.focus();
@@ -187,7 +190,9 @@ function onKeydown(event: KeyboardEvent): void {
   if (event.key === 'Escape') {
     event.preventDefault();
     // Esc steps back out of a drill-in view first, then closes the menu.
-    if (drilledIn) onPanelBack?.();
+    // Read props directly (not the $derived) — the portal element outlives the
+    // component effect, so drilledIn would warn derived_inert on destruction.
+    if (!!panel && panelTitle !== undefined) onPanelBack?.();
     else close();
   } else if (event.key === 'ArrowDown') {
     event.preventDefault();
