@@ -221,18 +221,47 @@ body,
 /* The scrollable region of a Space panel: everything below the pinned header
  * (pinned list, divider, New Tab row, temp list). `flex: 1` + `min-height: 0` lets it
  * absorb the remaining height and scroll within it; `overscroll-behavior: none` stops
- * Chrome's two-finger back/forward at the scroll edge (was on `.content-slide`). */
+ * Chrome's two-finger back/forward at the scroll edge (was on `.content-slide`).
+ *
+ * The native scrollbar is HIDDEN so it can NEVER reserve layout width: a classic
+ * (Windows/Linux) scrollbar would inset the tab rows ~15px from the pinned header's
+ * kebab column, and even macOS's overlay bar adds paint churn on scroll. Hiding it
+ * keeps the rows plumb with the header on every platform; the list still scrolls by
+ * wheel / trackpad / drag (Arc hides the sidebar scrollbar the same way).
+ *
+ * `translateZ(0)` composites the scroller into its OWN layer FROM MOUNT. Without it,
+ * Chrome lazily promotes the scroller to a composited scrolling layer on the FIRST
+ * scroll — and that one-off promotion re-partitions the parent `.track` layer, which
+ * nudges/re-rasterizes the pinned Space header beside it (the "icon + title flicker on
+ * the first scroll"). Pre-promoting means the first scroll is just a scroll, no layer
+ * transition. Safe: `ContextMenu` portals its `position: fixed` panel to <body> (so the
+ * containing block this transform creates can't trap it) and `RowMenu`'s drawer is
+ * `position: absolute` in-flow. */
 .slide-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: none;
+  scrollbar-width: none; /* Firefox / standard */
+  transform: translateZ(0);
+}
+.slide-scroll::-webkit-scrollbar {
+  display: none; /* Chromium / WebKit */
 }
 
 /* The header is a fixed-height flex child — never shrink it when the scroll region
- * is short; it holds its row height and the scroll area absorbs the rest. */
+ * is short; it holds its row height and the scroll area absorbs the rest.
+ *
+ * `position: relative; z-index: 1` keeps the kebab morph drawer painting ABOVE the
+ * now-composited `.slide-scroll` below it. It ALSO gets its own compositing layer
+ * (`translateZ(0)`) so it is fully isolated from any scroll-driven layer work on the
+ * scroller — belt-and-suspenders with the scroller's own pre-promotion above. (On
+ * macOS there is no subpixel text AA to lose by layer-promoting the title.) */
 .content-slide > .section-header {
   flex: 0 0 auto;
+  position: relative;
+  z-index: 1;
+  transform: translateZ(0);
 }
 
 /* The New Tab row shares the temporary list's horizontal inset (`--list-pad`) so
