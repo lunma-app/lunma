@@ -322,9 +322,12 @@ backfilling older unread as items are consumed. An item is **consumed** (marked
 opening (`openSmartItem`) binds a tab and keeps the entry in the list (bound,
 active, unread); the item is marked read only when its bound tab is **deactivated**
 (the user navigates to another tab — per-window, swept in the store's
-`setActiveTab`) or **closed** (`onTabRemoved`). The read set is persisted ids-only
-and pruned (see the `storage-and-migrations` capability, Requirement:
-Smart-folder read-state is persisted and pruned).
+`setActiveTab`) or **closed** (`onTabRemoved`). **Consume SHALL also close the
+tab**: when an entry is consumed by navigating away, its bound (now-inactive) tab
+is closed (`chrome.tabs.remove`) so the reading queue leaves no tab trail; the tab
+you are actively on is never closed, and an already-read item is never re-closed.
+The read set is persisted ids-only and pruned (see the `storage-and-migrations`
+capability, Requirement: Smart-folder read-state is persisted and pruned).
 
 The feed's resting state SHALL be **drained** — read rows hidden (the node's
 `hideRead` defaults `true`). The sidebar SHALL expose, on a feed folder: a
@@ -342,7 +345,7 @@ items carry no read-state.
 - **WHEN** the user activates its row (opening its tab)
 - **THEN** the item is bound and **stays unread** in the list while its tab is the active tab
 - **AND WHEN** the user navigates to another tab (its bound tab deactivates) or closes the tab
-- **THEN** the item is marked read, its row drains, the next-oldest unread backfills, and the unread badge decrements
+- **THEN** the item is marked read, its row drains, the next-oldest unread backfills, the unread badge decrements, AND (on the navigate-away path) its bound tab is closed (consume = close — no tab trail)
 
 #### Scenario: The resting state is drained; "Show recently read" reveals
 
