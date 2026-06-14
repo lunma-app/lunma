@@ -13,8 +13,12 @@
 #      bypass the guard too.)
 set -eu
 
-# 1) Guard: openspec/changes/archive/** is append-only.
-archived=$(git diff --cached --name-only --diff-filter=ACMRD -- 'openspec/changes/archive/')
+# 1) Guard: openspec/changes/archive/** is append-only — adding a freshly
+# archived change is allowed; editing or removing one that already exists is
+# not. `--no-renames` decomposes an archive move into Add(new)+Delete(old) so
+# the new files read as plain additions; `--diff-filter=MD` then flags only
+# modifications/deletions of already-archived files (an edit, or a move-away).
+archived=$(git diff --cached --name-only --no-renames --diff-filter=MD -- 'openspec/changes/archive/')
 if [ -n "$archived" ]; then
   echo "✖ pre-commit guard: refusing to commit changes under openspec/changes/archive/** (immutable history):" >&2
   echo "$archived" | sed 's/^/    /' >&2
