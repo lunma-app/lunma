@@ -38,16 +38,27 @@ export type ConnectorCaches = Map<string, Promise<unknown>>;
 /** One smart-folder connector source. */
 export interface SourceConnector {
   readonly source: SmartSource;
-  /** The editor's per-source base-URL seed. */
+  /** The editor's per-source base-URL seed (empty for `rss` — a feed has no
+   * canonical host; the user pastes the feed URL). */
   readonly defaultBaseUrl: string;
-  /** The icon the SW mints onto a created node — `'folder-git-2'` for both
-   * shipped sources (lucide ships no GitHub brand glyph; design D7). */
+  /** The icon the SW mints onto a created node — `'folder-git-2'` for both git
+   * forges (lucide ships no GitHub brand glyph; github-connector D7),
+   * `'folder-kanban'` for Jira, `'rss'` for the feed source. */
   readonly mintedIcon: string;
-  /** Bounded, never throws; resolves every failure to a runtime state. */
+  /** Bounded, never throws; resolves every failure to a runtime state. Slices
+   * its normalized results to the node's `maxItems` (rss-connector design D5). */
   fetchRuntime(
-    node: Pick<SmartFolderNode, 'baseUrl' | 'query'>,
+    node: Pick<SmartFolderNode, 'baseUrl' | 'query' | 'maxItems'>,
     caches?: ConnectorCaches,
   ): Promise<SmartFolderRuntime>;
+  /**
+   * The URL that shows the source's full listing in a browser, consumed by
+   * "open all in a tab" (rss-connector design D6) — the dashboard/search/JQL
+   * view for the queue sources, the feed channel's own website link for `rss`
+   * (falling back to the feed URL when the channel link is not yet known). NO
+   * network I/O — a synchronous, pure resolution.
+   */
+  listingUrl(node: Pick<SmartFolderNode, 'baseUrl' | 'query'>): string;
 }
 
 /**

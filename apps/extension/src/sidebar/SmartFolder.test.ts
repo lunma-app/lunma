@@ -36,9 +36,45 @@ function smartNode(overrides: Partial<SmartNode> = {}): SmartNode {
     source: 'gitlab',
     baseUrl: 'https://gitlab.example.com',
     query: 'review-requested',
+    maxItems: 20,
+    hideRead: false,
     refreshMinutes: 10,
     ...overrides,
   };
+}
+
+/** A feed (`rss`) node — the reading-nook source. */
+function feedNode(overrides: Partial<SmartNode> = {}): SmartNode {
+  return smartNode({
+    id: 'feed-1',
+    name: 'Hacker News',
+    icon: 'rss',
+    source: 'rss',
+    query: undefined,
+    baseUrl: 'https://news.ycombinator.com/rss',
+    maxItems: 30,
+    hideRead: false,
+    ...overrides,
+  });
+}
+
+/** A feed result item (no status). */
+function post(i: number): SmartFolderItem {
+  return { id: `post-${i}`, title: `Post ${i}`, url: `https://example.com/p/${i}` };
+}
+
+/** A store holding a single feed folder, optionally with a runtime + read-state. */
+function makeFeedStore(
+  node: SmartNode,
+  runtime?: SmartFolderRuntime,
+  readIds: string[] = [],
+): LunmaStore {
+  const store = new LunmaStore();
+  store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+  store.state.pinnedBySpace.work = [node];
+  if (runtime) store.state.smartFolders[node.id] = runtime;
+  if (readIds.length > 0) store.state.smartReadState[node.id] = readIds;
+  return store;
 }
 
 function item(i: number, status?: SmartFolderItem['status']): SmartFolderItem {
@@ -117,7 +153,7 @@ describe('SmartFolder — count badge', () => {
     expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('7');
   });
 
-  test('renders 20+ at the cap (the cap is never silent)', () => {
+  test('renders 20+ at the maxItems cap (the cap is never silent)', () => {
     const store = makeStore({
       state: 'ok',
       items: Array.from({ length: 20 }, (_, i) => item(i)),
@@ -127,6 +163,20 @@ describe('SmartFolder — count badge', () => {
     expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('20+');
   });
 
+  test('the cap badge follows the node maxItems (30 items, maxItems 30 → 30+)', () => {
+    const node = smartNode({ maxItems: 30 });
+    const store = new LunmaStore();
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.pinnedBySpace.work = [node];
+    store.state.smartFolders['sf-1'] = {
+      state: 'ok',
+      items: Array.from({ length: 30 }, (_, i) => item(i)),
+      fetchedAt: 1,
+    };
+    const { container } = renderSmart(store, { node });
+    expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('30+');
+  });
+
   test('renders no badge before the first fetch lands', () => {
     const store = makeStore(); // no runtime → pending
     const { container } = renderSmart(store);
@@ -134,17 +184,131 @@ describe('SmartFolder — count badge', () => {
   });
 });
 
-describe('SmartFolder — activate-only rows', () => {
-  test('clicking a result row dispatches openUrl with the item url and window id', async () => {
+describe('SmartFolder — pinned-tab activation (smart-folder-item-bindings)', () => {
+  test('clicking a result row dispatches openSmartItem with identity only — never a URL', async () => {
     const store = makeStore({ state: 'ok', items: [item(42)], fetchedAt: 1 });
     const { container } = renderSmart(store);
     await fireEvent.click(
       container.querySelector('[data-testid="smart-result-row"]') as HTMLButtonElement,
     );
     expect(sendMock).toHaveBeenCalledWith({
-      kind: 'openUrl',
-      payload: { url: 'https://gitlab.example.com/g/p/-/merge_requests/42', windowId: 100 },
+      kind: 'openSmartItem',
+      payload: { spaceId: 'work', folderId: 'sf-1', itemId: 'mr-42', windowId: 100 },
     });
+  });
+
+  test('a bound row whose tab is the window’s focused tab takes the active treatment', () => {
+    const store = makeStore({ state: 'ok', items: [item(1), item(2)], fetchedAt: 1 });
+    store.state.smartItemBindings['sf-1'] = { 'mr-1': { 100: { tabId: 7, allowGlob: '' } } };
+    store.state.liveTabsById[7] = {
+      tabId: 7,
+      windowId: 100,
+      title: 'MR 1',
+      url: 'https://gitlab.example.com/g/p/-/merge_requests/1',
+      active: true,
+      status: 'complete',
+    };
+    const { container } = renderSmart(store);
+
+    const rows = container.querySelectorAll('[data-testid="smart-result-row"]');
+    expect(rows[0]?.getAttribute('data-bound')).toBe('true');
+    expect(rows[0]?.getAttribute('data-active')).toBe('true');
+    expect(rows[0]?.classList).toContain('active');
+    // An unbound sibling stays plain.
+    expect(rows[1]?.getAttribute('data-bound')).toBe('false');
+    expect(rows[1]?.classList).not.toContain('active');
+  });
+
+  test('a bound-but-unfocused row reads as a normal row (no active wash)', () => {
+    const store = makeStore({ state: 'ok', items: [item(1)], fetchedAt: 1 });
+    store.state.smartItemBindings['sf-1'] = { 'mr-1': { 100: { tabId: 7, allowGlob: '' } } };
+    store.state.liveTabsById[7] = {
+      tabId: 7,
+      windowId: 100,
+      title: 'MR 1',
+      url: 'https://gitlab.example.com/g/p/-/merge_requests/1',
+      active: false,
+      status: 'complete',
+    };
+    const { container } = renderSmart(store);
+    const row = container.querySelector('[data-testid="smart-result-row"]');
+    expect(row?.getAttribute('data-bound')).toBe('true');
+    expect(row?.getAttribute('data-active')).toBe('false');
+  });
+
+  test('a binding for ANOTHER window carries no treatment here', () => {
+    const store = makeStore({ state: 'ok', items: [item(1)], fetchedAt: 1 });
+    store.state.smartItemBindings['sf-1'] = { 'mr-1': { 200: { tabId: 7, allowGlob: '' } } }; // window 200, not 100
+    const { container } = renderSmart(store);
+    const row = container.querySelector('[data-testid="smart-result-row"]');
+    expect(row?.getAttribute('data-bound')).toBe('false');
+    expect(container.querySelector('[data-testid="smart-close"]')).toBeNull();
+  });
+
+  test('the bound row’s ✕ dispatches closeTab for the bound tab; the dot stays in the DOM', async () => {
+    const store = makeStore({
+      state: 'ok',
+      items: [item(1, { tone: 'ok', label: 'Pipeline passed' })],
+      fetchedAt: 1,
+    });
+    store.state.smartItemBindings['sf-1'] = { 'mr-1': { 100: { tabId: 7, allowGlob: '' } } };
+    const { container } = renderSmart(store);
+
+    const close = container.querySelector('[data-testid="smart-close"]') as HTMLButtonElement;
+    expect(close).not.toBeNull();
+    await fireEvent.click(close);
+    expect(sendMock).toHaveBeenCalledWith({ kind: 'closeTab', payload: { tabId: 7 } });
+    // The dot is hidden by hover CSS only — it remains in the DOM (returns on
+    // mouse-out) and the full phrase stays in the ARIA label.
+    expect(container.querySelector('[data-testid="smart-status-dot"]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="smart-result-row"]')?.getAttribute('aria-label'),
+    ).toBe('MR 1 — Pipeline passed');
+  });
+
+  test('an unbound row renders no ✕', () => {
+    const store = makeStore({ state: 'ok', items: [item(1)], fetchedAt: 1 });
+    const { container } = renderSmart(store);
+    expect(container.querySelector('[data-testid="smart-close"]')).toBeNull();
+  });
+});
+
+describe('SmartFolder — binding-held rows (open work holds its row)', () => {
+  test('a bound item dropped from an ok result keeps rendering, and evaporates on unbind', async () => {
+    const store = makeStore({ state: 'ok', items: [item(1), item(2)], fetchedAt: 1 });
+    store.state.smartItemBindings['sf-1'] = { 'mr-1': { 100: { tabId: 7, allowGlob: '' } } };
+    const { container } = renderSmart(store);
+    await tick();
+    expect(container.querySelectorAll('[data-testid="smart-result-row"]')).toHaveLength(2);
+
+    // The next ok poll no longer lists mr-1 (merged) — its binding lives, so
+    // the row holds, rendered from component memory with its bound treatment.
+    store.state.smartFolders['sf-1'] = { state: 'ok', items: [item(2)], fetchedAt: 2 };
+    await tick();
+    let rows = container.querySelectorAll('[data-testid="smart-result-row"]');
+    expect(rows).toHaveLength(2);
+    const heldRow = [...rows].find((r) => r.getAttribute('aria-label') === 'MR 1');
+    expect(heldRow?.getAttribute('data-bound')).toBe('true');
+
+    // The bound tab closes → the binding drops → the held row evaporates.
+    store.unbindSmartItemsForTab(7);
+    await tick();
+    rows = container.querySelectorAll('[data-testid="smart-result-row"]');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.getAttribute('aria-label')).toBe('MR 2');
+  });
+
+  test('an honest ok-empty result keeps ONLY binding-held rows', async () => {
+    const store = makeStore({ state: 'ok', items: [item(1), item(2)], fetchedAt: 1 });
+    store.state.smartItemBindings['sf-1'] = { 'mr-1': { 100: { tabId: 7, allowGlob: '' } } };
+    const { container } = renderSmart(store);
+    await tick();
+
+    store.state.smartFolders['sf-1'] = { state: 'ok', items: [], fetchedAt: 2 };
+    await tick();
+    const rows = container.querySelectorAll('[data-testid="smart-result-row"]');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.getAttribute('aria-label')).toBe('MR 1');
   });
 });
 
@@ -153,14 +317,56 @@ describe('SmartFolder — menu (Refresh now · Edit… · Move · Delete)', () =
   const menuItem = (id: string): HTMLButtonElement =>
     document.querySelector(`[data-menu-id="${id}"]`) as HTMLButtonElement;
 
-  test('carries exactly the five smart actions (no folder rename/appearance built-ins)', async () => {
+  test('a queue folder carries Refresh · Edit · Open-all · Move · Delete (no Mark-all-read)', async () => {
     const store = makeStore({ state: 'ok', items: [], fetchedAt: 1 });
     const { container } = renderSmart(store);
     await fireEvent.click(container.querySelector(TRIGGER) as HTMLButtonElement);
     const ids = [...document.querySelectorAll('[data-testid="folder-row-menu-item"]')].map((e) =>
       e.getAttribute('data-menu-id'),
     );
-    expect(ids).toEqual(['refresh', 'edit', 'move-up', 'move-down', 'delete']);
+    expect(ids).toEqual(['refresh', 'edit', 'open-all', 'move-up', 'move-down', 'delete']);
+  });
+
+  test('a feed folder additionally carries Mark all read', async () => {
+    const node = feedNode();
+    const store = makeFeedStore(node, { state: 'ok', items: [post(1)], fetchedAt: 1 });
+    const { container } = renderSmart(store, { node });
+    await fireEvent.click(container.querySelector(TRIGGER) as HTMLButtonElement);
+    const ids = [...document.querySelectorAll('[data-testid="folder-row-menu-item"]')].map((e) =>
+      e.getAttribute('data-menu-id'),
+    );
+    expect(ids).toEqual([
+      'refresh',
+      'edit',
+      'open-all',
+      'mark-all-read',
+      'move-up',
+      'move-down',
+      'delete',
+    ]);
+  });
+
+  test('Open all in a tab dispatches openSmartFolderListing', async () => {
+    const store = makeStore({ state: 'ok', items: [], fetchedAt: 1 });
+    const { container } = renderSmart(store);
+    await fireEvent.click(container.querySelector(TRIGGER) as HTMLButtonElement);
+    await fireEvent.click(menuItem('open-all'));
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'openSmartFolderListing',
+      payload: { spaceId: 'work', folderId: 'sf-1', windowId: 100 },
+    });
+  });
+
+  test('Mark all read (feed) dispatches markAllSmartItemsRead', async () => {
+    const node = feedNode();
+    const store = makeFeedStore(node, { state: 'ok', items: [post(1)], fetchedAt: 1 });
+    const { container } = renderSmart(store, { node });
+    await fireEvent.click(container.querySelector(TRIGGER) as HTMLButtonElement);
+    await fireEvent.click(menuItem('mark-all-read'));
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'markAllSmartItemsRead',
+      payload: { spaceId: 'work', folderId: 'feed-1' },
+    });
   });
 
   test('Refresh now dispatches refreshSmartFolder', async () => {
@@ -300,6 +506,26 @@ describe('SmartFolder — calm states (design D7)', () => {
     expect(sendMock).not.toHaveBeenCalled();
   });
 
+  test('a signed-out jira folder shows "Sign in to ⟨host⟩" and opens the instance, never the options path', async () => {
+    const jiraNode = smartNode({
+      source: 'jira',
+      icon: 'folder-kanban',
+      baseUrl: 'https://acme.atlassian.net',
+    });
+    const store = makeStore({ state: 'signed-out', items: [], fetchedAt: 1 });
+    store.state.pinnedBySpace.work = [jiraNode];
+    const { container } = renderSmart(store, { node: jiraNode });
+    const row = container.querySelector('[data-testid="smart-signin-row"]') as HTMLButtonElement;
+    // Jira groups with GitLab — there is a session to sign into (no token path).
+    expect(row.textContent?.trim()).toBe('Sign in to acme.atlassian.net');
+    await fireEvent.click(row);
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'openUrl',
+      payload: { url: 'https://acme.atlassian.net', windowId: 100 },
+    });
+    expect(openOptionsAtMock).not.toHaveBeenCalled();
+  });
+
   test('error keeps last-known items with one dim "Couldn\'t reach ⟨host⟩" note', () => {
     const store = makeStore({
       state: 'error',
@@ -334,8 +560,8 @@ describe('SmartFolder — calm states (design D7)', () => {
       container.querySelector('[data-testid="smart-result-row"]') as HTMLButtonElement,
     );
     expect(sendMock).toHaveBeenCalledWith({
-      kind: 'openUrl',
-      payload: { url: 'https://gitlab.example.com/g/p/-/merge_requests/1', windowId: 100 },
+      kind: 'openSmartItem',
+      payload: { spaceId: 'work', folderId: 'sf-1', itemId: 'mr-1', windowId: 100 },
     });
   });
 
@@ -354,5 +580,300 @@ describe('SmartFolder — calm states (design D7)', () => {
     await tick();
     expect(container.querySelectorAll('[data-testid="smart-result-row"]')).toHaveLength(0);
     expect(container.querySelectorAll('[data-testid="smart-ghost-row"]')).toHaveLength(3);
+  });
+});
+
+describe('SmartFolder — the reading nook (rss-connector)', () => {
+  const rows = (c: HTMLElement): HTMLButtonElement[] =>
+    [...c.querySelectorAll('[data-testid="smart-result-row"]')] as HTMLButtonElement[];
+
+  test('unread and read rows render distinctly (dot, read class, accessible name)', () => {
+    const node = feedNode();
+    const store = makeFeedStore(
+      node,
+      { state: 'ok', items: [post(1), post(2)], fetchedAt: 1 },
+      ['post-2'], // post-2 is read
+    );
+    const { container } = renderSmart(store, { node });
+    const [r1, r2] = rows(container);
+
+    // Unread row: not read, carries the (un-cleared) unread dot, "unread" in name.
+    expect(r1?.classList).not.toContain('read');
+    expect(r1?.getAttribute('aria-label')).toBe('Post 1 — unread');
+    const dot1 = r1?.querySelector('[data-testid="smart-unread-dot"]');
+    expect(dot1).not.toBeNull();
+    expect(dot1?.classList).not.toContain('cleared');
+
+    // Read row: read class, the dot is mounted-but-cleared, "read" in name.
+    expect(r2?.classList).toContain('read');
+    expect(r2?.getAttribute('aria-label')).toBe('Post 2 — read');
+    expect(r2?.querySelector('[data-testid="smart-unread-dot"]')?.classList).toContain('cleared');
+    // Feed rows never carry a status dot.
+    expect(container.querySelector('[data-testid="smart-status-dot"]')).toBeNull();
+  });
+
+  test('the badge counts UNREAD and disappears when everything is read', async () => {
+    const node = feedNode();
+    const store = makeFeedStore(
+      node,
+      { state: 'ok', items: [post(1), post(2), post(3)], fetchedAt: 1 },
+      ['post-1'], // 1 read → 2 unread
+    );
+    const { container } = renderSmart(store, { node });
+    expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('2');
+
+    // Everything read → the badge is absent (the calm "caught up" state).
+    store.state.smartReadState['feed-1'] = ['post-1', 'post-2', 'post-3'];
+    await tick();
+    expect(container.querySelector('[data-testid="folder-row-badge"]')).toBeNull();
+  });
+
+  test('opening a feed row dispatches openSmartItem; the read broadcast resolves the row in place', async () => {
+    const node = feedNode();
+    const store = makeFeedStore(node, { state: 'ok', items: [post(1)], fetchedAt: 1 });
+    const { container } = renderSmart(store, { node });
+
+    await fireEvent.click(rows(container)[0] as HTMLButtonElement);
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'openSmartItem',
+      payload: { spaceId: 'work', folderId: 'feed-1', itemId: 'post-1', windowId: 100 },
+    });
+
+    // The SW marks it read and re-broadcasts — the row settles to read in place.
+    store.state.smartReadState['feed-1'] = ['post-1'];
+    await tick();
+    expect(rows(container)[0]?.classList).toContain('read');
+    expect(rows(container)[0]?.getAttribute('aria-label')).toBe('Post 1 — read');
+  });
+
+  test('with hideRead OFF the read row is visible and the footer offers "Hide N read"', () => {
+    const node = feedNode({ hideRead: false });
+    const store = makeFeedStore(node, { state: 'ok', items: [post(1), post(2)], fetchedAt: 1 }, [
+      'post-2',
+    ]);
+    const { container } = renderSmart(store, { node });
+    const readWrap = [...container.querySelectorAll('[data-testid="smart-row-wrap"]')].find(
+      (w) => w.getAttribute('data-read') === 'true',
+    );
+    expect(readWrap?.classList).not.toContain('collapsed');
+    expect(
+      container.querySelector('[data-testid="smart-reading-controls"]')?.textContent,
+    ).toContain('Hide 1 read');
+  });
+
+  test('with hideRead ON the read row collapses (mounted-but-inert) and the footer offers "Show N read"', () => {
+    const node = feedNode({ hideRead: true });
+    const store = makeFeedStore(node, { state: 'ok', items: [post(1), post(2)], fetchedAt: 1 }, [
+      'post-2',
+    ]);
+    const { container } = renderSmart(store, { node });
+    const readWrap = [...container.querySelectorAll('[data-testid="smart-row-wrap"]')].find(
+      (w) => w.getAttribute('data-read') === 'true',
+    );
+    // The read row stays mounted but collapses (height/opacity) and goes inert.
+    expect(readWrap?.classList).toContain('collapsed');
+    expect(readWrap?.getAttribute('aria-hidden')).toBe('true');
+    expect(
+      readWrap?.querySelector('[data-testid="smart-result-row"]')?.getAttribute('tabindex'),
+    ).toBe('-1');
+    // The unread row is unaffected.
+    const unreadWrap = [...container.querySelectorAll('[data-testid="smart-row-wrap"]')].find(
+      (w) => w.getAttribute('data-read') === 'false',
+    );
+    expect(unreadWrap?.classList).not.toContain('collapsed');
+    expect(
+      container.querySelector('[data-testid="smart-reading-controls"]')?.textContent,
+    ).toContain('Show 1 read');
+  });
+
+  test('the footer hide/show toggle dispatches setSmartFolderHideRead', async () => {
+    const node = feedNode();
+    const store = makeFeedStore(node, { state: 'ok', items: [post(1), post(2)], fetchedAt: 1 }, [
+      'post-2',
+    ]);
+    const { container } = renderSmart(store, { node });
+    const footer = container.querySelector('[data-testid="smart-reading-controls"]') as HTMLElement;
+    const hideBtn = [...footer.querySelectorAll('button')].find((b) =>
+      /Hide \d+ read/.test(b.textContent ?? ''),
+    ) as HTMLButtonElement;
+    await fireEvent.click(hideBtn);
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'setSmartFolderHideRead',
+      payload: { spaceId: 'work', folderId: 'feed-1', hideRead: true },
+    });
+  });
+
+  test('the footer is absent of a hide toggle when nothing is read, and Open all dispatches the listing', async () => {
+    const node = feedNode();
+    const store = makeFeedStore(node, { state: 'ok', items: [post(1), post(2)], fetchedAt: 1 });
+    const { container } = renderSmart(store, { node });
+    const footer = container.querySelector('[data-testid="smart-reading-controls"]') as HTMLElement;
+    // No read items → no hide/show toggle, but Open all is always present.
+    expect(footer.textContent).not.toMatch(/Hide|Show/);
+    const openAll = [...footer.querySelectorAll('button')].find((b) =>
+      (b.textContent ?? '').includes('Open all'),
+    ) as HTMLButtonElement;
+    await fireEvent.click(openAll);
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'openSmartFolderListing',
+      payload: { spaceId: 'work', folderId: 'feed-1', windowId: 100 },
+    });
+  });
+
+  test('a queue folder renders no reading-controls footer', () => {
+    const store = makeStore({ state: 'ok', items: [item(1)], fetchedAt: 1 });
+    const { container } = renderSmart(store);
+    expect(container.querySelector('[data-testid="smart-reading-controls"]')).toBeNull();
+    expect(container.querySelector('[data-testid="smart-unread-dot"]')).toBeNull();
+  });
+});
+
+describe('SmartFolder — the draining queue (rss-connector, maxItems = unread budget)', () => {
+  /** The accessible labels of the rows that are actually VISIBLE (row-wraps not
+   * collapsed by the drained default). */
+  const visibleLabels = (c: HTMLElement): (string | null)[] =>
+    [...c.querySelectorAll('[data-testid="smart-row-wrap"]')]
+      .filter((w) => !w.classList.contains('collapsed'))
+      .map(
+        (w) =>
+          w.querySelector('[data-testid="smart-result-row"]')?.getAttribute('aria-label') ?? null,
+      );
+
+  /** A feed buffer, newest-first (post-5 newest … post-1 oldest), all unread. */
+  function fiveUnread(): SmartFolderItem[] {
+    return [post(5), post(4), post(3), post(2), post(1)];
+  }
+
+  test('a feed surfaces only the newest N UNREAD (maxItems is the budget, not a fetch cap)', () => {
+    const node = feedNode({ maxItems: 2, hideRead: true });
+    const store = makeFeedStore(node, { state: 'ok', items: fiveUnread(), fetchedAt: 1 });
+    const { container } = renderSmart(store, { node });
+    // Budget 2 → only the newest two unread render, though the buffer holds five.
+    expect(visibleLabels(container)).toEqual(['Post 5 — unread', 'Post 4 — unread']);
+    // The badge reads `2+` — there are more unread than the budget.
+    expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('2+');
+  });
+
+  test('reading an item drains it and backfills the next-oldest unread', async () => {
+    const node = feedNode({ maxItems: 2, hideRead: true });
+    const store = makeFeedStore(node, { state: 'ok', items: fiveUnread(), fetchedAt: 1 });
+    const { container } = renderSmart(store, { node });
+    expect(visibleLabels(container)).toEqual(['Post 5 — unread', 'Post 4 — unread']);
+
+    // The SW marks Post 5 read (the open path) and re-broadcasts.
+    store.state.smartReadState['feed-1'] = ['post-5'];
+    await tick();
+    // Post 5 drains out (collapsed); Post 3 backfills in to keep two unread shown.
+    expect(visibleLabels(container)).toEqual(['Post 4 — unread', 'Post 3 — unread']);
+    // The drained item stays mounted-but-collapsed for the resolve beat.
+    const drained = [...container.querySelectorAll('[data-testid="smart-row-wrap"]')].find((w) =>
+      w.classList.contains('collapsed'),
+    );
+    expect(
+      drained?.querySelector('[data-testid="smart-result-row"]')?.getAttribute('aria-label'),
+    ).toBe('Post 5 — read');
+  });
+
+  test('the drained default hides read; "Show recently read" reveals them (and persists the toggle)', async () => {
+    const node = feedNode({ maxItems: 5, hideRead: true });
+    // post-3 read, the rest unread.
+    const store = makeFeedStore(node, { state: 'ok', items: fiveUnread(), fetchedAt: 1 }, [
+      'post-3',
+    ]);
+    const { container } = renderSmart(store, { node });
+    // Drained: the read Post 3 is collapsed, the four unread are visible.
+    expect(visibleLabels(container)).not.toContain('Post 3 — read');
+    expect(visibleLabels(container)).toHaveLength(4);
+    // The footer offers to reveal the one read item.
+    const footer = container.querySelector('[data-testid="smart-reading-controls"]') as HTMLElement;
+    expect(footer.textContent).toContain('Show 1 read');
+    const showBtn = [...footer.querySelectorAll('button')].find((b) =>
+      /Show \d+ read/.test(b.textContent ?? ''),
+    ) as HTMLButtonElement;
+    await fireEvent.click(showBtn);
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'setSmartFolderHideRead',
+      payload: { spaceId: 'work', folderId: 'feed-1', hideRead: false },
+    });
+  });
+
+  test('revealing read (hideRead OFF) un-collapses the read row inline', () => {
+    const node = feedNode({ maxItems: 5, hideRead: false });
+    const store = makeFeedStore(node, { state: 'ok', items: fiveUnread(), fetchedAt: 1 }, [
+      'post-3',
+    ]);
+    const { container } = renderSmart(store, { node });
+    // With the peek on, the read row is visible (greyed, not collapsed).
+    expect(visibleLabels(container)).toContain('Post 3 — read');
+  });
+
+  test('the badge caps at maxItems+ when unread exceeds the budget, and clears when caught up', async () => {
+    const node = feedNode({ maxItems: 3, hideRead: true });
+    const store = makeFeedStore(node, { state: 'ok', items: fiveUnread(), fetchedAt: 1 });
+    const { container } = renderSmart(store, { node });
+    expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('3+');
+
+    // Mark everything read → caught up → the badge disappears, nothing visible.
+    store.state.smartReadState['feed-1'] = ['post-1', 'post-2', 'post-3', 'post-4', 'post-5'];
+    await tick();
+    expect(container.querySelector('[data-testid="folder-row-badge"]')).toBeNull();
+    expect(visibleLabels(container)).toEqual([]);
+  });
+});
+
+describe('SmartFolder — empty-state parity (rss-connector)', () => {
+  const emptyNote = (c: HTMLElement): string | undefined =>
+    c.querySelector('[data-testid="smart-empty-note"]')?.textContent ?? undefined;
+
+  test('a queue folder with no open items shows a quiet note (not a blank list)', () => {
+    const store = makeStore({ state: 'ok', items: [], fetchedAt: 1 });
+    const { container } = renderSmart(store);
+    expect(container.querySelectorAll('[data-testid="smart-result-row"]')).toHaveLength(0);
+    expect(emptyNote(container)).toBe('Nothing here right now.');
+  });
+
+  test('a populated queue folder shows no empty note', () => {
+    const store = makeStore({ state: 'ok', items: [item(1)], fetchedAt: 1 });
+    const { container } = renderSmart(store);
+    expect(emptyNote(container)).toBeUndefined();
+  });
+
+  test('a feed with no entries shows "No entries yet."', () => {
+    const node = feedNode();
+    const store = makeFeedStore(node, { state: 'ok', items: [], fetchedAt: 1 });
+    const { container } = renderSmart(store, { node });
+    expect(emptyNote(container)).toBe('No entries yet.');
+  });
+
+  test('a caught-up feed shows "You\'re all caught up."', () => {
+    const node = feedNode({ hideRead: true });
+    const store = makeFeedStore(
+      node,
+      { state: 'ok', items: [post(1), post(2)], fetchedAt: 1 },
+      ['post-1', 'post-2'], // every item read
+    );
+    const { container } = renderSmart(store, { node });
+    expect(emptyNote(container)).toBe("You're all caught up.");
+  });
+
+  test('a feed with unread shows no empty note', () => {
+    const node = feedNode();
+    const store = makeFeedStore(node, { state: 'ok', items: [post(1)], fetchedAt: 1 });
+    const { container } = renderSmart(store, { node });
+    expect(emptyNote(container)).toBeUndefined();
+  });
+
+  test('the empty note yields to the pending ghosts, the sign-in row, and the error note', () => {
+    // First fetch (pending, no items) → ghosts, no empty note.
+    const pending = makeStore();
+    expect(emptyNote(renderSmart(pending).container)).toBeUndefined();
+    cleanup();
+    // Signed-out → the sign-in row owns the copy.
+    const signedOut = makeStore({ state: 'signed-out', items: [], fetchedAt: 1 });
+    expect(emptyNote(renderSmart(signedOut).container)).toBeUndefined();
+    cleanup();
+    // Error → the "Couldn't reach" note owns the copy.
+    const errored = makeStore({ state: 'error', items: [], fetchedAt: 1 });
+    expect(emptyNote(renderSmart(errored).container)).toBeUndefined();
   });
 });

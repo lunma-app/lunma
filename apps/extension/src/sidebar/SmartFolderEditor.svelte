@@ -8,12 +8,16 @@ import TextInput from '../ui/TextInput.svelte';
 
 /**
  * Smart-folder config editor (smart-folders design D9; source picker by
- * github-connector design D8) — the menu drill-in panel behind "New smart
- * folder…" (pinned-header kebab) and a smart row's Edit…, both reached through
- * RowMenu's `panel`/`panelTitle` drill-in (the host renders the back-arrow
- * header). Five fields: source (GitLab | GitHub, ABOVE the URL it seeds),
- * instance base URL, query, cadence, name (auto-suggested per source from the
- * query until the user types).
+ * github-connector D8, third source by jira-connector D9, fourth (RSS) by
+ * rss-connector D7) — the menu drill-in panel behind "New smart folder…"
+ * (pinned-header kebab) and a smart row's Edit…, both reached through RowMenu's
+ * `panel`/`panelTitle` drill-in (the host renders the back-arrow header).
+ *
+ * Source-adaptive: the source picker is the `Select` primitive (it scales past
+ * four sources — rss is the fourth). For the queue sources it shows the canned
+ * query control; for the FEED source (`rss`) the query is hidden, the URL field
+ * is "Feed URL", the Refresh default is 30 minutes, and the hint says no sign-in
+ * is needed. The "Show at most" `Select` (→ `maxItems`) shows for every source.
  */
 
 type SmartNode = Extract<PinNode, { kind: 'smart' }>;
@@ -30,15 +34,20 @@ interface Props {
 const { spaceId, node, onDone }: Props = $props();
 
 /** Each source's canonical base-URL default — the editor seed, and the swap
- * rule's whole vocabulary (a custom URL matches neither and never swaps). */
+ * rule's whole vocabulary (a custom URL matches none and never swaps). Jira's is
+ * a template placeholder; `rss` has NO canonical host (the user pastes the feed
+ * URL), so its default is empty (design D6/D2). */
 const DEFAULT_BASE_URL: Record<SmartSource, string> = {
   gitlab: 'https://gitlab.com',
   github: 'https://github.com',
+  jira: 'https://your-site.atlassian.net',
+  rss: '',
 };
 
 /** Auto-suggested names per (source, query) — used until the user touches the
- * field. `authored` follows each forge's vocabulary; the rest are shared. */
-const SUGGESTED_NAME: Record<SmartSource, Record<SmartQuery, string>> = {
+ * field. The feed source has no canned query, so its name is not derived: it
+ * stays empty until typed (design D2/D7). */
+const SUGGESTED_QUEUE_NAME: Record<Exclude<SmartSource, 'rss'>, Record<SmartQuery, string>> = {
   gitlab: {
     authored: 'My merge requests',
     assigned: 'Assigned to me',
@@ -49,25 +58,35 @@ const SUGGESTED_NAME: Record<SmartSource, Record<SmartQuery, string>> = {
     assigned: 'Assigned to me',
     'review-requested': 'Review requests',
   },
+  jira: {
+    authored: 'My reported issues',
+    assigned: 'Assigned to me',
+    'review-requested': 'Watching',
+  },
 };
 
-/** Per-source token hint: GitLab's session-or-token line vs GitHub's
- * token-required line (design D8). */
+/** The name a blank field falls back to: the queue suggestion, or '' for a feed
+ * (no query to derive from). */
+function suggestedName(s: SmartSource, q: SmartQuery): string {
+  return s === 'rss' ? '' : SUGGESTED_QUEUE_NAME[s][q];
+}
+
+/** Per-source hint: GitLab's session-or-token line, GitHub's token-required
+ * line, Jira's session-only line, and the feed's no-sign-in line (design
+ * D8/D9; rss D11). */
 const HINT: Record<SmartSource, string> = {
   gitlab:
     "Signed in to GitLab in this browser? That's enough. Otherwise add an access token in Settings → Connectors.",
   github: 'GitHub needs an access token — add one in Settings → Connectors.',
+  jira: "Signed in to Jira in this browser? That's enough.",
+  rss: 'Public feed — no sign-in needed. Paste the feed URL.',
 };
 
 const SOURCE_OPTIONS: Array<{ value: SmartSource; label: string }> = [
   { value: 'gitlab', label: 'GitLab' },
   { value: 'github', label: 'GitHub' },
-];
-
-const QUERY_OPTIONS: Array<{ value: SmartQuery; label: string }> = [
-  { value: 'authored', label: 'Authored' },
-  { value: 'assigned', label: 'Assigned' },
-  { value: 'review-requested', label: 'Review' },
+  { value: 'jira', label: 'Jira' },
+  { value: 'rss', label: 'RSS' },
 ];
 
 const CADENCE_OPTIONS = [
@@ -76,6 +95,20 @@ const CADENCE_OPTIONS = [
   { value: '30', label: 'Every 30 minutes' },
   { value: '60', label: 'Every hour' },
 ];
+
+/** The per-folder `maxItems` options (design D5). For a QUEUE it caps the total
+ * results ("10 items"); for the FEED it is the UNREAD budget ("10 unread" — the
+ * draining-queue model surfaces the newest N unread and backfills as you read).
+ * Source-adaptive labels keep the meaning honest. */
+const MAX_ITEMS_VALUES = ['10', '20', '30', '50'];
+const maxItemsOptions = $derived(
+  MAX_ITEMS_VALUES.map((value) => ({ value, label: `${value} ${isFeed ? 'unread' : 'items'}` })),
+);
+
+/** Refresh default by source: feeds move slowly (30 min); queues poll at 10. */
+function defaultRefresh(s: SmartSource): number {
+  return s === 'rss' ? 30 : 10;
+}
 
 // The draft fields intentionally capture the node's config AT MOUNT: the
 // editor is a fresh instance per drill-in (the menu drawer unmounts on close),
@@ -87,15 +120,32 @@ let baseUrl = $state(node?.baseUrl ?? DEFAULT_BASE_URL[node?.source ?? 'gitlab']
 // svelte-ignore state_referenced_locally
 let query = $state<SmartQuery>(node?.query ?? 'review-requested');
 // svelte-ignore state_referenced_locally
-let refreshMinutes = $state(String(node?.refreshMinutes ?? 10));
+let maxItems = $state(String(node?.maxItems ?? 10));
+// svelte-ignore state_referenced_locally
+let refreshMinutes = $state(
+  String(node?.refreshMinutes ?? defaultRefresh(node?.source ?? 'gitlab')),
+);
 // svelte-ignore state_referenced_locally
 let name = $state(
-  node?.name ?? SUGGESTED_NAME[node?.source ?? 'gitlab'][node?.query ?? 'review-requested'],
+  node?.name ?? suggestedName(node?.source ?? 'gitlab', node?.query ?? 'review-requested'),
 );
-// Editing an existing folder keeps its name; in create mode the suggestion
-// follows the source + query until the user types a name of their own.
+// Editing an existing folder keeps its name/cadence; in create mode the
+// suggestion + the cadence follow the source until the user changes them.
 // svelte-ignore state_referenced_locally
 let nameTouched = $state(node !== undefined);
+// svelte-ignore state_referenced_locally
+let refreshTouched = $state(node !== undefined);
+
+const isFeed = $derived(source === 'rss');
+
+// QUERY_OPTIONS is source-aware (design D9): the third slot reads "Watching" for
+// Jira and "Review" for the forges. The `SmartQuery` value stays
+// 'review-requested' — only the displayed label (and the connector's JQL) differ.
+const queryOptions = $derived<Array<{ value: SmartQuery; label: string }>>([
+  { value: 'authored', label: 'Authored' },
+  { value: 'assigned', label: 'Assigned' },
+  { value: 'review-requested', label: source === 'jira' ? 'Watching' : 'Review' },
+]);
 
 /** Absolute http(s) URL — mirrors the SW's `normalizeBaseUrl` acceptance (the
  * SW re-validates and rejects with an error ack as the backstop). */
@@ -110,27 +160,29 @@ function isValidBaseUrl(raw: string): boolean {
 
 const urlValid = $derived(isValidBaseUrl(baseUrl.trim()));
 // The quiet inline message renders only once the field holds something — an
-// untouched default never scolds.
+// untouched default (or the feed source's empty seed) never scolds.
 const showUrlError = $derived(!urlValid && baseUrl.trim() !== '');
 
 function onSourceChange(next: string): void {
   const nextSource = next as SmartSource;
   if (nextSource === source) return;
-  // The canonical-default swap rule (design D8): swap the URL whenever the
-  // current value equals EITHER source's canonical default — an untouched
-  // create-mode field and an on-default edit-mode folder both follow the
-  // switch, while a custom/self-hosted URL is never clobbered.
+  // The canonical-default swap rule (design D8, four-valued by rss D7): swap the
+  // URL whenever the current value equals ANY source's canonical default — an
+  // untouched create-mode field and an on-default edit-mode folder both follow
+  // the switch (including to/from the feed source's empty seed), while a
+  // custom/self-hosted URL is never clobbered.
   const trimmed = baseUrl.trim();
-  if (trimmed === DEFAULT_BASE_URL.gitlab || trimmed === DEFAULT_BASE_URL.github) {
+  if ((Object.values(DEFAULT_BASE_URL) as string[]).includes(trimmed)) {
     baseUrl = DEFAULT_BASE_URL[nextSource];
   }
   source = nextSource;
-  if (!nameTouched) name = SUGGESTED_NAME[source][query];
+  if (!nameTouched) name = suggestedName(source, query);
+  if (!refreshTouched) refreshMinutes = String(defaultRefresh(source));
 }
 
 function onQueryChange(next: string): void {
   query = next as SmartQuery;
-  if (!nameTouched) name = SUGGESTED_NAME[source][query];
+  if (!nameTouched) name = suggestedName(source, query);
 }
 
 function confirm(): void {
@@ -138,10 +190,12 @@ function confirm(): void {
   const payloadBase = {
     spaceId,
     source,
-    name: name.trim() === '' ? SUGGESTED_NAME[source][query] : name.trim(),
+    name: name.trim() === '' ? suggestedName(source, query) : name.trim(),
     baseUrl: baseUrl.trim(),
-    query,
+    maxItems: Number(maxItems),
     refreshMinutes: Number(refreshMinutes),
+    // A feed has no canned query — omit it entirely (design D2).
+    ...(isFeed ? {} : { query }),
   };
   if (node) {
     dispatch({ kind: 'updateSmartFolder', payload: { ...payloadBase, folderId: node.id } });
@@ -155,37 +209,56 @@ function confirm(): void {
 <div class="editor" data-testid="smart-folder-editor">
   <div class="field">
     <span class="field-label">Source</span>
-    <SegmentedControl
-      name={`smart-folder-source-${spaceId}-${node?.id ?? 'new'}`}
+    <Select
       options={SOURCE_OPTIONS}
       value={source}
       onchange={onSourceChange}
-      block
+      ariaLabel="Source"
+      testid="smart-folder-source"
     />
   </div>
 
   <TextInput
-    label="Instance URL"
+    label={isFeed ? 'Feed URL' : 'Instance URL'}
     bind:value={baseUrl}
-    placeholder={DEFAULT_BASE_URL[source]}
+    placeholder={isFeed ? 'https://example.com/feed.xml' : DEFAULT_BASE_URL[source]}
     invalid={showUrlError}
     testid="smart-folder-url"
     onenter={confirm}
   />
   {#if showUrlError}
     <p class="url-error" data-testid="smart-folder-url-error">
-      Needs a full URL, like https://gitlab.example.com
+      {#if isFeed}
+        Needs a full feed URL, like https://example.com/feed.xml
+      {:else}
+        Needs a full URL, like https://gitlab.example.com
+      {/if}
     </p>
   {/if}
 
+  {#if !isFeed}
+    <div class="field">
+      <span class="field-label" id="smart-folder-query-label">Show</span>
+      <SegmentedControl
+        name={`smart-folder-query-${spaceId}-${node?.id ?? 'new'}`}
+        options={queryOptions}
+        value={query}
+        onchange={onQueryChange}
+        block
+      />
+    </div>
+  {/if}
+
   <div class="field">
-    <span class="field-label" id="smart-folder-query-label">Show</span>
-    <SegmentedControl
-      name={`smart-folder-query-${spaceId}-${node?.id ?? 'new'}`}
-      options={QUERY_OPTIONS}
-      value={query}
-      onchange={onQueryChange}
-      block
+    <span class="field-label">{isFeed ? 'Show up to' : 'Show at most'}</span>
+    <Select
+      options={maxItemsOptions}
+      value={maxItems}
+      onchange={(v) => {
+        maxItems = v;
+      }}
+      ariaLabel={isFeed ? 'Unread to show' : 'Maximum items'}
+      testid="smart-folder-max-items"
     />
   </div>
 
@@ -196,6 +269,7 @@ function confirm(): void {
       value={refreshMinutes}
       onchange={(v) => {
         refreshMinutes = v;
+        refreshTouched = true;
       }}
       ariaLabel="Refresh cadence"
       testid="smart-folder-cadence"
@@ -235,7 +309,7 @@ function confirm(): void {
     gap: var(--space-1);
   }
 
-  /* Mirrors TextInput's own label treatment so the five fields read as one form. */
+  /* Mirrors TextInput's own label treatment so the fields read as one form. */
   .field-label {
     color: var(--text-muted);
     font: var(--weight-medium) var(--text-xs) / 1 var(--font-sans);

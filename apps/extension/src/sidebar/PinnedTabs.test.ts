@@ -1224,6 +1224,8 @@ describe('PinnedTabs smart-folder node (smart-folders, design D13)', () => {
     source: 'gitlab',
     baseUrl: 'https://gitlab.example.com',
     query: 'review-requested',
+    maxItems: 20,
+    hideRead: false,
     refreshMinutes: 10,
   } as const;
 

@@ -1,28 +1,28 @@
 import { describe, expect, test } from 'vitest';
-import { AppStateV5Schema, CURRENT_SCHEMA_VERSION, EnvelopeSchema } from './schemas';
+import { AppStateV6Schema, CURRENT_SCHEMA_VERSION, EnvelopeSchema } from './schemas';
 import { createInitialState } from './store.svelte';
 
 // Validates the freshly-minted initial state against the persisted schema.
 // `createInitialState()` carries the `faviconRow` placement (favicon-row-model,
 // ADR 0010), a nullable `spaceId` shape, and the optional per-Space `autoArchive`
-// override (auto-archive) — all part of the current `AppStateV5Schema` shape.
-describe('AppStateV5Schema validation', () => {
+// override (auto-archive) — all part of the current `AppStateV6Schema` shape.
+describe('AppStateV6Schema validation', () => {
   test('valid initial AppState parses', () => {
     const state = createInitialState();
-    const result = AppStateV5Schema.safeParse(state);
+    const result = AppStateV6Schema.safeParse(state);
     expect(result.success).toBe(true);
   });
 
   test('missing required field rejects', () => {
     const state = createInitialState() as unknown as Record<string, unknown>;
     delete state.spaces;
-    const result = AppStateV5Schema.safeParse(state);
+    const result = AppStateV6Schema.safeParse(state);
     expect(result.success).toBe(false);
   });
 
   test('unknown extra field rejects (strict)', () => {
     const state = { ...createInitialState(), extra: 'nope' };
-    const result = AppStateV5Schema.safeParse(state);
+    const result = AppStateV6Schema.safeParse(state);
     expect(result.success).toBe(false);
   });
 });

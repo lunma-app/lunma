@@ -462,3 +462,83 @@ describe('new-tab hearth bloom — muted caption over the peak (WCAG AA per tint
     });
   }
 });
+
+/**
+ * The reading nook's read-row title (rss-connector design D8) — a READ feed row
+ * recedes to `--text-muted` (NOT `--text-faint`, which is reserved for the error
+ * note), and it MUST stay legible over the sidebar's Space wash at every tint.
+ * We composite the wash's peak stop (`--wash-a1`, the coloured overlay's
+ * strongest alpha — read per tint from `app.css` so the test's source of truth
+ * IS the stylesheet) over the per-tint substrate (`--bg`) and measure muted text
+ * on the result, at each tint (the newtab-hearth precedent). Representative
+ * saturated hue.
+ */
+describe('reading folder read-row title — muted over the Space wash (WCAG AA per tint)', () => {
+  const tokens = readTokens();
+  const APP_CSS = readFileSync(APP_CSS_PATH, 'utf-8');
+  const HUE = 250;
+  const CHROMA = 0.15;
+  // The wash + identity tokens resolve `--space-l` to its documented default.
+  const L = 0.62;
+
+  interface Rgba {
+    r: number;
+    g: number;
+    b: number;
+    a: number;
+  }
+  function toRgba(expr: string): Rgba {
+    const c = parse(expr);
+    if (!c) throw new Error(`culori failed to parse '${expr}'`);
+    const r = rgb(c);
+    const clamp = (n: number): number => Math.min(1, Math.max(0, n));
+    return { r: clamp(r.r), g: clamp(r.g), b: clamp(r.b), a: c.alpha ?? 1 };
+  }
+  function over(fg: Rgba, bg: Rgba): Rgba {
+    const a = fg.a;
+    return {
+      r: fg.r * a + bg.r * (1 - a),
+      g: fg.g * a + bg.g * (1 - a),
+      b: fg.b * a + bg.b * (1 - a),
+      a: 1,
+    };
+  }
+  function col(c: Rgba): { mode: 'rgb'; r: number; g: number; b: number } {
+    return { mode: 'rgb', r: c.r, g: c.g, b: c.b };
+  }
+  function rootToken(name: string): string {
+    const v = tokens.get(name);
+    if (!v) throw new Error(`tokens.css missing ${name}`);
+    return v;
+  }
+
+  /** Walk every `.sidebar[data-tint='<tint>']` block (the grouped base AND the
+   * per-tint override) in source order and return the last value of `prop` — the
+   * CSS cascade for these equal-specificity blocks. */
+  function tintCascade(tint: string, prop: string, fallback?: string): string {
+    const blockRe = /([^{}]+)\{([^{}]*)\}/g;
+    const declRe = new RegExp(`${prop}\\s*:\\s*([^;]+);`, 'g');
+    let value = fallback;
+    let m: RegExpExecArray | null = blockRe.exec(APP_CSS);
+    while (m) {
+      if (m[1]?.includes(`[data-tint='${tint}']`)) {
+        const d = [...(m[2] ?? '').matchAll(declRe)].pop();
+        if (d?.[1]) value = d[1].trim();
+      }
+      m = blockRe.exec(APP_CSS);
+    }
+    if (value === undefined) throw new Error(`app.css missing ${prop} for ${tint}`);
+    return value;
+  }
+
+  for (const tint of ['vivid', 'standard', 'subtle'] as const) {
+    test(`muted read-row title over the ${tint} Space wash meets AA Normal (4.5:1)`, () => {
+      const washA1 = Number(tintCascade(tint, '--wash-a1'));
+      // The per-tint `--bg` carries `var(--base-hue)` — resolve it to the hue.
+      const substrate = toRgba(resolveOklch(tintCascade(tint, '--bg', rootToken('--bg')), HUE));
+      const wash = over(toRgba(`oklch(${L} ${CHROMA} ${HUE} / ${washA1})`), substrate);
+      const muted = toRgba(resolveOklch(rootToken('--text-muted')));
+      expect(wcagContrast(col(muted), col(wash))).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+});

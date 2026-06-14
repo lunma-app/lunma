@@ -112,7 +112,7 @@ $effect(() => {
   candidate; // re-run whenever the staged candidate (re)mounts the preloader
   const el = preloadEl;
   // `bind:this` is null while no preloader is mounted (candidate exhausted).
-  if (el && el.complete && el.naturalWidth > 0) onPreloadLoad();
+  if (el?.complete && el.naturalWidth > 0) onPreloadLoad();
 });
 
 // Preload failed → advance the active stage's error flag so `candidate`

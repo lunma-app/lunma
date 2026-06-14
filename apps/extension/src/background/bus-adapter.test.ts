@@ -217,9 +217,9 @@ describe('installBusAdapter', () => {
         kind: 'createSmartFolder',
         payload: {
           spaceId: 'work',
-          source: 'jira', // not a shipped connector — the z.enum rejects
+          source: 'bitbucket', // not a shipped connector — the z.enum rejects
           name: 'X',
-          baseUrl: 'https://jira.example.com',
+          baseUrl: 'https://bitbucket.example.com',
           query: 'authored',
           refreshMinutes: 10,
         },

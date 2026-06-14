@@ -8,12 +8,15 @@ import type { AppState, BackupEnvelope } from './types';
 // widens the smart node's `source` to `'gitlab' | 'github'`; v4
 // (smart-folder-item-bindings) adds the persisted ids-only `smartItemBindings`
 // slice (`.default({})`, so older envelopes parse unchanged); v5 (jira-connector)
-// widens the smart node's `source` to `'gitlab' | 'github' | 'jira'` — all
-// pass-through entries in the append-only `migrations` list (see `migrations.ts`).
-// Each bump is deliberate despite the pass-through: it makes a downgrade
-// detectable (an older build reading newer data quarantines on the version gate
-// instead of Zod-rejecting unfamiliar nodes with a confusing parse error).
-export const CURRENT_SCHEMA_VERSION = 5;
+// widens the smart node's `source` to `'gitlab' | 'github' | 'jira'`; v6
+// (rss-connector) widens it to add `'rss'`, makes the smart node's `query`
+// optional, adds `maxItems` (`.default(20)`) / `hideRead` (`.default(false)`),
+// and adds the persisted ids-only `smartReadState` slice (`.default({})`) — all
+// pass-through entries in the append-only `migrations` list (see `migrations.ts`);
+// v7 (smart-tab-boundary) widens each `smartItemBindings` innermost slot from a
+// bare `TabId` to `{ tabId: TabId; allowGlob: string }` — a REAL transformation,
+// not a pass-through. Each bump is deliberate: it makes a downgrade detectable.
+export const CURRENT_SCHEMA_VERSION = 7;
 
 const SpaceInstanceSchema = z.strictObject({
   spaceId: z.string(),
@@ -104,9 +107,22 @@ const PinNodeSchema = z.discriminatedUnion('kind', [
     id: z.string(),
     name: z.string(),
     icon: z.string(),
-    source: z.enum(['gitlab', 'github', 'jira']),
+    source: z.enum(['gitlab', 'github', 'jira', 'rss']),
     baseUrl: z.string(),
-    query: z.enum(['authored', 'assigned', 'review-requested']),
+    // Source-optional (rss-connector design D2): queue sources carry a canned
+    // query; a feed source (`rss`) omits it.
+    query: z.enum(['authored', 'assigned', 'review-requested']).optional(),
+    // Per-folder cap (rss-connector design D5). For QUEUE sources the total
+    // result cap; for the FEED source the UNREAD budget (the draining-queue
+    // model — the connector keeps the whole feed, the sidebar surfaces the
+    // newest `maxItems` unread). `.default(20)` so pre-v6 nodes migrate
+    // losslessly with the prior hardcoded cap.
+    maxItems: z.number().default(20),
+    // Feed read-hiding state (rss-connector design D9; feed sources only).
+    // `.default(true)` — a feed's resting state is the DRAINED unread queue
+    // (read hidden); the footer's "Show recently read" reveals them. Inert on
+    // queue sources. `default` so pre-v6 nodes parse unchanged.
+    hideRead: z.boolean().default(true),
     refreshMinutes: z.number(),
   }),
 ]);
@@ -153,17 +169,32 @@ const SmartFolderRuntimeSchema = z.strictObject({
 });
 
 // Per-(smart-folder item, window) live bindings (smart-folder-item-bindings):
-// `{ [folderId]: { [itemId]: { [windowId]: tabId } } }` — the inner record is
-// the same per-window shape as `TabBindingsSchema`'s. PERSISTED, but ids only
-// (never the item's URL/title — the work-sensitive payload stays off disk).
-// `.default({})` (the `tempTabTitles` precedent) so v3 envelopes, written
-// before this slice existed, parse cleanly through the v4 pass-through.
+// `{ [folderId]: { [itemId]: { [windowId]: tabId } } }` — v6 shape (bare TabId).
+// Kept so the v6 schema below can remain a stable parse target for migration tests.
 const SmartItemBindingsSchema = z.record(
   z.string(),
   z.record(z.string(), z.record(z.coerce.number(), z.number())),
 );
 
-export const AppStateV5Schema = z.strictObject({
+// v7 shape (smart-tab-boundary): each slot stores `{ tabId, allowGlob }` so the
+// boundary content script can be re-armed at boot without the ephemeral runtime.
+const SmartItemBindingsV7Schema = z.record(
+  z.string(),
+  z.record(
+    z.string(),
+    z.record(z.coerce.number(), z.object({ tabId: z.number(), allowGlob: z.string() })),
+  ),
+);
+
+// Per-feed-folder read-state (rss-connector, design D3): `{ [folderId]: string[] }`
+// — the read item ids per smart folder. PERSISTED (kept by `toPersistable`, like
+// `smartItemBindings`; not stripped like the ephemeral `smartFolders`), but IDS
+// ONLY — never the item's title/URL. `.default({})` (the `smartItemBindings`
+// precedent) so pre-v6 envelopes, written before this slice existed, parse
+// cleanly through the v6 pass-through.
+const SmartReadStateSchema = z.record(z.string(), z.array(z.string()));
+
+export const AppStateV6Schema = z.strictObject({
   schemaVersion: z.number(),
   spaces: z.array(SpaceSchema),
   activeSpaceByWindow: z.record(z.coerce.number(), z.string().nullable()),
@@ -181,15 +212,40 @@ export const AppStateV5Schema = z.strictObject({
   liveTabsById: z.record(z.coerce.number(), LiveTabSchema).optional(),
   faviconRow: z.array(z.string()),
   smartItemBindings: SmartItemBindingsSchema.default({}),
+  smartReadState: SmartReadStateSchema.default({}),
+  smartFolders: z.record(z.string(), SmartFolderRuntimeSchema).optional(),
+});
+
+// v7: same as v6 but with the widened SmartItemBindingsV7Schema (smart-tab-boundary).
+export const AppStateV7Schema = z.strictObject({
+  schemaVersion: z.number(),
+  spaces: z.array(SpaceSchema),
+  activeSpaceByWindow: z.record(z.coerce.number(), z.string().nullable()),
+  spaceInstancesByWindow: z.record(
+    z.coerce.number(),
+    z.record(z.string(), SpaceInstanceSchema).optional(),
+  ),
+  tabBindings: TabBindingsSchema,
+  savedTabs: z.record(z.string(), SavedTabSchema),
+  lastActivatedSpaceId: z.string().nullable(),
+  tabLastActivity: z.record(z.coerce.number(), z.number()),
+  archivedTabs: z.array(ArchivedTabSchema),
+  trash: z.record(z.string(), TrashedSpaceSchema),
+  pinnedBySpace: z.record(z.string(), z.array(PinNodeSchema)),
+  liveTabsById: z.record(z.coerce.number(), LiveTabSchema).optional(),
+  faviconRow: z.array(z.string()),
+  smartItemBindings: SmartItemBindingsV7Schema.default({}),
+  smartReadState: SmartReadStateSchema.default({}),
   smartFolders: z.record(z.string(), SmartFolderRuntimeSchema).optional(),
 });
 
 export const EnvelopeSchema = z.strictObject({
   schemaVersion: z.number(),
-  state: AppStateV5Schema,
+  state: AppStateV7Schema,
 });
 
-export type AppStateV5 = z.infer<typeof AppStateV5Schema>;
+export type AppStateV6 = z.infer<typeof AppStateV6Schema>;
+export type AppStateV7 = z.infer<typeof AppStateV7Schema>;
 export type Envelope = z.infer<typeof EnvelopeSchema>;
 
 type AssertEqual<A, B> =
@@ -197,9 +253,10 @@ type AssertEqual<A, B> =
 
 // `liveTabsById` and `smartFolders` are ephemeral: required on the runtime
 // `AppState`, optional on the persisted schema (stripped before write). Compare
-// the persisted shapes — every NON-ephemeral field must still match exactly.
+// the persisted shapes — every NON-ephemeral field must still match exactly
+// (the persisted `smartReadState` slice is included, like `smartItemBindings`).
 type Persisted<T> = Omit<T, 'liveTabsById' | 'smartFolders'>;
-const _schemaMatchesAppState: AssertEqual<Persisted<AppStateV5>, Persisted<AppState>> = true;
+const _schemaMatchesAppState: AssertEqual<Persisted<AppStateV7>, Persisted<AppState>> = true;
 void _schemaMatchesAppState;
 
 // ── Data-backup: BackupEnvelopeSchema ────────────────────────────────────────

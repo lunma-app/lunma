@@ -401,7 +401,7 @@ The vocabulary SHALL cover, at minimum, these command families:
 - **Saved-tab:** `openSavedTab`, `focusSavedTab`, `goHome`, `makeThisHome`, `deleteSavedTab`, `renameTab`, `setTabBoundary`.
 - **Pinned-tab and favourites:** `pinTab`, `unpinTab`, `reorderPinned`, `pinSavedTab`, `favoriteTab`, `favoriteSavedTab`, `reorderFavorites`.
 - **Pinned-tab folder:** `createFolder`, `createFolderFromTabs`, `renameFolder`, `setFolderIcon`, `setFolderColor`, `deleteFolder`.
-- **Smart-folder:** `createSmartFolder`, `updateSmartFolder`, `deleteSmartFolder`, `refreshSmartFolder` (see Requirement: Smart-folder lifecycle commands).
+- **Smart-folder:** `createSmartFolder`, `updateSmartFolder`, `deleteSmartFolder`, `refreshSmartFolder` (see Requirement: Smart-folder lifecycle commands), `openSmartItem` (see Requirement: Smart-item activation command).
 - **Temporary-tab and navigation:** `reorderTemp`, `focusTab`, `closeTab`, `newTab`, `clearTempTabs`, `undoClearTempTabs`, `renameTempTab`, `openUrl`.
 - **Archive and auto-archive:** `restoreArchivedTab`, `deleteArchivedTab`, `clearArchivedTabs`, `setSpaceAutoArchive`.
 
@@ -475,6 +475,43 @@ capability's extension rule).
 - **WHEN** `chrome.tabs.create` rejects for an `openUrl` command
 - **THEN** the handler SHALL throw
 - **AND** the coordinator SHALL emit a `lunma/command-ack` whose result includes an `error`
+
+### Requirement: Smart-item activation command
+
+The `SidebarCommand` union SHALL include `openSmartItem` —
+`{ spaceId: SpaceId; folderId: FolderId; itemId: string; windowId: WindowId }`
+— validated by a Zod schema in the `bus.ts` discriminated union. The payload
+carries **identity only**: the SW resolves the item's URL from its own
+`smartFolders` runtime slice and SHALL NOT accept a URL on the wire (the
+`openUrl` scheme-hardening questions never arise; the attack surface is a
+lookup key).
+
+Handler semantics: when `smartItemBindings[folderId][itemId][windowId]`
+exists, focus that tab (the `focusSavedTab` shape); otherwise resolve the
+item from `state.smartFolders[folderId].items`, create the tab, bind it in
+the same drain, seed the live-tab record, and join the Space's Chrome group
+(the `openSavedTab` ordering). An unknown `spaceId`, `folderId`, or an
+`itemId` that is neither bound nor listed SHALL throw (error ack) — the
+unknown-id convention. Closing a bound tab rides the existing
+`closeTab { tabId }` command; no new close plumbing ships.
+
+#### Scenario: Activation carries identity, never a URL
+
+- **WHEN** the sidebar dispatches `bus.send({ kind: 'openSmartItem', payload: { spaceId: 'work', folderId: 'sf-1', itemId: '42', windowId: 100 } })`
+- **THEN** `SidebarCommandSchema` validation succeeds and the handler resolves the URL from the SW's runtime slice
+- **AND** a payload carrying an extra `url` field SHALL fail validation (strict payload)
+
+#### Scenario: Bound items focus, unbound items open
+
+- **GIVEN** item `42` bound to tab 7 in window 100
+- **WHEN** `openSmartItem` is dispatched for it
+- **THEN** tab 7 is focused and no tab is created
+- **AND** for an unbound listed item a tab is created, bound, and grouped in one drain
+
+#### Scenario: An unknown item rejects
+
+- **WHEN** `openSmartItem` is dispatched with an `itemId` that is neither bound nor present in the folder's runtime items
+- **THEN** the handler SHALL throw and the ack SHALL carry `{ error }`
 
 ### Requirement: Sidebar bus carries the reorderSpaces command
 
@@ -632,18 +669,24 @@ The `SidebarCommand` union (`apps/extension/src/shared/bus.ts`) SHALL include a 
 
 The `SidebarCommand` union SHALL include four smart-folder lifecycle kinds with flat payloads (no nested config object); update/delete/refresh address `{ spaceId, folderId }`, matching the existing folder-command convention (`renameFolder`, `deleteFolder`, …):
 
-- `createSmartFolder` — `{ spaceId: SpaceId; source: SmartSource; name: string; baseUrl: string; query: 'authored' | 'assigned' | 'review-requested'; refreshMinutes: number }`. The SW mints the node id (`crypto.randomUUID`) and the `icon` (the source connector's `mintedIcon` — `'folder-git-2'` for both shipped sources), normalizes `baseUrl` (absolute http(s) URL required, trailing slash stripped; invalid SHALL throw), clamps `refreshMinutes` to the floor of 5, inserts the node at the top of the Space's pinned list via `store.addSmartFolder(spaceId, node)` (matching `createFolder`'s top insertion), retunes the poll alarm, and triggers an immediate first fetch. Unknown `spaceId` SHALL throw (error ack).
+- `createSmartFolder` — `{ spaceId: SpaceId; source: SmartSource; name: string; baseUrl: string; query: 'authored' | 'assigned' | 'review-requested'; refreshMinutes: number }`. The SW mints the node id (`crypto.randomUUID`) and the `icon` (the source connector's `mintedIcon` — `'folder-git-2'` for the git forges, `'folder-kanban'` for Jira), normalizes `baseUrl` (absolute http(s) URL required, trailing slash stripped; invalid SHALL throw), clamps `refreshMinutes` to the floor of 5, inserts the node at the top of the Space's pinned list via `store.addSmartFolder(spaceId, node)` (matching `createFolder`'s top insertion), retunes the poll alarm, and triggers an immediate first fetch. Unknown `spaceId` SHALL throw (error ack).
 - `updateSmartFolder` — `{ spaceId: SpaceId; folderId: FolderId; source: SmartSource; name: string; baseUrl: string; query: 'authored' | 'assigned' | 'review-requested'; refreshMinutes: number }`. Edits the node in place via `store.updateSmartFolder(spaceId, folderId, config)`; a `baseUrl`, `query`, or `source` change invalidates `fetchedAt` and triggers an immediate refetch. Unknown `spaceId` or `folderId` SHALL throw.
 - `deleteSmartFolder` — `{ spaceId: SpaceId; folderId: FolderId }`. Removes the node from its pinned list and drops its `smartFolders` runtime entry via `store.deleteSmartFolder(spaceId, folderId)`, then retunes (or clears) the poll alarm. Unknown `spaceId` or `folderId` SHALL throw. No tabs are closed.
 - `refreshSmartFolder` — `{ spaceId: SpaceId; folderId: FolderId }`. Refreshes that folder unconditionally. The handler SHALL ack `ok` once the refresh is underway; the fetch **outcome** (ok / signed-out / error) lands via the runtime slice and the state broadcast, never via the ack. Unknown `spaceId` or `folderId` SHALL throw.
 
-All four payloads SHALL be validated by Zod schemas in the `bus.ts` discriminated union, with `query` and `source` as `z.enum`s (`source` over `['gitlab', 'github']`) and `refreshMinutes` as a number. The `bus.ts` `PinNode` mirror's smart member SHALL admit both `source` values, so a tree containing a smart node of either source round-trips `reorderPinned` losslessly. Connector fetch failures SHALL never reject any command ack.
+All four payloads SHALL be validated by Zod schemas in the `bus.ts` discriminated union, with `query` and `source` as `z.enum`s (`source` over `['gitlab', 'github', 'jira']`) and `refreshMinutes` as a number. The `bus.ts` `PinNode` mirror's smart member SHALL admit all three `source` values, so a tree containing a smart node of any source round-trips `reorderPinned` losslessly. Connector fetch failures SHALL never reject any command ack.
 
 #### Scenario: createSmartFolder inserts a SW-minted node at the top and fetches
 
 - **WHEN** the sidebar dispatches `bus.send({ kind: 'createSmartFolder', payload: { spaceId: 'work', source: 'github', name: 'My pull requests', baseUrl: 'https://github.com', query: 'review-requested', refreshMinutes: 10 } })`
 - **THEN** the handler SHALL insert a `smart` node with a SW-minted id, `source: 'github'`, and the source's minted icon at the top of `pinnedBySpace.work`
 - **AND** SHALL trigger an immediate first fetch and ack `ok`
+
+#### Scenario: A jira createSmartFolder is accepted and mints the kanban icon
+
+- **WHEN** the sidebar dispatches `bus.send({ kind: 'createSmartFolder', payload: { spaceId: 'work', source: 'jira', name: 'My reported issues', baseUrl: 'https://acme.atlassian.net', query: 'authored', refreshMinutes: 10 } })`
+- **THEN** `SidebarCommandSchema` validation SHALL pass and the handler SHALL insert a `smart` node with `source: 'jira'` and `icon: 'folder-kanban'` at the top of `pinnedBySpace.work`
+- **AND** a tree containing that node SHALL round-trip `reorderPinned` losslessly
 
 #### Scenario: refreshSmartFolder acks before the fetch resolves
 
@@ -658,7 +701,7 @@ All four payloads SHALL be validated by Zod schemas in the `bus.ts` discriminate
 
 #### Scenario: An out-of-vocabulary source is rejected at the bus boundary
 
-- **WHEN** a `createSmartFolder` payload carries `source: 'jira'`
+- **WHEN** a `createSmartFolder` payload carries `source: 'bitbucket'` (a source the registry does not hold)
 - **THEN** `SidebarCommandSchema` validation SHALL fail and the command is never enqueued
 
 ### Requirement: importState command applies a validated backup

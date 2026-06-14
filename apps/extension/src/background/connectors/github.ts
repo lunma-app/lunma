@@ -22,9 +22,6 @@ import {
  *     (fail > pending > ok > warn; unmapped conclusions ignored).
  */
 
-/** Results cap — mirrors the GitLab connector's review-queue bound. */
-const RESULTS_CAP = 20;
-
 /** Check-run-enrichment fan-out bound (≤2 extra requests per listed PR). */
 const ENRICH_CONCURRENCY = 5;
 
@@ -215,7 +212,7 @@ async function enrich(
  * request could only fail; not sending it is honest and rate-limit kind).
  */
 async function fetchRuntime(
-  node: Pick<SmartFolderNode, 'baseUrl' | 'query'>,
+  node: Pick<SmartFolderNode, 'baseUrl' | 'query' | 'maxItems'>,
   _caches?: ConnectorCaches,
 ): Promise<SmartFolderRuntime> {
   const fetchedAt = Date.now();
@@ -239,11 +236,17 @@ async function fetchRuntime(
   const token = connectors[host];
   if (token === undefined) return fail('signed-out');
 
+  // A queue node always carries a query (source-optional only for feeds);
+  // default defensively so the now-optional field stays a total switch.
+  const query: SmartQuery = node.query ?? 'assigned';
+
   // `advanced_search=true` rides GitHub's issue-search migration — becoming
-  // required on github.com, ignored by GHE versions that predate it.
+  // required on github.com, ignored by GHE versions that predate it. The
+  // per-folder cap (rss-connector design D5) bounds the page; the badge shows
+  // `N+` at it, so the cap is never silent.
   const url =
-    `${apiRoot}/search/issues?q=is:pr+is:open+${qualifierFor(node.query)}` +
-    `&per_page=${RESULTS_CAP}&sort=updated&order=desc&advanced_search=true`;
+    `${apiRoot}/search/issues?q=is:pr+is:open+${qualifierFor(query)}` +
+    `&per_page=${node.maxItems}&sort=updated&order=desc&advanced_search=true`;
   const outcome = await githubGet(url, token);
   if (outcome.kind !== 'ok') return fail(outcome.kind);
   const parsed = SearchResponseSchema.safeParse(outcome.json);
@@ -255,7 +258,7 @@ async function fetchRuntime(
       const item = SearchItemSchema.safeParse(element);
       return item.success ? [item.data] : [];
     })
-    .slice(0, RESULTS_CAP);
+    .slice(0, node.maxItems);
 
   const enrichments = await mapWithConcurrency(prs, ENRICH_CONCURRENCY, (pr) =>
     enrich(pr.pull_request?.url, apiRoot, token),
@@ -276,10 +279,19 @@ async function fetchRuntime(
   return { state: 'ok', items, fetchedAt };
 }
 
+/** The full listing on the forge (rss-connector design D6, "open all in a
+ * tab"): GitHub's pull-requests dashboard — the canonical "PRs that involve me"
+ * page (github.com AND GHE both serve `/pulls`), independent of the canned
+ * query. */
+function listingUrl(node: Pick<SmartFolderNode, 'baseUrl' | 'query'>): string {
+  return `${node.baseUrl}/pulls`;
+}
+
 /** The GitHub `SourceConnector` — the registry's `github` entry. */
 export const githubConnector: SourceConnector = {
   source: 'github',
   defaultBaseUrl: 'https://github.com',
   mintedIcon: 'folder-git-2',
   fetchRuntime,
+  listingUrl,
 };

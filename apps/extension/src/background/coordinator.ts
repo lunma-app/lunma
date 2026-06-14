@@ -137,6 +137,12 @@ export const EventPolicy: Record<PendingEventKind, EventPolicyEntry> = {
   // Per-click distinct (smart-folder-item-bindings): a re-click of an
   // already-bound row is the cheap focus path, so coalescing buys nothing.
   openSmartItem: {},
+  // Feed read-state (rss-connector): each is a distinct intent — per-item marks,
+  // a mark-all, a hide-read toggle, an open-all. No coalescing.
+  markSmartItemRead: {},
+  markAllSmartItemsRead: {},
+  setSmartFolderHideRead: {},
+  openSmartFolderListing: {},
   'smartFolders.result': {},
   reorderTemp: {},
   reorderSpaces: {},
@@ -160,6 +166,8 @@ export const EventPolicy: Record<PendingEventKind, EventPolicyEntry> = {
   clearArchivedTabs: {},
   // Data-backup: each import is a distinct, non-coalescing user action.
   importState: {},
+  // OPML import: each import is a distinct, non-coalescing user action.
+  importOpml: {},
 };
 
 export const QUEUE_CAP = 1000;
@@ -263,6 +271,7 @@ export class Coordinator {
         this.dirty = true;
       },
       runSideEffect: (fn) => this.runSideEffect(fn),
+      enqueue: (ev) => this.enqueue(ev),
       groups: this.groups,
       boundary: this.boundary,
     };

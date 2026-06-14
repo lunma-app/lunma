@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { LunmaStore } from '../shared/store.svelte';
 import type { PinNode, SpaceId, WindowId } from '../shared/types';
+// biome-ignore lint/style/useImportType: Svelte component used as value in template
 import SmartFolder from './SmartFolder.svelte';
 import { setStore } from './store-context.svelte';
 

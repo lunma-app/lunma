@@ -45,6 +45,8 @@ function node(overrides: Partial<SmartFolderNode> = {}): SmartFolderNode {
     source: 'github',
     baseUrl: 'https://github.com',
     query: 'authored',
+    maxItems: 20,
+    hideRead: false,
     refreshMinutes: 10,
     ...overrides,
   };
@@ -425,5 +427,20 @@ describe('fetchRuntime — check-run enrichment', () => {
     ]);
     const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }));
     expect(runtime.items.map((i) => i.title)).toEqual(['Draft: PR 1', 'PR 2']);
+  });
+});
+
+// ── maxItems + listingUrl (rss-connector D5/D6) ─────────────────────────────────
+
+describe('maxItems + listingUrl', () => {
+  test('the node maxItems drives the per_page cap', async () => {
+    storageData = { ...TOKEN };
+    fetchMock.mockResolvedValueOnce(searchResponse([]));
+    await githubConnector.fetchRuntime(node({ query: 'authored', maxItems: 30 }));
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('per_page=30');
+  });
+
+  test('listingUrl is the pull-requests dashboard', () => {
+    expect(githubConnector.listingUrl(node())).toBe('https://github.com/pulls');
   });
 });

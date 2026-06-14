@@ -150,6 +150,7 @@ export const ICON_NAMES = [
   'flower-2',
   'folder',
   'folder-git-2',
+  'folder-kanban',
   'folder-open',
   'footprints',
   'frame',

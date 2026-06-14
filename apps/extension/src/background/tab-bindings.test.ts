@@ -148,3 +148,93 @@ describe('runRestartRecovery (per-window)', () => {
     expect(store.state.tabBindings.gh).toEqual({ 100: 50 });
   });
 });
+
+describe('runRestartRecovery — smart-item bindings (smart-folder-item-bindings)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** Seed a smart node so the binding's folder exists. */
+  function seedSmartFolder(store: { state: { pinnedBySpace: Record<string, unknown> } }): void {
+    store.state.pinnedBySpace.work = [
+      {
+        kind: 'smart',
+        id: 'sf-1',
+        name: 'Review requests',
+        icon: 'folder-git-2',
+        source: 'gitlab',
+        baseUrl: 'https://gitlab.example.com',
+        query: 'review-requested',
+        refreshMinutes: 10,
+      },
+    ];
+  }
+
+  test('a stale binding (tab id gone) prunes away', async () => {
+    installChromeStub([]); // a browser restart: no persisted tab id survives
+    const { store, runRestartRecovery } = await freshImports();
+    seedSmartFolder(store);
+    store.state.smartItemBindings['sf-1'] = { '42': { 100: { tabId: 7, allowGlob: '' } } };
+
+    await runRestartRecovery();
+
+    expect(store.state.smartItemBindings).toEqual({});
+  });
+
+  test('a live binding survives an SW restart and keeps its tab out of temp', async () => {
+    installChromeStub([liveTab(7, 100, 'https://gitlab.example.com/mr/42')]);
+    const { store, runRestartRecovery } = await freshImports();
+    seedSmartFolder(store);
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: -1, tempTabIds: [], tempTabTitles: {} },
+    };
+    store.state.smartItemBindings['sf-1'] = {
+      '42': { 100: { tabId: 7, allowGlob: 'https://gitlab.example.com/mr/42*' } },
+    };
+
+    await runRestartRecovery();
+    // The boot pass that adopts already-open tabs runs AFTER recovery; the
+    // surviving binding is what keeps the tab out of Temporary there.
+    const { seedExistingTabs } = await import('./seed-existing-tabs');
+    seedExistingTabs(store, [{ id: 7, windowId: 100, url: 'https://gitlab.example.com/mr/42' }]);
+
+    expect(store.state.smartItemBindings).toEqual({
+      'sf-1': { '42': { 100: { tabId: 7, allowGlob: 'https://gitlab.example.com/mr/42*' } } },
+    });
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([]);
+  });
+
+  test('a binding for a deleted folder demotes its still-open tab to Temporary', async () => {
+    installChromeStub([liveTab(7, 100, 'https://gitlab.example.com/mr/42')]);
+    const { store, runRestartRecovery } = await freshImports();
+    // No smart node anywhere — the folder is gone, but its bound tab is open.
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: -1, tempTabIds: [], tempTabTitles: {} },
+    };
+    store.state.smartItemBindings['sf-gone'] = { '42': { 100: { tabId: 7, allowGlob: '' } } };
+
+    await runRestartRecovery();
+
+    expect(store.state.smartItemBindings).toEqual({});
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([7]);
+  });
+
+  test("a deleted folder's dead-tab binding just drops (nothing to demote)", async () => {
+    installChromeStub([]);
+    const { store, runRestartRecovery } = await freshImports();
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: -1, tempTabIds: [], tempTabTitles: {} },
+    };
+    store.state.smartItemBindings['sf-gone'] = { '42': { 100: { tabId: 7, allowGlob: '' } } };
+
+    await runRestartRecovery();
+
+    expect(store.state.smartItemBindings).toEqual({});
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([]);
+  });
+});

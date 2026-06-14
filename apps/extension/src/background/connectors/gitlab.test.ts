@@ -61,6 +61,8 @@ function node(overrides: Partial<SmartFolderNode> = {}): SmartFolderNode {
     source: 'gitlab',
     baseUrl: 'https://gitlab.example.com',
     query: 'review-requested',
+    maxItems: 20,
+    hideRead: false,
     refreshMinutes: 10,
     ...overrides,
   };
@@ -335,5 +337,21 @@ describe('fetchRuntime — auth ladder', () => {
     const runtime = await gitlabConnector.fetchRuntime(node({ query: 'review-requested' }));
     expect(runtime.state).toBe('signed-out');
     expect(fetchMock).toHaveBeenCalledTimes(1); // never reaches the list call
+  });
+});
+
+// ── maxItems + listingUrl (rss-connector D5/D6) ─────────────────────────────────
+
+describe('maxItems + listingUrl', () => {
+  test('the node maxItems drives the per_page cap', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+    await gitlabConnector.fetchRuntime(node({ query: 'authored', maxItems: 50 }));
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('per_page=50');
+  });
+
+  test('listingUrl is the dashboard merge-requests page', () => {
+    expect(gitlabConnector.listingUrl(node())).toBe(
+      'https://gitlab.example.com/dashboard/merge_requests',
+    );
   });
 });

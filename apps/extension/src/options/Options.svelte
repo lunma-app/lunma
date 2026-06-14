@@ -20,6 +20,7 @@ import Surface from '../ui/Surface.svelte';
 import TabRow from '../ui/TabRow.svelte';
 import TextInput from '../ui/TextInput.svelte';
 import BackupRestore from './BackupRestore.svelte';
+import FeedSubscriptions from './FeedSubscriptions.svelte';
 import RecentlyArchived from './RecentlyArchived.svelte';
 import '@lunma/tokens/tokens.css';
 import '@lunma/tokens/fonts.css';
@@ -488,6 +489,11 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
          Spaces and settings. Self-contained: export reads storage directly; import
          goes through the bus to the SW. -->
     <BackupRestore />
+
+    <!-- Feed subscriptions (opml-import-export): import/export RSS feed lists as
+         OPML. Self-contained: reads storage at action time; import goes through
+         the bus to the SW. Grouped with Backup & restore — both are data-management. -->
+    <FeedSubscriptions />
 
     <!-- Recently archived (auto-archive): the management view the sidebar chip
          deep-links to. A self-contained card reading `archivedTabs` from storage. -->

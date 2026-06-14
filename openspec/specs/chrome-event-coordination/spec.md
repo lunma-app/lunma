@@ -270,7 +270,7 @@ This channel is independent of the coordinator queue. The queue invariants state
 - **WHEN** comparing the `state` field of a `'lunma/state-snapshot'` response to the `state` field of a `'lunma/state-broadcast'` emission
 - **THEN** both SHALL be obtained via `store.snapshot()`
 - **AND** both SHALL serialise cleanly through `structuredClone` (no `$state` proxy references)
-- **AND** both SHALL pass `AppStateV3Schema.parse` (the current-version schema) validation in the receiving sidebar
+- **AND** both SHALL pass `AppStateV5Schema.parse` (the current-version schema) validation in the receiving sidebar
 
 ### Requirement: Sidebar-source handlers for recolourSpace and changeSpaceIcon
 

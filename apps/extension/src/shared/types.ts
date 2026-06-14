@@ -134,11 +134,13 @@ export type SmartQuery = 'authored' | 'assigned' | 'review-requested';
 
 /**
  * The shipped smart-folder connector sources (github-connector, then
- * jira-connector). A closed union — the `CONNECTORS` registry in
- * `background/smart-folders.ts` holds exactly these three; widening it is a
- * schema-version bump (the v2→v3, then v4→v5 precedent).
+ * jira-connector, then rss-connector). A closed union — the `CONNECTORS`
+ * registry in `background/smart-folders.ts` holds exactly these four; widening
+ * it is a schema-version bump (the v2→v3, v4→v5, then v5→v6 precedent). `rss`
+ * is the first FEED source (a public address, no identity, no canned query),
+ * which is why `query` is source-optional on the smart node below.
  */
-export type SmartSource = 'gitlab' | 'github' | 'jira';
+export type SmartSource = 'gitlab' | 'github' | 'jira' | 'rss';
 
 /**
  * A pinned-tab placement node. The pinned list for a Space is an ordered tree
@@ -167,9 +169,23 @@ export type PinNode =
       name: string;
       icon: string;
       source: SmartSource;
-      /** Absolute http(s) instance URL, stored without a trailing slash. */
+      /** Absolute http(s) instance URL, stored without a trailing slash. For a
+       * feed source (`rss`) this IS the feed URL. */
       baseUrl: string;
-      query: SmartQuery;
+      /**
+       * The canned queue query (rss-connector design D2). OPTIONAL: queue
+       * sources (`gitlab` / `github` / `jira`) carry one; a feed source (`rss`)
+       * has no canned query and omits it. Typed `| undefined` to match the
+       * persisted schema's `.optional()` inference under
+       * `exactOptionalPropertyTypes` (the equality guard in `schemas.ts`).
+       */
+      query?: SmartQuery | undefined;
+      /** Per-folder result cap (rss-connector design D5; replaces the hardcoded
+       * `RESULTS_CAP`). Migrated nodes default to 20 (no behaviour change). */
+      maxItems: number;
+      /** Per-folder "hide read" reading preference (rss-connector design D9;
+       * feed sources only). Persisted so it survives restart. */
+      hideRead: boolean;
       /** Poll cadence in minutes; default 10, floor 5 (SW-clamped). */
       refreshMinutes: number;
     };
@@ -296,14 +312,28 @@ export interface AppState {
    * Per-(smart-folder item, window) live bindings (smart-folder-item-bindings):
    * a result row activated like a pinned tab — open-if-dormant, focus-if-bound.
    * Keyed by folder id, then by the connector item id (stable across polls);
-   * the inner record is the same per-window `TabBinding` shape as
-   * `tabBindings`. PERSISTED, but **ids only** — never the item's URL or title
-   * (the deliberate carve-out from the results-are-ephemeral rule: the
-   * work-sensitive payload stays off disk). Persistence is what heals an SW
-   * restart; across a browser restart tab ids don't survive, so boot pruning
+   * each innermost slot stores the bound tab id AND the `pageGlob(itemUrl)`
+   * computed at open time (smart-tab-boundary), so the boundary content script
+   * can be re-armed on reload and at boot without the ephemeral runtime slice.
+   * PERSISTED; across a browser restart tab ids don't survive, so boot pruning
    * drops the entries and the restored tabs classify as temporary naturally.
    */
-  smartItemBindings: { [folderId: FolderId]: { [itemId: string]: TabBinding } };
+  smartItemBindings: {
+    [folderId: FolderId]: {
+      [itemId: string]: { [windowId: WindowId]: { tabId: TabId; allowGlob: string } };
+    };
+  };
+  /**
+   * Per-feed-folder read-state (rss-connector, design D3): the read item ids
+   * per smart folder. PERSISTED — kept by `toPersistable` (like
+   * `smartItemBindings`), NOT stripped like the ephemeral `smartFolders`
+   * runtime — so read marks survive SW sleeps and Chrome restarts. **Ids only**
+   * (never the item's title/URL — the reading-sensitive payload stays off
+   * disk). **Pruned to the live feed window** after every successful fetch
+   * (`pruneSmartReadState`), so the set can never exceed a folder's `maxItems`.
+   * Read-state is RSS-only in v1 — queue items self-resolve as you act on them.
+   */
+  smartReadState: { [folderId: FolderId]: string[] };
   /**
    * Ephemeral live-tab metadata, keyed by Chrome tab id. Never persisted
    * (stripped in `persist()`); rebuilt at SW boot from `chrome.tabs.query`.

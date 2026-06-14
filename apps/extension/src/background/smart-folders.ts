@@ -4,6 +4,8 @@ import type { AppState, FolderId, PinNode, SmartFolderRuntime, SmartSource } fro
 import type { ConnectorCaches, SourceConnector } from './connectors/connector';
 import { githubConnector } from './connectors/github';
 import { gitlabConnector } from './connectors/gitlab';
+import { jiraConnector } from './connectors/jira';
+import { rssConnector } from './connectors/rss';
 
 /**
  * Smart-folders engine (smart-folders; connector extraction by
@@ -16,7 +18,7 @@ import { gitlabConnector } from './connectors/gitlab';
  *     enqueue `{ source: 'connector', kind: 'smartFolders.result' }` events;
  *     only the drain's handler writes the runtime slice;
  *   - dispatch: fetches go through the closed `CONNECTORS` registry keyed by
- *     the node's `source` discriminant — exactly the two shipped connectors
+ *     the node's `source` discriminant — exactly the four shipped connectors
  *     (`background/connectors/`), no plug-in mechanism.
  */
 
@@ -36,6 +38,8 @@ export type SmartFolderNode = Extract<PinNode, { kind: 'smart' }>;
 export const CONNECTORS: Record<SmartSource, SourceConnector> = {
   gitlab: gitlabConnector,
   github: githubConnector,
+  jira: jiraConnector,
+  rss: rssConnector,
 };
 
 /**
@@ -85,11 +89,13 @@ export function normalizeBaseUrl(raw: string): string {
  * Fetch one smart folder's results through its source's connector. Never
  * throws — every failure shape resolves to a runtime state (the connectors'
  * contract). The node Pick includes `source` because dispatch needs the
- * discriminant; `caches` is the per-poll-cycle scratch map (absent on a
- * manual/single refresh — the connector defaults its own).
+ * discriminant and `maxItems` because each connector slices its results to it
+ * (rss-connector design D5 — no fixed cap in the engine); `caches` is the
+ * per-poll-cycle scratch map (absent on a manual/single refresh — the connector
+ * defaults its own).
  */
 export async function fetchSmartFolderRuntime(
-  node: Pick<SmartFolderNode, 'source' | 'baseUrl' | 'query'>,
+  node: Pick<SmartFolderNode, 'source' | 'baseUrl' | 'query' | 'maxItems'>,
   caches?: ConnectorCaches,
 ): Promise<SmartFolderRuntime> {
   return CONNECTORS[node.source].fetchRuntime(node, caches);

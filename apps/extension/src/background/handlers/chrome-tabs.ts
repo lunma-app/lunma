@@ -120,6 +120,19 @@ export function chromeTabHandlers(): Pick<
         ) {
           ctx.runSideEffect(() => ctx.boundary.configureBoundary(tabId, boundSaved));
         }
+        // Re-arm smart item boundary on page load (smart-tab-boundary): each
+        // navigation spins up a fresh content-script context that starts disarmed.
+        for (const byItem of Object.values(ctx.store.state.smartItemBindings)) {
+          for (const slots of Object.values(byItem)) {
+            for (const slot of Object.values(slots)) {
+              if (slot.tabId === tabId && slot.allowGlob) {
+                ctx.runSideEffect(() =>
+                  ctx.boundary.configureSmartItemBoundary(slot.tabId, slot.allowGlob),
+                );
+              }
+            }
+          }
+        }
       }
       ctx.markDirty();
     },

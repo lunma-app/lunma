@@ -23,10 +23,6 @@ import {
  * through the `CONNECTORS` registry.
  */
 
-/** Results cap — a review queue, not an archive. The folder badge renders
- * `20+` when the page is full, so the cap is never silent. */
-const RESULTS_CAP = 20;
-
 /** Pipeline-enrichment fan-out bound (≤21 requests/folder/poll worst case). */
 const ENRICH_CONCURRENCY = 5;
 
@@ -200,7 +196,7 @@ function usablePipelineStatus(mr: Mr): string | undefined {
  * runtime state. The engine reaches this via `CONNECTORS.gitlab.fetchRuntime`.
  */
 async function fetchRuntime(
-  node: Pick<SmartFolderNode, 'baseUrl' | 'query'>,
+  node: Pick<SmartFolderNode, 'baseUrl' | 'query' | 'maxItems'>,
   caches: ConnectorCaches = new Map(),
 ): Promise<SmartFolderRuntime> {
   const fetchedAt = Date.now();
@@ -220,14 +216,20 @@ async function fetchRuntime(
   }
   const auth = await authFor(host);
 
+  // A queue node always carries a query (it's source-optional only for feeds);
+  // default defensively so the now-optional field stays a total switch.
+  const query: SmartQuery = node.query ?? 'assigned';
+
   let meId: number | null = null;
-  if (node.query === 'review-requested') {
+  if (query === 'review-requested') {
     const me = await resolveMe(node.baseUrl, auth, caches);
     if (me.kind !== 'ok') return fail(me.kind);
     meId = me.id;
   }
 
-  const path = `/api/v4/merge_requests?state=opened&per_page=${RESULTS_CAP}&${queryParams(node.query, meId)}`;
+  // Per-folder cap (rss-connector design D5) — the badge renders `N+` at it, so
+  // the cap is never silent.
+  const path = `/api/v4/merge_requests?state=opened&per_page=${node.maxItems}&${queryParams(query, meId)}`;
   const outcome = await gitlabGet(node.baseUrl, path, auth);
   if (outcome.kind !== 'ok') return fail(outcome.kind);
   if (!Array.isArray(outcome.json)) return fail('error');
@@ -238,7 +240,7 @@ async function fetchRuntime(
       const parsed = MrSchema.safeParse(element);
       return parsed.success ? [parsed.data] : [];
     })
-    .slice(0, RESULTS_CAP);
+    .slice(0, node.maxItems);
 
   // Bounded pipeline enrichment: only for listed items whose list row carries
   // no usable pipeline field; skipped entirely when it does. An enrichment
@@ -270,10 +272,18 @@ async function fetchRuntime(
   return { state: 'ok', items, fetchedAt };
 }
 
+/** The full listing on the instance (rss-connector design D6, "open all in a
+ * tab"): GitLab's cross-project merge-requests dashboard — the canonical
+ * "MRs that involve me" page, independent of the folder's canned query. */
+function listingUrl(node: Pick<SmartFolderNode, 'baseUrl' | 'query'>): string {
+  return `${node.baseUrl}/dashboard/merge_requests`;
+}
+
 /** The GitLab `SourceConnector` — the registry's `gitlab` entry. */
 export const gitlabConnector: SourceConnector = {
   source: 'gitlab',
   defaultBaseUrl: 'https://gitlab.com',
   mintedIcon: 'folder-git-2',
   fetchRuntime,
+  listingUrl,
 };

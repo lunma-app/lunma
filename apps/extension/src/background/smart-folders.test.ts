@@ -72,6 +72,8 @@ function node(overrides: Partial<SmartFolderNode> = {}): SmartFolderNode {
     source: 'gitlab',
     baseUrl: 'https://gitlab.example.com',
     query: 'review-requested',
+    maxItems: 20,
+    hideRead: false,
     refreshMinutes: 10,
     ...overrides,
   };
@@ -126,14 +128,20 @@ describe('normalizeBaseUrl', () => {
 // ── registry dispatch ──────────────────────────────────────────────────────────
 
 describe('the CONNECTORS registry', () => {
-  test('holds exactly the two shipped sources, conforming to the contract', () => {
-    expect(Object.keys(CONNECTORS).sort()).toEqual(['github', 'gitlab']);
+  test('holds exactly the four shipped sources, conforming to the contract', () => {
+    expect(Object.keys(CONNECTORS).sort()).toEqual(['github', 'gitlab', 'jira', 'rss']);
     expect(CONNECTORS.gitlab.source).toBe('gitlab');
     expect(CONNECTORS.gitlab.defaultBaseUrl).toBe('https://gitlab.com');
     expect(CONNECTORS.github.source).toBe('github');
     expect(CONNECTORS.github.defaultBaseUrl).toBe('https://github.com');
+    expect(CONNECTORS.jira.source).toBe('jira');
+    expect(CONNECTORS.jira.defaultBaseUrl).toBe('https://your-site.atlassian.net');
+    expect(CONNECTORS.rss.source).toBe('rss');
+    expect(CONNECTORS.rss.defaultBaseUrl).toBe('');
     expect(CONNECTORS.gitlab.mintedIcon).toBe('folder-git-2');
     expect(CONNECTORS.github.mintedIcon).toBe('folder-git-2');
+    expect(CONNECTORS.jira.mintedIcon).toBe('folder-kanban');
+    expect(CONNECTORS.rss.mintedIcon).toBe('rss');
   });
 
   test('a github folder dispatches through CONNECTORS.github and its result reaches the drain', async () => {
@@ -154,6 +162,30 @@ describe('the CONNECTORS registry', () => {
     // GitLab result rides the drain.
     expect(events).toHaveLength(2);
     expect(events[1]?.payload).toEqual({ folderId: 'sf-gh', runtime });
+  });
+
+  test('a jira folder dispatches through CONNECTORS.jira and its result reaches the drain', async () => {
+    const runtime = { state: 'ok' as const, items: [], fetchedAt: 123 };
+    const jiraFetch = vi.spyOn(CONNECTORS.jira, 'fetchRuntime').mockResolvedValue(runtime);
+    const store = makeStoreWithSmartFolders([]);
+    const events: SmartFoldersResultEvent[] = [];
+    const jiraNode = node({
+      id: 'sf-jira',
+      source: 'jira',
+      baseUrl: 'https://acme.atlassian.net',
+    });
+
+    const { completion } = startSmartFolderRefresh(
+      { store, enqueue: (e) => events.push(e) },
+      jiraNode,
+    );
+    await completion;
+
+    expect(jiraFetch).toHaveBeenCalledWith(jiraNode, undefined);
+    // The pending mark, then the jira connector's result — exactly as a GitLab
+    // or GitHub result rides the drain.
+    expect(events).toHaveLength(2);
+    expect(events[1]?.payload).toEqual({ folderId: 'sf-jira', runtime });
   });
 });
 

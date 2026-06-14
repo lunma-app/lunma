@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { LunmaStore } from '../shared/store.svelte';
 import type { SavedTab, TabBoundary } from '../shared/types';
+import { BoundaryController } from './boundary-controller';
 import { makeCoordinator, sidebar, tabUpdated } from './coordinator.test-helpers';
 
 // Boundary wiring (pinned-tab-domain-boundary): the coordinator injects + pushes
@@ -459,6 +461,114 @@ describe('off-allow divert reuses openUrl', () => {
     expect(chromeStub.tabs.create).toHaveBeenCalledWith({
       url: 'https://evil.test/',
       windowId: 100,
+    });
+  });
+});
+
+// ── configureSmartItemBoundary (smart-tab-boundary) ──────────────────────────
+
+describe('BoundaryController.configureSmartItemBoundary', () => {
+  test('empty allowGlob is a no-op (no inject or send called)', async () => {
+    const chromeStub = installChrome();
+    const store = new LunmaStore();
+    const boundary = new BoundaryController(store);
+
+    await boundary.configureSmartItemBoundary(42, '');
+
+    expect(chromeStub.scripting.executeScript).not.toHaveBeenCalled();
+    expect(chromeStub.tabs.sendMessage).not.toHaveBeenCalled();
+  });
+
+  test('non-empty allowGlob calls injectBoundary then sendBoundaryConfig with [allowGlob]', async () => {
+    const chromeStub = installChrome();
+    const store = new LunmaStore();
+    const boundary = new BoundaryController(store);
+
+    await boundary.configureSmartItemBoundary(42, 'https://gitlab.example.com/mr/42*');
+
+    expect(chromeStub.scripting.executeScript).toHaveBeenCalledWith({
+      target: { tabId: 42 },
+      files: BOUNDARY_FILES,
+    });
+    expect(chromeStub.tabs.sendMessage).toHaveBeenCalledWith(42, {
+      type: 'lunma/boundary-config',
+      allow: ['https://gitlab.example.com/mr/42*'],
+    });
+  });
+
+  test('a thrown error does not propagate', async () => {
+    const chromeStub = installChrome();
+    chromeStub.scripting.executeScript.mockRejectedValueOnce(new Error('injection forbidden'));
+    const store = new LunmaStore();
+    const boundary = new BoundaryController(store);
+
+    await expect(
+      boundary.configureSmartItemBoundary(42, 'https://example.com/page*'),
+    ).resolves.toBeUndefined();
+  });
+});
+
+// ── smart-item boundary re-arm on tabs.onUpdated ─────────────────────────────
+
+describe('smart-item boundary re-arm on tabs.onUpdated', () => {
+  test('tab id matches a slot with non-empty allowGlob → configureSmartItemBoundary called', async () => {
+    const chromeStub = installChrome();
+    const { coordinator, store } = makeCoordinator();
+    store.state.smartItemBindings['sf-1'] = {
+      '42': { 100: { tabId: 7, allowGlob: 'https://gitlab.example.com/mr/42*' } },
+    };
+
+    coordinator.enqueue(tabUpdated(7, { status: 'complete' }));
+    await coordinator.idle();
+
+    expect(chromeStub.scripting.executeScript).toHaveBeenCalledWith({
+      target: { tabId: 7 },
+      files: BOUNDARY_FILES,
+    });
+    expect(chromeStub.tabs.sendMessage).toHaveBeenCalledWith(7, {
+      type: 'lunma/boundary-config',
+      allow: ['https://gitlab.example.com/mr/42*'],
+    });
+  });
+
+  test('slot allowGlob empty → skipped (no inject or send)', async () => {
+    const chromeStub = installChrome();
+    const { coordinator, store } = makeCoordinator();
+    store.state.smartItemBindings['sf-1'] = {
+      '42': { 100: { tabId: 7, allowGlob: '' } },
+    };
+
+    coordinator.enqueue(tabUpdated(7, { status: 'complete' }));
+    await coordinator.idle();
+
+    expect(chromeStub.scripting.executeScript).not.toHaveBeenCalled();
+    expect(chromeStub.tabs.sendMessage).not.toHaveBeenCalled();
+  });
+
+  test('tab id not in any slot → saved-tab path unaffected, smart-item path skipped', async () => {
+    const chromeStub = installChrome();
+    const { coordinator, store } = makeCoordinator();
+    store.state.savedTabs['st-1'] = saved('st-1', 'https://mail.google.com/', {
+      boundary: { mode: 'locked', allow: ['*.google.com'] },
+    });
+    store.state.tabBindings['st-1'] = { 100: 42 };
+    // Smart item binding on a different tab (999), not the updated tab (42).
+    store.state.smartItemBindings['sf-1'] = {
+      '7': { 100: { tabId: 999, allowGlob: 'https://gitlab.example.com/mr/7*' } },
+    };
+
+    coordinator.enqueue(tabUpdated(42, { status: 'complete' }));
+    await coordinator.idle();
+
+    // Only the saved-tab re-arm fires (tab 42 ↔ st-1); the smart-item path is skipped.
+    expect(chromeStub.scripting.executeScript).toHaveBeenCalledTimes(1);
+    expect(chromeStub.scripting.executeScript).toHaveBeenCalledWith({
+      target: { tabId: 42 },
+      files: BOUNDARY_FILES,
+    });
+    expect(chromeStub.tabs.sendMessage).toHaveBeenCalledWith(42, {
+      type: 'lunma/boundary-config',
+      allow: ['*.google.com'],
     });
   });
 });

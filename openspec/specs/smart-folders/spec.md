@@ -3,15 +3,16 @@
 ## Purpose
 
 Live forge work items inside the pinned section. A smart folder is a third
-`PinNode` kind persisting configuration only (`source` — GitLab or GitHub —
-instance `baseUrl`, a canned `query`, `refreshMinutes`, `name`/`icon`); its
-displayed children are ephemeral connector results held in the broadcast-only
+`PinNode` kind persisting configuration only (`source` — GitLab, GitHub, or
+Jira — instance `baseUrl`, a canned `query`, `refreshMinutes`, `name`/`icon`);
+its displayed children are ephemeral connector results held in the broadcast-only
 `smartFolders` slice, never persisted. An alarms-driven background engine polls
 on a per-folder cadence (plus sidebar-open and post-boot refresh kicks),
 dispatching fetches through per-source connector modules behind the
 `SourceConnector` contract — GitLab merge requests over the v4 REST API
 (per-host PAT, else the browser's session cookies), GitHub pull requests over
-the search API (token-only) — resolving failures calmly (`signed-out` /
+the search API (token-only), Jira issues over the GA JQL search API
+(session-riding) — resolving failures calmly (`signed-out` /
 `error` runtime states, never a red error card). Result rows are link-shaped —
 favicon, title, at most one status dot — and activate via the existing
 `openUrl` command. Folders are created and edited from the pinned-header menu
@@ -23,27 +24,29 @@ section.
 A smart folder SHALL persist as a third `PinNode` kind in `pinnedBySpace`:
 `{ kind: 'smart'; id: FolderId; name: string; icon: string; source: SmartSource; baseUrl: string; query: SmartQuery; refreshMinutes: number }`,
 where `SmartQuery` is `'authored' | 'assigned' | 'review-requested'` and
-`SmartSource` is `'gitlab' | 'github'` (widened from the v1 `'gitlab'` literal
-by the `github-connector` change — the cause of the v2→v3 schema bump). The node
-persists **configuration only** — it SHALL NOT carry a `children` field; results
+`SmartSource` is `'gitlab' | 'github' | 'jira'` (widened from the v1 `'gitlab'`
+literal by the `github-connector` change, then to three values by the
+`jira-connector` change — the cause of the v2→v3 and v4→v5 schema bumps). The
+node persists **configuration only** — it SHALL NOT carry a `children` field; results
 are ephemeral runtime state (see Requirement: Smart-folder results are ephemeral
 runtime state). `baseUrl` defaults per source (`https://gitlab.com` /
-`https://github.com`) and SHALL be an
-absolute http(s) URL: the SW SHALL strip any trailing slash on create/update and
-SHALL throw (error ack) when the payload's `baseUrl` does not parse as an
-absolute http(s) URL; the per-host PAT lookup key is `new URL(baseUrl).host`
-(hostname plus any explicit port), and instances served under a subpath are
-supported because every endpoint string-appends to `baseUrl` (the GitHub
-connector's API-root derivation is specified in its own requirement).
-`refreshMinutes` defaults to `10` with a floor of `5` (the SW SHALL clamp lower
-values on create/update); `icon` is minted by the SW on create from the source
-connector's `mintedIcon` — `'folder-git-2'` for both shipped sources (a lucide
-glyph in the curated `ICON_NAMES` list in `shared/icon-names.ts`, with
-`ui/icon-loaders.generated.ts` generated to match; lucide
-ships no GitHub brand glyph, and the instance favicon on every result row
-carries source identity) — persisted so a later change can expose it; the
-editor does not. The smart node orders among pins exactly like
-a `folder` node — it reorders by drag as one unit and round-trips `reorderPinned`
+`https://github.com` / `https://your-site.atlassian.net` — the Jira default is a
+template placeholder the user edits, since Jira Cloud has no universal host) and
+SHALL be an absolute http(s) URL: the SW SHALL strip any trailing slash on
+create/update and SHALL throw (error ack) when the payload's `baseUrl` does not
+parse as an absolute http(s) URL; the per-host token lookup key (where a source
+uses one) is `new URL(baseUrl).host` (hostname plus any explicit port), and
+instances served under a subpath are supported because every endpoint
+string-appends to `baseUrl` (the GitHub connector's API-root derivation is
+specified in its own requirement). `refreshMinutes` defaults to `10` with a
+floor of `5` (the SW SHALL clamp lower values on create/update); `icon` is
+minted by the SW on create from the source connector's `mintedIcon` —
+`'folder-git-2'` for both git forges and `'folder-kanban'` for Jira (each a
+lucide glyph in the curated `ICON_NAMES` list in `shared/icon-names.ts`, with
+`ui/icon-loaders.generated.ts` generated to match; the instance favicon on every
+result row carries source identity) — persisted so a later change can expose it;
+the editor does not. The smart node orders among pins exactly like a `folder`
+node — it reorders by drag as one unit and round-trips `reorderPinned`
 losslessly; its full drag/drop semantics (inert "onto" target, temporary-section
 rejection) are specified in the `spaces-and-tabs` drag requirement — and its
 expand/collapse state rides the existing per-window ephemeral folder-expansion
@@ -75,6 +78,11 @@ mechanism, keyed by node id.
 
 - **WHEN** `createSmartFolder` is dispatched with `source: 'github'` and the SW restarts after the node persists
 - **THEN** the node is restored with `source: 'github'` intact and validates under the current-version schema
+
+#### Scenario: A jira node persists and mints the kanban icon
+
+- **WHEN** `createSmartFolder` is dispatched with `source: 'jira'` and the SW restarts after the node persists
+- **THEN** the node is restored with `source: 'jira'` intact, its `icon` minted `'folder-kanban'`, and validates under the current-version schema
 
 ### Requirement: Smart-folder results are ephemeral runtime state
 
@@ -226,8 +234,8 @@ source-agnostic engine in `apps/extension/src/background/smart-folders.ts`
 (scheduling, due-clocks, the in-flight guard, the state-request and post-boot
 kicks, the `smartFolders.result` event plumbing) SHALL dispatch fetches through
 a closed registry `CONNECTORS: Record<SmartSource, SourceConnector>` holding
-exactly the shipped sources (`gitlab`, `github`) — no plug-in mechanism, no
-speculative members; its `fetchSmartFolderRuntime(node, caches?)` entry point
+exactly the shipped sources (`gitlab`, `github`, `jira`) — no plug-in mechanism,
+no speculative members; its `fetchSmartFolderRuntime(node, caches?)` entry point
 widens its node parameter to `Pick<SmartFolderNode, 'source' | 'baseUrl' | 'query'>`
 (dispatch needs the discriminant). The GitLab implementation
 (`apps/extension/src/background/connectors/gitlab.ts`) is the existing engine
@@ -237,13 +245,18 @@ only mechanical import-path and entry-point call-site changes are permitted.
 
 #### Scenario: A fetch dispatches through the registry by source
 
-- **WHEN** the engine refreshes a folder whose node carries `source: 'github'`
-- **THEN** `CONNECTORS.github.fetchRuntime` performs the fetch and the result event reaches the drain exactly as a GitLab result does
+- **WHEN** the engine refreshes a folder whose node carries `source: 'jira'`
+- **THEN** `CONNECTORS.jira.fetchRuntime` performs the fetch and the result event reaches the drain exactly as a GitLab or GitHub result does
 
 #### Scenario: The GitLab relocation changes no behaviour
 
 - **WHEN** the relocated GitLab connector's pre-existing unit tests run against `connectors/gitlab.ts`
 - **THEN** they pass without assertion changes (import paths aside)
+
+#### Scenario: The registry holds exactly the three shipped sources
+
+- **WHEN** the `CONNECTORS` registry is inspected
+- **THEN** its keys are exactly `gitlab`, `github`, and `jira` — no plug-in mechanism, no speculative members
 
 ### Requirement: The GitHub connector fetches canned queries over the search API
 
@@ -325,6 +338,100 @@ echoed.
 - **WHEN** a poll with a stored token receives a `401`
 - **THEN** the runtime becomes `state: 'signed-out'` with no exception and no error ack anywhere
 
+### Requirement: The Jira connector fetches canned queries over the search/JQL endpoint
+
+The Jira connector (`apps/extension/src/background/connectors/jira.ts`) SHALL
+target **Jira Cloud** (`*.atlassian.net`), issuing one REST `GET` per folder per
+poll against the GA search endpoint
+`GET {baseUrl}/rest/api/3/search/jql?jql={encoded}&fields=summary,status&maxResults=20`
+with `Accept: application/json` (the legacy `/rest/api/3/search` is deprecated by
+Atlassian and SHALL NOT be used; Jira Server/Data Center `/rest/api/2` is out of
+scope for this change). The three canned queries map to JQL — the
+`review-requested` slot is **re-skinned per source** to Jira's `watcher` (its
+editor label is "Watching"; the `SmartQuery` value remains `'review-requested'`):
+
+- `authored` → `reporter = currentUser() AND statusCategory != Done ORDER BY updated DESC`
+- `assigned` → `assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC`
+- `review-requested` → `watcher = currentUser() AND statusCategory != Done ORDER BY updated DESC`
+
+`currentUser()` resolves server-side under the session, so the Jira connector
+performs **NO me-resolution request** (and uses no `ConnectorCaches`). Results
+SHALL cap at 20 items (the badge renders `20+` when the page is full). Each issue
+maps to `SmartFolderItem` with `id` from the issue id, `url` set to
+`{baseUrl}/browse/{key}`, and `title` set to `{key} {summary}` — the issue key
+prefixes the summary (GitHub's `Draft: ` precedent: a per-source normalization
+restoring the at-a-glance anchor, since Jira issues are identified by key).
+Parsing SHALL be element-wise (one malformed issue never costs the rest of the
+list). Status SHALL be taken **inline** from `fields.status.statusCategory.key`
+with no enrichment request: `indeterminate` (In Progress) → `pending`
+("In progress"); `done` → `ok` ("Done"); `new` (To Do) and any unmapped/absent
+key → no `status` (no glyph — absence over guessing). Because every canned JQL
+excludes `statusCategory = Done`, the live signal is In Progress vs backlog; the
+`done` → `ok` branch is defensive.
+
+#### Scenario: An assigned folder lists my open issues over the GA endpoint
+
+- **GIVEN** a `jira` smart folder with `query: 'assigned'` on a logged-in `*.atlassian.net` site
+- **WHEN** the connector polls
+- **THEN** it requests `{baseUrl}/rest/api/3/search/jql?jql=assignee%20%3D%20currentUser()%20AND%20statusCategory%20!%3D%20Done%20ORDER%20BY%20updated%20DESC&fields=summary,status&maxResults=20` with no me-resolution call, and the runtime becomes `ok` with one item per returned issue
+
+#### Scenario: The watching slot re-skins review-requested to JQL watcher
+
+- **GIVEN** a `jira` folder whose `query` value is `'review-requested'`
+- **WHEN** the connector builds its request
+- **THEN** the JQL filters `watcher = currentUser()` (not any review concept), while the persisted `SmartQuery` value stays `'review-requested'`
+
+#### Scenario: An issue row leads with its key and links to browse
+
+- **WHEN** the connector normalizes an issue with `key: 'PROJ-123'` and `fields.summary: 'Fix the export'`
+- **THEN** the item's `title` is `PROJ-123 Fix the export` and its `url` is `{baseUrl}/browse/PROJ-123`
+
+#### Scenario: statusCategory maps to one tone, inline
+
+- **WHEN** an issue's `fields.status.statusCategory.key` is `indeterminate`
+- **THEN** its item carries `status.tone: 'pending'` with the label "In progress"
+- **AND** an issue whose category is `new` carries no `status`
+- **AND** no per-item follow-up request is issued to resolve status
+
+### Requirement: Jira connector auth is session-riding only
+
+The Jira connector SHALL authenticate exclusively by riding the browser's
+existing `*.atlassian.net` session: every request is sent with
+`credentials: 'include'` and **no** `Authorization` header. It SHALL NOT read,
+write, or depend on the `lunma.connectors` token record, and there is **no PAT
+or Basic-auth rung** (this is the cookie sub-path of the connector-auth strategy,
+chosen with no token). The manifest's `host_permissions: <all_urls>` already
+exempts these SW fetches from CORS and SameSite (no manifest change, no
+`cookies` permission), and the connector issues only GETs, so Jira's write-path
+XSRF token (`X-Atlassian-Token`) does not apply. Signed-out detection SHALL be
+response-shape-based and non-throwing — ported from the GitLab connector and
+kept inside the Jira module (it SHALL NOT leak to other connectors): a `401`, a
+redirect landing on a non-JSON (atlassian login) document, or any non-JSON body
+SHALL resolve `state: 'signed-out'`; network errors, timeouts, and 5xx/429
+resolve `state: 'error'`; any other non-2xx resolves `state: 'error'`. Every
+request SHALL carry the bounded timeout via the shared `boundedFetch` helper so
+a hung connection resolves to `error` rather than wedging the folder in
+`pending`. The connector SHALL NOT prompt, retry-loop, or surface an exception
+for auth failures.
+
+#### Scenario: A logged-in poll rides the session cookies
+
+- **GIVEN** a browser logged into the folder's `*.atlassian.net` site and no stored token of any kind
+- **WHEN** the Jira connector polls
+- **THEN** the request is sent with `credentials: 'include'` and no `Authorization` header
+- **AND** `lunma.connectors` is not read
+
+#### Scenario: A login redirect resolves to signed-out, calmly
+
+- **WHEN** a poll receives a `401` or a redirect to a non-JSON atlassian login document
+- **THEN** the runtime becomes `state: 'signed-out'` with no exception thrown and no error ack anywhere
+
+#### Scenario: A hung connection resolves bounded, never an eternal pending
+
+- **WHEN** a poll's request hangs
+- **THEN** the bounded timeout aborts it and the runtime resolves to `state: 'error'`
+- **AND** the folder's in-flight guard clears, so the next due poll retries
+
 ### Requirement: Polling and refresh scheduling
 
 The SW SHALL maintain a single repeating alarm (`lunma/smart-folders-poll`)
@@ -368,6 +475,100 @@ folder unconditionally.
 - **THEN** the post-boot refresh-due check refetches every folder (all are due — the runtime slice was wiped)
 - **AND** the open sidebar's results heal within the fetch round-trip, not the alarm cadence
 
+### Requirement: Smart-item bindings give results pinned-tab activation
+
+`smartItemBindings` is typed as `{ [folderId: FolderId]: { [itemId: string]: { [windowId: WindowId]: { tabId: TabId; allowGlob: string } } } }` in `AppState` and persisted at schema v7 (raised by this change from v6). Each slot stores the bound tab id **and** the `pageGlob(itemUrl)` computed at open time so the boundary can be re-armed without the ephemeral runtime slice being populated (design D1).
+
+On `openSmartItem`, after the tab is created and bound via `store.bindSmartItem(folderId, itemId, windowId, tabId, allowGlob)`, the SW SHALL arm the boundary content script on the new tab as a side effect: `ctx.boundary.configureSmartItemBoundary(tabId, allowGlob)`. The `allowGlob` SHALL be `pageGlob(item.url)` — `origin + pathname + '*'` — so every sub-path and query-string variation of the item URL stays in-tab, and any off-prefix click opens a new temp tab instead.
+
+The `tabs.onRemoved` unbind behaviour, the `dropSmartFolderBindings` demote-on-folder-delete behaviour, and the `isBound` tab-created guard are unchanged except that every slot read/write must use the `{ tabId, allowGlob }` shape.
+
+#### Scenario: Opening a dormant smart item arms the boundary
+
+- **GIVEN** a smart folder with a runtime item `{ id: '42', url: 'https://gitlab.example.com/proj/-/merge_requests/42', ... }` in window 100 with no existing binding
+- **WHEN** `openSmartItem { folderId, itemId: '42', windowId: 100, spaceId }` is dispatched
+- **THEN** a tab opens at the item's URL, joins the Space's Chrome group, and is bound under `smartItemBindings[folderId]['42'][100]` as `{ tabId: <new>, allowGlob: 'https://gitlab.example.com/proj/-/merge_requests/42*' }`
+- **AND** the boundary content script SHALL be injected into the tab and configured with `allow: ['https://gitlab.example.com/proj/-/merge_requests/42*']`
+
+#### Scenario: Clicking an off-prefix link in a smart tab opens a temp tab
+
+- **GIVEN** a smart item tab bound to `https://gitlab.example.com/proj/-/merge_requests/42` with allowGlob `https://gitlab.example.com/proj/-/merge_requests/42*`
+- **WHEN** the user clicks a link to `https://gitlab.example.com/proj/-/merge_requests/` (the MR list) inside the smart tab
+- **THEN** the boundary content script SHALL intercept the click and open the link in a new temp tab
+- **AND** the smart item tab SHALL remain on its current URL and stay bound
+
+#### Scenario: In-prefix link navigation stays in the smart tab
+
+- **GIVEN** the same smart item tab
+- **WHEN** the user clicks a link to `https://gitlab.example.com/proj/-/merge_requests/42/diffs`
+- **THEN** the browser navigates the smart tab to the diffs view (within the `42*` prefix)
+- **AND** the smart item tab remains bound
+
+### Requirement: Smart-item boundary re-arms on page load
+
+After any page load in a smart item bound tab (`tabs.onUpdated` with `status: 'complete'`), the SW SHALL re-arm the boundary content script using the slot's stored `allowGlob`. This mirrors the existing saved-tab re-arm path in the `tabs.onUpdated` handler. The re-arm SHALL be floated as a side effect (same as saved tabs) to avoid blocking the drain's persist+broadcast.
+
+If the slot's `allowGlob` is empty (a pre-migration slot that was bound before this change deployed), the re-arm SHALL be skipped for that slot — it degrades to the v1 no-boundary behaviour until the user next opens that item.
+
+#### Scenario: Reloading a smart tab re-arms the boundary
+
+- **GIVEN** a smart item tab whose `allowGlob` is `'https://gitlab.example.com/proj/-/merge_requests/42*'`
+- **WHEN** `tabs.onUpdated { status: 'complete' }` fires for that tab
+- **THEN** the SW SHALL float `ctx.boundary.configureSmartItemBoundary(tabId, allowGlob)` as a side effect
+- **AND** the boundary content script SHALL be (re-)injected and armed with the original allow-set
+
+### Requirement: Boot re-arm covers smart item tabs
+
+`BoundaryController.refreshBoundTabBoundaries` SHALL iterate `store.state.smartItemBindings` in addition to `store.state.tabBindings` and call `configureSmartItemBoundary(tabId, slot.allowGlob)` for every slot whose `allowGlob` is non-empty. This ensures smart item tabs that were open when the SW restarted regain their boundary enforcement on boot without requiring the smart folder runtime to be populated first.
+
+#### Scenario: Boot re-arm covers a smart item tab with a stored glob
+
+- **GIVEN** a persisted `smartItemBindings` slot `{ tabId: 500, allowGlob: 'https://jira.example.com/browse/PROJ-1*' }`
+- **WHEN** the SW boots and calls `refreshBoundTabBoundaries`
+- **THEN** `configureSmartItemBoundary(500, 'https://jira.example.com/browse/PROJ-1*')` SHALL be called for that slot
+- **AND** the smart item tab SHALL have its boundary content script injected and armed
+
+### Requirement: `BoundaryController.configureSmartItemBoundary`
+
+`BoundaryController` SHALL expose a method `configureSmartItemBoundary(tabId: TabId, allowGlob: string): Promise<void>` that:
+- Returns immediately (no-op) when `allowGlob` is empty.
+- Calls `await injectBoundary(tabId)` to ensure the content script is present.
+- Calls `sendBoundaryConfig(tabId, [allowGlob])` to arm the script with the single-pattern allow-set.
+- Never throws — a forbidden page or closed receiver is benign, same as `configureBoundary`.
+
+This method is the only new surface on `BoundaryController`; all other boundary methods and the `effectiveBoundaryDefault` logic are unchanged.
+
+#### Scenario: First activation opens a bound, non-temporary tab
+
+- **GIVEN** an expanded smart folder listing item `42` with no binding in window 100
+- **WHEN** the user activates the row
+- **THEN** a tab opens at the item's URL, joins the Space's Chrome group, and is bound under `smartItemBindings[folderId]['42'][100]`
+- **AND** the tab never appears in the Temporary list
+
+#### Scenario: Re-activation focuses instead of reopening
+
+- **GIVEN** item `42` bound to tab 7 in window 100
+- **WHEN** the user activates the row again
+- **THEN** tab 7 is focused and no new tab is created
+
+#### Scenario: An SW restart keeps the binding
+
+- **GIVEN** item `42` bound to tab 7
+- **WHEN** the SW restarts and boot recovery runs while tab 7 is still open
+- **THEN** the binding survives (ids persisted) and tab 7 stays out of Temporary
+
+#### Scenario: Deleting the folder demotes bound tabs to Temporary
+
+- **GIVEN** a smart folder with two bound live tabs
+- **WHEN** the user deletes the folder
+- **THEN** no tab closes, both bindings drop, and both tabs appear in the Temporary list
+
+#### Scenario: Closing the tab unbinds
+
+- **GIVEN** item `42` bound to tab 7
+- **WHEN** tab 7 closes (the row's ✕ or Chrome's own close)
+- **THEN** the binding drops and the row returns to its plain (or evaporates if held)
+
 ### Requirement: Smart-folder rendering and the one-glyph restraint
 
 The sidebar SHALL render a smart node as a smart folder, implemented as the
@@ -390,14 +591,23 @@ existing semantic tokens (`ok → --success`, `fail → --danger`,
 `warn → --warning`, `pending → --info`) — identical at every tint level. The
 full status phrase (pipeline state plus any secondary facts) SHALL live in the
 row's `Tooltip` and ARIA label, never as additional visible glyphs or text —
-colour SHALL NOT be the only carrier of the status meaning. Result rows are
-activate-only: click dispatches the existing `openUrl { url, windowId }`; rows
-SHALL NOT drag, reorder, rename, or close. The folder's kebab/right-click menu
+colour SHALL NOT be the only carrier of the status meaning. Result rows
+SHALL activate like pinned tabs (reversing the v1 link-shaped decision —
+made before the click-spam cost was lived with): click dispatches
+`openSmartItem { spaceId, folderId, itemId, windowId }` — open-if-dormant,
+focus-if-bound (the binding lifecycle is owned by Requirement: Smart-item
+bindings give results pinned-tab activation). A bound row SHALL take the
+`TabRow` selection grammar — the `--space-c-soft` active wash when its bound
+tab is the window's focused tab — and a hover ✕ at the trailing slot
+dispatching the existing `closeTab` for its bound tab (the status dot
+returns on mouse-out; the full phrase stays in the `Tooltip`/ARIA label).
+Rows SHALL NOT drag, reorder, or rename. The folder's kebab/right-click menu
 SHALL carry **Refresh now**, **Edit…**, **Move up** / **Move down** (the
 keyboard-reachable reorder pair every pinned row carries — disabled at the
 respective end of the top-level list, dispatching the full-tree
 `reorderPinned`), and **Delete** (no two-step confirm — deleting a smart folder
-destroys only its own recreatable config and closes no tabs). Under `prefers-reduced-motion` the in-flight refresh indicator SHALL NOT
+destroys only its own recreatable config and closes no tabs; its bound tabs
+demote to Temporary per the binding requirement). Under `prefers-reduced-motion` the in-flight refresh indicator SHALL NOT
 rotate (a static dimmed treatment) and item-set changes SHALL swap instantly
 with an identical end state.
 
@@ -407,11 +617,17 @@ with an identical end state.
 - **WHEN** the folder is expanded
 - **THEN** each row shows favicon + title + at most one status dot, with the full status text in the tooltip/ARIA label
 
-#### Scenario: Activating a row opens the MR
+#### Scenario: Activating a row opens the MR as a bound tab
 
-- **WHEN** the user clicks a result row whose `url` is `https://gitlab.example.com/g/p/-/merge_requests/42`
-- **THEN** the sidebar dispatches `openUrl` with that url and the window id
-- **AND** no `SavedTab` record is created and no binding occurs
+- **WHEN** the user clicks a result row for item `42`
+- **THEN** the sidebar dispatches `openSmartItem` with the folder id, item id, and window id
+- **AND** the first activation opens a bound tab and a re-activation focuses it — no `SavedTab` record is created and no Temporary entry appears
+
+#### Scenario: A bound row reads bound
+
+- **GIVEN** an item whose bound tab is the window's focused tab
+- **WHEN** the folder renders
+- **THEN** the row carries the active selection wash, and hovering reveals a ✕ that closes the bound tab via `closeTab`
 
 #### Scenario: The count badge reflects the cap honestly
 
@@ -423,14 +639,14 @@ with an identical end state.
 
 A smart folder's non-`ok` runtime states SHALL render quietly, never as a red
 error card: `signed-out` → a single muted row whose copy and activation are
-**per source** — a GitLab folder renders "Sign in to ⟨host⟩" dispatching
-`openUrl` with the folder's `baseUrl` (the next due poll heals after sign-in);
-a GitHub folder renders "Add a token in Settings → Connectors" opening the
-options page at its Connectors anchor via the sidebar's established options
-deep-link (`openOptionsAt('#connectors')` from `sidebar/open-options.ts` —
-App.svelte's helper extracted; NOT `openUrl`, whose handler's scheme hardening
-deliberately drops non-http(s) URLs and stays untouched — there is no session
-to sign in to, the fix is the token);
+**per source** — a GitLab **or Jira** folder renders "Sign in to ⟨host⟩"
+dispatching `openUrl` with the folder's `baseUrl` (both ride a browser session,
+so the next due poll heals after sign-in); a GitHub folder renders "Add a token
+in Settings → Connectors" opening the options page at its Connectors anchor via
+the sidebar's established options deep-link (`openOptionsAt('#connectors')` from
+`sidebar/open-options.ts` — App.svelte's helper; NOT `openUrl`, whose handler's
+scheme hardening deliberately drops non-http(s) URLs and stays untouched — there
+is no session to sign in to, the fix is the token);
 `error` → the last-known items remain rendered with one
 dim note row ("Couldn't reach ⟨host⟩") at the list end; first-fetch `pending`
 (no items yet) → three static low-alpha ghost rows (no shimmer, no strobe).
@@ -439,8 +655,13 @@ carries an empty runtime slice — the sidebar SHALL keep rendering the folder's
 last-shown items from component memory (held in the sidebar only, never
 persisted), activatable throughout, with only the refresh indicator marking the
 reload; ghost rows render only when nothing has ever been shown, and an honest
-`ok`-empty result clears the hold (stale items are never resurrected). No
-failure state SHALL produce a rejected command ack, a toast, or a notification.
+`ok`-empty result clears the hold (stale items are never resurrected) —
+**except items whose smart-item binding is live**: open work holds its row.
+An item that drops out of the latest results while its bound tab is open
+SHALL keep rendering from component memory (same anatomy, same dot rules)
+until its binding drops, at which point the row evaporates on the next
+render. No failure state SHALL produce a rejected command ack, a toast, or a
+notification.
 
 #### Scenario: Signed-out shows the sign-in row
 
@@ -448,6 +669,12 @@ failure state SHALL produce a rejected command ack, a toast, or a notification.
 - **WHEN** the folder is expanded
 - **THEN** it renders one "Sign in to gitlab.example.com" row and no ghost/error rows
 - **AND** activating it opens the instance via `openUrl`
+
+#### Scenario: A signed-out Jira folder shows the sign-in row
+
+- **GIVEN** a `jira` folder on `acme.atlassian.net` whose runtime is `signed-out`
+- **WHEN** the folder is expanded
+- **THEN** it renders one "Sign in to acme.atlassian.net" row and activating it opens the instance via `openUrl` (never the token/options path — Jira has no token)
 
 #### Scenario: A token-less GitHub folder points at Connectors
 
@@ -474,6 +701,13 @@ failure state SHALL produce a rejected command ack, a toast, or a notification.
 - **THEN** the 5 last-shown items remain rendered and activatable, with the refresh indicator spinning
 - **AND** no ghost rows appear until/unless the folder has never shown items
 
+#### Scenario: Open work holds its row
+
+- **GIVEN** an item bound to an open tab
+- **WHEN** the next `ok` poll no longer lists that item (the PR merged, or the folder's query changed)
+- **THEN** the row keeps rendering with its bound treatment
+- **AND** when the bound tab closes, the row evaporates on the next render
+
 ### Requirement: Creation and configuration via the pinned-header menu
 
 The pinned-section header kebab (`RowMenu`) SHALL carry a "New smart folder…"
@@ -483,17 +717,18 @@ entry alongside the existing "New folder". Both it and the smart folder's
 existing `panel`/`panelTitle` drill-in — back-arrow header; Edit… reaches it
 through `FolderRow`'s forwarded panel, and the right-click `ContextMenu` path
 drills into the same editor component) whose fields are: **source** (a
-two-option control, GitLab | GitHub, ABOVE the base-URL field), instance base
-URL (text, defaulting per source — `https://gitlab.com` / `https://github.com`
-— with a source switch swapping the value whenever it currently equals either
-source's canonical default, so an untouched create-mode field and an
-on-default edit-mode folder both follow the switch while a custom/self-hosted
-URL is never clobbered),
-query (a three-option control for
-`authored | assigned | review-requested`), refresh cadence (the enum 5 / 10 /
-30 / 60 minutes), and name (text, auto-suggested per source from the chosen
-query — e.g. `authored` suggests "My merge requests" for GitLab and "My pull
-requests" for GitHub). Confirming
+three-option control, GitLab | GitHub | Jira, ABOVE the base-URL field),
+instance base URL (text, defaulting per source — `https://gitlab.com` /
+`https://github.com` / `https://your-site.atlassian.net` — with a source switch
+swapping the value whenever it currently equals any source's canonical default,
+so an untouched create-mode field and an on-default edit-mode folder both follow
+the switch while a custom/self-hosted URL is never clobbered),
+query (a three-option control whose third slot's **label is source-aware** —
+"Watching" when Jira is selected, "Review" otherwise — over the unchanged
+`SmartQuery` values `authored | assigned | review-requested`), refresh cadence
+(the enum 5 / 10 / 30 / 60 minutes), and name (text, auto-suggested per source
+from the chosen query — e.g. `authored` suggests "My merge requests" for GitLab,
+"My pull requests" for GitHub, "My reported issues" for Jira). Confirming
 dispatches `createSmartFolder` (or `updateSmartFolder`), both carrying the
 chosen `source`, and SHALL dismiss the **hosting menu entirely** — the header
 kebab's morph in create mode, and the row kebab's `RowMenu` morph or the
@@ -501,11 +736,11 @@ right-click `ContextMenu` in edit mode — never merely the drill-in: the
 editor's `onDone` contract is that the host closes its menu, with `FolderRow`
 exposing its menu-open state as a bindable pass-through for this purpose
 (outside-click and Escape dismissal are unchanged). The editor's token hint
-is per source — GitLab: an access
-token can optionally be added in Settings → Connectors; GitHub: a token is
-required ("GitHub needs an access token — add one in Settings → Connectors").
-A `baseUrl`, `query`, **or `source`** change on an existing folder SHALL
-trigger an immediate refetch.
+is per source — GitLab: an access token can optionally be added in Settings →
+Connectors; GitHub: a token is required ("GitHub needs an access token — add one
+in Settings → Connectors"); Jira: a session-only line, no token
+("Signed in to Jira in this browser? That's enough."). A `baseUrl`, `query`,
+**or `source`** change on an existing folder SHALL trigger an immediate refetch.
 
 #### Scenario: Creating a review-requests folder from the header menu
 
@@ -527,6 +762,12 @@ trigger an immediate refetch.
 - **THEN** the base URL reads `https://github.com` and the suggested name follows GitHub's vocabulary
 - **AND** the hint states that GitHub needs an access token in Settings → Connectors
 
+#### Scenario: Picking Jira swaps the defaults and the third-slot label
+
+- **WHEN** the user opens "New smart folder…" and switches the source to Jira without having touched the URL or name fields
+- **THEN** the base URL reads `https://your-site.atlassian.net`, the suggested name follows Jira's vocabulary ("My reported issues"), and the query control's third slot reads "Watching"
+- **AND** the hint states that being signed into Jira in this browser is enough (no token)
+
 #### Scenario: Editing the query refetches immediately
 
 - **GIVEN** an existing smart folder with `query: 'assigned'`
@@ -536,8 +777,8 @@ trigger an immediate refetch.
 #### Scenario: Editing the source refetches immediately
 
 - **GIVEN** an existing `gitlab` folder
-- **WHEN** the user edits its source to GitHub and confirms
-- **THEN** `updateSmartFolder` carries `source: 'github'` and the folder refetches without waiting for its cadence
+- **WHEN** the user edits its source to Jira and confirms
+- **THEN** `updateSmartFolder` carries `source: 'jira'` and the folder refetches without waiting for its cadence
 
 ### Requirement: Connectors section in the options page
 

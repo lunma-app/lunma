@@ -302,6 +302,7 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
       name: 'Review requests',
       baseUrl: 'https://gitlab.example.com',
       query: 'review-requested',
+      maxItems: 20,
       refreshMinutes: 10,
     },
   },
@@ -314,11 +315,28 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
       name: 'Assigned to me',
       baseUrl: 'https://github.com',
       query: 'assigned',
+      maxItems: 30,
       refreshMinutes: 30,
     },
   },
   deleteSmartFolder: { kind: 'deleteSmartFolder', payload: { spaceId: 'sp', folderId: 'sf' } },
   refreshSmartFolder: { kind: 'refreshSmartFolder', payload: { spaceId: 'sp', folderId: 'sf' } },
+  markSmartItemRead: {
+    kind: 'markSmartItemRead',
+    payload: { folderId: 'sf', itemId: '42' },
+  },
+  markAllSmartItemsRead: {
+    kind: 'markAllSmartItemsRead',
+    payload: { spaceId: 'sp', folderId: 'sf' },
+  },
+  setSmartFolderHideRead: {
+    kind: 'setSmartFolderHideRead',
+    payload: { spaceId: 'sp', folderId: 'sf', hideRead: true },
+  },
+  openSmartFolderListing: {
+    kind: 'openSmartFolderListing',
+    payload: { spaceId: 'sp', folderId: 'sf', windowId: 1 },
+  },
   openSmartItem: {
     kind: 'openSmartItem',
     payload: { spaceId: 'sp', folderId: 'sf', itemId: '42', windowId: 1 },
@@ -368,6 +386,13 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
           lastActivatedSpaceId: null,
         },
       },
+    },
+  },
+  importOpml: {
+    kind: 'importOpml',
+    payload: {
+      spaceId: 'sp',
+      feeds: [{ name: 'HN', feedUrl: 'https://hnrss.org/frontpage' }],
     },
   },
 };
@@ -488,6 +513,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
           name: 'X',
           baseUrl: 'https://gitlab.com',
           query: 'merged-by-me', // not in the canned enum
+          maxItems: 20,
           refreshMinutes: 10,
         },
       }).success,
@@ -528,7 +554,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     expect(parsed.success).toBe(false);
   });
 
-  test('createSmartFolder and updateSmartFolder round-trip with each source', () => {
+  test('createSmartFolder and updateSmartFolder round-trip with each queue source', () => {
     for (const source of ['gitlab', 'github', 'jira'] as const) {
       const create = {
         kind: 'createSmartFolder',
@@ -538,6 +564,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
           name: 'X',
           baseUrl: 'https://forge.example.com',
           query: 'authored',
+          maxItems: 20,
           refreshMinutes: 10,
         },
       };
@@ -554,6 +581,23 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     }
   });
 
+  test('an rss createSmartFolder round-trips with no query (feed source, rss-connector D2)', () => {
+    const create = {
+      kind: 'createSmartFolder',
+      payload: {
+        spaceId: 'sp',
+        source: 'rss',
+        name: 'Hacker News',
+        baseUrl: 'https://news.ycombinator.com/rss',
+        maxItems: 30,
+        refreshMinutes: 30,
+      },
+    };
+    const parsed = SidebarCommandSchema.safeParse(create);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data).toEqual(create);
+  });
+
   test('rejects an out-of-vocabulary smart-folder source', () => {
     for (const kind of ['createSmartFolder', 'updateSmartFolder'] as const) {
       expect(
@@ -566,6 +610,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
             name: 'X',
             baseUrl: 'https://bitbucket.example.com',
             query: 'authored',
+            maxItems: 20,
             refreshMinutes: 10,
           },
         }).success,
@@ -583,6 +628,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
           name: 'X',
           baseUrl: 'https://gitlab.com',
           query: 'authored',
+          maxItems: 20,
           refreshMinutes: 10,
         },
       }).success,
@@ -601,6 +647,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
           name: 'X',
           baseUrl: 'https://gitlab.com',
           query: 'authored',
+          maxItems: 20,
           refreshMinutes: 10,
         },
       }).success,
@@ -617,6 +664,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
           name: 'X',
           baseUrl: 'https://gitlab.com',
           query: 'authored',
+          maxItems: 20,
           refreshMinutes: 10,
         },
       }).success,
@@ -632,6 +680,8 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
       source: 'gitlab',
       baseUrl: 'https://gitlab.example.com',
       query: 'review-requested',
+      maxItems: 20,
+      hideRead: false,
       refreshMinutes: 5,
     };
     const cmd = {
@@ -664,6 +714,8 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
             source: 'github',
             baseUrl: 'https://github.com',
             query: 'authored',
+            maxItems: 20,
+            hideRead: false,
             refreshMinutes: 10,
           },
         ],
@@ -688,7 +740,34 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
             source: 'jira',
             baseUrl: 'https://acme.atlassian.net',
             query: 'authored',
+            maxItems: 20,
+            hideRead: false,
             refreshMinutes: 10,
+          },
+        ],
+      },
+    };
+    const parsed = SidebarCommandSchema.safeParse(cmd);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data).toEqual(cmd);
+  });
+
+  test('a reorderPinned tree containing an rss smart node (no query) round-trips losslessly', () => {
+    const cmd = {
+      kind: 'reorderPinned',
+      payload: {
+        spaceId: 'sp',
+        nodes: [
+          {
+            kind: 'smart',
+            id: 'feed-1',
+            name: 'Hacker News',
+            icon: 'rss',
+            source: 'rss',
+            baseUrl: 'https://news.ycombinator.com/rss',
+            maxItems: 30,
+            hideRead: true,
+            refreshMinutes: 30,
           },
         ],
       },

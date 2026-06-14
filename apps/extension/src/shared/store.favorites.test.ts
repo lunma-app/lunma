@@ -65,15 +65,15 @@ describe('LunmaStore decouple/couple (favicon-row-model)', () => {
   test('moveSavedTabToFavorites decouples a pinned tab to a global favorite', () => {
     const store = makeStore();
     const space = seedSpace(store);
-    store.state.savedTabs['t1'] = savedTab({ id: 't1', spaceId: space.id });
+    store.state.savedTabs.t1 = savedTab({ id: 't1', spaceId: space.id });
     seedSaved(store, 't2');
-    store.state.savedTabs['t2'] = savedTab({ id: 't2', spaceId: space.id });
+    store.state.savedTabs.t2 = savedTab({ id: 't2', spaceId: space.id });
     store.setPinned(space.id, tabs('t1', 't2'));
 
     store.moveSavedTabToFavorites('t1');
 
     // spaceId flips to null, the record leaves pinnedBySpace and enters faviconRow.
-    expect(store.state.savedTabs['t1']?.spaceId).toBeNull();
+    expect(store.state.savedTabs.t1?.spaceId).toBeNull();
     expect(store.state.pinnedBySpace[space.id]).toEqual(tabs('t2'));
     expect(store.state.faviconRow).toEqual(['t1']);
   });
@@ -81,7 +81,7 @@ describe('LunmaStore decouple/couple (favicon-row-model)', () => {
   test('moveSavedTabToFavorites keeps exactly one placement (no duplicate)', () => {
     const store = makeStore();
     const space = seedSpace(store);
-    store.state.savedTabs['t1'] = savedTab({ id: 't1', spaceId: space.id });
+    store.state.savedTabs.t1 = savedTab({ id: 't1', spaceId: space.id });
     store.setPinned(space.id, tabs('t1'));
     store.moveSavedTabToFavorites('t1');
     const inPinned = (store.state.pinnedBySpace[space.id] ?? []).some(
@@ -93,24 +93,24 @@ describe('LunmaStore decouple/couple (favicon-row-model)', () => {
 
   test('moveSavedTabToFavorites is an idempotent no-op when already a favorite', () => {
     const store = makeStore();
-    store.state.savedTabs['f1'] = savedTab({ id: 'f1', spaceId: null });
+    store.state.savedTabs.f1 = savedTab({ id: 'f1', spaceId: null });
     store.state.faviconRow = ['f1'];
     store.moveSavedTabToFavorites('f1');
-    expect(store.state.savedTabs['f1']?.spaceId).toBeNull();
+    expect(store.state.savedTabs.f1?.spaceId).toBeNull();
     expect(store.state.faviconRow).toEqual(['f1']);
   });
 
   test('moveSavedTabToSpace couples a favorite into a Space at the index', () => {
     const store = makeStore();
     const space = seedSpace(store);
-    store.state.savedTabs['f1'] = savedTab({ id: 'f1', spaceId: null });
-    store.state.savedTabs['p1'] = savedTab({ id: 'p1', spaceId: space.id });
+    store.state.savedTabs.f1 = savedTab({ id: 'f1', spaceId: null });
+    store.state.savedTabs.p1 = savedTab({ id: 'p1', spaceId: space.id });
     store.state.faviconRow = ['f1'];
     store.setPinned(space.id, tabs('p1'));
 
     store.moveSavedTabToSpace('f1', space.id, 0);
 
-    expect(store.state.savedTabs['f1']?.spaceId).toBe(space.id);
+    expect(store.state.savedTabs.f1?.spaceId).toBe(space.id);
     expect(store.state.faviconRow).toEqual([]);
     expect(store.state.pinnedBySpace[space.id]).toEqual(tabs('f1', 'p1'));
   });
@@ -118,15 +118,15 @@ describe('LunmaStore decouple/couple (favicon-row-model)', () => {
   test('couple then decouple round-trips placement and spaceId', () => {
     const store = makeStore();
     const space = seedSpace(store);
-    store.state.savedTabs['f1'] = savedTab({ id: 'f1', spaceId: null });
+    store.state.savedTabs.f1 = savedTab({ id: 'f1', spaceId: null });
     store.state.faviconRow = ['f1'];
 
     store.moveSavedTabToSpace('f1', space.id, 0);
-    expect(store.state.savedTabs['f1']?.spaceId).toBe(space.id);
+    expect(store.state.savedTabs.f1?.spaceId).toBe(space.id);
     expect(store.state.faviconRow).toEqual([]);
 
     store.moveSavedTabToFavorites('f1');
-    expect(store.state.savedTabs['f1']?.spaceId).toBeNull();
+    expect(store.state.savedTabs.f1?.spaceId).toBeNull();
     expect(store.state.faviconRow).toEqual(['f1']);
     expect(store.state.pinnedBySpace[space.id]).toEqual([]);
   });
@@ -144,15 +144,15 @@ describe('LunmaStore decouple/couple (favicon-row-model)', () => {
 describe('LunmaStore.removeSavedTab cleans faviconRow', () => {
   test('drops a favorite from faviconRow and savedTabs with no dangling id', () => {
     const store = makeStore();
-    store.state.savedTabs['f1'] = savedTab({ id: 'f1', spaceId: null });
-    store.state.savedTabs['f2'] = savedTab({ id: 'f2', spaceId: null });
-    store.state.tabBindings['f1'] = { 100: 42 };
+    store.state.savedTabs.f1 = savedTab({ id: 'f1', spaceId: null });
+    store.state.savedTabs.f2 = savedTab({ id: 'f2', spaceId: null });
+    store.state.tabBindings.f1 = { 100: 42 };
     store.state.faviconRow = ['f1', 'f2'];
 
     store.removeSavedTab('f1');
 
-    expect(store.state.savedTabs['f1']).toBeUndefined();
-    expect(store.state.tabBindings['f1']).toBeUndefined();
+    expect(store.state.savedTabs.f1).toBeUndefined();
+    expect(store.state.tabBindings.f1).toBeUndefined();
     expect(store.state.faviconRow).toEqual(['f2']);
   });
 });
@@ -162,7 +162,7 @@ describe('LunmaStore.registerSavedTab accepts a null-Space favorite', () => {
     const store = makeStore();
     const fav = savedTab({ id: 'f1', spaceId: null });
     store.registerSavedTab(fav);
-    expect(store.state.savedTabs['f1']?.spaceId).toBeNull();
-    expect(store.state.tabBindings['f1']).toEqual({});
+    expect(store.state.savedTabs.f1?.spaceId).toBeNull();
+    expect(store.state.tabBindings.f1).toEqual({});
   });
 });

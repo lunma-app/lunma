@@ -90,6 +90,67 @@ export async function runRestartRecovery(): Promise<void> {
     }
   }
 
+  pruneSmartItemBindings(windowByTabId);
+
   if (Object.keys(resolved).length === 0) return;
   store.applyRestartRecovery(resolved);
+}
+
+/**
+ * Boot pruning for smart-item bindings (smart-folder-item-bindings). The slice
+ * persists ids only — there is no URL to rebind by — so recovery is
+ * prune-or-keep rather than the saved-tab rebind above:
+ *
+ *   - A binding whose FOLDER config no longer exists demotes each still-open
+ *     bound tab into its window's active Temporary list (`restoreTempTab`) and
+ *     drops — no tab goes invisible, no tab closes.
+ *   - A slot whose TAB id no longer exists prunes away. Across a browser
+ *     restart tab ids don't survive, so every slot lands here and the restored
+ *     tabs classify as temporary naturally once `seedExistingTabs` runs.
+ *   - A live (folder exists, tab exists) binding survives untouched — the tab
+ *     stays out of Temporary because `isBound` still sees it.
+ *
+ * `windowByTabId` is the live tab→window view from the recovery's own
+ * `chrome.tabs.query` (the ephemeral `liveTabsById` is not rebuilt yet at this
+ * boot stage, so `dropSmartFolderBindings`'s return value — which judges "open"
+ * by that slice — is unusable here; the open set is computed from the query).
+ */
+function pruneSmartItemBindings(windowByTabId: Map<TabId, WindowId>): void {
+  const liveSmartFolderIds = new Set<string>();
+  for (const nodes of Object.values(store.state.pinnedBySpace)) {
+    for (const node of nodes) {
+      if (node.kind === 'smart') liveSmartFolderIds.add(node.id);
+    }
+  }
+
+  for (const [folderId, byItem] of Object.entries(store.state.smartItemBindings)) {
+    if (liveSmartFolderIds.has(folderId)) continue;
+    // Folder gone — capture the still-open tabs BEFORE the drop, demote after
+    // (restoreTempTab's isBound guard must no longer see the binding).
+    const openTabs: Array<{ windowId: WindowId; tabId: TabId }> = [];
+    for (const slots of Object.values(byItem)) {
+      for (const slot of Object.values(slots)) {
+        const windowId = windowByTabId.get(slot.tabId);
+        if (windowId !== undefined) openTabs.push({ windowId, tabId: slot.tabId });
+      }
+    }
+    store.dropSmartFolderBindings(folderId);
+    for (const { windowId, tabId } of openTabs) {
+      store.restoreTempTab(windowId, tabId);
+    }
+  }
+
+  // Slots whose tab id no longer exists: unbind per dead tab (the closing-tab
+  // mutator already drops every slot a tab holds and prunes empty records).
+  const deadTabIds = new Set<TabId>();
+  for (const byItem of Object.values(store.state.smartItemBindings)) {
+    for (const slots of Object.values(byItem)) {
+      for (const slot of Object.values(slots)) {
+        if (!windowByTabId.has(slot.tabId)) deadTabIds.add(slot.tabId);
+      }
+    }
+  }
+  for (const tabId of deadTabIds) {
+    store.unbindSmartItemsForTab(tabId);
+  }
 }

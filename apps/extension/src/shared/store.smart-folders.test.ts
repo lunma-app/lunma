@@ -13,6 +13,8 @@ function smartNode(overrides: Partial<SmartNode> = {}): SmartNode {
     source: 'gitlab',
     baseUrl: 'https://gitlab.example.com',
     query: 'review-requested',
+    maxItems: 20,
+    hideRead: false,
     refreshMinutes: 10,
     ...overrides,
   };
@@ -63,6 +65,7 @@ describe('updateSmartFolder', () => {
       name: 'Assigned',
       baseUrl: 'https://gitlab.example.com',
       query: 'assigned',
+      maxItems: 20,
       refreshMinutes: 30,
     });
     expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({
@@ -80,6 +83,7 @@ describe('updateSmartFolder', () => {
       name: 'Review requests',
       baseUrl: 'https://gitlab.example.com',
       query: 'review-requested',
+      maxItems: 20,
       refreshMinutes: 10,
     });
     expect(store.state.smartFolders['sf-1']?.fetchedAt).toBeNull();
@@ -93,6 +97,7 @@ describe('updateSmartFolder', () => {
       name: 'Renamed only',
       baseUrl: 'https://gitlab.example.com',
       query: 'review-requested',
+      maxItems: 20,
       refreshMinutes: 10,
     });
     expect(store.state.smartFolders['sf-1']?.fetchedAt).toBe(123);
@@ -101,8 +106,24 @@ describe('updateSmartFolder', () => {
       name: 'Renamed only',
       baseUrl: 'https://gitlab.other.com',
       query: 'review-requested',
+      maxItems: 20,
       refreshMinutes: 10,
     });
+    expect(store.state.smartFolders['sf-1']?.fetchedAt).toBeNull();
+  });
+
+  test('a maxItems change invalidates fetchedAt (rss-connector design D5)', () => {
+    store.addSmartFolder('work', smartNode());
+    store.setSmartFolderRuntime('sf-1', { state: 'ok', items: items('A'), fetchedAt: 123 });
+    store.updateSmartFolder('work', 'sf-1', {
+      source: 'gitlab',
+      name: 'Review requests',
+      baseUrl: 'https://gitlab.example.com',
+      query: 'review-requested',
+      maxItems: 50,
+      refreshMinutes: 10,
+    });
+    expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({ maxItems: 50 });
     expect(store.state.smartFolders['sf-1']?.fetchedAt).toBeNull();
   });
 
@@ -114,10 +135,25 @@ describe('updateSmartFolder', () => {
       name: 'Review requests',
       baseUrl: 'https://forge.example.com',
       query: 'review-requested',
+      maxItems: 20,
       refreshMinutes: 10,
     });
     expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({ source: 'github' });
     expect(store.state.smartFolders['sf-1']?.fetchedAt).toBeNull();
+  });
+
+  test('preserves hideRead (owned by setSmartFolderHideRead, not the editor)', () => {
+    store.addSmartFolder('work', smartNode());
+    store.setSmartFolderHideRead('sf-1', true);
+    store.updateSmartFolder('work', 'sf-1', {
+      source: 'gitlab',
+      name: 'Renamed',
+      baseUrl: 'https://gitlab.example.com',
+      query: 'review-requested',
+      maxItems: 20,
+      refreshMinutes: 10,
+    });
+    expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({ hideRead: true });
   });
 
   test('unknown folder is a logged no-op (the handler owns the throw)', () => {
@@ -126,9 +162,64 @@ describe('updateSmartFolder', () => {
       name: 'X',
       baseUrl: 'https://gitlab.example.com',
       query: 'authored',
+      maxItems: 20,
       refreshMinutes: 10,
     });
     expect(store.state.pinnedBySpace.work).toBeUndefined();
+  });
+});
+
+describe('feed read-state (rss-connector design D3)', () => {
+  function feedNode() {
+    return smartNode({
+      id: 'feed-1',
+      source: 'rss',
+      query: undefined,
+      baseUrl: 'https://news.example.com/rss',
+    });
+  }
+
+  test('markSmartItemRead is idempotent and seeds the folder entry', () => {
+    store.markSmartItemRead('feed-1', 'a');
+    store.markSmartItemRead('feed-1', 'a'); // dup — no-op
+    store.markSmartItemRead('feed-1', 'b');
+    expect(store.state.smartReadState['feed-1']).toEqual(['a', 'b']);
+  });
+
+  test('markAllSmartItemsRead unions with the existing read set', () => {
+    store.markSmartItemRead('feed-1', 'a');
+    store.markAllSmartItemsRead('feed-1', ['b', 'c', 'a']);
+    expect(store.state.smartReadState['feed-1']?.sort()).toEqual(['a', 'b', 'c']);
+  });
+
+  test('setSmartFolderHideRead writes the node preference', () => {
+    store.addSmartFolder('work', feedNode());
+    store.setSmartFolderHideRead('feed-1', true);
+    expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({ hideRead: true });
+  });
+
+  test('pruneSmartReadState drops read ids absent from the live window (18 → 12 live → 6 dropped)', () => {
+    const all = Array.from({ length: 18 }, (_, i) => `item-${i}`);
+    for (const id of all) store.markSmartItemRead('feed-1', id);
+    expect(store.state.smartReadState['feed-1']).toHaveLength(18);
+    const live = all.slice(0, 12); // the latest fetch only returned 12 of them
+    store.pruneSmartReadState('feed-1', live);
+    expect(store.state.smartReadState['feed-1']).toEqual(live);
+    expect(store.state.smartReadState['feed-1']).toHaveLength(12);
+  });
+
+  test('pruneSmartReadState removes the folder entry once empty', () => {
+    store.markSmartItemRead('feed-1', 'a');
+    store.pruneSmartReadState('feed-1', ['x', 'y']); // none survive
+    expect(store.state.smartReadState['feed-1']).toBeUndefined();
+  });
+
+  test('deleteSmartFolder drops the folder’s read-state', () => {
+    store.addSmartFolder('work', feedNode());
+    store.markSmartItemRead('feed-1', 'a');
+    store.markSmartItemRead('feed-1', 'b');
+    store.deleteSmartFolder('work', 'feed-1');
+    expect(store.state.smartReadState['feed-1']).toBeUndefined();
   });
 });
 
@@ -230,5 +321,94 @@ describe('setPinned round-trips smart nodes', () => {
     ];
     store.setPinned('work', tree);
     expect(store.state.pinnedBySpace.work).toEqual([{ kind: 'tab', id: 'st-1' }, smartNode()]);
+  });
+});
+
+describe('smart-item bindings (smart-folder-item-bindings)', () => {
+  // A live (window 100, Space work) instance so the temp classifier has a
+  // Temporary list to (not) claim into.
+  beforeEach(() => {
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: -1, tempTabIds: [], tempTabTitles: {} },
+    };
+  });
+
+  test('bindSmartItem / unbindSmartItemsForTab round-trip', () => {
+    store.bindSmartItem('sf-1', '42', 100, 7, '');
+    expect(store.state.smartItemBindings).toEqual({
+      'sf-1': { '42': { 100: { tabId: 7, allowGlob: '' } } },
+    });
+
+    store.unbindSmartItemsForTab(7);
+    // Emptied item AND folder records prune away — no empty husks persist.
+    expect(store.state.smartItemBindings).toEqual({});
+  });
+
+  test('unbindSmartItemsForTab drops only the closing tab’s slot', () => {
+    store.bindSmartItem('sf-1', '42', 100, 7, '');
+    store.bindSmartItem('sf-1', '42', 200, 8, ''); // same item bound in another window
+    store.bindSmartItem('sf-1', '43', 100, 9, '');
+
+    store.unbindSmartItemsForTab(7);
+
+    expect(store.state.smartItemBindings).toEqual({
+      'sf-1': {
+        '42': { 200: { tabId: 8, allowGlob: '' } },
+        '43': { 100: { tabId: 9, allowGlob: '' } },
+      },
+    });
+  });
+
+  test('bindSmartItem enforces bound-not-temp for the window', () => {
+    const instance = store.state.spaceInstancesByWindow[100]?.work;
+    instance?.tempTabIds.push(7);
+    store.bindSmartItem('sf-1', '42', 100, 7, '');
+    expect(instance?.tempTabIds).toEqual([]);
+  });
+
+  test('onTabCreated skips a smart-item-bound tab (never temp)', () => {
+    store.bindSmartItem('sf-1', '42', 100, 7, '');
+    store.onTabCreated({ id: 7, windowId: 100 });
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([]);
+  });
+
+  test('onTabRemoved unbinds the closed tab', () => {
+    store.bindSmartItem('sf-1', '42', 100, 7, '');
+    store.onTabRemoved(7, { windowId: 100 });
+    expect(store.state.smartItemBindings).toEqual({});
+  });
+
+  test('dropSmartFolderBindings returns the still-open tab ids and clears the slice', () => {
+    store.bindSmartItem('sf-1', '42', 100, 7, '');
+    store.bindSmartItem('sf-1', '43', 100, 9, '');
+    store.bindSmartItem('sf-2', '50', 100, 11, ''); // another folder — untouched
+    // Tab 7 is live; tab 9 already closed (no live record) — a stale slot.
+    store.state.liveTabsById[7] = {
+      tabId: 7,
+      windowId: 100,
+      title: 'MR 42',
+      url: 'https://gitlab.example.com/mr/42',
+      active: false,
+      status: 'complete',
+    };
+
+    const orphaned = store.dropSmartFolderBindings('sf-1');
+
+    expect(orphaned).toEqual([7]);
+    expect(store.state.smartItemBindings).toEqual({
+      'sf-2': { '50': { 100: { tabId: 11, allowGlob: '' } } },
+    });
+  });
+
+  test('dropSmartFolderBindings on an unknown folder returns []', () => {
+    expect(store.dropSmartFolderBindings('sf-nope')).toEqual([]);
+  });
+
+  test('deleteSmartFolder drops the folder’s bindings', () => {
+    store.addSmartFolder('work', smartNode());
+    store.bindSmartItem('sf-1', '42', 100, 7, '');
+    store.deleteSmartFolder('work', 'sf-1');
+    expect(store.state.smartItemBindings).toEqual({});
   });
 });

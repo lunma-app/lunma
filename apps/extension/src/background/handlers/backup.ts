@@ -2,10 +2,12 @@
 // imported backup, replaces the store state, and triggers persist+broadcast.
 
 import { parseBackup } from '../../shared/backup';
+import { log } from '../../shared/logger';
 import { writeAllSettings } from '../../shared/settings';
 import type { TabId } from '../../shared/types';
 import { seedExistingTabs } from '../seed-existing-tabs';
 import { seedExistingWindows } from '../seed-existing-windows';
+import { refreshDueSmartFolders } from '../smart-folders';
 import { reconcileTabGroupsOnBoot } from '../tab-group-adoption';
 import type { HandlersMap } from './context';
 
@@ -23,22 +25,37 @@ export function backupHandlers(): Pick<HandlersMap, 'importState'> {
       }
       ctx.store.replaceState(result.state);
 
-      // The imported state has empty machine-bound maps (tabBindings,
-      // activeSpaceByWindow, spaceInstancesByWindow). Run the same reconciliation
-      // the boot sequence runs so the broadcast carries a usable state and the
-      // sidebar doesn't appear blank until the next SW restart.
-      await seedExistingWindows(ctx.store);
-      const tabs = await chrome.tabs.query({});
-      seedExistingTabs(ctx.store, tabs);
-      ctx.store.rebuildLiveTabs(tabs);
-      const tabGroupById = new Map<TabId, number>();
-      for (const tab of tabs) {
-        if (tab.id !== undefined) tabGroupById.set(tab.id, tab.groupId ?? -1);
-      }
-      ctx.store.reconcileTabOwnership(tabGroupById);
-      await reconcileTabGroupsOnBoot(ctx.store, false);
-
+      // Mark dirty BEFORE reconciliation so a throw below still triggers
+      // persist+broadcast (design D4: mutate-then-await-throw still persists).
+      // The drain snapshots state AFTER the handler returns, so it captures
+      // whatever reconciliation managed to complete before any throw.
       ctx.markDirty();
+
+      // Rebuild machine-bound maps (mirrors the boot reconciliation) so the
+      // broadcast carries a usable active-space without needing a SW restart.
+      // Errors are swallowed — partial reconciliation is better than a throw
+      // that would prevent the smart-folder refresh side-effect below.
+      try {
+        await seedExistingWindows(ctx.store);
+        const tabs = await chrome.tabs.query({});
+        seedExistingTabs(ctx.store, tabs);
+        ctx.store.rebuildLiveTabs(tabs);
+        const tabGroupById = new Map<TabId, number>();
+        for (const tab of tabs) {
+          if (tab.id !== undefined) tabGroupById.set(tab.id, tab.groupId ?? -1);
+        }
+        ctx.store.reconcileTabOwnership(tabGroupById);
+        await reconcileTabGroupsOnBoot(ctx.store, false);
+      } catch (err) {
+        log.error('importState: post-replace reconciliation failed', { err });
+      }
+
+      // Kick a smart-folder refresh off the critical path so the sidebar
+      // doesn't show an eternal loading spinner after restore. The runtime
+      // slice (smartFolders) is always empty after replaceState (it's
+      // ephemeral, never exported), and the sidebar-open kick only fires on
+      // lunma/state-request which an already-open sidebar never resends.
+      ctx.runSideEffect(() => refreshDueSmartFolders({ store: ctx.store, enqueue: ctx.enqueue }));
     },
   };
 }

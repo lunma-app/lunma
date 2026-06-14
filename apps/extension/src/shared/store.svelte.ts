@@ -15,7 +15,6 @@ import type {
   SpaceAutoArchive,
   SpaceId,
   SpaceInstance,
-  TabBinding,
   TabBoundary,
   TabId,
   WindowId,
@@ -67,6 +66,7 @@ export const createInitialState = (): AppState => ({
   pinnedBySpace: {},
   faviconRow: [],
   smartItemBindings: {},
+  smartReadState: {},
   liveTabsById: {},
   smartFolders: {},
 });
@@ -525,6 +525,10 @@ export class LunmaStore {
         if (saved) saved.currentURL = null;
       }
     }
+    // A closing FEED tab drains its item (rss-connector, the draining queue) —
+    // mark it read BEFORE unbinding so the item is still findable; closing is
+    // unambiguously "done with this entry."
+    this.markFeedItemForClosedTab(tabId);
     // A closing tab also drops any smart-item binding it held (smart-folder-
     // item-bindings): the row returns to plain, a held row evaporates.
     this.unbindSmartItemsForTab(tabId);
@@ -911,6 +915,7 @@ export class LunmaStore {
       name: string;
       baseUrl: string;
       query: Extract<PinNode, { kind: 'smart' }>['query'];
+      maxItems: number;
       refreshMinutes: number;
     },
   ): void {
@@ -919,14 +924,20 @@ export class LunmaStore {
       log.error('updateSmartFolder: unknown smart folder', { spaceId, folderId });
       return;
     }
+    // A baseUrl/query/source/maxItems change invalidates the results (the
+    // results belong to the OLD query/instance/source/cap) → immediate refetch
+    // (rss-connector design D5 adds `maxItems`). `hideRead` is owned by
+    // `setSmartFolderHideRead`, not the editor's update, so it is preserved.
     const resultsInvalidated =
       node.baseUrl !== config.baseUrl ||
       node.query !== config.query ||
-      node.source !== config.source;
+      node.source !== config.source ||
+      node.maxItems !== config.maxItems;
     node.source = config.source;
     node.name = config.name;
     node.baseUrl = config.baseUrl;
     node.query = config.query;
+    node.maxItems = config.maxItems;
     node.refreshMinutes = config.refreshMinutes;
     const runtime = this.state.smartFolders[folderId];
     if (resultsInvalidated && runtime) {
@@ -953,6 +964,9 @@ export class LunmaStore {
     list.splice(idx, 1);
     delete this.state.smartFolders[folderId];
     delete this.state.smartItemBindings[folderId];
+    // Drop the feed's read-state too (rss-connector design D3) — the config is
+    // gone, so the read ids have nothing to prune against.
+    delete this.state.smartReadState[folderId];
   }
 
   /**
@@ -987,26 +1001,33 @@ export class LunmaStore {
 
   /**
    * Bind a smart-folder result item to a live Chrome tab IN A SPECIFIC WINDOW
-   * (smart-folder-item-bindings): set
-   * `smartItemBindings[folderId][itemId][windowId] = tabId`, leaving any other
-   * window's slot untouched, and enforce the bound-not-temp invariant for
-   * `windowId` (mirrors {@link bindSavedTab}). Ids only — the item's URL/title
-   * never enter the persisted slice.
+   * (smart-folder-item-bindings): set `smartItemBindings[folderId][itemId][windowId]`
+   * to `{ tabId, allowGlob }` (smart-tab-boundary), leaving any other window's slot
+   * untouched, and enforce the bound-not-temp invariant for `windowId` (mirrors
+   * {@link bindSavedTab}). Ids only — the item's URL/title never enter the slice.
    */
-  bindSmartItem(folderId: FolderId, itemId: string, windowId: WindowId, tabId: TabId): void {
+  bindSmartItem(
+    folderId: FolderId,
+    itemId: string,
+    windowId: WindowId,
+    tabId: TabId,
+    allowGlob: string,
+  ): void {
     let byItem = this.state.smartItemBindings[folderId];
     if (!byItem) {
       this.state.smartItemBindings[folderId] = {};
       // Re-read so we mutate the reactive proxy, not the plain literal
       // (the ensureInstance/ensureBindingRecord precedent).
-      byItem = this.state.smartItemBindings[folderId] as { [itemId: string]: TabBinding };
+      byItem = this.state.smartItemBindings[folderId] as {
+        [itemId: string]: { [windowId: WindowId]: { tabId: TabId; allowGlob: string } };
+      };
     }
     let slots = byItem[itemId];
     if (!slots) {
       byItem[itemId] = {};
-      slots = byItem[itemId] as TabBinding;
+      slots = byItem[itemId] as { [windowId: WindowId]: { tabId: TabId; allowGlob: string } };
     }
-    slots[windowId] = tabId;
+    slots[windowId] = { tabId, allowGlob };
     this.removeFromWindowTemp(windowId, tabId);
   }
 
@@ -1021,8 +1042,8 @@ export class LunmaStore {
   unbindSmartItemsForTab(tabId: TabId): void {
     for (const [folderId, byItem] of Object.entries(this.state.smartItemBindings)) {
       for (const [itemId, slots] of Object.entries(byItem)) {
-        for (const [windowIdStr, boundTabId] of Object.entries(slots)) {
-          if (boundTabId === tabId) delete slots[Number(windowIdStr)];
+        for (const [windowIdStr, slot] of Object.entries(slots)) {
+          if (slot.tabId === tabId) delete slots[Number(windowIdStr)];
         }
         if (Object.keys(slots).length === 0) delete byItem[itemId];
       }
@@ -1042,8 +1063,8 @@ export class LunmaStore {
     if (!byItem) return [];
     const orphaned: TabId[] = [];
     for (const slots of Object.values(byItem)) {
-      for (const tabId of Object.values(slots)) {
-        if (this.state.liveTabsById[tabId] !== undefined) orphaned.push(tabId);
+      for (const slot of Object.values(slots)) {
+        if (this.state.liveTabsById[slot.tabId] !== undefined) orphaned.push(slot.tabId);
       }
     }
     delete this.state.smartItemBindings[folderId];
@@ -1060,6 +1081,68 @@ export class LunmaStore {
       if (node.kind === 'smart' && node.id === folderId) return node;
     }
     return undefined;
+  }
+
+  /** Find a smart node by id across every Space (folder ids are globally unique
+   * — `crypto.randomUUID`), for the read-state mutators that address a folder by
+   * id alone (the `smartReadState` slice is keyed by folder id, not by Space). */
+  private findSmartFolderAnySpace(
+    folderId: FolderId,
+  ): Extract<PinNode, { kind: 'smart' }> | undefined {
+    for (const nodes of Object.values(this.state.pinnedBySpace)) {
+      for (const node of nodes) {
+        if (node.kind === 'smart' && node.id === folderId) return node;
+      }
+    }
+    return undefined;
+  }
+
+  // ───────────────────────────────────────────────────────────────────────
+  // Feed read-state (rss-connector, design D3). The persisted `smartReadState`
+  // slice holds the read item ids per feed folder, ids only and pruned to the
+  // live window. RSS-only — queue items self-resolve. These mutators ride the
+  // existing single-writer drain (the coordinator's read-state handlers).
+  // ───────────────────────────────────────────────────────────────────────
+
+  /** Mark one feed item read (opening it). Idempotent; seeds the folder's entry
+   * on first write. */
+  markSmartItemRead(folderId: FolderId, itemId: string): void {
+    const read = this.state.smartReadState[folderId];
+    if (read === undefined) {
+      this.state.smartReadState[folderId] = [itemId];
+      return;
+    }
+    if (!read.includes(itemId)) read.push(itemId);
+  }
+
+  /** Mark every supplied item read (the "Mark all read" action). Unions with any
+   * existing ids so a binding-held row already read stays read. */
+  markAllSmartItemsRead(folderId: FolderId, itemIds: string[]): void {
+    const existing = this.state.smartReadState[folderId] ?? [];
+    this.state.smartReadState[folderId] = Array.from(new Set([...existing, ...itemIds]));
+  }
+
+  /** Set a feed folder's persisted `hideRead` preference (design D9). */
+  setSmartFolderHideRead(folderId: FolderId, hideRead: boolean): void {
+    const node = this.findSmartFolderAnySpace(folderId);
+    if (!node) {
+      log.error('setSmartFolderHideRead: unknown smart folder', { folderId });
+      return;
+    }
+    node.hideRead = hideRead;
+  }
+
+  /** Prune the folder's read-state to the live feed window (design D3): drop any
+   * read id no longer present in the fetched set, so the slice can never exceed
+   * a folder's `maxItems`. Removes the folder's entry entirely once empty. */
+  pruneSmartReadState(folderId: FolderId, liveIds: string[]): void {
+    const read = this.state.smartReadState[folderId];
+    if (read === undefined) return;
+    const live = new Set(liveIds);
+    const kept = read.filter((id) => live.has(id));
+    if (kept.length === read.length) return;
+    if (kept.length === 0) delete this.state.smartReadState[folderId];
+    else this.state.smartReadState[folderId] = kept;
   }
 
   /** Remove a folder, spilling its children back to top-level tab nodes at the
@@ -1264,6 +1347,7 @@ export class LunmaStore {
     this.state.spaceInstancesByWindow = next.spaceInstancesByWindow;
     this.state.tabLastActivity = next.tabLastActivity;
     this.state.smartItemBindings = next.smartItemBindings;
+    this.state.smartReadState = next.smartReadState;
     this.state.liveTabsById = next.liveTabsById;
     this.state.smartFolders = next.smartFolders;
 
@@ -1362,6 +1446,50 @@ export class LunmaStore {
         entry.active = shouldBeActive;
         if (!shouldBeActive && entry.tabId in this.state.tabLastActivity) {
           this.state.tabLastActivity[entry.tabId] = Date.now();
+        }
+      }
+    }
+    // rss-connector (the draining queue): a feed item is "consumed" once its
+    // bound tab is no longer the active tab — so navigating to another tab
+    // drains the entry you were on. (Opening keeps it active → unread; only
+    // moving on, or closing, marks it read.)
+    this.markConsumedFeedItems();
+  }
+
+  /** Whether `folderId` is a FEED (`rss`) smart folder — the draining-queue read
+   * trigger needs the source. */
+  private isFeedFolder(folderId: FolderId): boolean {
+    return this.findSmartFolderAnySpace(folderId)?.source === 'rss';
+  }
+
+  /**
+   * Mark a feed item read once its bound tab is no longer the active tab in any
+   * window (rss-connector, the draining-queue "consumed" trigger). A just-opened
+   * entry's tab is active, so it stays unread until you move on; navigating to
+   * another tab deactivates it → it drains. Idempotent; feed folders only.
+   */
+  private markConsumedFeedItems(): void {
+    for (const [folderId, byItem] of Object.entries(this.state.smartItemBindings)) {
+      if (!this.isFeedFolder(folderId)) continue;
+      for (const [itemId, slots] of Object.entries(byItem)) {
+        const anyActive = Object.values(slots).some(
+          (slot) => this.state.liveTabsById[slot.tabId]?.active === true,
+        );
+        if (!anyActive) this.markSmartItemRead(folderId, itemId);
+      }
+    }
+  }
+
+  /** Mark a feed item read because its bound tab is CLOSING (rss-connector, the
+   * draining-queue "consumed" trigger) — regardless of its active flag, since a
+   * closed tab is unambiguously done. Called from {@link onTabRemoved} BEFORE
+   * the binding is dropped (so the item is still findable). */
+  private markFeedItemForClosedTab(tabId: TabId): void {
+    for (const [folderId, byItem] of Object.entries(this.state.smartItemBindings)) {
+      if (!this.isFeedFolder(folderId)) continue;
+      for (const [itemId, slots] of Object.entries(byItem)) {
+        if (Object.values(slots).some((slot) => slot.tabId === tabId)) {
+          this.markSmartItemRead(folderId, itemId);
         }
       }
     }
@@ -1556,8 +1684,8 @@ export class LunmaStore {
     // bindings number at most a handful, no cost at sidebar scale.
     for (const byItem of Object.values(this.state.smartItemBindings)) {
       for (const slots of Object.values(byItem)) {
-        for (const boundTabId of Object.values(slots)) {
-          if (boundTabId === tabId) return true;
+        for (const slot of Object.values(slots)) {
+          if (slot.tabId === tabId) return true;
         }
       }
     }

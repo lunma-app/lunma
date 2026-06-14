@@ -100,7 +100,10 @@ export type SidebarCommand =
         source: SmartSource;
         name: string;
         baseUrl: string;
-        query: SmartQuery;
+        // Source-optional (rss-connector design D2): a feed omits it. `maxItems`
+        // is the per-folder result cap; `hideRead` defaults false on create.
+        query?: SmartQuery;
+        maxItems: number;
         refreshMinutes: number;
       };
     }
@@ -112,11 +115,25 @@ export type SidebarCommand =
         source: SmartSource;
         name: string;
         baseUrl: string;
-        query: SmartQuery;
+        query?: SmartQuery;
+        maxItems: number;
         refreshMinutes: number;
       };
     }
   | { kind: 'deleteSmartFolder'; payload: { spaceId: SpaceId; folderId: FolderId } }
+  // Feed read-state (rss-connector design D3). Mark one item read (the open path
+  // also marks read SW-side), mark every current item read, toggle the persisted
+  // hide-read preference, and open the source's full listing in a tab.
+  | { kind: 'markSmartItemRead'; payload: { folderId: FolderId; itemId: string } }
+  | { kind: 'markAllSmartItemsRead'; payload: { spaceId: SpaceId; folderId: FolderId } }
+  | {
+      kind: 'setSmartFolderHideRead';
+      payload: { spaceId: SpaceId; folderId: FolderId; hideRead: boolean };
+    }
+  | {
+      kind: 'openSmartFolderListing';
+      payload: { spaceId: SpaceId; folderId: FolderId; windowId: WindowId };
+    }
   // Unconditional refresh; acks ok once underway — the fetch OUTCOME lands via
   // the runtime slice and the state broadcast, never via the ack.
   | { kind: 'refreshSmartFolder'; payload: { spaceId: SpaceId; folderId: FolderId } }
@@ -173,7 +190,13 @@ export type SidebarCommand =
   | { kind: 'clearArchivedTabs'; payload: Record<string, never> }
   // Data-backup (data-backup capability): the options page sends a parsed backup
   // file to the SW, which validates, migrates, and replaces the store state + broadcasts.
-  | { kind: 'importState'; payload: { backup: BackupEnvelope } };
+  | { kind: 'importState'; payload: { backup: BackupEnvelope } }
+  // OPML import (opml-import-export): bulk-create RSS smart folders from a
+  // parsed OPML feed list. The handler loops createSmartFolder logic per entry.
+  | {
+      kind: 'importOpml';
+      payload: { spaceId: string; feeds: { name: string; feedUrl: string }[] };
+    };
 
 export type SidebarCommandKind = SidebarCommand['kind'];
 
@@ -208,6 +231,10 @@ export const SIDEBAR_COMMAND_KINDS: ReadonlySet<SidebarCommandKind> = new Set<Si
   'deleteSmartFolder',
   'refreshSmartFolder',
   'openSmartItem',
+  'markSmartItemRead',
+  'markAllSmartItemsRead',
+  'setSmartFolderHideRead',
+  'openSmartFolderListing',
   'reorderTemp',
   'reorderSpaces',
   'renameTab',
@@ -224,6 +251,7 @@ export const SIDEBAR_COMMAND_KINDS: ReadonlySet<SidebarCommandKind> = new Set<Si
   'deleteArchivedTab',
   'clearArchivedTabs',
   'importState',
+  'importOpml',
 ]);
 
 // Compile-time exhaustiveness guard: if a new variant is added to `SidebarCommand`
@@ -260,6 +288,10 @@ const _kindExhaustiveness = {
   deleteSmartFolder: true,
   refreshSmartFolder: true,
   openSmartItem: true,
+  markSmartItemRead: true,
+  markAllSmartItemsRead: true,
+  setSmartFolderHideRead: true,
+  openSmartFolderListing: true,
   reorderTemp: true,
   reorderSpaces: true,
   renameTab: true,
@@ -276,6 +308,7 @@ const _kindExhaustiveness = {
   deleteArchivedTab: true,
   clearArchivedTabs: true,
   importState: true,
+  importOpml: true,
 } satisfies Record<SidebarCommandKind, true>;
 
 // ── Runtime payload schema (Task 1.x) ──────────────────────────────────────────
@@ -330,7 +363,7 @@ const SmartQuerySchema = z.enum(['authored', 'assigned', 'review-requested']);
 
 // The shipped connector sources — mirrors `SmartSource` in `types.ts`. An
 // out-of-vocabulary source (e.g. 'bitbucket') rejects at the bus boundary.
-const SmartSourceSchema = z.enum(['gitlab', 'github', 'jira']);
+const SmartSourceSchema = z.enum(['gitlab', 'github', 'jira', 'rss']);
 
 // A pinned-tab placement node — mirrors `PinNode` in `types.ts` (all three
 // kinds, so `reorderPinned` round-trips smart nodes losslessly with their
@@ -354,7 +387,11 @@ const PinNodeSchema = z.discriminatedUnion('kind', [
     icon: z.string(),
     source: SmartSourceSchema,
     baseUrl: z.string(),
-    query: SmartQuerySchema,
+    // Source-optional (rss-connector design D2): queue sources carry a query, a
+    // feed source omits it. `maxItems`/`hideRead` are the v6 node fields.
+    query: SmartQuerySchema.optional(),
+    maxItems: z.number(),
+    hideRead: z.boolean(),
     refreshMinutes: z.number(),
   }),
 ]);
@@ -508,7 +545,9 @@ const COMMAND_SCHEMAS = {
       source: SmartSourceSchema,
       name: z.string(),
       baseUrl: z.string(),
-      query: SmartQuerySchema,
+      // Source-optional (rss-connector design D2): a feed omits it.
+      query: SmartQuerySchema.optional(),
+      maxItems: z.number(),
       refreshMinutes: z.number(),
     }),
   }),
@@ -520,7 +559,8 @@ const COMMAND_SCHEMAS = {
       source: SmartSourceSchema,
       name: z.string(),
       baseUrl: z.string(),
-      query: SmartQuerySchema,
+      query: SmartQuerySchema.optional(),
+      maxItems: z.number(),
       refreshMinutes: z.number(),
     }),
   }),
@@ -531,6 +571,33 @@ const COMMAND_SCHEMAS = {
   refreshSmartFolder: z.strictObject({
     kind: z.literal('refreshSmartFolder'),
     payload: z.strictObject({ spaceId: z.string(), folderId: z.string() }),
+  }),
+  // Feed read-state (rss-connector design D3). `markSmartItemRead` is keyed by
+  // folder id alone (the read-state slice is not Space-keyed); the rest carry
+  // `spaceId` for the `requireSmartNode` validation.
+  markSmartItemRead: z.strictObject({
+    kind: z.literal('markSmartItemRead'),
+    payload: z.strictObject({ folderId: z.string(), itemId: z.string() }),
+  }),
+  markAllSmartItemsRead: z.strictObject({
+    kind: z.literal('markAllSmartItemsRead'),
+    payload: z.strictObject({ spaceId: z.string(), folderId: z.string() }),
+  }),
+  setSmartFolderHideRead: z.strictObject({
+    kind: z.literal('setSmartFolderHideRead'),
+    payload: z.strictObject({
+      spaceId: z.string(),
+      folderId: z.string(),
+      hideRead: z.boolean(),
+    }),
+  }),
+  openSmartFolderListing: z.strictObject({
+    kind: z.literal('openSmartFolderListing'),
+    payload: z.strictObject({
+      spaceId: z.string(),
+      folderId: z.string(),
+      windowId: z.number(),
+    }),
   }),
   // Identity only — a payload smuggling a `url` key fails the strict parse
   // (smart-folder-item-bindings; the SW resolves the URL from its own runtime).
@@ -617,6 +684,14 @@ const COMMAND_SCHEMAS = {
     kind: z.literal('importState'),
     payload: z.strictObject({ backup: BackupEnvelopeSchema }),
   }),
+  // OPML import: bulk-create RSS smart folders from a parsed feed list.
+  importOpml: z.strictObject({
+    kind: z.literal('importOpml'),
+    payload: z.strictObject({
+      spaceId: z.string(),
+      feeds: z.array(z.strictObject({ name: z.string(), feedUrl: z.string() })),
+    }),
+  }),
 } satisfies Record<SidebarCommandKind, z.ZodType>;
 
 /**
@@ -656,6 +731,10 @@ export const SidebarCommandSchema = z.discriminatedUnion('kind', [
   COMMAND_SCHEMAS.deleteSmartFolder,
   COMMAND_SCHEMAS.refreshSmartFolder,
   COMMAND_SCHEMAS.openSmartItem,
+  COMMAND_SCHEMAS.markSmartItemRead,
+  COMMAND_SCHEMAS.markAllSmartItemsRead,
+  COMMAND_SCHEMAS.setSmartFolderHideRead,
+  COMMAND_SCHEMAS.openSmartFolderListing,
   COMMAND_SCHEMAS.reorderTemp,
   COMMAND_SCHEMAS.reorderSpaces,
   COMMAND_SCHEMAS.renameTab,
@@ -672,6 +751,7 @@ export const SidebarCommandSchema = z.discriminatedUnion('kind', [
   COMMAND_SCHEMAS.deleteArchivedTab,
   COMMAND_SCHEMAS.clearArchivedTabs,
   COMMAND_SCHEMAS.importState,
+  COMMAND_SCHEMAS.importOpml,
 ]);
 
 export interface CommandMessage {

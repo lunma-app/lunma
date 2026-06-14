@@ -620,14 +620,14 @@ describe('reconcileTabGroupsOnBoot — favorite ungroup reconciliation (ADR 0010
     };
     // A global favorite bound to tab 42 in window 100, which Chrome restored
     // still inside "work"'s restored group 77.
-    store.state.savedTabs['fav'] = {
+    store.state.savedTabs.fav = {
       id: 'fav',
       spaceId: null,
       title: 'GitHub',
       originalURL: 'https://github.com/',
       currentURL: 'https://github.com/',
     };
-    store.state.tabBindings['fav'] = { 100: 42 };
+    store.state.tabBindings.fav = { 100: 42 };
     store.state.faviconRow = ['fav'];
     for (const id of [17, 42]) store.state.liveTabsById[id] = live(id, 100);
     chrome.addGroup({ id: 77, windowId: 100, collapsed: false });
@@ -650,14 +650,14 @@ describe('reconcileTabGroupsOnBoot — favorite ungroup reconciliation (ADR 0010
     store.state.spaceInstancesByWindow[100] = {
       work: { spaceId: 'work', groupId: 77, tempTabIds: [17], tempTabTitles: {} },
     };
-    store.state.savedTabs['fav'] = {
+    store.state.savedTabs.fav = {
       id: 'fav',
       spaceId: null,
       title: 'GitHub',
       originalURL: 'https://github.com/',
       currentURL: 'https://github.com/',
     };
-    store.state.tabBindings['fav'] = { 100: 43 };
+    store.state.tabBindings.fav = { 100: 43 };
     store.state.faviconRow = ['fav'];
     for (const id of [17, 43]) store.state.liveTabsById[id] = live(id, 100);
     chrome.addGroup({ id: 77, windowId: 100, collapsed: false });

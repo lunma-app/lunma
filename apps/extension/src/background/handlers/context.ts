@@ -86,6 +86,10 @@ export type PendingEvent =
   | SidebarVariant<'deleteSmartFolder'>
   | SidebarVariant<'refreshSmartFolder'>
   | SidebarVariant<'openSmartItem'>
+  | SidebarVariant<'markSmartItemRead'>
+  | SidebarVariant<'markAllSmartItemsRead'>
+  | SidebarVariant<'setSmartFolderHideRead'>
+  | SidebarVariant<'openSmartFolderListing'>
   | SidebarVariant<'reorderTemp'>
   | SidebarVariant<'reorderSpaces'>
   | SidebarVariant<'focusTab'>
@@ -102,6 +106,9 @@ export type PendingEvent =
   // Data-backup (data-backup capability): replace the whole store state from an
   // imported backup file. Dispatched by the options page; handled by the SW.
   | SidebarVariant<'importState'>
+  // OPML import (opml-import-export): bulk-create RSS smart folders from a
+  // parsed feed list. Dispatched by the options page; handled by the SW.
+  | SidebarVariant<'importOpml'>
   // Auto-archive (auto-archive, design D2): the `chrome.alarms`-driven idle-tab
   // sweep. A new `source: 'alarm'` — not a Chrome event, not a sidebar command —
   // carrying no payload and no `correlationId` (fire-and-forget; nobody awaits it).
@@ -166,6 +173,8 @@ export interface HandlerContext {
   markDirty(): void;
   /** Run a side-effect OFF the drain's critical path (see Coordinator.runSideEffect). */
   runSideEffect(fn: () => Promise<void>): void;
+  /** Enqueue a PendingEvent into this coordinator's queue. */
+  enqueue(ev: PendingEvent): void;
   readonly groups: GroupOrchestrator;
   readonly boundary: BoundaryController;
 }
