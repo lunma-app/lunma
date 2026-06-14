@@ -200,6 +200,7 @@ function onMenuOpenChange(open: boolean): void {
     class="folder-row"
     class:drop-target={dropTarget}
     class:editing
+    class:menu-open={menuOpen}
     data-testid="folder-row"
     style:--folder-c={`oklch(0.62 0.16 ${hue})`}
   >
@@ -233,12 +234,14 @@ function onMenuOpenChange(open: boolean): void {
           <Icon name={icon} size={16} />
         </span>
         <span class="name">{name}</span>
-        {#if badge !== undefined}
-          <span class="badge" data-testid="folder-row-badge">{badge}</span>
-        {/if}
       </button>
     {/if}
-    <span class="trailing">{@render trigger()}</span>
+    <span class="trailing">
+      {#if badge !== undefined}
+        <span class="badge" data-testid="folder-row-badge">{badge}</span>
+      {/if}
+      <span class="kebab">{@render trigger()}</span>
+    </span>
   </div>
 {/snippet}
 
@@ -350,29 +353,49 @@ function onMenuOpenChange(open: boolean): void {
     font: var(--weight-regular) var(--text-base) / 1 var(--font-sans);
   }
 
+  /* Trailing slot — the quiet count badge and the kebab share one right-aligned
+   * grid cell, so the kebab lands exactly where the badge sat. The badge shows
+   * at rest; row hover, keyboard focus, or an open menu swaps it for the kebab
+   * (mirroring the result rows' status-dot → ✕ swap). Both stay mounted, so the
+   * column width is constant — the swap is a cross-fade with no layout shift. */
+  .trailing {
+    flex-shrink: 0;
+    display: inline-grid;
+    align-items: center;
+    justify-items: end;
+    margin-left: var(--space-2);
+  }
+  .trailing > * {
+    grid-area: 1 / 1; /* stack badge + kebab in the same cell */
+  }
+
   /* Quiet trailing count badge — a soft pill that never competes with the name. */
   .badge {
-    flex-shrink: 0;
-    margin-left: var(--space-2);
     padding: var(--space-1) var(--space-2);
     border-radius: var(--r-pill);
     background: var(--surface-2);
     color: var(--text-faint);
     font: var(--weight-medium) var(--text-2xs) / 1 var(--font-sans);
+    transition: opacity var(--motion-fast) var(--ease-standard);
   }
 
-  /* Trailing kebab — quiet until row hover or the menu is open. */
-  .trailing {
-    flex-shrink: 0;
+  /* Kebab — hidden behind the badge until the row is hovered/focused or the
+   * menu is open, then it fades in over the badge's spot. */
+  .kebab {
     display: inline-flex;
     align-items: center;
-    margin-left: var(--space-1);
     opacity: 0;
     transition: opacity var(--motion-fast) var(--ease-standard);
   }
-  .folder-row:hover .trailing,
-  .trailing:focus-within {
+  .folder-row:hover .kebab,
+  .folder-row.menu-open .kebab,
+  .trailing:focus-within .kebab {
     opacity: 1;
+  }
+  .folder-row:hover .badge,
+  .folder-row.menu-open .badge,
+  .trailing:focus-within .badge {
+    opacity: 0;
   }
 
   /* In-drawer icon/colour editor (revealed by "Icon & colour"). */
