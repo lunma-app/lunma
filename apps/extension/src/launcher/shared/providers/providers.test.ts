@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import type { SavedTab } from '../../../shared/types';
+import type { SavedTab, SmartFolderRuntime } from '../../../shared/types';
 import { bookmarksProvider } from './bookmarks';
 import { historyProvider } from './history';
 import { openTabsProvider } from './open-tabs';
 import { savedTabsProvider } from './saved-tabs';
+import { smartFoldersProvider } from './smart-folders';
 
 describe('openTabsProvider', () => {
   test('maps tabs to tab results carrying tabId + windowId', () => {
@@ -80,6 +81,97 @@ describe('savedTabsProvider', () => {
     );
     const byId = Object.fromEntries(results.map((r) => [r.savedTabId, r.tabId]));
     expect(byId).toEqual({ bound: 42, dormant: undefined });
+  });
+
+  test('carries folderName when the saved tab is in a folder, none otherwise', () => {
+    const results = savedTabsProvider(
+      {
+        infolder: saved('infolder', 'https://f/', 'https://f/'),
+        loose: saved('loose', 'https://l/', 'https://l/'),
+      },
+      {},
+      undefined,
+      { infolder: 'Work' },
+    );
+    const byId = Object.fromEntries(results.map((r) => [r.savedTabId, r.folderName]));
+    expect(byId).toEqual({ infolder: 'Work', loose: undefined });
+  });
+
+  test('carries spaceId for a pinned saved tab, none for a favorite (spaceId null)', () => {
+    const results = savedTabsProvider({
+      pinned: {
+        id: 'pinned',
+        spaceId: 'work',
+        title: 'p',
+        originalURL: 'https://p/',
+        currentURL: null,
+      },
+      fav: { id: 'fav', spaceId: null, title: 'f', originalURL: 'https://f/', currentURL: null },
+    });
+    const byId = Object.fromEntries(results.map((r) => [r.savedTabId, r.spaceId]));
+    expect(byId).toEqual({ pinned: 'work', fav: undefined });
+  });
+});
+
+describe('smartFoldersProvider', () => {
+  const runtime = (
+    state: SmartFolderRuntime['state'],
+    items: SmartFolderRuntime['items'],
+  ): SmartFolderRuntime => ({ state, items, fetchedAt: state === 'ok' ? 1 : null });
+
+  const item = (id: string, title: string, url: string) => ({ id, title, url });
+
+  test('flattens every folder’s items to smart results with folderName + spaceId', () => {
+    const results = smartFoldersProvider(
+      {
+        'sf-1': runtime('ok', [item('i1', 'Fix the parser', 'https://github.com/o/r/pull/12')]),
+      },
+      { 'sf-1': 'Work PRs' },
+      { 'sf-1': 'work' },
+    );
+    expect(results).toEqual([
+      {
+        id: 'smart:i1',
+        source: 'smart',
+        title: 'Fix the parser',
+        url: 'https://github.com/o/r/pull/12',
+        score: 0,
+        folderName: 'Work PRs',
+        spaceId: 'work',
+      },
+    ]);
+  });
+
+  test('carries no spaceId when no folder-space index is passed', () => {
+    const results = smartFoldersProvider({
+      'sf-1': runtime('ok', [item('i1', 'Title', 'https://x/1')]),
+    });
+    expect(results[0]?.spaceId).toBeUndefined();
+  });
+
+  test('a pending refresh keeps its last-known items', () => {
+    const results = smartFoldersProvider({
+      'sf-1': runtime('pending', [item('i1', 'Stale but matchable', 'https://x/1')]),
+    });
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ source: 'smart', url: 'https://x/1' });
+    expect(results[0]?.folderName).toBeUndefined(); // no index passed
+  });
+
+  test('signed-out and error folders (empty items) contribute nothing', () => {
+    const results = smartFoldersProvider({
+      out: runtime('signed-out', []),
+      err: runtime('error', []),
+    });
+    expect(results).toEqual([]);
+  });
+
+  test('includes items from all folders and skips items without a url', () => {
+    const results = smartFoldersProvider({
+      a: runtime('ok', [item('a1', 'A one', 'https://a/1'), item('a2', 'no url', '')]),
+      b: runtime('ok', [item('b1', 'B one', 'https://b/1')]),
+    });
+    expect(results.map((r) => r.url)).toEqual(['https://a/1', 'https://b/1']);
   });
 });
 

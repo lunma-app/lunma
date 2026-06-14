@@ -28,6 +28,13 @@ export type PinnedTabBoundaryDefault = 'off' | 'domain' | 'page';
 /** The launcher's default web-search engine: a built-in engine id (from
  * `search-engines.ts`) or `'custom'` (use `customSearchUrl`). */
 export type DefaultSearchEngine = BuiltInEngineId | 'custom';
+/** How the launcher ranks/filters items by Space (launcher-fuzzy-smart-folders,
+ * design D9). `'global'` — rank purely by match/source, no Space preference;
+ * `'prefer-current-space'` — boost items in the requesting window's active Space
+ * while keeping everything reachable (default); `'current-space-only'` — hide
+ * cross-Space Lunma items (smart items + pinned saved tabs from other Spaces),
+ * leaving global favorites, open tabs, bookmarks, and history visible. */
+export type LauncherScope = 'global' | 'prefer-current-space' | 'current-space-only';
 
 export interface Settings {
   density: DensityMode;
@@ -36,6 +43,16 @@ export interface Settings {
   defaultSearchEngine: DefaultSearchEngine;
   customSearchUrl: string;
   customSearchKeyword: string;
+  /** How the launcher treats items from other Spaces (launcher-fuzzy-smart-folders,
+   * design D9): rank everything globally, prefer the current Space, or show only
+   * the current Space's Lunma items. */
+  launcherScope: LauncherScope;
+  /** Navigation dedup (navigation-tab-dedup). When `true`, a blank new tab that
+   * navigates (address bar) to a URL already open in the current window's active
+   * Space focuses the existing tab and closes the new one instead of duplicating;
+   * when `false`, that navigation produces a duplicate as before. The launcher's
+   * `openUrl` dedup is always-on and unaffected by this toggle. */
+  dedupNewTabNavigations: boolean;
   /** Master switch for auto-archive (auto-archive). `true` ⇒ the sweep runs and
    * each Space resolves its effective config; `false` ⇒ nothing is archived,
    * per-Space overrides moot. */
@@ -161,6 +178,22 @@ export const SETTINGS: readonly SettingDeclaration[] = [
     placeholder: 'k',
   },
   {
+    // Launcher Space scope (launcher-fuzzy-smart-folders, design D9). Governs how
+    // results from other Spaces are ranked/shown — handled SW-side in the
+    // suggestions handler + scoring (open tabs/bookmarks/history stay global).
+    key: 'launcherScope',
+    type: 'enum',
+    default: 'prefer-current-space',
+    label: 'Launcher scope',
+    description: 'How the launcher ranks items that live in other Spaces',
+    group: 'Search',
+    options: [
+      { value: 'global', label: 'All Spaces' },
+      { value: 'prefer-current-space', label: 'Prefer current Space' },
+      { value: 'current-space-only', label: 'Current Space only' },
+    ],
+  },
+  {
     key: 'density',
     type: 'enum',
     default: 'normal',
@@ -198,6 +231,21 @@ export const SETTINGS: readonly SettingDeclaration[] = [
       { value: 'domain', label: 'Lock to domain' },
       { value: 'page', label: 'Lock to this page' },
     ],
+  },
+  // Navigation dedup (navigation-tab-dedup): the escape hatch for the
+  // address-bar dedup behaviour owned by the `tab-dedup` capability. Default On —
+  // the whole point is to fix the duplicate complaint ("smart by default"); the
+  // narrow scope (only a blank new tab's first navigation) makes an unwanted
+  // dedup rare. The generic `toggle` rendering is the settings capability's
+  // contribution.
+  {
+    key: 'dedupNewTabNavigations',
+    type: 'toggle',
+    default: true,
+    label: 'Switch to an already-open tab',
+    description:
+      "When you open a new tab and go to a page that's already open in this space, switch to it instead of opening a duplicate",
+    group: 'Tabs',
   },
   // Auto-archive (auto-archive): the master switch + the global idle threshold.
   // Owned by the auto-archive capability; the generic `toggle`/`number` rendering

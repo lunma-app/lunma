@@ -1,14 +1,17 @@
 import type { LauncherResult } from '../../shared/launcher-contract';
 import { log } from '../../shared/logger';
-import { scoreResult } from './scoring';
+import type { SpaceId } from '../../shared/types';
+import { scoreCandidates } from './scoring';
 
 /**
- * Candidate results from the four providers, kept apart so the engine can apply
- * the de-dup precedence `tab > saved > bookmark > history` (design D2).
+ * Candidate results from the five providers, kept apart so the engine can apply
+ * the de-dup precedence `tab > saved > smart > bookmark > history`
+ * (launcher-fuzzy-smart-folders, design D4).
  */
 export interface SearchSources {
   tabs: LauncherResult[];
   saved: LauncherResult[];
+  smart: LauncherResult[];
   bookmarks: LauncherResult[];
   history: LauncherResult[];
 }
@@ -21,19 +24,23 @@ export const MAX_RESULTS = 12;
  *
  * - An empty/whitespace query returns `[]` (the surfaces show their idle state).
  * - Results sharing a URL are de-duped with precedence
- *   `tab > saved > bookmark > history` (the higher-precedence one is kept).
- * - Each survivor is scored; candidates the query does not match (score 0) are
- *   dropped.
+ *   `tab > saved > smart > bookmark > history` (the higher-precedence one is kept).
+ * - The de-duped survivors are scored in a single batch (uFuzzy is a batch
+ *   matcher); candidates the query does not match (score 0) are dropped.
  * - Sorted by score descending with a stable tie order (insertion order, which
  *   is source-precedence order, breaks ties).
  * - Capped to {@link MAX_RESULTS}; truncation emits a `log` line (never silent).
  *
- * `now` is forwarded to scoring for the deterministic history-recency term.
+ * `now` is forwarded to scoring for the deterministic history-recency term;
+ * `activeSpaceId` (the requesting window's active Space) is forwarded for the
+ * `prefer-current-space` boost (design D9) — the handler passes it only in that
+ * scope mode, so `global`/`current-space-only` leave it undefined.
  */
 export function runSearch(
   query: string,
   sources: SearchSources,
   now: number = Date.now(),
+  activeSpaceId?: SpaceId,
 ): LauncherResult[] {
   if (query.trim() === '') return [];
 
@@ -43,16 +50,19 @@ export function runSearch(
   for (const candidate of [
     ...sources.tabs,
     ...sources.saved,
+    ...sources.smart,
     ...sources.bookmarks,
     ...sources.history,
   ]) {
     if (!byUrl.has(candidate.url)) byUrl.set(candidate.url, candidate);
   }
 
+  const survivors = [...byUrl.values()];
+  const scores = scoreCandidates(query, survivors, now, activeSpaceId);
   const scored: LauncherResult[] = [];
-  for (const candidate of byUrl.values()) {
-    const score = scoreResult(query, candidate, now);
-    if (score > 0) scored.push({ ...candidate, score });
+  for (let i = 0; i < survivors.length; i++) {
+    const score = scores[i] as number;
+    if (score > 0) scored.push({ ...(survivors[i] as LauncherResult), score });
   }
 
   // Stable sort (ES2019+): equal scores keep insertion order = source precedence.

@@ -11,11 +11,23 @@ import type { SavedTab, SavedTabId, TabBinding, WindowId } from '../../../shared
  * (stateless) surface uses to dispatch `focusSavedTab` rather than `openSavedTab`
  * (no surface needs to read bindings itself). The request's `windowId` selects
  * which window's slot decides focus-vs-open.
+ *
+ * `savedTabFolder` (optional) maps a `SavedTabId` to the name of the regular
+ * `folder` node it lives in (from `buildFolderNameIndex().savedTabFolder`,
+ * launcher-fuzzy-smart-folders): when the saved tab has an entry, the result
+ * carries it as the matchable `folderName` field. A favicon-row or unfoldered
+ * saved tab has no entry and so no `folderName`.
+ *
+ * A **pinned** saved tab (non-null `SavedTab.spaceId`) also carries that
+ * `spaceId` for the launcher's current-Space scope (design D9). A favicon-row
+ * favorite (`spaceId === null`) is global — it carries no `spaceId`, so it is
+ * never down-ranked or filtered by the current-Space scope.
  */
 export function savedTabsProvider(
   savedTabs: Record<SavedTabId, SavedTab>,
   tabBindings: Record<SavedTabId, TabBinding> = {},
   windowId?: WindowId,
+  savedTabFolder: Record<SavedTabId, string> = {},
 ): LauncherResult[] {
   const results: LauncherResult[] = [];
   for (const saved of Object.values(savedTabs)) {
@@ -31,6 +43,9 @@ export function savedTabsProvider(
     };
     const bound = windowId !== undefined ? tabBindings[saved.id]?.[windowId] : undefined;
     if (bound !== undefined) result.tabId = bound;
+    const folderName = savedTabFolder[saved.id];
+    if (folderName !== undefined) result.folderName = folderName;
+    if (saved.spaceId !== null) result.spaceId = saved.spaceId;
     results.push(result);
   }
   return results;

@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { DEFAULTS, readSettings, watchSettings, writeAllSettings, writeSetting } from './settings';
+import {
+  DEFAULTS,
+  readSettings,
+  SETTINGS,
+  watchSettings,
+  writeAllSettings,
+  writeSetting,
+} from './settings';
 
 type StorageListener = (
   changes: Record<string, chrome.storage.StorageChange>,
@@ -101,6 +108,8 @@ describe('writeSetting', () => {
       defaultSearchEngine: 'google',
       customSearchUrl: '',
       customSearchKeyword: '',
+      launcherScope: 'prefer-current-space',
+      dedupNewTabNavigations: true,
       autoArchiveEnabled: true,
       autoArchiveIdleMinutes: 720,
       autoArchiveRetentionDays: 7,
@@ -120,6 +129,8 @@ describe('writeSetting', () => {
       defaultSearchEngine: 'google',
       customSearchUrl: '',
       customSearchKeyword: '',
+      launcherScope: 'prefer-current-space',
+      dedupNewTabNavigations: true,
       autoArchiveEnabled: true,
       autoArchiveIdleMinutes: 720,
       autoArchiveRetentionDays: 7,
@@ -149,6 +160,8 @@ describe('watchSettings', () => {
       defaultSearchEngine: 'google',
       customSearchUrl: '',
       customSearchKeyword: '',
+      launcherScope: 'prefer-current-space',
+      dedupNewTabNavigations: true,
       autoArchiveEnabled: true,
       autoArchiveIdleMinutes: 720,
       autoArchiveRetentionDays: 7,
@@ -197,6 +210,8 @@ describe('watchSettings', () => {
       defaultSearchEngine: 'google',
       customSearchUrl: '',
       customSearchKeyword: '',
+      launcherScope: 'prefer-current-space',
+      dedupNewTabNavigations: true,
       autoArchiveEnabled: true,
       autoArchiveIdleMinutes: 720,
       autoArchiveRetentionDays: 7,
@@ -248,6 +263,8 @@ describe('tint setting', () => {
       defaultSearchEngine: 'google',
       customSearchUrl: '',
       customSearchKeyword: '',
+      launcherScope: 'prefer-current-space',
+      dedupNewTabNavigations: true,
       autoArchiveEnabled: true,
       autoArchiveIdleMinutes: 720,
       autoArchiveRetentionDays: 7,
@@ -446,5 +463,35 @@ describe('auto-archive settings (toggle + number)', () => {
   test('writeAllSettings propagates a storage error (does not swallow it)', async () => {
     chromeMock.set.mockRejectedValueOnce(new Error('quota exceeded'));
     await expect(writeAllSettings(DEFAULTS)).rejects.toThrow('quota exceeded');
+  });
+});
+
+describe('dedupNewTabNavigations setting (navigation-tab-dedup)', () => {
+  test('defaults to On (true), derived from its declaration', async () => {
+    expect(DEFAULTS.dedupNewTabNavigations).toBe(true);
+    expect((await readSettings()).dedupNewTabNavigations).toBe(true);
+  });
+
+  test('is declared as a toggle in the Tabs group', () => {
+    const decl = SETTINGS.find((d) => d.key === 'dedupNewTabNavigations');
+    expect(decl).toMatchObject({ type: 'toggle', group: 'Tabs', default: true });
+  });
+
+  test('a malformed stored value degrades to the default (true)', async () => {
+    chromeMock.data['lunma.settings'] = { dedupNewTabNavigations: 'yes', density: 'compact' };
+    const settings = await readSettings();
+    expect(settings.dedupNewTabNavigations).toBe(true);
+    // The per-field `.catch` is isolated — the valid sibling still parses.
+    expect(settings.density).toBe('compact');
+  });
+
+  test('reads a valid stored false', async () => {
+    chromeMock.data['lunma.settings'] = { dedupNewTabNavigations: false };
+    expect((await readSettings()).dedupNewTabNavigations).toBe(false);
+  });
+
+  test('writeSetting round-trips the toggle key', async () => {
+    await writeSetting('dedupNewTabNavigations', false);
+    expect((await readSettings()).dedupNewTabNavigations).toBe(false);
   });
 });

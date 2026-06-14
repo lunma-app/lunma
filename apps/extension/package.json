@@ -21,6 +21,7 @@
     "verify": "tsc --noEmit && biome check src && pnpm check && pnpm lint:styles && vitest run"
   },
   "dependencies": {
+    "@leeoniya/ufuzzy": "1.0.19",
     "@lucide/svelte": "^1.16.0",
     "@lunma/tokens": "workspace:*",
     "bits-ui": "^2.18.1",
