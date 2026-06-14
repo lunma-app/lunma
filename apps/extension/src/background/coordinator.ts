@@ -6,6 +6,7 @@ import type { AppState } from '../shared/types';
 import { BoundaryController } from './boundary-controller';
 import { GroupOrchestrator } from './group-orchestrator';
 import { autoArchiveHandlers } from './handlers/auto-archive';
+import { backupHandlers } from './handlers/backup';
 import { boundaryHandlers } from './handlers/boundary';
 import { chromeGroupWindowHandlers } from './handlers/chrome-groups-windows';
 import { chromeTabHandlers } from './handlers/chrome-tabs';
@@ -133,6 +134,9 @@ export const EventPolicy: Record<PendingEventKind, EventPolicyEntry> = {
   updateSmartFolder: {},
   deleteSmartFolder: {},
   refreshSmartFolder: {},
+  // Per-click distinct (smart-folder-item-bindings): a re-click of an
+  // already-bound row is the cheap focus path, so coalescing buys nothing.
+  openSmartItem: {},
   'smartFolders.result': {},
   reorderTemp: {},
   reorderSpaces: {},
@@ -154,6 +158,8 @@ export const EventPolicy: Record<PendingEventKind, EventPolicyEntry> = {
   setSpaceAutoArchive: {},
   deleteArchivedTab: {},
   clearArchivedTabs: {},
+  // Data-backup: each import is a distinct, non-coalescing user action.
+  importState: {},
 };
 
 export const QUEUE_CAP = 1000;
@@ -276,6 +282,7 @@ export class Coordinator {
       ...tempTabHandlers(),
       ...autoArchiveHandlers(),
       ...boundaryHandlers(),
+      ...backupHandlers(),
     };
   }
 

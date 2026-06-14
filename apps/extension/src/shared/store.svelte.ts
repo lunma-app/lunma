@@ -15,6 +15,7 @@ import type {
   SpaceAutoArchive,
   SpaceId,
   SpaceInstance,
+  TabBinding,
   TabBoundary,
   TabId,
   WindowId,
@@ -65,6 +66,7 @@ export const createInitialState = (): AppState => ({
   trash: {},
   pinnedBySpace: {},
   faviconRow: [],
+  smartItemBindings: {},
   liveTabsById: {},
   smartFolders: {},
 });
@@ -523,6 +525,9 @@ export class LunmaStore {
         if (saved) saved.currentURL = null;
       }
     }
+    // A closing tab also drops any smart-item binding it held (smart-folder-
+    // item-bindings): the row returns to plain, a held row evaporates.
+    this.unbindSmartItemsForTab(tabId);
     delete this.state.tabLastActivity[tabId];
     void info;
   }
@@ -929,9 +934,11 @@ export class LunmaStore {
     }
   }
 
-  /** Remove a smart-folder node AND drop its runtime entry (smart-folders,
-   * design D12) — both are store state. Closes no tabs, spills no children
-   * (a smart node has none). */
+  /** Remove a smart-folder node AND drop its runtime entry and item bindings
+   * (smart-folders design D12; smart-folder-item-bindings) — all store state.
+   * Closes no tabs, spills no children (a smart node has none). The
+   * coordinator captures the orphaned live tabs via
+   * {@link dropSmartFolderBindings} BEFORE this, to demote them to Temporary. */
   deleteSmartFolder(spaceId: SpaceId, folderId: FolderId): void {
     const list = this.state.pinnedBySpace[spaceId];
     if (!list) {
@@ -945,6 +952,7 @@ export class LunmaStore {
     }
     list.splice(idx, 1);
     delete this.state.smartFolders[folderId];
+    delete this.state.smartItemBindings[folderId];
   }
 
   /**
@@ -975,6 +983,71 @@ export class LunmaStore {
       return;
     }
     this.state.smartFolders[folderId] = runtime;
+  }
+
+  /**
+   * Bind a smart-folder result item to a live Chrome tab IN A SPECIFIC WINDOW
+   * (smart-folder-item-bindings): set
+   * `smartItemBindings[folderId][itemId][windowId] = tabId`, leaving any other
+   * window's slot untouched, and enforce the bound-not-temp invariant for
+   * `windowId` (mirrors {@link bindSavedTab}). Ids only — the item's URL/title
+   * never enter the persisted slice.
+   */
+  bindSmartItem(folderId: FolderId, itemId: string, windowId: WindowId, tabId: TabId): void {
+    let byItem = this.state.smartItemBindings[folderId];
+    if (!byItem) {
+      this.state.smartItemBindings[folderId] = {};
+      // Re-read so we mutate the reactive proxy, not the plain literal
+      // (the ensureInstance/ensureBindingRecord precedent).
+      byItem = this.state.smartItemBindings[folderId] as { [itemId: string]: TabBinding };
+    }
+    let slots = byItem[itemId];
+    if (!slots) {
+      byItem[itemId] = {};
+      slots = byItem[itemId] as TabBinding;
+    }
+    slots[windowId] = tabId;
+    this.removeFromWindowTemp(windowId, tabId);
+  }
+
+  /**
+   * Drop every smart-item binding slot held by `tabId` (smart-folder-item-
+   * bindings) — called from {@link onTabRemoved} when the tab closes. A Chrome
+   * tab id is globally unique, but scan every slot anyway (defensive, like the
+   * `tabBindings` loop there). Emptied item/folder records are pruned so a held
+   * row evaporates on the next render and the persisted slice never accretes
+   * empty husks.
+   */
+  unbindSmartItemsForTab(tabId: TabId): void {
+    for (const [folderId, byItem] of Object.entries(this.state.smartItemBindings)) {
+      for (const [itemId, slots] of Object.entries(byItem)) {
+        for (const [windowIdStr, boundTabId] of Object.entries(slots)) {
+          if (boundTabId === tabId) delete slots[Number(windowIdStr)];
+        }
+        if (Object.keys(slots).length === 0) delete byItem[itemId];
+      }
+      if (Object.keys(byItem).length === 0) delete this.state.smartItemBindings[folderId];
+    }
+  }
+
+  /**
+   * Drop ALL of a smart folder's item bindings (smart-folder-item-bindings,
+   * design D4) and return the orphaned still-open tab ids — the tabs the
+   * coordinator demotes into their window's active instance (`tempTabIds`) so
+   * no tab goes invisible. "Still open" is judged by `liveTabsById` (the SW's
+   * live view); a stale id (tab already closed) is dropped silently.
+   */
+  dropSmartFolderBindings(folderId: FolderId): TabId[] {
+    const byItem = this.state.smartItemBindings[folderId];
+    if (!byItem) return [];
+    const orphaned: TabId[] = [];
+    for (const slots of Object.values(byItem)) {
+      for (const tabId of Object.values(slots)) {
+        if (this.state.liveTabsById[tabId] !== undefined) orphaned.push(tabId);
+      }
+    }
+    delete this.state.smartItemBindings[folderId];
+    return orphaned;
   }
 
   private findSmartFolder(
@@ -1168,6 +1241,37 @@ export class LunmaStore {
   clearArchivedTabs(): void {
     if (this.state.archivedTabs.length === 0) return;
     this.state.archivedTabs.splice(0, this.state.archivedTabs.length);
+  }
+
+  /**
+   * Replace the whole store state in place from a fully-parsed `AppState` (the
+   * data-backup import path). NEVER reassigns `this.state` — that would swap the
+   * Svelte `$state` proxy and break every open surface's reactive subscriptions.
+   * Instead, array slices are spliced in place (the `clearArchivedTabs` / `reorderSpaces`
+   * precedents) and all other fields are directly reassigned on the reactive proxy.
+   * The handler calls `ctx.markDirty()` after this so the coordinator's atomic
+   * persist + broadcast delivers the replacement to every open surface.
+   */
+  replaceState(next: AppState): void {
+    // Scalar and object fields: direct property assignment on the reactive proxy.
+    this.state.schemaVersion = next.schemaVersion;
+    this.state.lastActivatedSpaceId = next.lastActivatedSpaceId;
+    this.state.savedTabs = next.savedTabs;
+    this.state.pinnedBySpace = next.pinnedBySpace;
+    this.state.trash = next.trash;
+    this.state.tabBindings = next.tabBindings;
+    this.state.activeSpaceByWindow = next.activeSpaceByWindow;
+    this.state.spaceInstancesByWindow = next.spaceInstancesByWindow;
+    this.state.tabLastActivity = next.tabLastActivity;
+    this.state.smartItemBindings = next.smartItemBindings;
+    this.state.liveTabsById = next.liveTabsById;
+    this.state.smartFolders = next.smartFolders;
+
+    // Arrays: splice in place so any component holding a reference to the
+    // reactive array proxy continues to observe the replaced contents.
+    this.state.spaces.splice(0, this.state.spaces.length, ...next.spaces);
+    this.state.archivedTabs.splice(0, this.state.archivedTabs.length, ...next.archivedTabs);
+    this.state.faviconRow.splice(0, this.state.faviconRow.length, ...next.faviconRow);
   }
 
   // ───────────────────────────────────────────────────────────────────────
@@ -1445,6 +1549,16 @@ export class LunmaStore {
     for (const slots of Object.values(this.state.tabBindings)) {
       for (const boundTabId of Object.values(slots)) {
         if (boundTabId === tabId) return true;
+      }
+    }
+    // Smart-item bindings count too (smart-folder-item-bindings): a tab opened
+    // from a smart-folder row is bound, never temporary. O(bindings) — smart-item
+    // bindings number at most a handful, no cost at sidebar scale.
+    for (const byItem of Object.values(this.state.smartItemBindings)) {
+      for (const slots of Object.values(byItem)) {
+        for (const boundTabId of Object.values(slots)) {
+          if (boundTabId === tabId) return true;
+        }
       }
     }
     return false;

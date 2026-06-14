@@ -1,15 +1,19 @@
 import { z } from 'zod';
-import type { AppState } from './types';
+import { SettingsSchema } from './settings';
+import type { AppState, BackupEnvelope } from './types';
 
 // Pre-release clean baseline (rebrand-to-lunma): the placeholder-era v1→v11
 // schema history was collapsed to a single v1 shape. v2 (smart-folders) widens
 // the persisted `PinNode` union with the `smart` kind; v3 (github-connector)
-// widens the smart node's `source` to `'gitlab' | 'github'` — both pass-through
-// entries in the append-only `migrations` list (see `migrations.ts`). Each bump
-// is deliberate despite the pass-through: it makes a downgrade detectable (an
-// older build reading newer data quarantines on the version gate instead of
-// Zod-rejecting unfamiliar nodes with a confusing parse error).
-export const CURRENT_SCHEMA_VERSION = 3;
+// widens the smart node's `source` to `'gitlab' | 'github'`; v4
+// (smart-folder-item-bindings) adds the persisted ids-only `smartItemBindings`
+// slice (`.default({})`, so older envelopes parse unchanged); v5 (jira-connector)
+// widens the smart node's `source` to `'gitlab' | 'github' | 'jira'` — all
+// pass-through entries in the append-only `migrations` list (see `migrations.ts`).
+// Each bump is deliberate despite the pass-through: it makes a downgrade
+// detectable (an older build reading newer data quarantines on the version gate
+// instead of Zod-rejecting unfamiliar nodes with a confusing parse error).
+export const CURRENT_SCHEMA_VERSION = 5;
 
 const SpaceInstanceSchema = z.strictObject({
   spaceId: z.string(),
@@ -100,7 +104,7 @@ const PinNodeSchema = z.discriminatedUnion('kind', [
     id: z.string(),
     name: z.string(),
     icon: z.string(),
-    source: z.enum(['gitlab', 'github']),
+    source: z.enum(['gitlab', 'github', 'jira']),
     baseUrl: z.string(),
     query: z.enum(['authored', 'assigned', 'review-requested']),
     refreshMinutes: z.number(),
@@ -148,7 +152,18 @@ const SmartFolderRuntimeSchema = z.strictObject({
   fetchedAt: z.number().nullable(),
 });
 
-export const AppStateV3Schema = z.strictObject({
+// Per-(smart-folder item, window) live bindings (smart-folder-item-bindings):
+// `{ [folderId]: { [itemId]: { [windowId]: tabId } } }` — the inner record is
+// the same per-window shape as `TabBindingsSchema`'s. PERSISTED, but ids only
+// (never the item's URL/title — the work-sensitive payload stays off disk).
+// `.default({})` (the `tempTabTitles` precedent) so v3 envelopes, written
+// before this slice existed, parse cleanly through the v4 pass-through.
+const SmartItemBindingsSchema = z.record(
+  z.string(),
+  z.record(z.string(), z.record(z.coerce.number(), z.number())),
+);
+
+export const AppStateV5Schema = z.strictObject({
   schemaVersion: z.number(),
   spaces: z.array(SpaceSchema),
   activeSpaceByWindow: z.record(z.coerce.number(), z.string().nullable()),
@@ -165,15 +180,16 @@ export const AppStateV3Schema = z.strictObject({
   pinnedBySpace: z.record(z.string(), z.array(PinNodeSchema)),
   liveTabsById: z.record(z.coerce.number(), LiveTabSchema).optional(),
   faviconRow: z.array(z.string()),
+  smartItemBindings: SmartItemBindingsSchema.default({}),
   smartFolders: z.record(z.string(), SmartFolderRuntimeSchema).optional(),
 });
 
 export const EnvelopeSchema = z.strictObject({
   schemaVersion: z.number(),
-  state: AppStateV3Schema,
+  state: AppStateV5Schema,
 });
 
-export type AppStateV3 = z.infer<typeof AppStateV3Schema>;
+export type AppStateV5 = z.infer<typeof AppStateV5Schema>;
 export type Envelope = z.infer<typeof EnvelopeSchema>;
 
 type AssertEqual<A, B> =
@@ -183,5 +199,37 @@ type AssertEqual<A, B> =
 // `AppState`, optional on the persisted schema (stripped before write). Compare
 // the persisted shapes — every NON-ephemeral field must still match exactly.
 type Persisted<T> = Omit<T, 'liveTabsById' | 'smartFolders'>;
-const _schemaMatchesAppState: AssertEqual<Persisted<AppStateV3>, Persisted<AppState>> = true;
+const _schemaMatchesAppState: AssertEqual<Persisted<AppStateV5>, Persisted<AppState>> = true;
 void _schemaMatchesAppState;
+
+// ── Data-backup: BackupEnvelopeSchema ────────────────────────────────────────
+// The portable backup envelope schema (data-backup capability). Strict: an
+// unknown top-level key rejects. The `state` slice reuses the portable-subset
+// field schemas above (no coerce/default so the backup boundary is clean); the
+// window-bound maps are intentionally absent and re-seeded on import.
+
+const PortableAppStateSchema = z.strictObject({
+  schemaVersion: z.number(),
+  spaces: z.array(SpaceSchema),
+  savedTabs: z.record(z.string(), SavedTabSchema),
+  pinnedBySpace: z.record(z.string(), z.array(PinNodeSchema)),
+  faviconRow: z.array(z.string()),
+  archivedTabs: z.array(ArchivedTabSchema),
+  trash: z.record(z.string(), TrashedSpaceSchema),
+  lastActivatedSpaceId: z.string().nullable(),
+});
+
+export const BackupEnvelopeSchema = z.strictObject({
+  formatVersion: z.literal(1),
+  schemaVersion: z.number(),
+  exportedAt: z.number(),
+  state: PortableAppStateSchema,
+  settings: SettingsSchema.optional(),
+});
+
+// Directional compile-time guard: the Zod inferred type must be assignable to
+// `BackupEnvelope`. The reverse direction (BackupEnvelope → schema) is verified
+// by the `parseBackup` return-type check in `backup.ts`.
+const _schemaAssignableToBackupEnvelope: z.infer<typeof BackupEnvelopeSchema> =
+  {} as BackupEnvelope;
+void _schemaAssignableToBackupEnvelope;

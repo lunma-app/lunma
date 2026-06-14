@@ -82,12 +82,13 @@ describe('Options', () => {
     expect(getByText('Colour intensity')).not.toBeNull();
     // Segmented controls: Density (compact/normal/comfort) + Colour intensity
     // (subtle/standard/vivid) in Appearance + the Pinned-tabs boundary default
-    // (off/domain/page) + the Auto-archive toggle (off/on) → 3 + 3 + 3 + 2 = eleven
-    // radios. The Search default-engine picker is a dropdown (8 options don't fit a
+    // (off/domain/page) + the Auto-archive toggle (off/on) + the BackupRestore
+    // "Include settings" Off/On toggle → 3 + 3 + 3 + 2 + 2 = thirteen radios.
+    // The Search default-engine picker is a dropdown (8 options don't fit a
     // segmented control) and the custom-URL + custom-keyword + idle-minutes fields
     // are text/number inputs — none contribute radios.
     const radios = container.querySelectorAll('input[type="radio"]');
-    expect(radios).toHaveLength(11);
+    expect(radios).toHaveLength(13);
   });
 
   test('renders the Pinned tabs group with the boundary-default control (no Options code)', () => {

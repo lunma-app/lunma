@@ -171,3 +171,46 @@ describe('LunmaStore.snapshot()', () => {
     expect(store.state.spaces.find((s) => s.id === 'leak')).toBeUndefined();
   });
 });
+
+describe('LunmaStore.replaceState (data-backup)', () => {
+  test('swaps all portable slices in place', () => {
+    const store = makeStore();
+    seedSpace(store);
+    store.state.savedTabs['st-1'] = savedTab();
+
+    const next = {
+      ...store.state,
+      spaces: [{ id: 'sp-new', name: 'New', color: 'green', icon: 'star' }],
+      savedTabs: { 'st-new': savedTab({ id: 'st-new', spaceId: 'sp-new' }) },
+      lastActivatedSpaceId: 'sp-new',
+      faviconRow: ['st-new'],
+      archivedTabs: [],
+    };
+    const stateBefore = store.state;
+    store.replaceState(next);
+
+    // state object identity is preserved (same reactive proxy)
+    expect(store.state).toBe(stateBefore);
+    expect(store.state.spaces).toHaveLength(1);
+    expect(store.state.spaces[0]?.id).toBe('sp-new');
+    expect(Object.keys(store.state.savedTabs)).toEqual(['st-new']);
+    expect(store.state.lastActivatedSpaceId).toBe('sp-new');
+    expect(store.state.faviconRow).toEqual(['st-new']);
+  });
+
+  test('arrays are mutated in place (same array reference)', () => {
+    const store = makeStore();
+    seedSpace(store);
+    const spacesBefore = store.state.spaces;
+    const archivedBefore = store.state.archivedTabs;
+    const faviconBefore = store.state.faviconRow;
+
+    const next = { ...store.state, spaces: [], archivedTabs: [], faviconRow: [] };
+    store.replaceState(next);
+
+    expect(store.state.spaces).toBe(spacesBefore);
+    expect(store.state.archivedTabs).toBe(archivedBefore);
+    expect(store.state.faviconRow).toBe(faviconBefore);
+    expect(store.state.spaces).toHaveLength(0);
+  });
+});

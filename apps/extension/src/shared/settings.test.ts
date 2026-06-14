@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { DEFAULTS, readSettings, watchSettings, writeSetting } from './settings';
+import { DEFAULTS, readSettings, watchSettings, writeAllSettings, writeSetting } from './settings';
 
 type StorageListener = (
   changes: Record<string, chrome.storage.StorageChange>,
@@ -431,5 +431,20 @@ describe('auto-archive settings (toggle + number)', () => {
         .autoArchiveIdleMinutes,
     ).toBe(30);
     expect((await readSettings()).autoArchiveIdleMinutes).toBe(30);
+  });
+
+  test('writeAllSettings persists a complete settings object in one set call', async () => {
+    chromeMock.set.mockClear();
+    const next = { ...DEFAULTS, density: 'compact' as const };
+    await writeAllSettings(next);
+    expect(chromeMock.set).toHaveBeenCalledTimes(1);
+    const stored = chromeMock.data['lunma.settings'] as typeof next;
+    expect(stored.density).toBe('compact');
+    expect((await readSettings()).density).toBe('compact');
+  });
+
+  test('writeAllSettings propagates a storage error (does not swallow it)', async () => {
+    chromeMock.set.mockRejectedValueOnce(new Error('quota exceeded'));
+    await expect(writeAllSettings(DEFAULTS)).rejects.toThrow('quota exceeded');
   });
 });

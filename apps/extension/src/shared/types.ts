@@ -133,12 +133,12 @@ export interface SavedTab {
 export type SmartQuery = 'authored' | 'assigned' | 'review-requested';
 
 /**
- * The shipped smart-folder connector sources (github-connector). A closed
- * union — the `CONNECTORS` registry in `background/smart-folders.ts` holds
- * exactly these two; widening it is a schema-version bump (the v2→v3
- * precedent).
+ * The shipped smart-folder connector sources (github-connector, then
+ * jira-connector). A closed union — the `CONNECTORS` registry in
+ * `background/smart-folders.ts` holds exactly these three; widening it is a
+ * schema-version bump (the v2→v3, then v4→v5 precedent).
  */
-export type SmartSource = 'gitlab' | 'github';
+export type SmartSource = 'gitlab' | 'github' | 'jira';
 
 /**
  * A pinned-tab placement node. The pinned list for a Space is an ordered tree
@@ -293,6 +293,18 @@ export interface AppState {
    */
   faviconRow: SavedTabId[];
   /**
+   * Per-(smart-folder item, window) live bindings (smart-folder-item-bindings):
+   * a result row activated like a pinned tab — open-if-dormant, focus-if-bound.
+   * Keyed by folder id, then by the connector item id (stable across polls);
+   * the inner record is the same per-window `TabBinding` shape as
+   * `tabBindings`. PERSISTED, but **ids only** — never the item's URL or title
+   * (the deliberate carve-out from the results-are-ephemeral rule: the
+   * work-sensitive payload stays off disk). Persistence is what heals an SW
+   * restart; across a browser restart tab ids don't survive, so boot pruning
+   * drops the entries and the restored tabs classify as temporary naturally.
+   */
+  smartItemBindings: { [folderId: FolderId]: { [itemId: string]: TabBinding } };
+  /**
    * Ephemeral live-tab metadata, keyed by Chrome tab id. Never persisted
    * (stripped in `persist()`); rebuilt at SW boot from `chrome.tabs.query`.
    */
@@ -305,6 +317,44 @@ export interface AppState {
    * work-sensitive MR titles never touch disk.
    */
   smartFolders: { [folderId: FolderId]: SmartFolderRuntime };
+}
+
+// Data-backup: the portable backup envelope types (data-backup capability).
+
+/**
+ * The portable subset of `AppState` that travels in a backup file. Excludes
+ * machine-bound maps (`tabBindings`, `spaceInstancesByWindow`,
+ * `activeSpaceByWindow`, `tabLastActivity`, `smartItemBindings`) and the
+ * ephemeral slices (`liveTabsById`, `smartFolders`). On import these are
+ * re-seeded to empty defaults so the imported data adopts the new machine's
+ * live tabs cleanly on next boot.
+ */
+export type PortableAppState = Pick<
+  AppState,
+  | 'spaces'
+  | 'savedTabs'
+  | 'pinnedBySpace'
+  | 'faviconRow'
+  | 'archivedTabs'
+  | 'trash'
+  | 'lastActivatedSpaceId'
+> & { schemaVersion: number };
+
+/**
+ * The on-file backup envelope written by `buildBackup` and validated by
+ * `BackupEnvelopeSchema` in `schemas.ts`. `formatVersion` is the backup FILE
+ * FORMAT version (independent of the storage `schemaVersion`), always `1` for
+ * this first shipped format. `schemaVersion` carries the storage schema the
+ * `state` payload was written at, so import can run `runMigrations` forward.
+ */
+export interface BackupEnvelope {
+  formatVersion: 1;
+  schemaVersion: number;
+  exportedAt: number;
+  state: PortableAppState;
+  /** Typed `| undefined` to match the Zod schema's `.optional()` inference under
+   * `exactOptionalPropertyTypes` (see the equality guard in `schemas.ts`). */
+  settings?: import('./settings').Settings | undefined;
 }
 
 /**

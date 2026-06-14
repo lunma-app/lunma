@@ -292,6 +292,19 @@ export async function readSettings(): Promise<Settings> {
   }
 }
 
+/**
+ * Validate and write a complete `Settings` object to `chrome.storage.sync` in a
+ * single call — the data-backup import path. Throws on validation failure or
+ * storage error so the caller (`importState` handler) can ack with an error.
+ */
+export async function writeAllSettings(settings: Settings): Promise<void> {
+  const parsed = SettingsSchema.safeParse(settings);
+  if (!parsed.success) {
+    throw new Error(`writeAllSettings: invalid settings: ${parsed.error.message}`);
+  }
+  await chrome.storage.sync.set({ [SETTINGS_KEY]: parsed.data });
+}
+
 /** Merge a single field into the stored settings object and persist it. Never
  * rejects to the caller: a storage failure is caught and logged (the in-memory
  * selection still applies locally so the user isn't blocked). */

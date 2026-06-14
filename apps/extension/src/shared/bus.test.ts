@@ -319,6 +319,10 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
   },
   deleteSmartFolder: { kind: 'deleteSmartFolder', payload: { spaceId: 'sp', folderId: 'sf' } },
   refreshSmartFolder: { kind: 'refreshSmartFolder', payload: { spaceId: 'sp', folderId: 'sf' } },
+  openSmartItem: {
+    kind: 'openSmartItem',
+    payload: { spaceId: 'sp', folderId: 'sf', itemId: '42', windowId: 1 },
+  },
   reorderTemp: { kind: 'reorderTemp', payload: { windowId: 1, tabIds: [1, 2, 3] } },
   reorderSpaces: { kind: 'reorderSpaces', payload: { spaceIds: ['a', 'b'] } },
   renameTab: { kind: 'renameTab', payload: { savedTabId: 'st', newName: 'N' } },
@@ -346,6 +350,26 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
   },
   deleteArchivedTab: { kind: 'deleteArchivedTab', payload: { archivedAt: 123, tabId: 5 } },
   clearArchivedTabs: { kind: 'clearArchivedTabs', payload: {} },
+  importState: {
+    kind: 'importState',
+    payload: {
+      backup: {
+        formatVersion: 1 as const,
+        schemaVersion: 5,
+        exportedAt: 1000,
+        state: {
+          schemaVersion: 5,
+          spaces: [],
+          savedTabs: {},
+          pinnedBySpace: {},
+          faviconRow: [],
+          archivedTabs: [],
+          trash: {},
+          lastActivatedSpaceId: null,
+        },
+      },
+    },
+  },
 };
 
 describe('SidebarCommandSchema (full-payload validation)', () => {
@@ -470,8 +494,42 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     ).toBe(false);
   });
 
+  test('openSmartItem round-trips (identity-only payload)', () => {
+    const cmd = {
+      kind: 'openSmartItem',
+      payload: { spaceId: 'sp', folderId: 'sf-1', itemId: '42', windowId: 100 },
+    };
+    const parsed = SidebarCommandSchema.safeParse(cmd);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data).toEqual(cmd);
+  });
+
+  test('openSmartItem rejects a smuggled url key (strict payload)', () => {
+    // The SW resolves the URL from its own runtime slice — a URL on the wire
+    // is exactly what the identity-only contract forbids.
+    const parsed = SidebarCommandSchema.safeParse({
+      kind: 'openSmartItem',
+      payload: {
+        spaceId: 'sp',
+        folderId: 'sf-1',
+        itemId: '42',
+        windowId: 100,
+        url: 'https://evil.example.com',
+      },
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  test('openSmartItem rejects a missing itemId', () => {
+    const parsed = SidebarCommandSchema.safeParse({
+      kind: 'openSmartItem',
+      payload: { spaceId: 'sp', folderId: 'sf-1', windowId: 100 },
+    });
+    expect(parsed.success).toBe(false);
+  });
+
   test('createSmartFolder and updateSmartFolder round-trip with each source', () => {
-    for (const source of ['gitlab', 'github'] as const) {
+    for (const source of ['gitlab', 'github', 'jira'] as const) {
       const create = {
         kind: 'createSmartFolder',
         payload: {
@@ -504,14 +562,14 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
           payload: {
             spaceId: 'sp',
             ...(kind === 'updateSmartFolder' ? { folderId: 'sf-1' } : {}),
-            source: 'jira', // not a shipped connector
+            source: 'bitbucket', // not a shipped connector
             name: 'X',
-            baseUrl: 'https://jira.example.com',
+            baseUrl: 'https://bitbucket.example.com',
             query: 'authored',
             refreshMinutes: 10,
           },
         }).success,
-        `${kind} with source jira`,
+        `${kind} with source bitbucket`,
       ).toBe(false);
     }
   });
@@ -616,6 +674,30 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     if (parsed.success) expect(parsed.data).toEqual(cmd);
   });
 
+  test('a reorderPinned tree containing a jira smart node round-trips losslessly', () => {
+    const cmd = {
+      kind: 'reorderPinned',
+      payload: {
+        spaceId: 'sp',
+        nodes: [
+          {
+            kind: 'smart',
+            id: 'sf-jira',
+            name: 'My reported issues',
+            icon: 'folder-kanban',
+            source: 'jira',
+            baseUrl: 'https://acme.atlassian.net',
+            query: 'authored',
+            refreshMinutes: 10,
+          },
+        ],
+      },
+    };
+    const parsed = SidebarCommandSchema.safeParse(cmd);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data).toEqual(cmd);
+  });
+
   test('rejects a smart PinNode with an out-of-vocabulary source', () => {
     expect(
       SidebarCommandSchema.safeParse({
@@ -628,8 +710,8 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
               id: 'sf-1',
               name: 'X',
               icon: 'folder-git-2',
-              source: 'jira',
-              baseUrl: 'https://jira.example.com',
+              source: 'bitbucket',
+              baseUrl: 'https://bitbucket.example.com',
               query: 'authored',
               refreshMinutes: 10,
             },

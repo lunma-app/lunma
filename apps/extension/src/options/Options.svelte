@@ -19,6 +19,7 @@ import Select from '../ui/Select.svelte';
 import Surface from '../ui/Surface.svelte';
 import TabRow from '../ui/TabRow.svelte';
 import TextInput from '../ui/TextInput.svelte';
+import BackupRestore from './BackupRestore.svelte';
 import RecentlyArchived from './RecentlyArchived.svelte';
 import '@lunma/tokens/tokens.css';
 import '@lunma/tokens/fonts.css';
@@ -482,6 +483,11 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
         </div>
       </section>
     </Surface>
+
+    <!-- Backup & restore (data-backup): export/import a portable JSON snapshot of
+         Spaces and settings. Self-contained: export reads storage directly; import
+         goes through the bus to the SW. -->
+    <BackupRestore />
 
     <!-- Recently archived (auto-archive): the management view the sidebar chip
          deep-links to. A self-contained card reading `archivedTabs` from storage. -->

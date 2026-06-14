@@ -85,6 +85,7 @@ export type PendingEvent =
   | SidebarVariant<'updateSmartFolder'>
   | SidebarVariant<'deleteSmartFolder'>
   | SidebarVariant<'refreshSmartFolder'>
+  | SidebarVariant<'openSmartItem'>
   | SidebarVariant<'reorderTemp'>
   | SidebarVariant<'reorderSpaces'>
   | SidebarVariant<'focusTab'>
@@ -98,6 +99,9 @@ export type PendingEvent =
   | SidebarVariant<'setSpaceAutoArchive'>
   | SidebarVariant<'deleteArchivedTab'>
   | SidebarVariant<'clearArchivedTabs'>
+  // Data-backup (data-backup capability): replace the whole store state from an
+  // imported backup file. Dispatched by the options page; handled by the SW.
+  | SidebarVariant<'importState'>
   // Auto-archive (auto-archive, design D2): the `chrome.alarms`-driven idle-tab
   // sweep. A new `source: 'alarm'` — not a Chrome event, not a sidebar command —
   // carrying no payload and no `correlationId` (fire-and-forget; nobody awaits it).

@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { ICON_NAMES } from './icon-names';
 import { log } from './logger';
+import { BackupEnvelopeSchema } from './schemas';
 import type {
+  BackupEnvelope,
   FolderId,
   IconName,
   PinNode,
@@ -118,6 +120,16 @@ export type SidebarCommand =
   // Unconditional refresh; acks ok once underway — the fetch OUTCOME lands via
   // the runtime slice and the state broadcast, never via the ack.
   | { kind: 'refreshSmartFolder'; payload: { spaceId: SpaceId; folderId: FolderId } }
+  // Smart-item activation (smart-folder-item-bindings): open-if-dormant,
+  // focus-if-bound. IDENTITY ONLY — the SW resolves the item's URL from its own
+  // `smartFolders` runtime slice and never trusts a URL on the wire (the
+  // `openUrl` scheme-hardening questions don't arise; the attack surface is a
+  // lookup key). Unknown spaceId/folderId, or an itemId neither bound nor
+  // listed, throws (error ack).
+  | {
+      kind: 'openSmartItem';
+      payload: { spaceId: SpaceId; folderId: FolderId; itemId: string; windowId: WindowId };
+    }
   | { kind: 'reorderTemp'; payload: { windowId: WindowId; tabIds: TabId[] } }
   | { kind: 'reorderSpaces'; payload: { spaceIds: SpaceId[] } }
   | { kind: 'renameTab'; payload: { savedTabId: SavedTabId; newName: string } }
@@ -158,7 +170,10 @@ export type SidebarCommand =
   | { kind: 'deleteArchivedTab'; payload: { archivedAt: number; tabId: number } }
   // Discard every archived-tab record (the "Clear all" affordance in the options
   // Recently-archived view). Global — not scoped to a Space. No payload.
-  | { kind: 'clearArchivedTabs'; payload: Record<string, never> };
+  | { kind: 'clearArchivedTabs'; payload: Record<string, never> }
+  // Data-backup (data-backup capability): the options page sends a parsed backup
+  // file to the SW, which validates, migrates, and replaces the store state + broadcasts.
+  | { kind: 'importState'; payload: { backup: BackupEnvelope } };
 
 export type SidebarCommandKind = SidebarCommand['kind'];
 
@@ -192,6 +207,7 @@ export const SIDEBAR_COMMAND_KINDS: ReadonlySet<SidebarCommandKind> = new Set<Si
   'updateSmartFolder',
   'deleteSmartFolder',
   'refreshSmartFolder',
+  'openSmartItem',
   'reorderTemp',
   'reorderSpaces',
   'renameTab',
@@ -207,6 +223,7 @@ export const SIDEBAR_COMMAND_KINDS: ReadonlySet<SidebarCommandKind> = new Set<Si
   'setSpaceAutoArchive',
   'deleteArchivedTab',
   'clearArchivedTabs',
+  'importState',
 ]);
 
 // Compile-time exhaustiveness guard: if a new variant is added to `SidebarCommand`
@@ -242,6 +259,7 @@ const _kindExhaustiveness = {
   updateSmartFolder: true,
   deleteSmartFolder: true,
   refreshSmartFolder: true,
+  openSmartItem: true,
   reorderTemp: true,
   reorderSpaces: true,
   renameTab: true,
@@ -257,6 +275,7 @@ const _kindExhaustiveness = {
   setSpaceAutoArchive: true,
   deleteArchivedTab: true,
   clearArchivedTabs: true,
+  importState: true,
 } satisfies Record<SidebarCommandKind, true>;
 
 // ── Runtime payload schema (Task 1.x) ──────────────────────────────────────────
@@ -310,8 +329,8 @@ const SpaceAutoArchiveSchema = z.discriminatedUnion('mode', [
 const SmartQuerySchema = z.enum(['authored', 'assigned', 'review-requested']);
 
 // The shipped connector sources — mirrors `SmartSource` in `types.ts`. An
-// out-of-vocabulary source (e.g. 'jira') rejects at the bus boundary.
-const SmartSourceSchema = z.enum(['gitlab', 'github']);
+// out-of-vocabulary source (e.g. 'bitbucket') rejects at the bus boundary.
+const SmartSourceSchema = z.enum(['gitlab', 'github', 'jira']);
 
 // A pinned-tab placement node — mirrors `PinNode` in `types.ts` (all three
 // kinds, so `reorderPinned` round-trips smart nodes losslessly with their
@@ -513,6 +532,17 @@ const COMMAND_SCHEMAS = {
     kind: z.literal('refreshSmartFolder'),
     payload: z.strictObject({ spaceId: z.string(), folderId: z.string() }),
   }),
+  // Identity only — a payload smuggling a `url` key fails the strict parse
+  // (smart-folder-item-bindings; the SW resolves the URL from its own runtime).
+  openSmartItem: z.strictObject({
+    kind: z.literal('openSmartItem'),
+    payload: z.strictObject({
+      spaceId: z.string(),
+      folderId: z.string(),
+      itemId: z.string(),
+      windowId: z.number(),
+    }),
+  }),
   reorderTemp: z.strictObject({
     kind: z.literal('reorderTemp'),
     payload: z.strictObject({ windowId: z.number(), tabIds: z.array(z.number()) }),
@@ -581,6 +611,12 @@ const COMMAND_SCHEMAS = {
     kind: z.literal('clearArchivedTabs'),
     payload: z.strictObject({}),
   }),
+  // Data-backup: validate the full backup envelope at the bus boundary so the
+  // handler only ever receives a well-formed `BackupEnvelope`.
+  importState: z.strictObject({
+    kind: z.literal('importState'),
+    payload: z.strictObject({ backup: BackupEnvelopeSchema }),
+  }),
 } satisfies Record<SidebarCommandKind, z.ZodType>;
 
 /**
@@ -619,6 +655,7 @@ export const SidebarCommandSchema = z.discriminatedUnion('kind', [
   COMMAND_SCHEMAS.updateSmartFolder,
   COMMAND_SCHEMAS.deleteSmartFolder,
   COMMAND_SCHEMAS.refreshSmartFolder,
+  COMMAND_SCHEMAS.openSmartItem,
   COMMAND_SCHEMAS.reorderTemp,
   COMMAND_SCHEMAS.reorderSpaces,
   COMMAND_SCHEMAS.renameTab,
@@ -634,6 +671,7 @@ export const SidebarCommandSchema = z.discriminatedUnion('kind', [
   COMMAND_SCHEMAS.setSpaceAutoArchive,
   COMMAND_SCHEMAS.deleteArchivedTab,
   COMMAND_SCHEMAS.clearArchivedTabs,
+  COMMAND_SCHEMAS.importState,
 ]);
 
 export interface CommandMessage {
