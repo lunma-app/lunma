@@ -22,6 +22,8 @@ function settings(over: Partial<Settings> = {}): Settings {
     defaultSearchEngine: 'google',
     customSearchUrl: '',
     customSearchKeyword: '',
+    launcherScope: 'prefer-current-space',
+    dedupNewTabNavigations: true,
     autoArchiveEnabled: true,
     autoArchiveIdleMinutes: 60,
     autoArchiveRetentionDays: 30,

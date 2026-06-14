@@ -20,6 +20,7 @@
 | Headless UI primitives | **`bits-ui`** | Svelte 5 port of Radix Primitives. We use it sparingly — only the primitives where getting accessibility right by hand is hard (Tooltip, and later Popover / Menu / Dialog / Combobox when the create-edit-space and launcher slices land). Our scoped styles + CSS tokens stay; Bits provides only behaviour. Crucially **not** shadcn-svelte — we keep our own design system and skip Tailwind. |
 | Drag and drop | **Custom pointer-drag** (`apps/extension/src/sidebar/drag.svelte.ts`) | First-party pointer-drag controller for the sidebar lists: source row stays put (dimmed), a floating clone follows the cursor, an insertion line marks the landing slot, nothing reorders until drop. Cross-zone pin/unpin (temp→pinned drag, reorder pinned) via a single module-level controller. SW state stays authoritative — no optimistic updates. Replaced `svelte-dnd-action` during implementation; see [ADR 0006](adr/0006-custom-sidebar-drag.md) (supersedes [ADR 0003](adr/0003-sidebar-dnd-library.md)). |
 | Feed parsing | **`saxes`** (DOM-free streaming SAX) | RSS 2.0 / Atom parsing for the `rss` smart-folder connector, in the MV3 service worker — which has **no `DOMParser`**. A streaming SAX parser over a tree builder: feeds are small and we need only a flat entry list, so the event model fits, memory stays bounded, and it was already resolved transitively (promoted to a direct dep, not a novel one). |
+| Fuzzy search | **`@leeoniya/ufuzzy`** (uFuzzy) | Fuzzy, typo-tolerant matching for the launcher finder (`launcher-fuzzy-smart-folders`). Tiny (~6KB), dependency-free, batch matcher. Runs **service-worker-side only** — never in the `Alt+L` overlay content-script bundle — so the overlay byte budget and the no-Svelte/no-fuzzy overlay guard stay green (see "Non-obvious choices"). |
 
 ## Non-obvious choices, with rationale
 
@@ -89,6 +90,31 @@ Biome also carries the **architecture-integrity** guardrail. The one-way layer D
 
 Biome can lint CSS structure but cannot require a *value* (e.g. "`font-size` must be a `var(--text-*)` token"). That primitive→token half of the component-library contract is enforced by **Stylelint** + `postcss-html` (parses `.svelte` `<style>`) + `stylelint-declaration-strict-value`, scoped to `src/ui` primitives. It is the project's one deliberate addition beyond the original stack — narrow and load-bearing (the alternative, leaving the contract convention-only, is exactly the drift this guardrail exists to stop). Press-scale / control-height / feature-side token use stay at proposal-review, because raw `scale()` and heights aren't mechanically separable from legitimate use.
 
+### uFuzzy for launcher fuzzy matching — service-worker-side only
+
+The launcher finder (`launcher-fuzzy-smart-folders`) matches a query against open
+tabs, saved tabs, smart-folder items, bookmarks, and history with **fuzzy,
+typo-tolerant** matching, replacing the hand-rolled exact-substring scorer. uFuzzy
+(`@leeoniya/ufuzzy`) is a tiny, dependency-free **batch** matcher: it returns
+matching indices + per-match info (start offset, intra/inter insertions), not a
+0..1 score, so Lunma derives a bounded match *strength* from that info and keeps it
+inside the existing `× SOURCE_WEIGHT (+ history recency)` envelope — source
+ordering and the recency tiebreaker survive.
+
+The key constraint: **uFuzzy runs ONLY in the service worker.** `scoring.ts` /
+`search-engine.ts` are imported by `background/` and `launcher/shared/`, **never**
+by `overlay.ts` (the `Alt+L` content script imports only `launcher-contract` for
+`sourceBadgeLabel`/types). So the fuzzy library never enters the `<15KB`
+content-script bundle the verify-time budget guard
+(`src/launcher/overlay.budget.test.ts`) polices — the overlay stays vanilla, the
+byte budget and the no-Svelte/no-fuzzy guard stay green. This is the deliberate
+exception to the earlier "scoring is hand-rolled, no fuzzy dependency" stance
+(ADR 0001 / `docs/04-capabilities.md` §5): that rationale was "keep the stack
+pinned and the overlay bundle small," and adding uFuzzy SW-side honours both — the
+pinned stack is amended here explicitly, and the overlay is untouched. Fuse.js /
+minisearch were rejected as heavier; a hand-rolled Damerau-Levenshtein term
+matcher was rejected as reinventing exactly what uFuzzy does well.
+
 ## What to avoid
 
 - **React** — 40KB+ for what an extension needs. The component model is fine; the runtime cost on the overlay isn't.
@@ -119,6 +145,7 @@ Resolved at project start; the `pnpm-lock.yaml` is the source of truth from here
 | `@types/chrome` | 0.1.x | |
 | `bits-ui` | 2.18.x | |
 | `saxes` | 6.x | DOM-free streaming SAX XML parser — RSS 2.0 / Atom feed parsing in the service worker (`rss-connector`). The MV3 SW has **no `DOMParser`**, so feed XML cannot be parsed with the platform; promoted from a transitive dep to a direct one. |
+| `@leeoniya/ufuzzy` | 1.0.19 (exact) | Fuzzy, typo-tolerant launcher matching (`launcher-fuzzy-smart-folders`). Exact-pinned (like `saxes`) — a deliberately-added runtime dep. **Service-worker-side only**; absent from the overlay content-script bundle (enforced by the overlay budget guard). |
 | `@sveltejs/kit` | 2.x | **`apps/site` only** — build-time, nothing ships in the extension |
 | `@sveltejs/adapter-static` | 3.x | **`apps/site` only** — prerender to static output for `lunma.app` |
 | `simple-icons` | 16.x | **`apps/site` only** — build-time mock brand glyphs (CC0-1.0); nothing ships in the extension |

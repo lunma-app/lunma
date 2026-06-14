@@ -18,7 +18,13 @@
       "Bash(git diff *)",
       "Bash(git log *)",
       "Bash(git show *)",
-      "Bash(git branch*)"
+      "Bash(git branch*)",
+      "Bash(openspec list*)",
+      "Bash(openspec status *)",
+      "Bash(openspec validate *)",
+      "Bash(openspec instructions *)",
+      "Bash(mv openspec*)",
+      "Bash(mkdir -p openspec/changes/archive)"
     ],
     "deny": [
       "Read(./.env)",
@@ -27,7 +33,6 @@
       "Edit(./.env.*)",
       "Write(./.env)",
       "Write(./.env.*)",
-      "Edit(openspec/changes/archive/**)",
       "Bash(git push --force*)",
       "Bash(git push -f*)",
       "Bash(git push * --force*)",

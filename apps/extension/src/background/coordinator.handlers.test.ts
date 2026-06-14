@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { TAB_DEDUP_FLASH } from '../shared/bus';
 import type { LunmaStore } from '../shared/store.svelte';
 import type { PinNode, SavedTab } from '../shared/types';
 import {
@@ -220,6 +221,7 @@ interface SavedTabChromeStub {
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     remove: ReturnType<typeof vi.fn>;
+    duplicate: ReturnType<typeof vi.fn>;
   };
   windows: { update: ReturnType<typeof vi.fn> };
   runtime: {
@@ -234,6 +236,7 @@ function installSavedTabChromeStub(): SavedTabChromeStub {
       create: vi.fn(() => Promise.resolve({ id: 999, windowId: 100 } as chrome.tabs.Tab)),
       update: vi.fn(() => Promise.resolve({ id: 999, windowId: 100 } as chrome.tabs.Tab)),
       remove: vi.fn(() => Promise.resolve()),
+      duplicate: vi.fn(() => Promise.resolve({ id: 1000, windowId: 100 } as chrome.tabs.Tab)),
     },
     windows: { update: vi.fn(() => Promise.resolve({ id: 100 } as chrome.windows.Window)) },
     runtime: {
@@ -1425,6 +1428,294 @@ describe('Coordinator handlers: openUrl', () => {
     expect(emitAck.mock.calls[0]?.[0]).toMatchObject({
       id: 'sess:1',
       result: { error: 'window gone' },
+    });
+  });
+
+  // tab-dedup: seed a temp tab in window 100's active Space whose live URL
+  // matches, so findTabInActiveSpace resolves it.
+  function seedOpenTab(store: LunmaStore, url: string): void {
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [42], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[42] = {
+      tabId: 42,
+      windowId: 100,
+      title: 'Example',
+      url,
+      active: false,
+      status: 'complete',
+    };
+  }
+
+  test('dedup: URL already open in active Space → focuses existing tab, no create', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store, emitAck } = makeCoordinator();
+    seedOpenTab(store, 'https://example.com/');
+    coordinator.enqueue(
+      sidebar(
+        { kind: 'openUrl', payload: { url: 'https://example.com/', windowId: 100 } },
+        'sess:1',
+      ),
+    );
+    await coordinator.idle();
+    expect(chromeStub.tabs.update).toHaveBeenCalledWith(42, { active: true });
+    expect(chromeStub.windows.update).toHaveBeenCalledWith(100, { focused: true });
+    expect(chromeStub.tabs.create).not.toHaveBeenCalled();
+    expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'sess:1', result: 'ok' });
+  });
+
+  test('dedup: emits the tab-dedup-flash runtime message for the focused tab', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    seedOpenTab(store, 'https://example.com/');
+    coordinator.enqueue(
+      sidebar(
+        { kind: 'openUrl', payload: { url: 'https://example.com/', windowId: 100 } },
+        'sess:1',
+      ),
+    );
+    await coordinator.idle();
+    expect(chromeStub.runtime.sendMessage).toHaveBeenCalledWith({
+      type: TAB_DEDUP_FLASH,
+      tabId: 42,
+    });
+  });
+
+  test('dedup: force:true always creates a new tab, never focuses the existing one', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    seedOpenTab(store, 'https://example.com/');
+    coordinator.enqueue(
+      sidebar(
+        { kind: 'openUrl', payload: { url: 'https://example.com/', windowId: 100, force: true } },
+        'sess:1',
+      ),
+    );
+    await coordinator.idle();
+    expect(chromeStub.tabs.create).toHaveBeenCalledWith({
+      url: 'https://example.com/',
+      windowId: 100,
+    });
+    expect(chromeStub.tabs.update).not.toHaveBeenCalled();
+    expect(chromeStub.runtime.sendMessage).not.toHaveBeenCalled();
+  });
+
+  test('dedup: existing tab closed before update → falls through to create', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    chromeStub.tabs.update.mockRejectedValueOnce(new Error('No tab with id: 42'));
+    const { coordinator, store, emitAck } = makeCoordinator();
+    seedOpenTab(store, 'https://example.com/');
+    coordinator.enqueue(
+      sidebar(
+        { kind: 'openUrl', payload: { url: 'https://example.com/', windowId: 100 } },
+        'sess:1',
+      ),
+    );
+    await coordinator.idle();
+    expect(chromeStub.tabs.create).toHaveBeenCalledWith({
+      url: 'https://example.com/',
+      windowId: 100,
+    });
+    expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'sess:1', result: 'ok' });
+  });
+});
+
+// =====================================================================
+// Navigation dedup (navigation-tab-dedup): a blank new tab's FIRST real
+// navigation to a URL already open in the active Space focuses the existing
+// tab and closes the new one, instead of adopting a duplicate. Exercised
+// through the `tabs.onUpdated` adoption branch in handlers/chrome-tabs.ts.
+// =====================================================================
+describe('Coordinator handlers: navigation dedup (navigation-tab-dedup)', () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  /**
+   * Seed window 100's active Space ('work') with an existing temp tab (42) at
+   * `existingUrl` — the dedup target — and a blank new tab (`navTabId`, default
+   * 99) that is about to navigate. The navigator has a liveTabsById entry (so the
+   * handler can resolve its windowId) but is UNTRACKED (absent from tempTabIds),
+   * exactly like a home tab that just committed its first real URL.
+   */
+  function seedNavDedup(store: LunmaStore, existingUrl: string, navTabId = 99): void {
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [42], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[42] = {
+      tabId: 42,
+      windowId: 100,
+      title: 'Example',
+      url: existingUrl,
+      active: false,
+      status: 'complete',
+    };
+    store.state.liveTabsById[navTabId] = {
+      tabId: navTabId,
+      windowId: 100,
+      title: 'New Tab',
+      url: 'about:blank',
+      active: true,
+      status: 'complete',
+    };
+  }
+
+  // 4.1 — the happy path: focus the existing tab, close the new one, don't adopt.
+  test('URL already open in active Space → focuses existing tab, closes the new tab, no adoption', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    seedNavDedup(store, 'https://example.com/');
+    coordinator.enqueue(tabUpdated(99, { url: 'https://example.com/' }));
+    await coordinator.idle();
+    expect(chromeStub.tabs.update).toHaveBeenCalledWith(42, { active: true });
+    expect(chromeStub.windows.update).toHaveBeenCalledWith(100, { focused: true });
+    expect(chromeStub.tabs.remove).toHaveBeenCalledWith(99);
+    // The navigated tab is NOT adopted into the Temporary list.
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([42]);
+  });
+
+  // 4.1 (flash) — the focused row flashes via the reused tab-dedup message.
+  test('emits the lunma/tab-dedup-flash message for the focused tab', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    seedNavDedup(store, 'https://example.com/');
+    coordinator.enqueue(tabUpdated(99, { url: 'https://example.com/' }));
+    await coordinator.idle();
+    expect(chromeStub.runtime.sendMessage).toHaveBeenCalledWith({
+      type: TAB_DEDUP_FLASH,
+      tabId: 42,
+    });
+  });
+
+  // 4.2 — no match → adopted normally; no focus/close.
+  test('no match in the active Space → adopted normally, no focus/close', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    seedNavDedup(store, 'https://example.com/');
+    coordinator.enqueue(tabUpdated(99, { url: 'https://new.example/' }));
+    await coordinator.idle();
+    expect(chromeStub.tabs.update).not.toHaveBeenCalled();
+    expect(chromeStub.tabs.remove).not.toHaveBeenCalled();
+    expect(chromeStub.runtime.sendMessage).not.toHaveBeenCalled();
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toContain(99);
+  });
+
+  // 4.3 — setting off → adopted normally even when the URL is already open.
+  test('dedupNewTabNavigations off → adopted normally even when the URL is open', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    coordinator.setDedupNewTabNavigations(false);
+    seedNavDedup(store, 'https://example.com/');
+    coordinator.enqueue(tabUpdated(99, { url: 'https://example.com/' }));
+    await coordinator.idle();
+    expect(chromeStub.tabs.update).not.toHaveBeenCalled();
+    expect(chromeStub.tabs.remove).not.toHaveBeenCalled();
+    expect(chromeStub.runtime.sendMessage).not.toHaveBeenCalled();
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toContain(99);
+  });
+
+  // 4.4 — an already-tracked tab navigating to a URL open in ANOTHER tab is not
+  // deduped (only untracked first-navigations are eligible).
+  test('already-tracked tab navigating to an already-open URL → not deduped', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    seedNavDedup(store, 'https://example.com/');
+    // Make tab 99 TRACKED (a listed temp tab) — it re-navigates to a URL that tab
+    // 42 already holds. Tracked tabs never reach the first-navigation dedup path.
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [42, 99], tempTabTitles: {} },
+    };
+    coordinator.enqueue(tabUpdated(99, { url: 'https://example.com/' }));
+    await coordinator.idle();
+    expect(chromeStub.tabs.update).not.toHaveBeenCalled();
+    expect(chromeStub.tabs.remove).not.toHaveBeenCalled();
+  });
+
+  // 4.5 — a URL open only in a different Space (same window) is not deduped.
+  test('URL open only in a different Space → adopted normally (no cross-Space dedup)', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    seedNavDedup(store, 'https://example.com/');
+    // Move the matching tab (42) into a BACKGROUND Space; the active Space ('work')
+    // then has no tab at the URL, so findTabInActiveSpace returns null.
+    store.state.spaces.push({ id: 'archive', name: 'Archive', color: 'green', icon: 'box' });
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [], tempTabTitles: {} },
+      archive: { spaceId: 'archive', groupId: 2, tempTabIds: [42], tempTabTitles: {} },
+    };
+    coordinator.enqueue(tabUpdated(99, { url: 'https://example.com/' }));
+    await coordinator.idle();
+    expect(chromeStub.tabs.update).not.toHaveBeenCalled();
+    expect(chromeStub.tabs.remove).not.toHaveBeenCalled();
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toContain(99);
+  });
+
+  // 4.6 — the only tab at the URL IS the navigator itself: it must never close
+  // itself. The untracked-only branch guard reaches this first (a self-match
+  // implies the tab is in tempTabIds → tracked), and the `found !== tabId` check
+  // is the defensive backstop — together they guarantee no self-close.
+  test('the found tab IS the navigating tab → no self-close', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    seedNavDedup(store, 'https://self.example/');
+    // Tab 99 is the sole listed tab already at the URL it re-commits to.
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [99], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[99] = {
+      tabId: 99,
+      windowId: 100,
+      title: 'Self',
+      url: 'https://self.example/',
+      active: true,
+      status: 'complete',
+    };
+    coordinator.enqueue(tabUpdated(99, { url: 'https://self.example/' }));
+    await coordinator.idle();
+    expect(chromeStub.tabs.remove).not.toHaveBeenCalledWith(99);
+  });
+
+  // 4.7 — focus/close rejects → fall through to normal adoption (no lost tab).
+  test('focus/close rejection falls through to normal adoption (no lost tab)', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    chromeStub.tabs.update.mockRejectedValueOnce(new Error('No tab with id: 42'));
+    const { coordinator, store } = makeCoordinator();
+    seedNavDedup(store, 'https://example.com/');
+    coordinator.enqueue(tabUpdated(99, { url: 'https://example.com/' }));
+    await coordinator.idle();
+    // update rejected before remove → the navigated tab is never closed, and it
+    // is adopted normally so it is not lost.
+    expect(chromeStub.tabs.remove).not.toHaveBeenCalled();
+    expect(chromeStub.runtime.sendMessage).not.toHaveBeenCalled();
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toContain(99);
+  });
+});
+
+describe('Coordinator handlers: duplicateTab', () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  test('happy path: calls chrome.tabs.duplicate, acks ok, no direct state mutation', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store, emitAck } = makeCoordinator();
+    coordinator.enqueue(sidebar({ kind: 'duplicateTab', payload: { tabId: 42 } }, 'sess:1'));
+    await coordinator.idle();
+    expect(chromeStub.tabs.duplicate).toHaveBeenCalledWith(42);
+    // The clone is adopted via tabs.onCreated, not this handler.
+    expect(Object.keys(store.state.liveTabsById)).toHaveLength(0);
+    expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'sess:1', result: 'ok' });
+  });
+
+  test('chrome.tabs.duplicate rejection → error ack', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    chromeStub.tabs.duplicate.mockRejectedValueOnce(new Error('no such tab'));
+    const { coordinator, emitAck } = makeCoordinator();
+    coordinator.enqueue(sidebar({ kind: 'duplicateTab', payload: { tabId: 42 } }, 'sess:1'));
+    await coordinator.idle();
+    expect(emitAck.mock.calls[0]?.[0]).toMatchObject({
+      id: 'sess:1',
+      result: { error: 'no such tab' },
     });
   });
 });

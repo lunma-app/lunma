@@ -154,6 +154,8 @@ export const EventPolicy: Record<PendingEventKind, EventPolicyEntry> = {
   undoClearTempTabs: {},
   // Per-invocation distinct — each launcher pick opens its own tab.
   openUrl: {},
+  // Per-click distinct — each duplicate spawns its own tab.
+  duplicateTab: {},
   // Per-tab boundary edit — distinct per saved tab (no coalesce).
   setTabBoundary: {},
   // Auto-archive (auto-archive): each is a distinct intent — no coalescing. Two
@@ -220,6 +222,15 @@ export class Coordinator {
    * differently) but never wrongly SKIPS a real write (design D2).
    */
   private lastPersistedSignature: string | null = null;
+  /**
+   * Cached mirror of the `dedupNewTabNavigations` setting (navigation-tab-dedup).
+   * Seeded + updated by the SW's settings watcher via
+   * {@link setDedupNewTabNavigations} so the `tabs.onUpdated` handler reads it
+   * synchronously on the drain (no per-navigation `readSettings()`), exactly like
+   * the `pinnedTabBoundaryDefault` mirror on {@link BoundaryController}. Defaults
+   * to `true` (the setting's declared default) until seeded.
+   */
+  private dedupNavigations = true;
   private drainPromise: Promise<void> | null = null;
   /** Per-drain ack buffer. Includes both coalesce-time pushes (D5b) and
    * handler-tail pushes. Flushed at end of drain. */
@@ -272,6 +283,10 @@ export class Coordinator {
       },
       runSideEffect: (fn) => this.runSideEffect(fn),
       enqueue: (ev) => this.enqueue(ev),
+      // Read the cached navigation-dedup setting live (navigation-tab-dedup) —
+      // a closure over the mirror, so a settings change pushed after construction
+      // is visible to the handler.
+      dedupNewTabNavigations: () => this.dedupNavigations,
       groups: this.groups,
       boundary: this.boundary,
     };
@@ -396,6 +411,16 @@ export class Coordinator {
    */
   setBoundaryDefault(value: 'off' | 'domain' | 'page'): void {
     this.boundary.setBoundaryDefault(value);
+  }
+
+  /**
+   * Update the cached `dedupNewTabNavigations` mirror (navigation-tab-dedup). The
+   * SW seeds this from `readSettings()` at boot and calls it again from its
+   * settings watcher when the user flips the toggle, so the `tabs.onUpdated`
+   * handler can gate navigation dedup on the live value without a storage read.
+   */
+  setDedupNewTabNavigations(value: boolean): void {
+    this.dedupNavigations = value;
   }
 
   /**
