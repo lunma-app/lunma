@@ -660,3 +660,31 @@ All four payloads SHALL be validated by Zod schemas in the `bus.ts` discriminate
 
 - **WHEN** a `createSmartFolder` payload carries `source: 'jira'`
 - **THEN** `SidebarCommandSchema` validation SHALL fail and the command is never enqueued
+
+### Requirement: importState command applies a validated backup
+
+The bus SHALL carry an `importState` command — `{ kind: 'importState'; payload: { backup: BackupEnvelope } }`
+— dispatched by the options surface and handled by the background coordinator (the owner
+of the store). The command SHALL be registered in every guarded site that the typed bus
+requires so a missing registration fails `tsc`: the `SidebarCommand` union, the
+`SIDEBAR_COMMAND_KINDS` set, the `_kindExhaustiveness` record, the `COMMAND_SCHEMAS` Zod
+map (validating the `backup` payload against `BackupEnvelopeSchema`), and the
+`SidebarCommandSchema` union; plus the coordinator-side `PendingEvent` union and an
+`EventPolicy` entry. Its `EventPolicy` SHALL treat each invocation as distinct (no
+coalescing).
+
+The handler SHALL validate + migrate the backup (per the `data-backup` capability) and, on
+success, replace the store state and `markDirty()` so the coordinator persists and
+broadcasts the replacement in one atomic cycle. On a validation failure the handler SHALL
+NOT mutate, persist, or broadcast, and the dispatcher's `bus.send` SHALL reject so the
+options page can surface the failure.
+
+#### Scenario: A dispatched importState with an invalid payload is rejected at the boundary
+
+- **WHEN** an `importState` is dispatched whose `backup` payload does not match `BackupEnvelopeSchema`
+- **THEN** the bus adapter SHALL reject it at the validation boundary and the coordinator SHALL NOT run the handler
+
+#### Scenario: A valid importState replaces and broadcasts state
+
+- **WHEN** an `importState` carrying a valid backup is handled
+- **THEN** the store state SHALL be replaced and a single persist + `state-broadcast` SHALL deliver the new state to every open surface
