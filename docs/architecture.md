@@ -545,6 +545,17 @@ apps depend on it via `workspace:*`. The site composes the shared tokens/recipes
 directly and builds its own marketing components; it never reaches into the
 extension's `ui/` primitives (which are coupled to `shared`).
 
+### Continuous integration
+
+These boundary rules are enforced **on every pull request and push to `main`**, not
+only locally. CI (`.github/workflows/ci.yml`) runs the same `pnpm -r verify` gate,
+whose `biome check` step is what fails on a layer-DAG or import-cycle violation (and
+on a planted cross-app import) — so `architecture-integrity` holds at the merge
+boundary, not just on the author's machine. A parallel `e2e` job runs the Playwright
+MV3 smoke under `xvfb-run`, and merge to `main` is gated on both the `verify` and
+`e2e` checks. See [ADR 0016](adr/0016-ci-on-github-actions.md) and the
+`release-engineering` capability.
+
 ## Logging
 
 A `Logger` gated by a `debugLoggingEnabled` setting in `chrome.storage.sync`. Never use `console.*` directly in production paths.

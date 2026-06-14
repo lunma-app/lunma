@@ -19,9 +19,9 @@
 
 ## 2. CI workflow (`.github/workflows/ci.yml`)
 
-- [ ] 2.1 Workflow skeleton: `on: [pull_request]` + `push: { branches: [main] }`;
+- [x] 2.1 Workflow skeleton: `on: [pull_request]` + `push: { branches: [main] }`;
   top-level `permissions: { contents: read }`; `concurrency: { group: "${{ github.workflow }}-${{ github.ref }}", cancel-in-progress: true }`.
-- [ ] 2.2 `verify` job (ubuntu-latest), in this exact step order (the cache step
+- [x] 2.2 `verify` job (ubuntu-latest), in this exact step order (the cache step
   needs a real store path, which only exists after corepack activates pnpm):
   1. `actions/checkout@v4`
   2. `actions/setup-node@v4` with `node-version: 24`
@@ -37,44 +37,44 @@
      `restore-keys: ${{ runner.os }}-pnpm-`.
   6. `run: pnpm install --frozen-lockfile`
   7. `run: pnpm -r verify`
-- [ ] 2.3 `e2e` job (ubuntu-latest, parallel to `verify`): same setup steps 1–6 as
+- [x] 2.3 `e2e` job (ubuntu-latest, parallel to `verify`): same setup steps 1–6 as
   2.2 (checkout → setup-node 24 → corepack → store cache → frozen install), then
   `pnpm --filter @lunma/extension exec playwright install --with-deps chromium`,
   then `xvfb-run -a pnpm test:e2e` (the root `test:e2e` filters to the extension,
   which runs `pnpm build && playwright test` — the build runs under `xvfb-run`,
   which is harmless; `CI=true` is set by GitHub so the config's single retry
   applies).
-- [ ] 2.4 Pin every third-party action to a major tag (or SHA). Confirm the two
+- [x] 2.4 Pin every third-party action to a major tag (or SHA). Confirm the two
   job names are exactly `verify` and `e2e` (the names §5.4 will require in branch
   protection — keep them in lockstep).
 
 ## 3. Repo hygiene files
 
-- [ ] 3.1 `.github/pull_request_template.md` — summary / linked OpenSpec change /
+- [x] 3.1 `.github/pull_request_template.md` — summary / linked OpenSpec change /
   `pnpm -r verify` + `pnpm test:e2e` run locally / doc-lockstep checkbox.
-- [ ] 3.2 `.github/ISSUE_TEMPLATE/bug_report.md` and
+- [x] 3.2 `.github/ISSUE_TEMPLATE/bug_report.md` and
   `.github/ISSUE_TEMPLATE/feature_request.md`, plus
   `.github/ISSUE_TEMPLATE/config.yml` with `blank_issues_enabled: false`.
-- [ ] 3.3 `.github/CODEOWNERS` — route all paths to the owner: `* @lunma-app/maintainers`
+- [x] 3.3 `.github/CODEOWNERS` — route all paths to the owner: `* @lunma-app/maintainers`
   (the authenticated `gh` account — verified). If the org is owned by a different
   account/team, use that handle instead, since GitHub silently no-ops an unknown
   owner (see spec scenario "CODEOWNERS names a valid owner").
-- [ ] 3.4 `.github/dependabot.yml` — two ecosystems at `/`: `npm` (pnpm) and
+- [x] 3.4 `.github/dependabot.yml` — two ecosystems at `/`: `npm` (pnpm) and
   `github-actions`, weekly, grouped where sensible.
 
 ## 4. Documentation (doc-lockstep — required this change)
 
-- [ ] 4.1 `docs/02-tech-stack.md` — add a CI/release-engineering note: CI runs the
+- [x] 4.1 `docs/02-tech-stack.md` — add a CI/release-engineering note: CI runs the
   same pinned toolchain (Node 24, corepack-pinned `pnpm@11.3.0`) and the same
   `pnpm -r verify` gate as local; the e2e smoke runs under `xvfb-run` (headed-MV3
   requirement); devbox remains the local-dev story only. Cross-reference the
   existing corepack/`packageManager` toolchain rows rather than restating the pin
   (avoid two statements of the same fact drifting apart).
-- [ ] 4.2 `docs/03-architecture.md` — add a short "Continuous integration"
+- [x] 4.2 `docs/03-architecture.md` — add a short "Continuous integration"
   subsection: CI enforces the `architecture-integrity` layer-DAG rules (via
   `biome check` inside `pnpm -r verify`) on every PR, not just locally; merge to
   `main` is gated on `verify` + `e2e`.
-- [ ] 4.3 New ADR `docs/adr/0016-ci-on-github-actions.md` recording D1–D5
+- [x] 4.3 New ADR `docs/adr/0016-ci-on-github-actions.md` recording D1–D5
   (setup-node+corepack over devbox-in-CI; two jobs; single `pnpm -r verify` over a
   matrix; `xvfb-run` for e2e; imperative branch protection / rulesets). Add it to
   `docs/adr/README.md`.

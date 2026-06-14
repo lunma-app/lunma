@@ -152,6 +152,20 @@ Resolved at project start; the `pnpm-lock.yaml` is the source of truth from here
 
 When bumping: run `pnpm view <pkg> version` for each, prefer current minors, update `pnpm-lock.yaml`.
 
+## Continuous integration
+
+CI (GitHub Actions, `.github/workflows/ci.yml`) runs the **same gate as local**,
+on the **same pinned toolchain**: it provisions Node 24 and activates pnpm through
+**corepack from the root `package.json` `packageManager` field** (the pin in the
+"Versions pinned" table above — CI never re-declares a pnpm version, which is what
+keeps CI and local from drifting), installs with `pnpm install --frozen-lockfile`,
+then runs `pnpm -r verify`. A stale `pnpm-lock.yaml` fails the frozen install. A
+parallel `e2e` job runs the Playwright MV3 smoke under `xvfb-run` — the e2e fixture
+loads the unpacked extension via `--load-extension`, which Chromium permits only
+headed, so CI needs a virtual display. **devbox stays the local-dev story only**;
+CI needs the pinned Node + pnpm, not the local shell. Merges to `main` are gated on
+the `verify` + `e2e` checks. See [ADR 0016](adr/0016-ci-on-github-actions.md).
+
 ## Why this stack is a good fit for MV3 specifically
 
 | MV3 constraint | How this stack handles it |

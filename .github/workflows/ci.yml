@@ -1,0 +1,71 @@
+name: CI
+
+# Runs the same gate developers run locally (`pnpm -r verify`) plus the
+# Playwright MV3 smoke, on every pull request and every push to main. The two
+# job names — `verify` and `e2e` — are the required status checks the main
+# branch ruleset references; keep them in lockstep (see tasks.md §5.4).
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Least privilege: the workflow only reads the repo; it never mutates it.
+permissions:
+  contents: read
+
+# One in-flight run per ref; a newer commit cancels the prior run so review
+# feedback reflects the latest commit.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      # Let corepack fetch the packageManager-pinned pnpm non-interactively.
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: 0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # Activate the pnpm version pinned in the root package.json
+      # `packageManager` field — do NOT pin pnpm anywhere else (drift guard).
+      - run: corepack enable
+      # Resolve the store path into a step output: actions/cache `path:` is a
+      # static string, and the store only exists once corepack activates pnpm.
+      - id: pnpm-store
+        run: echo "dir=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.dir }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r verify
+
+  e2e:
+    runs-on: ubuntu-latest
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: 0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: corepack enable
+      - id: pnpm-store
+        run: echo "dir=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.dir }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @lunma/extension exec playwright install --with-deps chromium
+      # The e2e fixture loads the unpacked MV3 extension via --load-extension,
+      # which Chromium permits only headed — so run under a virtual display.
+      # `pnpm test:e2e` is `pnpm build && playwright test`; CI=true (set by
+      # GitHub) makes the Playwright config apply its single retry.
+      - run: xvfb-run -a pnpm test:e2e

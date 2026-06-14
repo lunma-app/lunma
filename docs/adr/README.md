@@ -63,6 +63,7 @@ future capability will be shaped a certain way, write an ADR.
 | 0013 | [English-only for v1; i18n deferred](0013-english-only-v1.md) | Accepted | — |
 | 0014 | [Restrict the lucide loader to a generated allowlist](0014-icon-loader-allowlist.md) | Accepted | 0004 (in part) |
 | 0015 | [Pinned-tab URL boundary](0015-pinned-tab-url-boundary.md) | Accepted | 0008 (D4 + D3 enum) |
+| 0016 | [CI on GitHub Actions](0016-ci-on-github-actions.md) | Accepted | — |
 
 ## Format
 

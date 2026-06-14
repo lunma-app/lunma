@@ -1,0 +1,4 @@
+# Every path is owned by the repository owner until finer-grained ownership is
+# warranted. @lunma-app/maintainers is the authenticated GitHub account that owns the repo;
+# GitHub silently no-ops an unknown owner, so this handle must stay valid.
+* @lunma-app/maintainers
