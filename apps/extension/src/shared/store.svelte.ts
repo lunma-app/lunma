@@ -1438,7 +1438,12 @@ export class LunmaStore {
    * entry are refreshed (a never-navigated tab carries no staleness signal and
    * stays unarchivable, per the auto-archive candidate rules).
    */
-  setActiveTab(windowId: WindowId, tabId: TabId): void {
+  /**
+   * Set the active tab in `windowId` and return the bound tab ids of any FEED
+   * items just **consumed** by the change (see {@link markConsumedFeedItems}) —
+   * the caller closes them (rss-connector: consume = close the article tab).
+   */
+  setActiveTab(windowId: WindowId, tabId: TabId): TabId[] {
     for (const entry of Object.values(this.state.liveTabsById)) {
       if (entry.windowId !== windowId) continue;
       const shouldBeActive = entry.tabId === tabId;
@@ -1453,7 +1458,7 @@ export class LunmaStore {
     // bound tab is no longer the active tab — so navigating to another tab
     // drains the entry you were on. (Opening keeps it active → unread; only
     // moving on, or closing, marks it read.)
-    this.markConsumedFeedItems();
+    return this.markConsumedFeedItems();
   }
 
   /** Whether `folderId` is a FEED (`rss`) smart folder — the draining-queue read
@@ -1463,21 +1468,31 @@ export class LunmaStore {
   }
 
   /**
-   * Mark a feed item read once its bound tab is no longer the active tab in any
+   * Mark every feed item read whose bound tab is no longer the active tab in any
    * window (rss-connector, the draining-queue "consumed" trigger). A just-opened
    * entry's tab is active, so it stays unread until you move on; navigating to
-   * another tab deactivates it → it drains. Idempotent; feed folders only.
+   * another tab deactivates it → it drains. Returns the bound tab ids of the
+   * items it NEWLY consumed (were unread, now read) so the SW caller can **close
+   * those tabs** (consume = close — the reading queue leaves no tab trail).
+   * Feed folders only; idempotent (already-read items are skipped, so a tab is
+   * returned for closing at most once).
    */
-  private markConsumedFeedItems(): void {
+  private markConsumedFeedItems(): TabId[] {
+    const consumedTabs: TabId[] = [];
     for (const [folderId, byItem] of Object.entries(this.state.smartItemBindings)) {
       if (!this.isFeedFolder(folderId)) continue;
+      const alreadyRead = new Set(this.state.smartReadState[folderId] ?? []);
       for (const [itemId, slots] of Object.entries(byItem)) {
+        if (alreadyRead.has(itemId)) continue; // already consumed — don't re-close
         const anyActive = Object.values(slots).some(
           (slot) => this.state.liveTabsById[slot.tabId]?.active === true,
         );
-        if (!anyActive) this.markSmartItemRead(folderId, itemId);
+        if (anyActive) continue; // still the active tab — you're on it
+        this.markSmartItemRead(folderId, itemId);
+        for (const slot of Object.values(slots)) consumedTabs.push(slot.tabId);
       }
     }
+    return consumedTabs;
   }
 
   /** Mark a feed item read because its bound tab is CLOSING (rss-connector, the

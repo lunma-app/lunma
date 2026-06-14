@@ -97,6 +97,15 @@ every tab-switch invoke; per-window, so switching *windows* doesn't count) or
 unread/highlighted — until you leave it. **Alternative — mark on open** (the
 original D3): rejected as the cause of the instant-drain bug.
 
+**Consume = close the tab (user feedback).** Reading a feed leaves no tab trail:
+when an entry is consumed by navigating away (deactivate), its bound tab is
+**closed** too. `markConsumedFeedItems` returns the newly-consumed inactive bound
+tabs, and the SW callers of `setActiveTab` (`tabs.onActivated`, the `openSmartItem`
+seed, pinned-tab activation) `chrome.tabs.remove` them. Only INACTIVE consumed
+tabs close — the entry you are actively on (its tab active) is never closed; an
+already-read item is never re-closed (idempotent). The close-trigger path
+(`onTabRemoved`) is already a close, so no double-action.
+
 ### D4 — Badge = unread count, `N+` at the budget, hidden at zero
 The header badge shows the **unread** count and **disappears at zero** (the calm
 "caught up" state — absence is the strongest signal, and in a multi-feed Reading

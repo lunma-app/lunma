@@ -806,7 +806,7 @@ describe('feed read-state handlers', () => {
     );
     await made.coordinator.idle();
     expect(stub.tabs.create).toHaveBeenCalled();
-    return made;
+    return { ...made, stub };
   }
 
   test('opening a feed item does NOT mark it read (it stays in the queue while you are on it)', async () => {
@@ -817,8 +817,8 @@ describe('feed read-state handlers', () => {
     expect(store.state.smartReadState['feed-1']).toBeUndefined();
   });
 
-  test('navigating to another tab drains the entry (marks it read)', async () => {
-    const { coordinator, store } = await openFeedItem();
+  test('navigating to another tab drains the entry (marks it read) AND closes its tab', async () => {
+    const { coordinator, store, stub } = await openFeedItem();
     // Another tab becomes active in the same window → the entry's tab deactivates.
     coordinator.enqueue({
       source: 'chrome',
@@ -827,6 +827,8 @@ describe('feed read-state handlers', () => {
     });
     await coordinator.idle();
     expect(store.state.smartReadState['feed-1']).toEqual(['post-1']);
+    // Consume = close: the entry's bound tab (999) is closed (no tab trail).
+    expect(stub.tabs.remove).toHaveBeenCalledWith(999);
   });
 
   test('closing the entry’s tab drains it (marks it read)', async () => {

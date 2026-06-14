@@ -138,7 +138,11 @@ export function chromeTabHandlers(): Pick<
     },
     'tabs.onActivated': (ctx, event) => {
       const { activeInfo } = event.payload;
-      ctx.store.setActiveTab(activeInfo.windowId, activeInfo.tabId);
+      // Navigating to another tab consumes the feed entry you were on
+      // (rss-connector, the draining queue): the store marks it read and returns
+      // its bound tab(s) to CLOSE (consume = close — no tab trail).
+      const consumed = ctx.store.setActiveTab(activeInfo.windowId, activeInfo.tabId);
+      for (const tabId of consumed) ctx.runSideEffect(() => chrome.tabs.remove(tabId));
       ctx.markDirty();
     },
   };
