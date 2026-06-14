@@ -409,15 +409,56 @@ describe('SmartFolder — menu (Refresh now · Edit… · Move · Delete)', () =
     expect(onMoveDown).toHaveBeenCalledTimes(1);
   });
 
-  test('Delete dispatches deleteSmartFolder immediately — no two-step confirm', async () => {
+  test('Delete is a two-step confirm — first arms "Delete — confirm" (menu open), second dispatches once', async () => {
     const store = makeStore({ state: 'ok', items: [], fetchedAt: 1 });
     const { container } = renderSmart(store);
     await fireEvent.click(container.querySelector(TRIGGER) as HTMLButtonElement);
+
+    // First activation: dispatches nothing, morphs the entry into the danger
+    // "Delete — confirm", and keeps the menu open (`keepOpen`).
     await fireEvent.click(menuItem('delete'));
+    expect(sendMock).not.toHaveBeenCalled();
+    const armed = menuItem('delete');
+    expect(armed).not.toBeNull();
+    expect(armed.textContent).toContain('Delete — confirm');
+    expect(armed.classList).toContain('danger');
+    expect(document.querySelector('[data-testid="folder-row-menu-item"]')).not.toBeNull();
+
+    // Second activation dispatches deleteSmartFolder exactly once.
+    await fireEvent.click(menuItem('delete'));
+    expect(sendMock).toHaveBeenCalledTimes(1);
     expect(sendMock).toHaveBeenCalledWith({
       kind: 'deleteSmartFolder',
       payload: { spaceId: 'work', folderId: 'sf-1' },
     });
+  });
+
+  test('closing the menu disarms a pending Delete — reopening shows the unarmed "Delete"', async () => {
+    const store = makeStore({ state: 'ok', items: [], fetchedAt: 1 });
+    const { container } = renderSmart(store);
+
+    // Arm via the right-click ContextMenu (its close is synchronous).
+    await fireEvent.contextMenu(
+      container.querySelector('[data-testid="context-surface"]') as HTMLElement,
+    );
+    await fireEvent.click(menuItem('delete'));
+    expect(menuItem('delete').textContent).toContain('Delete — confirm');
+
+    // Escape closes the menu without confirming — nothing dispatched, menu gone.
+    const panel = document.querySelector('[data-testid="smart-folder-menu"]') as HTMLElement;
+    await fireEvent.keyDown(panel, { key: 'Escape' });
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-menu-id="delete"]')).toBeNull();
+
+    // Reopening lands on the unarmed "Delete", never the stale "Delete — confirm".
+    await fireEvent.contextMenu(
+      container.querySelector('[data-testid="context-surface"]') as HTMLElement,
+    );
+    const reopened = menuItem('delete');
+    expect(reopened).not.toBeNull();
+    expect(reopened.textContent).toContain('Delete');
+    expect(reopened.textContent).not.toContain('confirm');
+    expect(sendMock).not.toHaveBeenCalled();
   });
 
   test('Edit… drills into the SmartFolderEditor panel with a back-header', async () => {

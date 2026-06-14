@@ -605,9 +605,17 @@ Rows SHALL NOT drag, reorder, or rename. The folder's kebab/right-click menu
 SHALL carry **Refresh now**, **Edit…**, **Move up** / **Move down** (the
 keyboard-reachable reorder pair every pinned row carries — disabled at the
 respective end of the top-level list, dispatching the full-tree
-`reorderPinned`), and **Delete** (no two-step confirm — deleting a smart folder
-destroys only its own recreatable config and closes no tabs; its bound tabs
-demote to Temporary per the binding requirement). Under `prefers-reduced-motion` the in-flight refresh indicator SHALL NOT
+`reorderPinned`), and **Delete**, gated behind a **two-step confirm** that
+mirrors the folder-row Delete arm: the first activation SHALL arm the entry into
+a danger **"Delete — confirm"** and keep the menu open (`keepOpen`), and only the
+second activation SHALL dispatch `deleteSmartFolder`. Closing or Escaping the menu
+SHALL disarm a pending confirm, so a reopened menu lands on the unarmed
+**"Delete"**, never a stale **"Delete — confirm"**. The arm SHALL be identical
+across both menu surfaces — the kebab `RowMenu` (via `FolderRow`) and the
+right-click `ContextMenu` — because both render the same `menuItems` source. A
+confirmed deletion destroys only the folder's own recreatable config and closes
+no tabs; its bound tabs demote to Temporary per the binding requirement. Under
+`prefers-reduced-motion` the in-flight refresh indicator SHALL NOT
 rotate (a static dimmed treatment) and item-set changes SHALL swap instantly
 with an identical end state.
 
@@ -634,6 +642,20 @@ with an identical end state.
 - **WHEN** the runtime holds 20 items (a full page)
 - **THEN** the folder badge renders `20+`
 - **AND** with 7 items it renders `7`
+
+#### Scenario: Deleting a smart folder is a two-step confirm
+
+- **GIVEN** an expanded smart folder's kebab (or right-click) menu is open
+- **WHEN** the user activates **Delete** the first time
+- **THEN** no `deleteSmartFolder` is dispatched, the entry morphs to a danger **"Delete — confirm"**, and the menu stays open
+- **AND** activating **"Delete — confirm"** dispatches `deleteSmartFolder { spaceId, folderId }` once
+
+#### Scenario: Closing the menu disarms a pending Delete
+
+- **GIVEN** the user has armed **Delete** into **"Delete — confirm"**
+- **WHEN** the menu is closed or Escaped without confirming
+- **THEN** no `deleteSmartFolder` is dispatched
+- **AND** reopening the menu shows the unarmed **"Delete"**, not **"Delete — confirm"**
 
 ### Requirement: Calm failure and pending states
 

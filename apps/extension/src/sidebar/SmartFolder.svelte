@@ -36,9 +36,12 @@ import { useStore } from './store-context.svelte';
  * existing `closeTab`. Still no drag/reorder/rename of result rows, and no
  * drift UI in v1 (the binding holds wherever the tab navigates). The folder
  * NODE itself drags/reorders among pins; its menu carries Refresh now · Edit…
- * · Move up/Move down · Delete (no two-step confirm — the config is
- * recreatable in seconds and deleting closes no tabs; bound tabs demote to
- * Temporary SW-side).
+ * · Move up/Move down · Delete (a two-step arm, smart-folder-delete-confirm —
+ * the first activation morphs the entry into a danger "Delete — confirm" and
+ * keeps the menu open, only the second dispatches `deleteSmartFolder`, and
+ * closing/Escaping disarms: a tuned connector config, a specific JQL or an
+ * obscure feed URL, is no longer trivially recreatable. The delete OUTCOME is
+ * unchanged — it closes no tabs; bound tabs demote to Temporary SW-side).
  */
 
 type SmartNode = Extract<PinNode, { kind: 'smart' }>;
@@ -295,6 +298,13 @@ async function grantAccess(): Promise<void> {
   await requestHostPermissions(requiredOriginsForNode(node));
 }
 
+// Two-step Delete arm (smart-folder-delete-confirm): a tuned connector config
+// (a specific JQL, an obscure feed URL) is no longer trivially recreatable, so
+// Delete arms a danger "Delete — confirm" before dispatching — the FolderRow
+// arm precedent. The same morphed `menuItems` feeds both surfaces, so they can
+// never diverge; closing/Escaping either menu disarms (the `$effect` below).
+let confirmingDelete = $state(false);
+
 // One action vocabulary for both the kebab (RowMenuItem) and the right-click
 // ContextMenu (MenuItem) — the shapes are structurally identical.
 const menuItems = $derived<RowMenuItem[] & MenuItem[]>([
@@ -306,6 +316,7 @@ const menuItems = $derived<RowMenuItem[] & MenuItem[]>([
     keepOpen: true,
     submenu: true,
     onSelect: () => {
+      confirmingDelete = false; // selecting another entry disarms a pending Delete
       editing = true;
     },
   },
@@ -319,9 +330,30 @@ const menuItems = $derived<RowMenuItem[] & MenuItem[]>([
     : []),
   { id: 'move-up', label: 'Move up', disabled: !canMoveUp, onSelect: onMoveUp },
   { id: 'move-down', label: 'Move down', disabled: !canMoveDown, onSelect: onMoveDown },
-  // No two-step confirm: deleting destroys only its own recreatable config,
-  // closes no tabs, loses no user content (design D7) — unlike deleteSavedTab.
-  { id: 'delete', label: 'Delete', icon: 'trash-2', danger: true, onSelect: deleteFolder },
+  // Two-step Delete: first activation arms the danger "Delete — confirm" and
+  // keeps the menu open (`keepOpen`); only the second dispatches. The outcome is
+  // unchanged — it destroys only the folder's own config and closes no tabs.
+  confirmingDelete
+    ? {
+        id: 'delete',
+        label: 'Delete — confirm',
+        icon: 'trash-2',
+        danger: true,
+        onSelect: () => {
+          confirmingDelete = false;
+          deleteFolder();
+        },
+      }
+    : {
+        id: 'delete',
+        label: 'Delete',
+        icon: 'trash-2',
+        danger: true,
+        keepOpen: true, // arm in place, keep the menu open
+        onSelect: () => {
+          confirmingDelete = true;
+        },
+      },
 ]);
 
 // Right-click menu (one per smart row — the TabBoundaryEditor drill-in precedent).
@@ -329,6 +361,15 @@ let menuOpen = $state(false);
 let menuX = $state(0);
 let menuY = $state(0);
 let menuAnchorEl = $state<HTMLElement | undefined>(undefined);
+
+// Disarm a pending Delete whenever BOTH menu surfaces are closed (design D2), so
+// a dismissed-and-reopened menu always lands on the unarmed "Delete", never a
+// stale "Delete — confirm". The kebab forwards its close only via the
+// `kebabMenuOpen` binding (no `onclose` reaches here), so this effect is its
+// disarm path; the ContextMenu also clears the flag explicitly in `onclose`.
+$effect(() => {
+  if (!kebabMenuOpen && !menuOpen) confirmingDelete = false;
+});
 
 export function onContextMenu(e: MouseEvent): void {
   e.preventDefault();
@@ -567,6 +608,7 @@ function itemAria(item: SmartFolderItem, read: boolean): string {
   }}
   onclose={() => {
     editing = false;
+    confirmingDelete = false; // closing / Escape disarms a pending Delete
   }}
 />
 
