@@ -197,6 +197,35 @@ export function parseFeed(xml: string): { items: SmartFolderItem[]; channelLink?
 }
 
 /**
+ * Decode a raw feed buffer using the correct charset.
+ *
+ * Priority (highest wins):
+ *   1. `charset` in the HTTP Content-Type header
+ *   2. `encoding` in the XML declaration inside the body
+ *   3. UTF-8 (safe default for all modern XML/Atom/RSS)
+ *
+ * Many legacy feeds (e.g. Portuguese or Spanish news sites) serve ISO-8859-1
+ * content with an `encoding="ISO-8859-1"` XML declaration but NO `charset` in
+ * the HTTP headers, causing `response.text()` to misread them as UTF-8.
+ */
+function decodeXmlBuffer(buf: ArrayBuffer, contentType: string): string {
+  // 1. HTTP Content-Type charset wins when explicitly declared.
+  const ctCharset = /charset=([^\s;]+)/i.exec(contentType)?.[1];
+  if (ctCharset) return new TextDecoder(ctCharset).decode(buf);
+
+  // 2. Peek at the first 200 bytes as Latin-1 (superset of ASCII, always safe
+  //    for the declaration preamble) to find an XML encoding declaration.
+  const preamble = new TextDecoder('latin1').decode(
+    new Uint8Array(buf, 0, Math.min(200, buf.byteLength)),
+  );
+  const xmlCharset = /<?xml[^>]*\bencoding=["']([^"']+)["']/i.exec(preamble)?.[1];
+  if (xmlCharset) return new TextDecoder(xmlCharset).decode(buf);
+
+  // 3. UTF-8 default.
+  return new TextDecoder('utf-8').decode(buf);
+}
+
+/**
  * Fetch one RSS folder's feed and normalize it. Never throws — every failure
  * shape resolves to a runtime state. No credentials (a public feed), so
  * `signed-out` is unreachable and never returned (design D11). The `caches`
@@ -233,7 +262,9 @@ async function fetchRuntime(
 
   let xml: string;
   try {
-    xml = await response.text();
+    const buf = await response.arrayBuffer();
+    if (buf.byteLength > MAX_FEED_BYTES) return fail();
+    xml = decodeXmlBuffer(buf, response.headers.get('content-type') ?? '');
   } catch {
     return fail();
   }

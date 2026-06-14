@@ -6,19 +6,43 @@ import { parseFeed, resetRssListingCache, rssConnector } from './rss';
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
-/** A minimal Response stand-in — the connector reads only `ok`, `headers.get`,
- * and `text()`. `contentLength` overrides the declared body size. */
+/** A minimal Response stand-in. `contentLength` overrides the declared body
+ * size; `contentType` sets the Content-Type header (e.g. to inject a charset). */
 function feedResponse(
   xml: string,
-  { ok = true, contentLength }: { ok?: boolean; contentLength?: string } = {},
+  {
+    ok = true,
+    contentLength,
+    contentType,
+  }: { ok?: boolean; contentLength?: string; contentType?: string } = {},
 ): unknown {
+  const buf = new TextEncoder().encode(xml).buffer;
   return {
     ok,
     status: ok ? 200 : 500,
     headers: {
-      get: (h: string) => (h.toLowerCase() === 'content-length' ? (contentLength ?? null) : null),
+      get: (h: string) => {
+        const lower = h.toLowerCase();
+        if (lower === 'content-length') return contentLength ?? null;
+        if (lower === 'content-type') return contentType ?? null;
+        return null;
+      },
     },
-    text: async () => xml,
+    arrayBuffer: async () => buf,
+  };
+}
+
+/** Feed response with the body encoded as ISO-8859-1 (Latin-1), simulating
+ * legacy feeds that declare `encoding="ISO-8859-1"` without an HTTP charset. */
+function latin1FeedResponse(xml: string): unknown {
+  // Encode each JS character to its Latin-1 byte value (code point & 0xFF).
+  const bytes = new Uint8Array(xml.length);
+  for (let i = 0; i < xml.length; i++) bytes[i] = xml.charCodeAt(i) & 0xff;
+  return {
+    ok: true,
+    status: 200,
+    headers: { get: () => null },
+    arrayBuffer: async () => bytes.buffer,
   };
 }
 
@@ -176,16 +200,43 @@ describe('fetchRuntime', () => {
   });
 
   test('an oversized declared body (Content-Length) resolves to error without reading', async () => {
-    const textSpy = vi.fn(async () => RSS_2_0);
+    const bufSpy = vi.fn(async () => new ArrayBuffer(0));
     fetchMock.mockResolvedValueOnce({
       ok: true,
       status: 200,
       headers: { get: () => String(10_000_000) },
-      text: textSpy,
+      arrayBuffer: bufSpy,
     });
     const runtime = await rssConnector.fetchRuntime(node());
     expect(runtime.state).toBe('error');
-    expect(textSpy).not.toHaveBeenCalled();
+    expect(bufSpy).not.toHaveBeenCalled();
+  });
+
+  test('Latin-1 encoded feed with XML encoding declaration is decoded correctly', async () => {
+    // Simulates feeds like jornaldenegocios.pt: ISO-8859-1 bytes, no HTTP charset.
+    const latin1Xml = `<?xml version="1.0" encoding="ISO-8859-1"?>
+<rss version="2.0"><channel>
+  <title>Jornal</title>
+  <link>https://jornaldenegocios.pt</link>
+  <item>
+    <title>Suíça rejeita proposta</title>
+    <link>https://jornaldenegocios.pt/1</link>
+  </item>
+</channel></rss>`;
+    fetchMock.mockResolvedValueOnce(latin1FeedResponse(latin1Xml));
+    const runtime = await rssConnector.fetchRuntime(node());
+    expect(runtime.state).toBe('ok');
+    expect(runtime.items[0]?.title).toBe('Suíça rejeita proposta');
+  });
+
+  test('explicit HTTP charset overrides XML declaration', async () => {
+    // Content-Type: charset wins when declared, even if XML says otherwise.
+    fetchMock.mockResolvedValueOnce(
+      feedResponse(RSS_2_0, { contentType: 'application/rss+xml; charset=utf-8' }),
+    );
+    const runtime = await rssConnector.fetchRuntime(node());
+    expect(runtime.state).toBe('ok');
+    expect(runtime.items).toHaveLength(2);
   });
 
   test('an empty parse (non-feed body) resolves to error', async () => {
