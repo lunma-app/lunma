@@ -10,6 +10,7 @@
     "node": ">=24"
   },
   "scripts": {
+    "pack": "pnpm --filter @lunma/extension pack",
     "verify": "pnpm -r --workspace-concurrency=1 verify",
     "test": "pnpm --filter @lunma/extension test:run",
     "test:e2e": "pnpm --filter @lunma/extension test:e2e",
