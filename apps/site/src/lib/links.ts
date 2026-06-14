@@ -16,3 +16,7 @@ export const LAUNCHED = false;
 
 /** Minimum supported Chromium version, mirrored from the extension manifest. */
 export const MIN_CHROMIUM = 123;
+
+/** Internal path for the privacy policy page (same-origin, not an outbound link).
+ *  The Chrome Web Store listing points at `${SITE_URL}${PRIVACY_PATH}`. */
+export const PRIVACY_PATH = '/privacy';

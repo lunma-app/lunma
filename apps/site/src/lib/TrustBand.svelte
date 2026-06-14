@@ -1,21 +1,26 @@
 <script lang="ts">
-import { GITHUB_URL } from '$lib/links';
+import { GITHUB_URL, PRIVACY_PATH } from '$lib/links';
 import { reveal } from '$lib/reveal';
 </script>
 
 <section class="trust wrap" id="trust" use:reveal>
   <div class="head">
-    <p class="kicker">Privacy</p>
+    <p class="kicker">Trust</p>
     <h2>Your data stays put, and the code is public.</h2>
+    <p class="more">
+      <!-- Same-tab internal link to the full policy page (matches the footer). -->
+      <a href={PRIVACY_PATH}>Read the full privacy policy <span aria-hidden="true">→</span></a>
+    </p>
   </div>
   <div class="cells">
     <div class="cell lunma-glass">
       <span class="cell-mark" aria-hidden="true">⌂</span>
       <h3>Your data stays on your device</h3>
       <p>
-        Your Spaces, favourites, pinned tabs, and settings sit in your browser's
-        local extension storage, on this device only. There's no Lunma account
-        and no Lunma server behind them.
+        Your Spaces, favourites, and pinned tabs sit in your browser's local
+        extension storage, on this device. Your settings ride your browser's own
+        sync, so they follow your profile and nothing else does. There's no Lunma
+        account and no Lunma server behind any of it.
       </p>
     </div>
     <div class="cell lunma-glass">
@@ -48,6 +53,19 @@ import { reveal } from '$lib/reveal';
   .head {
     text-align: center;
     margin-bottom: 48px;
+  }
+
+  .more {
+    margin-top: 16px;
+  }
+
+  /* Accent link on the page substrate — the `--accent` on `--bg` pair is already
+     gated at AA in contrast.test.ts (the kickers / source link). */
+  .more a {
+    color: var(--accent);
+    font-size: var(--text-md);
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
 
   h2 {

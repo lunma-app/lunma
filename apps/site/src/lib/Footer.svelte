@@ -1,5 +1,5 @@
 <script lang="ts">
-import { CHROME_WEB_STORE_URL, EDGE_ADDONS_URL, GITHUB_URL } from '$lib/links';
+import { CHROME_WEB_STORE_URL, EDGE_ADDONS_URL, GITHUB_URL, PRIVACY_PATH } from '$lib/links';
 import Wordmark from '$lib/Wordmark.svelte';
 </script>
 
@@ -7,6 +7,9 @@ import Wordmark from '$lib/Wordmark.svelte';
   <div class="top">
     <Wordmark href="#top" size={24} />
     <p class="links">
+      <!-- Same-tab internal link (no target/rel), distinct from the external
+           store/repo links beside it. -->
+      <a href={PRIVACY_PATH}>Privacy</a>
       <a href={GITHUB_URL} target="_blank" rel="noopener">GitHub</a>
       <a href={CHROME_WEB_STORE_URL} target="_blank" rel="noopener">Chrome Web Store</a>
       <a href={EDGE_ADDONS_URL} target="_blank" rel="noopener">Edge Add-ons</a>

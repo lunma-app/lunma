@@ -82,6 +82,7 @@ describe('marketing site — WCAG-AA contrast', () => {
   // text size demands (4.5 normal / 3 large). `[fg, bg, minRatio, where]`.
   const PAIRS: Array<[string, string, number, string]> = [
     ['--text', '--bg', 7, 'headings, hero, primary copy on the substrate'],
+    ['--text', '--surface', 7, 'privacy policy headings + body copy on the glass sheet'],
     ['--text-2', '--bg', 4.5, 'FAQ summaries, preview tab rows'],
     ['--text-2', '--surface', 4.5, 'the Alt / L keycaps'],
     ['--text-muted', '--bg', 4.5, 'lede, feature copy, nav links, trust cells'],

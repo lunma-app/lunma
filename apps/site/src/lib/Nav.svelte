@@ -27,7 +27,10 @@ onMount(() => {
     <Wordmark href="#top" />
     <div class="links">
       <a class="navlink" href="#features">Features</a>
-      <a class="navlink" href="#trust">Privacy</a>
+      <!-- 'Trust', not 'Privacy': the on-page trust section. The word 'Privacy'
+           is reserved for the footer link to the full /privacy policy page, so a
+           single label never points at two destinations. -->
+      <a class="navlink" href="#trust">Trust</a>
       <a class="navlink" href={GITHUB_URL} target="_blank" rel="noopener">GitHub</a>
       <InstallCta href={CHROME_WEB_STORE_URL} compact soonLabel="Coming soon">Add to Chrome</InstallCta>
     </div>

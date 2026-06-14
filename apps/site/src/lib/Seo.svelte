@@ -15,21 +15,28 @@ import {
 
 // Owns the page's discoverability <head>: the canonical link, the complete Open
 // Graph + Twitter card set, and the JSON-LD structured data (SoftwareApplication
-// + WebSite + FAQPage). The <title> + meta description stay in the route (it owns
-// its title); this composes the rest. The JSON-LD is serialised from trusted,
-// in-repo data (no user input) so `@html` is safe; `<\/script>` is escaped so the
-// closing tag does not terminate this component's own <script> block.
+// + WebSite, plus FAQPage when `faq` is set — the home page renders the FAQ, so
+// it defaults on; secondary pages like /privacy that render no FAQ pass
+// `faq={false}` to drop that block, keeping the structured data honest to the
+// page). The <title> + meta description stay in the route (it owns its title);
+// this composes the rest. The JSON-LD is serialised from trusted, in-repo data
+// (no user input) so `@html` is safe; `<\/script>` is escaped so the closing tag
+// does not terminate this component's own <script> block.
 interface Props {
   /** Canonical path for this page. */
   path?: string;
+  /** Emit the `FAQPage` JSON-LD. Default `true`; set `false` on pages with no FAQ. */
+  faq?: boolean;
 }
-let { path = '/' }: Props = $props();
+let { path = '/', faq = true }: Props = $props();
 
 const canonical = $derived(`${SITE_URL}${path}`);
-const ldHtml = [softwareAppLd(), webSiteLd(), faqPageLd()]
-  // biome-ignore lint/suspicious/noUselessEscapeInString: `<\/` stops this literal from closing the component's own <script> block
-  .map((block) => `<script type="application/ld+json">${JSON.stringify(block)}<\/script>`)
-  .join('');
+const ldHtml = $derived(
+  [softwareAppLd(), webSiteLd(), ...(faq ? [faqPageLd()] : [])]
+    // biome-ignore lint/suspicious/noUselessEscapeInString: `<\/` stops this literal from closing the component's own <script> block
+    .map((block) => `<script type="application/ld+json">${JSON.stringify(block)}<\/script>`)
+    .join(''),
+);
 </script>
 
 <svelte:head>

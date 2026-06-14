@@ -327,17 +327,7 @@ product's one-glyph restraint.
 
 ### Requirement: Product previews depict real apps with recognisable, freely-licensed glyphs, self-hosted
 
-The staged previews' favicon stand-ins (the `FaviconSpec` entries rendered by
-`apps/site/src/lib/mocks/Favicon.svelte` across the favourites tiles, sidebar
-tab rows, and launcher rows) SHALL render a recognisable brand glyph for every
-entry that depicts a real app, sourced from a freely-licensed icon set (CC0 or
-equivalent; `simple-icons`) and inlined into the prerendered static output at
-build time — no runtime fetch, no CDN, no icon font. Entries depicting generic
-content (untitled notes, articles, lists) SHALL keep the neutral letter plate.
-The glyph SHALL render in the plate's existing near-white foreground on the
-existing OKLCH plate colours — the previews' palette SHALL NOT adopt
-per-brand hex colours. The glyphs remain decorative and SHALL stay hidden from
-assistive technology, as the surrounding mock content already is.
+The staged previews' favicon stand-ins (the `FaviconSpec` entries rendered by `apps/site/src/lib/mocks/Favicon.svelte` across the favourites tiles, sidebar tab rows, and launcher rows) SHALL render a recognisable brand glyph for every entry that depicts a real app, sourced from a freely-licensed icon set (CC0 or equivalent; `simple-icons`) and inlined into the prerendered static output at build time — no runtime fetch, no CDN, no icon font. Entries depicting generic content (untitled notes, articles, lists) SHALL keep the neutral letter plate. The glyph SHALL render in the plate's existing near-white foreground on the existing OKLCH plate colours — the previews' palette SHALL NOT adopt per-brand hex colours. The glyphs remain decorative and SHALL stay hidden from assistive technology, as the surrounding mock content already is.
 
 #### Scenario: Brand entries render their real glyph
 
@@ -367,4 +357,96 @@ assistive technology, as the surrounding mock content already is.
 - **WHEN** a screen reader traverses a staged preview containing brand glyphs
 - **THEN** the glyphs are not announced (they remain inside the mock content
   already hidden from assistive technology)
+
+### Requirement: A privacy policy page is published at /privacy
+
+The site SHALL publish a statically prerendered privacy policy page at `/privacy`
+that is true to the extension's behavior and consistent with the site's trust
+signals. Its copy SHALL state that workspace data is stored locally in
+`chrome.storage.local` on the user's device; that user preferences sync across
+the Chrome profile via `chrome.storage.sync` but connector tokens never do; that
+there is no Lunma account or server and no analytics or telemetry; that when the
+user connects a smart folder to a service, Lunma contacts that host directly
+using **either** an access token the user provides (stored locally, sent only to
+that host) **or** the user's existing signed-in browser session, with nothing
+sent to Lunma and tokens never logged; that public feeds are fetched directly
+without sign-in; that content scripts read only the user's launcher input and the
+link they click, never page content; and that backup/export is a user-controlled
+local file. The copy SHALL describe connectors generically (a code host / issue
+tracker / feed), SHALL state that Lunma is not a data controller (it collects and
+transmits nothing to itself), SHALL explain each permission, and SHALL include
+sections for retention/deletion, children, policy changes, and a contact method.
+The page SHALL NOT contradict `TrustBand.svelte`, and this change SHALL correct
+TrustBand's "settings … on this device only" wording so the two agree.
+
+#### Scenario: The page is prerendered and reachable
+
+- **WHEN** the static site is built
+- **THEN** `/privacy` SHALL be emitted as prerendered HTML (no server runtime), reachable at the canonical origin
+
+#### Scenario: The policy states the data handling honestly
+
+- **WHEN** a reader opens `/privacy`
+- **THEN** it SHALL state that workspace data lives in on-device local storage, that preferences sync via the browser while tokens do not, that there is no Lunma server or account, and that there is no analytics/telemetry
+- **AND** it SHALL state that a connected service is contacted directly using **either** a user-provided token **or** the existing signed-in session, with nothing sent to Lunma and tokens never logged
+
+### Requirement: The privacy page is discoverable and crawlable without fabricated metadata
+
+The privacy page SHALL be linked from the site footer and SHALL be listed in the
+sitemap, and its structured data SHALL describe only what the page renders. A
+"Privacy" link SHALL appear in `Footer.svelte`'s links row, resolving from a
+`PRIVACY_PATH` constant in `links.ts`. The site chrome SHALL NOT present a second
+navigation control labelled "Privacy" that resolves to a different destination:
+the on-page trust section's nav anchor SHALL use a distinct label (e.g. "Trust"),
+so "Privacy" in the nav and footer resolves only to `/privacy`.
+`static/sitemap.xml` SHALL list the
+`/privacy` canonical URL under the single canonical origin. The page SHALL carry
+a `<link rel="canonical">` to its own URL and a complete Open Graph/Twitter set,
+but SHALL NOT emit `FAQPage` JSON-LD (it renders no FAQ) — achieved via a
+`faq?: boolean` prop on `Seo.svelte` (default `true`) which `/privacy` sets to
+`false`.
+
+#### Scenario: Footer links to the privacy page
+
+- **WHEN** the footer renders
+- **THEN** it SHALL contain a "Privacy" link to `PRIVACY_PATH` (`/privacy`)
+
+#### Scenario: "Privacy" in the site chrome is unambiguous
+
+- **WHEN** the homepage renders its nav and footer
+- **THEN** the only navigation control labelled "Privacy" SHALL resolve to `PRIVACY_PATH` (`/privacy`)
+- **AND** the on-page trust section's nav anchor SHALL use a distinct label (e.g. "Trust")
+
+#### Scenario: The privacy URL is in the sitemap
+
+- **WHEN** `/sitemap.xml` is served
+- **THEN** it SHALL list `/privacy` under the canonical origin as valid XML
+
+#### Scenario: No FAQ structured data on the privacy page
+
+- **WHEN** `/privacy` is rendered
+- **THEN** its `<head>` SHALL contain a canonical link and Open Graph metadata
+- **AND** it SHALL NOT contain `FAQPage` JSON-LD
+
+### Requirement: The privacy page meets the site's visual and accessibility bar
+
+The privacy page SHALL compose the shared `@lunma/tokens` design language and SHALL
+meet the same accessibility bar as the rest of the site. It SHALL use the brand
+type faces (Instrument Serif headings, Mona Sans body) and the shared
+glass/aurora recipes — not the extension's `ui/` primitives and not hand-rolled
+design values. Body text SHALL meet WCAG-AA contrast, and any motion SHALL be
+disabled under `prefers-reduced-motion: reduce`. Because the site's contrast test
+gates token *pairs* rather than pages, every text/background pair the page uses
+SHALL be present in that test's gated pairs (added by this change if not already
+listed).
+
+#### Scenario: The page's contrast pairs are gated at AA
+
+- **WHEN** the site's WCAG-AA contrast test runs
+- **THEN** every text/background token pair the privacy page uses SHALL be among the test's gated pairs and SHALL pass at AA
+
+#### Scenario: Motion respects reduced-motion
+
+- **WHEN** the user prefers reduced motion
+- **THEN** the page SHALL present without transitions/animation
 
