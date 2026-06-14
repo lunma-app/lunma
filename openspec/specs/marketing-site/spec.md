@@ -30,13 +30,20 @@ The page SHALL present a prominent install call-to-action linking to the Lunma C
 
 ### Requirement: Local-only, no-account, open-source trust signals
 
-The page SHALL explicitly communicate the product's trust posture — local-only (data stays in the browser), no account or sign-up required, works offline, and open-source — so a privacy-conscious visitor gains confidence to install.
+The page SHALL explicitly communicate the product's trust posture — local-only (data stays in the browser), no account or sign-up required, works offline, and open-source — so a privacy-conscious visitor gains confidence to install. Any claim the page makes about where data is stored or whether it syncs SHALL match the shipped storage model and SHALL NOT overstate portability or sync.
 
 #### Scenario: Trust posture is stated, not implied
 
 - **WHEN** a visitor reads the page
 - **THEN** copy explicitly states local-only / no-account / open-source
 - **AND** the open-source claim links to the public repository
+
+#### Scenario: Storage and sync claims match the shipped local-only model
+
+- **WHEN** the page (including the FAQ and the `FAQPage` structured data generated from the same entries) describes where data is stored or whether it syncs
+- **THEN** it SHALL state that Spaces, pinned tabs, favourites, and settings are stored locally (`chrome.storage.local`) and persist across restarts
+- **AND** it SHALL NOT claim that favourites or pinned tabs are Chrome bookmarks, nor that Lunma's data syncs across devices (the shipped model is local-only; saved tabs are Lunma-owned records, not bookmarks — see `lunma-bookmark-bindings` and ADR 0005)
+- **AND** any mention of browser bookmarks SHALL be limited to what is true: the launcher can search the user's existing browser bookmarks (read-only)
 
 ### Requirement: Composes the shared design language, not a copy
 
