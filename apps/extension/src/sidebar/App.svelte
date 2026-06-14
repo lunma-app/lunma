@@ -610,36 +610,41 @@ function onCancel(): void {
                 }
               }
             />
-            <PinnedTabs {windowId} spaceId={panel.space.id} active={i === activeIndex} />
-            {#if temps > 0}
-              <Divider>
-                {#snippet action()}
-                  <Button
-                    variant="ghost"
-                    onclick={() => onClearTemp(panel.space.id)}
-                    title="Close all temporary tabs"
-                  >
-                    <Icon name={'arrow-down' as IconName} size={12} /> Clear
-                  </Button>
-                {/snippet}
-              </Divider>
-            {:else}
-              <Divider />
-            {/if}
-            <div class="new-tab-row">
-              <RowButton
-                icon={'plus'}
-                label="New Tab"
-                onclick={() => onNewTab(panel.space.id)}
-              />
-              <!-- Recently archived (auto-archive): a quiet chip on the New Tab row's
-                   trailing edge (renders only when this Space has archived tabs). Opens
-                   the roomy options "Recently archived" subpage — no inline sidebar list. -->
-              <ArchivedChip spaceId={panel.space.id} onOpen={openArchivedOptions} />
+            <!-- Only this inner region scrolls; the Space header (SectionHeader)
+                 above stays pinned at the slide's top so the icon + name never
+                 ride away with the tab list. -->
+            <div class="slide-scroll" data-testid="slide-scroll">
+              <PinnedTabs {windowId} spaceId={panel.space.id} active={i === activeIndex} />
+              {#if temps > 0}
+                <Divider>
+                  {#snippet action()}
+                    <Button
+                      variant="ghost"
+                      onclick={() => onClearTemp(panel.space.id)}
+                      title="Close all temporary tabs"
+                    >
+                      <Icon name={'arrow-down' as IconName} size={12} /> Clear
+                    </Button>
+                  {/snippet}
+                </Divider>
+              {:else}
+                <Divider />
+              {/if}
+              <div class="new-tab-row">
+                <RowButton
+                  icon={'plus'}
+                  label="New Tab"
+                  onclick={() => onNewTab(panel.space.id)}
+                />
+                <!-- Recently archived (auto-archive): a quiet chip on the New Tab row's
+                     trailing edge (renders only when this Space has archived tabs). Opens
+                     the roomy options "Recently archived" subpage — no inline sidebar list. -->
+                <ArchivedChip spaceId={panel.space.id} onOpen={openArchivedOptions} />
+              </div>
+              {#if temps > 0}
+                <TempTabs {windowId} spaceId={panel.space.id} active={i === activeIndex} />
+              {/if}
             </div>
-            {#if temps > 0}
-              <TempTabs {windowId} spaceId={panel.space.id} active={i === activeIndex} />
-            {/if}
           </div>
         {/each}
       </div>

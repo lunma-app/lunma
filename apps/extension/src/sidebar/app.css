@@ -182,7 +182,8 @@ body,
  * drags; `position: relative` keeps it (and the switcher) painting above the
  * aurora layer and anchors the absolutely-positioned edge glows; `overscroll-
  * behavior: none` stops Chrome's own two-finger back/forward navigation while the
- * user is mid-swipe. Vertical scrolling lives on each `.content-slide`, not here. */
+ * user is mid-swipe. Vertical scrolling lives on each slide's inner `.slide-scroll`
+ * (below the pinned header), not here and not on `.content-slide` itself. */
 .content-stage {
   flex: 1;
   min-height: 0;
@@ -204,11 +205,34 @@ body,
   will-change: transform;
 }
 
+/* Each Space panel is a flex column: the pinned-section header (Space icon + name)
+ * stays put at the top, and ONLY the inner `.slide-scroll` below it scrolls — so the
+ * header never rides away with the tab list. The slide itself clips (the scroll lives
+ * one level in) and never scrolls as a whole. */
 .content-slide {
   flex: 0 0 100%;
   height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The scrollable region of a Space panel: everything below the pinned header
+ * (pinned list, divider, New Tab row, temp list). `flex: 1` + `min-height: 0` lets it
+ * absorb the remaining height and scroll within it; `overscroll-behavior: none` stops
+ * Chrome's two-finger back/forward at the scroll edge (was on `.content-slide`). */
+.slide-scroll {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: none;
+}
+
+/* The header is a fixed-height flex child — never shrink it when the scroll region
+ * is short; it holds its row height and the scroll area absorbs the rest. */
+.content-slide > .section-header {
+  flex: 0 0 auto;
 }
 
 /* The New Tab row shares the temporary list's horizontal inset (`--list-pad`) so
