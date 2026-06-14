@@ -19,6 +19,7 @@
 | Icon library | **`@lucide/svelte`** | Lazy per-icon loaders from a generated allowlist (`pnpm gen:icons`, guarded in `verify`); broad coverage; official Svelte 5 wrapper. See [ADR 0004](adr/0004-lucide-svelte-icons.md) + [ADR 0014](adr/0014-icon-loader-allowlist.md). |
 | Headless UI primitives | **`bits-ui`** | Svelte 5 port of Radix Primitives. We use it sparingly — only the primitives where getting accessibility right by hand is hard (Tooltip, and later Popover / Menu / Dialog / Combobox when the create-edit-space and launcher slices land). Our scoped styles + CSS tokens stay; Bits provides only behaviour. Crucially **not** shadcn-svelte — we keep our own design system and skip Tailwind. |
 | Drag and drop | **Custom pointer-drag** (`apps/extension/src/sidebar/drag.svelte.ts`) | First-party pointer-drag controller for the sidebar lists: source row stays put (dimmed), a floating clone follows the cursor, an insertion line marks the landing slot, nothing reorders until drop. Cross-zone pin/unpin (temp→pinned drag, reorder pinned) via a single module-level controller. SW state stays authoritative — no optimistic updates. Replaced `svelte-dnd-action` during implementation; see [ADR 0006](adr/0006-custom-sidebar-drag.md) (supersedes [ADR 0003](adr/0003-sidebar-dnd-library.md)). |
+| Feed parsing | **`saxes`** (DOM-free streaming SAX) | RSS 2.0 / Atom parsing for the `rss` smart-folder connector, in the MV3 service worker — which has **no `DOMParser`**. A streaming SAX parser over a tree builder: feeds are small and we need only a flat entry list, so the event model fits, memory stays bounded, and it was already resolved transitively (promoted to a direct dep, not a novel one). |
 
 ## Non-obvious choices, with rationale
 
@@ -117,6 +118,7 @@ Resolved at project start; the `pnpm-lock.yaml` is the source of truth from here
 | Zod | 4.x | |
 | `@types/chrome` | 0.1.x | |
 | `bits-ui` | 2.18.x | |
+| `saxes` | 6.x | DOM-free streaming SAX XML parser — RSS 2.0 / Atom feed parsing in the service worker (`rss-connector`). The MV3 SW has **no `DOMParser`**, so feed XML cannot be parsed with the platform; promoted from a transitive dep to a direct one. |
 | `@sveltejs/kit` | 2.x | **`apps/site` only** — build-time, nothing ships in the extension |
 | `@sveltejs/adapter-static` | 3.x | **`apps/site` only** — prerender to static output for `lunma.app` |
 | `simple-icons` | 16.x | **`apps/site` only** — build-time mock brand glyphs (CC0-1.0); nothing ships in the extension |

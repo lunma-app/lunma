@@ -1,0 +1,68 @@
+## 1. Dependency, types, and the V6 schema
+
+- [x] 1.1 Promote `saxes` to a direct dependency of `@lunma/extension` (`pnpm --filter @lunma/extension add saxes`); confirm it imports cleanly in the SW build (no DOM globals).
+- [x] 1.2 `shared/types.ts`: widen `SmartSource` to `'gitlab' | 'github' | 'jira' | 'rss'`; make the smart `PinNode`'s `query` optional; add `maxItems: number` and `hideRead: boolean`; add `AppState.smartReadState: { [folderId: FolderId]: string[] }`.
+- [x] 1.3 `shared/schemas.ts`: widen the `source` enum; make `query` `.optional()`; add `maxItems: z.number().default(20)` and `hideRead: z.boolean().default(false)` to the smart `PinNode` schema; add `SmartReadStateSchema` (`z.record(z.string(), z.array(z.string()))`) with `.default({})` on the AppState schema as `smartReadState`; bump to `AppStateV6Schema`. Keep the schema-to-type coherence assertion green.
+- [x] 1.4 `shared/migrations.ts`: append the `rss-connector` pass-through `{ toVersion: 6 }`; raise `CURRENT_SCHEMA_VERSION` to `6`. Add a migration test asserting a v5 envelope migrates losslessly and defaults `maxItems: 20` / `hideRead: false` / `smartReadState: {}`.
+- [x] 1.5 `shared/chrome/storage.ts`: confirm `toPersistable` KEEPS `smartReadState` (it is persisted, unlike `smartFolders`/`liveTabsById`); add/adjust the persist test that `smartReadState` survives a round-trip while `smartFolders` is stripped.
+- [x] 1.6 Icon allowlist: `'rss'` is already in the curated `ICON_NAMES` shortlist (it is a minted node icon). `'arrow-up-right'` is a UI footer glyph (not a Space-identity icon), so — per the agreed deviation (matches the existing `x`/`rotate-cw` convention, keeps arrows out of the Space-icon picker) — it is used as a cast source literal (`'arrow-up-right' as IconName`) in `SmartFolder.svelte`; `pnpm gen:icons` then auto-includes it in `ui/icon-loaders.generated.ts` (guarded in `verify`). Regenerated after the literal lands in §6.
+
+## 2. The RSS connector
+
+- [x] 2.1 `background/connectors/rss.ts`: implement `parseFeed(xml): { items: SmartFolderItem[]; channelLink?: string }` over `saxes` — RSS 2.0 + Atom in one streaming pass; CDATA + entities decoded; `url` from RSS `<link>` / Atom `link[rel=alternate]`/`link[@href]`; `id` from `guid`/`id`, falling back to `url`; element-wise tolerant (one bad entry never costs the rest; a parser error keeps what parsed). Capture the channel-level link for `listingUrl`.
+- [x] 2.2 `background/connectors/rss.ts`: implement `fetchRuntime(node, caches?)` via `boundedFetch` (no credentials), reject an oversized body to `error`, parse, slice to `node.maxItems`, resolve `pending | ok | error` only (never `signed-out`); implement `listingUrl(node)` returning the channel link (fallback: the feed URL). Export `rssConnector: SourceConnector` with `source: 'rss'`, `defaultBaseUrl: ''`, `mintedIcon: 'rss'`. (Channel link memoised per-feed in a module-level cache so `listingUrl` stays network-free; falls back to the feed URL until the first fetch — the agreed mechanism for "captured during parse" given the `Pick<baseUrl,query>` signature; byte cap = 5 MB.)
+- [x] 2.3 `background/connectors/rss.test.ts`: cover RSS 2.0 (CDATA title, guid-less item → id=link), Atom (alternate link + id), a malformed/truncated feed (degrades, never throws), `maxItems` slicing, the `error` resolutions, and `listingUrl`.
+
+## 3. Engine, contract, and queue-connector backfill
+
+- [x] 3.1 `background/connectors/connector.ts`: extend `SourceConnector` with `listingUrl(node)`; widen `fetchRuntime`'s node `Pick` to include `'maxItems'`.
+- [x] 3.2 `background/smart-folders.ts`: register `rss` in the closed `CONNECTORS`; widen `fetchSmartFolderRuntime`'s node `Pick` to include `'maxItems'`; remove the assumption of a fixed cap (the connector slices to `maxItems`). Update `smart-folders.test.ts` registry assertion to the four sources.
+- [x] 3.3 Backfill `listingUrl` on `gitlab.ts`, `github.ts`, `jira.ts` and have each `fetchRuntime` slice to `node.maxItems` (replacing the per-connector `RESULTS_CAP` literal; default 20 preserves prior behaviour). Update each connector test for the cap + `listingUrl`. Confirmed listing URLs (D6 open question): GitLab `/dashboard/merge_requests`, GitHub `/pulls` (the PR dashboard, query-independent), Jira `/issues/?jql=<folder JQL>` (the JQL issue navigator). Each queue connector defaults the now-optional `query` defensively (`?? 'assigned'`).
+
+## 4. Read-state: store mutators, pruning, and bus commands
+
+- [x] 4.1 `shared/store.svelte.ts`: add `smartReadState: {}` to the initial state; add mutators `markSmartItemRead(folderId, itemId)`, `markAllSmartItemsRead(folderId, itemIds)`, `setSmartFolderHideRead(folderId, hideRead)` (writes the node's `hideRead`), and `pruneSmartReadState(folderId, liveIds)`; drop a folder's `smartReadState` entry in the existing delete-smart-folder path. (Also threaded `smartReadState` into `replaceState` for the data-backup import path, parity with `smartItemBindings`.)
+- [x] 4.2 Wire `pruneSmartReadState` into the smart-folder result drain so each successful fetch prunes read ids to the fetched window (only on `ok` — `pending`/`error` hold last-known items). Cover with a store test (18 read → 12 live → 6 dropped) and a delete-drops-entry test.
+- [x] 4.3 `typed-message-bus` + coordinator handlers: add `markSmartItemRead`, `markAllSmartItemsRead`, `setSmartFolderHideRead`, `openSmartFolderListing` to the `PendingEvent`/`SidebarCommand` union with `EventPolicy` entries and handlers; `openSmartItem` for a feed source also marks the item read; `openSmartFolderListing` resolves the connector's `listingUrl` and opens it (scheme-hardened like `openUrl`). A `maxItems`/`source`/`query`/`baseUrl` change refetches immediately (the normative `smart-folders` spec scopes the refetch to these four; `setSmartFolderHideRead` is a display-only preference and persists WITHOUT a refetch — reconciling the loosely-grouped task wording to the spec). Covered in the coordinator/bus tests.
+
+## 5. Editor — source-adaptive
+
+- [x] 5.1 `sidebar/SmartFolderEditor.svelte`: replace the Source `SegmentedControl` with the `Select` primitive (GitLab | GitHub | Jira | RSS); add the `rss` entry to `DEFAULT_BASE_URL` (empty), `HINT` ("Public feed — no sign-in needed. Paste the feed URL."), and the suggested-name map (RSS: empty until typed).
+- [x] 5.2 Make the editor source-adaptive: relabel the URL field "Feed URL" for `rss`; HIDE the query `SegmentedControl` for `rss`; add a "Show at most" `Select` (10/20/30/50 → `maxItems`) for every source; default Refresh to 30 for `rss` (10 otherwise; a `refreshTouched` flag follows the source default until the user picks). Carry `maxItems` (and omit `query` for `rss`) in the `createSmartFolder`/`updateSmartFolder` payloads. New-folder editor default `maxItems` is 10 (per spec).
+- [x] 5.3 `sidebar/SmartFolderEditor.test.ts`: cover the RSS adaptation (feed-URL label, hidden query, shown max-items, 30-min default, hint, no-query payload) and the maxItems-edit-refetches path. (Source picker tests rewritten for the `Select` primitive.)
+
+## 6. SmartFolder rendering — the reading nook
+
+- [x] 6.1 `sidebar/SmartFolder.svelte`: badge = unread count for `rss` (hidden at zero), item count for queue sources (`N+` at the `maxItems` cap); compute unread from `smartReadState`.
+- [x] 6.2 Unread/read row grammar for `rss` (feature-local CSS, the `.dot`/`.note-row` precedent): unread = `--text` + `--weight-medium` + Space-hued dot + full-opacity favicon; read = `--text-muted` + no dot + favicon opacity `0.45`; the unread/read state in the row's accessible name (colour never the only carrier). Open-on-click marks read: dot fades over `--motion-base`, title settles to muted (reduced-motion: instant). The unread dot stays mounted and fades (opacity) on read so the "it resolves" beat animates.
+- [x] 6.3 Reading-controls footer (RSS, expanded, low-ink, composed from the ghost `Button` the Divider's "↓ Clear" uses): left = stateful `Hide N read` ⇄ `Show N read` (absent when no read items, dispatches `setSmartFolderHideRead`); right = `Open all ↗` (`arrow-up-right` source literal, dispatches `openSmartFolderListing`). Hide-read collapses read rows over `--motion-base`/`--ease-emphasised` (they stay mounted but inert/aria-hidden so the collapse animates and the unread count is unaffected); reduced-motion instant.
+- [x] 6.4 Folder kebab/right-click menu: add **Open all in a tab** (all sources) and **Mark all read** (feed sources only).
+- [x] 6.5 `sidebar/SmartFolder.test.ts`: cover unread/read rendering, the unread-hides-at-zero badge, open-marks-read, hide-read collapse, mark-all-read, and the open-all (footer + kebab) dispatches.
+- [x] 6.6 Add an automated WCAG-AA contrast case asserting the read-row title (`--text-muted`) clears AA over the Space wash at every tint (the `newtab-hearth` precedent).
+
+## 7. Docs (lockstep — same change)
+
+- [x] 7.1 `docs/04-capabilities.md`: update #12 smart-folders (the `rss` source, read-state, `maxItems`, open-all, source-adaptive editor) and #3 storage-and-migrations (V6, the persisted `smartReadState` slice; fixed the data-backup `AppStateV6Schema` reference).
+- [x] 7.2 `docs/02-tech-stack.md`: add the `saxes` dependency row (DOM-free SAX XML parser for feed parsing in the SW; note the no-`DOMParser` constraint) to both the at-a-glance + pinned-versions tables. Decision: **no separate ADR** — the dependency row + the design D1 decision log suffice (the design explicitly allows this; the lucide/drag precedent had ADRs but the row is sufficient here).
+- [x] 7.3 `the distribution notes`: add a decision-log entry — RSS ships as the fourth smart-folder source (the first feed/reading connector; `readlater-connector` named as the next, reusing this machinery; OPML/autodiscovery/multi-feed noted as RSS follow-ups).
+
+## 8. Quality gates
+
+- [x] 8.1 `pnpm --filter @lunma/extension verify` green (tsc, biome incl. the layer DAG, svelte-check, lint:styles, vitest — 1904 tests across 122 files).
+- [x] 8.2 `pnpm verify` green at the workspace root (incl. `apps/site` WCAG-AA + static prerender build); `pnpm test:e2e` green (10 passed / 1 pre-existing skip — the smart-folder-bindings spec's `createSmartFolder` payload was updated to carry the now-required `maxItems`).
+- [ ] 8.3 Manual smoke (browser-only — left for the user): add an RSS folder (a real public feed), confirm items render, the entry stays on open and drains when you move on (navigate away / close), the badge hides when caught up, "Show recently read"/"mark all read"/"open all" work, and the folder survives a SW restart with read-state intact.
+
+## 9. Draining-queue fold-in (added on user feedback, post-review)
+
+The original model (open marks read; `maxItems` = a total latest-N cap; read shown
+by default) was reworked into a **draining unread queue** after the user found that
+(a) a small cap + read-hiding stranded older unread, and (b) opening an entry
+drained it instantly. Folded into this change (artifacts + code + tests + docs in
+lockstep), reusing the shipped read-state / collapse / footer machinery.
+
+- [x] 9.1 `maxItems` is the **unread budget** for feeds (total cap for queues): the connector keeps the whole feed (`FEED_BUFFER = 200`, no longer sliced to `maxItems`), and `SmartFolder.svelte` surfaces the newest `maxItems` unread, backfilling older unread as items drain. Badge reads `N+` over the budget. Editor relabels "Show at most N items" → "Show up to N unread" for `rss`.
+- [x] 9.2 The read TRIGGER moved from "open" to "consumed": `openSmartItem` no longer marks read; the store marks a feed item read when its bound tab **deactivates** (swept in `setActiveTab`, per-window) or **closes** (`onTabRemoved`). So an opened entry stays put until you move on, then drains + backfills.
+- [x] 9.3 The feed resting state is **drained** (`hideRead` defaults `true`); the footer is a "Show recently read" peek. Schema default + create-handler flipped to `true`; pruning contract widened to the `FEED_BUFFER` window.
+- [x] 9.4 Tests updated/added: connector keeps-whole-feed; SmartFolder draining-queue (budget window, backfill-on-read, drained default, badge `N+`/caught-up); coordinator open-keeps-unread / navigate-away-drains / close-drains; migration `hideRead` default `true`.
+- [x] 9.5 Docs + artifacts (this `proposal`/`design`/`specs`, `docs/04-capabilities.md` #12) brought into lockstep with the draining model + new read trigger.
+- [x] 9.6 Empty-state parity (user feedback): a settled-but-empty smart folder shows a quiet note (parity with a normal folder's "Empty — drag tabs here") instead of a blank list — "Nothing here right now." (queue), "No entries yet." (empty feed), "You're all caught up." (caught-up feed); yields to the ghost/sign-in/error states. Covered in `SmartFolder.test.ts`.
