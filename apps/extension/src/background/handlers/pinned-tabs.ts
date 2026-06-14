@@ -3,6 +3,7 @@
 // moves of the former coordinator closures.
 
 import { log } from '../../shared/logger';
+import { closeTab } from '../tab-groups';
 import type { HandlersMap } from './context';
 import { spaceExists } from './queries';
 
@@ -71,7 +72,7 @@ export function pinnedTabHandlers(): Pick<
       // Activating a pinned tab deactivates (and so consumes) any feed entry you
       // were on (rss-connector, the draining queue) → close those tabs.
       const consumed = ctx.store.setActiveTab(windowId, tabId);
-      for (const closeId of consumed) ctx.runSideEffect(() => chrome.tabs.remove(closeId));
+      for (const closeId of consumed) ctx.runSideEffect(() => closeTab(closeId));
       // The grouping side-effect applies to `tabId` whether it was created OR
       // navigated in place (newtab-hearth, spaces-and-tabs rule 2b): the navigated
       // tab takes the created tab's grouping role. This matters on the in-place

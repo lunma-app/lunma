@@ -6,6 +6,7 @@
 
 import { isNewTabUrl } from '../../shared/new-tab';
 import { resolveBoundaryAllow } from '../../shared/url-boundary';
+import { closeTab } from '../tab-groups';
 import type { HandlersMap } from './context';
 import { isTrackedTab, savedTabIdForBoundTab } from './queries';
 
@@ -142,7 +143,7 @@ export function chromeTabHandlers(): Pick<
       // (rss-connector, the draining queue): the store marks it read and returns
       // its bound tab(s) to CLOSE (consume = close — no tab trail).
       const consumed = ctx.store.setActiveTab(activeInfo.windowId, activeInfo.tabId);
-      for (const tabId of consumed) ctx.runSideEffect(() => chrome.tabs.remove(tabId));
+      for (const tabId of consumed) ctx.runSideEffect(() => closeTab(tabId));
       ctx.markDirty();
     },
   };

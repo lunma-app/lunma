@@ -16,6 +16,7 @@ import {
   startSmartFolderRefresh,
   syncSmartFoldersAlarm,
 } from '../smart-folders';
+import { closeTab } from '../tab-groups';
 import type { HandlersMap } from './context';
 import { spaceExists } from './queries';
 
@@ -211,7 +212,7 @@ export function smartFolderHandlers(
       // consumes it (rss-connector, the draining queue) → close those tabs
       // (consume = close). The just-opened tab is active, so it is never closed.
       const consumed = ctx.store.setActiveTab(windowId, tabId);
-      for (const closeId of consumed) ctx.runSideEffect(() => chrome.tabs.remove(closeId));
+      for (const closeId of consumed) ctx.runSideEffect(() => closeTab(closeId));
       // The bound tab belongs to its Space — it joins the Space's Chrome group
       // in this window, like an opened pinned tab.
       await ctx.groups.addTabToSpaceGroup(windowId, spaceId, tabId);

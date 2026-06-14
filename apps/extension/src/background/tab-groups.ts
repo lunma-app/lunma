@@ -132,6 +132,25 @@ export async function moveTabToStripStart(tabId: TabId): Promise<void> {
 }
 
 /**
+ * Close a tab, best-effort. The consume=close paths (rss-connector's draining
+ * queue, and the pinned/smart consume floats) hand us a tab id the store just
+ * marked consumed, then close it OFF the drain. By the time the float runs the
+ * tab is often already gone — the user closed it manually (Chrome fires
+ * `onActivated` for the next tab before `onRemoved` reconciles the binding), or
+ * a concurrent path already removed it — so `chrome.tabs.remove` rejects with
+ * `No tab with id: N`. That is the *desired* end-state, not an error: swallow it
+ * at `debug`, never let it bubble to the coordinator's `SIDE_EFFECT_FAILED`.
+ * Mirrors {@link ungroupTabs} / {@link moveTabToStripStart}.
+ */
+export async function closeTab(tabId: TabId): Promise<void> {
+  try {
+    await chrome.tabs.remove(tabId);
+  } catch (err) {
+    log.debug('closeTab: remove refused (stale/already closed)', { tabId, err });
+  }
+}
+
+/**
  * Add a single (unbound) tab to its window's active Space group — into the
  * existing `groupId` when live, else into a new group. Returns the resulting
  * group id or `null`. Thin alias over {@link ensureGroupForSpace} for the
