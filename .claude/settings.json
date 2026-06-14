@@ -40,7 +40,6 @@
       "Bash(git push --mirror*)",
       "Bash(git reset --hard*)",
       "Bash(git rebase*)",
-      "Bash(git filter-branch*)",
       "Bash(git reflog expire*)",
       "Bash(git update-ref -d*)"
     ]
