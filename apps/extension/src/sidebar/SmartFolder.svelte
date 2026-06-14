@@ -1,6 +1,7 @@
 <script lang="ts">
 import { dispatch } from '../shared/bus';
-import type { IconName } from '../shared/icon-names';
+import { requiredOriginsForNode } from '../shared/connector-origins';
+import { requestHostPermissions } from '../shared/permissions';
 import type {
   PinNode,
   SmartFolderItem,
@@ -208,6 +209,7 @@ const badge = $derived.by<string | undefined>(() => {
  * entries" when the feed is genuinely empty; for a queue: "nothing here". */
 const emptyNote = $derived.by<string | undefined>(() => {
   if (fetchState === 'signed-out') return undefined;
+  if (fetchState === 'needs-access') return undefined; // the grant prompt owns this state
   if (fetchState === 'pending' && displayItems.length === 0) return undefined;
   if (fetchState === 'error') return undefined; // the "Couldn't reach" note shows
   if (isFeed) {
@@ -284,6 +286,15 @@ function openConnectorsSettings(): void {
   void openOptionsAt('#connectors');
 }
 
+// needs-access (least-privilege-permissions design D1/D3): the gesture-bound
+// host request runs HERE (an extension-page surface), requesting the connector's
+// required origins. On grant the SW's `onPermissionsChange` refetches the folder
+// (needs-access → pending → ok), so this handler only requests — it never writes
+// runtime state. A deny/dismiss leaves the prompt in place (reversible).
+async function grantAccess(): Promise<void> {
+  await requestHostPermissions(requiredOriginsForNode(node));
+}
+
 // One action vocabulary for both the kebab (RowMenuItem) and the right-click
 // ContextMenu (MenuItem) — the shapes are structurally identical.
 const menuItems = $derived<RowMenuItem[] & MenuItem[]>([
@@ -341,7 +352,7 @@ function itemAria(item: SmartFolderItem, read: boolean): string {
 
 <FolderRow
   name={node.name}
-  icon={node.icon as IconName}
+  icon={node.icon}
   color={spaceColor}
   {expanded}
   {onToggle}
@@ -405,6 +416,17 @@ function itemAria(item: SmartFolderItem, read: boolean): string {
           Sign in to {host}
         </button>
       {/if}
+    {:else if fetchState === 'needs-access'}
+      <!-- needs-access (least-privilege-permissions design D3): a calm muted
+           prompt — NEVER a red error card. One key glyph, one muted line, and a
+           primary "Grant access" button that requests the connector's required
+           origins from this user gesture. On grant the SW's onPermissionsChange
+           refetches (needs-access → pending → ok), no reload. -->
+      <div class="needs-access" data-testid="smart-needs-access">
+        <Icon name="key-round" size={16} />
+        <span class="needs-access-copy">Lunma needs access to {host}</span>
+        <Button variant="primary" onclick={grantAccess}>Grant access</Button>
+      </div>
     {:else}
       {#each renderItems as item (item.id)}
         {@const bound = boundTabIdFor(item.id) !== undefined}
@@ -421,7 +443,7 @@ function itemAria(item: SmartFolderItem, read: boolean): string {
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <span class="close-slot" onpointerdown={(e) => e.stopPropagation()}>
               <IconButton
-                icon={'x' as IconName}
+                icon="x"
                 ariaLabel="Close tab"
                 title="Close tab"
                 size={14}
@@ -522,7 +544,7 @@ function itemAria(item: SmartFolderItem, read: boolean): string {
           <span class="controls-spacer"></span>
           <Button variant="ghost" onclick={openAll} title="Open the feed's website in a new tab">
             <span class="open-all-label">Open all</span>
-            <Icon name={'arrow-up-right' as IconName} size={12} />
+            <Icon name="arrow-up-right" size={12} />
           </Button>
         </div>
       {/if}
@@ -791,6 +813,25 @@ function itemAria(item: SmartFolderItem, read: boolean): string {
   .signin-row:focus-visible {
     outline: var(--focus-width) solid var(--focus-color);
     outline-offset: var(--focus-offset);
+  }
+
+  /* needs-access: a calm muted prompt (least-privilege-permissions Visual
+   * language) — NEVER a red error card. A key glyph + one muted line + the
+   * primary Grant button (which owns its own tokens). Neutral foreground tokens
+   * throughout, so a missing permission never reads as failure. */
+  .needs-access {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0 0 var(--row-gap);
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+    color: var(--text-muted);
+  }
+  .needs-access-copy {
+    flex: 1;
+    min-width: 0;
+    color: var(--text-muted);
+    font: var(--weight-regular) var(--text-sm) / 1.3 var(--font-sans);
   }
 
   /* Error: last-known items hold; one dim note at the list end — never a card. */

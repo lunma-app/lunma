@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { requiredOriginsForNode } from '../../shared/connector-origins';
 import type { SmartFolderItem, SmartFolderRuntime, SmartQuery } from '../../shared/types';
 import {
   boundedFetch,
@@ -192,11 +193,20 @@ function listingUrl(node: Pick<SmartFolderNode, 'baseUrl' | 'query'>): string {
   return `${node.baseUrl}/issues/?jql=${encodeURIComponent(jqlFor(node.query ?? 'assigned'))}`;
 }
 
+/** The origin this connector fetches (least-privilege-permissions design D8):
+ * Jira fetches same-origin under `{baseUrl}/rest/api/3`. Delegates to the shared
+ * {@link requiredOriginsForNode} so the SW gate and the surfaces share one
+ * derivation. */
+function requiredOrigins(node: Pick<SmartFolderNode, 'baseUrl'>): string[] {
+  return requiredOriginsForNode({ source: 'jira', baseUrl: node.baseUrl });
+}
+
 /** The Jira `SourceConnector` — the registry's `jira` entry. */
 export const jiraConnector: SourceConnector = {
   source: 'jira',
   defaultBaseUrl: 'https://your-site.atlassian.net',
   mintedIcon: 'folder-kanban',
+  requiredOrigins,
   fetchRuntime,
   listingUrl,
 };

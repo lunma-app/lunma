@@ -1,4 +1,5 @@
 import { SaxesParser } from 'saxes';
+import { requiredOriginsForNode } from '../../shared/connector-origins';
 import type { SmartFolderItem, SmartFolderRuntime } from '../../shared/types';
 import {
   boundedFetch,
@@ -289,12 +290,22 @@ function listingUrl(node: Pick<SmartFolderNode, 'baseUrl' | 'query'>): string {
   return channelLinkByFeed.get(node.baseUrl) ?? node.baseUrl;
 }
 
+/** The origin this connector fetches (least-privilege-permissions design D8/D9):
+ * RSS fetches the feed URL directly, so the gate keys on the feed's own origin
+ * (an ungranted feed shows `needs-access`, not `error`). Delegates to the shared
+ * {@link requiredOriginsForNode} so the SW gate and the surfaces share one
+ * derivation. */
+function requiredOrigins(node: Pick<SmartFolderNode, 'baseUrl'>): string[] {
+  return requiredOriginsForNode({ source: 'rss', baseUrl: node.baseUrl });
+}
+
 /** The RSS `SourceConnector` — the registry's `rss` entry. `defaultBaseUrl` is
  * empty (a feed has no canonical host); the SW mints the `'rss'` icon. */
 export const rssConnector: SourceConnector = {
   source: 'rss',
   defaultBaseUrl: '',
   mintedIcon: 'rss',
+  requiredOrigins,
   fetchRuntime,
   listingUrl,
 };

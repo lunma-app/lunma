@@ -11,17 +11,23 @@ interface ChromeMock {
   set: ReturnType<typeof vi.fn>;
   getAll: ReturnType<typeof vi.fn>;
   tabsCreate: ReturnType<typeof vi.fn>;
+  /** `chrome.permissions.request` — the Result sources Enable controls. */
+  permissionsRequest: ReturnType<typeof vi.fn>;
 }
 
 // `launcherShortcut` controls what `chrome.commands.getAll()` reports for the
 // `toggle-launcher` command — '' means unbound (guidance card shows). Defaults
 // to bound so the existing Appearance tests see the page unchanged (no card).
-function installChromeMock(launcherShortcut = 'Alt+L'): ChromeMock {
+function installChromeMock(
+  launcherShortcut = 'Alt+L',
+  granted: { history?: boolean; bookmarks?: boolean } = {},
+): ChromeMock {
   const getAll = vi.fn(async () => [
     { name: 'pin-active-tab', shortcut: 'Alt+D' },
     { name: 'toggle-launcher', shortcut: launcherShortcut },
   ]);
   const tabsCreate = vi.fn(async () => ({}));
+  const permissionsRequest = vi.fn(async () => true);
   const mock: ChromeMock = {
     data: {},
     localData: {},
@@ -35,6 +41,7 @@ function installChromeMock(launcherShortcut = 'Alt+L'): ChromeMock {
     }),
     getAll,
     tabsCreate,
+    permissionsRequest,
   };
   (globalThis as unknown as { chrome: unknown }).chrome = {
     storage: {
@@ -58,6 +65,19 @@ function installChromeMock(launcherShortcut = 'Alt+L'): ChromeMock {
     },
     commands: { getAll },
     tabs: { create: tabsCreate },
+    // Result sources (least-privilege-permissions D5): the section reads grant
+    // state via `hasApiPermission` and grants via `requestApiPermission`.
+    permissions: {
+      contains: vi.fn(async (q: { permissions?: string[] }) => {
+        const name = q.permissions?.[0];
+        if (name === 'history') return granted.history ?? false;
+        if (name === 'bookmarks') return granted.bookmarks ?? false;
+        return false;
+      }),
+      request: permissionsRequest,
+      onAdded: { addListener: vi.fn(), removeListener: vi.fn() },
+      onRemoved: { addListener: vi.fn(), removeListener: vi.fn() },
+    },
   };
   return mock;
 }
@@ -81,14 +101,16 @@ describe('Options', () => {
     expect(getByText('Density')).not.toBeNull();
     expect(getByText('Colour intensity')).not.toBeNull();
     // Segmented controls: Density (compact/normal/comfort) + Colour intensity
-    // (subtle/standard/vivid) in Appearance + the Pinned-tabs boundary default
-    // (off/domain/page) + the Auto-archive toggle (off/on) + the BackupRestore
-    // "Include settings" Off/On toggle → 3 + 3 + 3 + 2 + 2 = thirteen radios.
-    // The Search default-engine picker is a dropdown (8 options don't fit a
-    // segmented control) and the custom-URL + custom-keyword + idle-minutes fields
-    // are text/number inputs — none contribute radios.
+    // (subtle/standard/vivid) in Appearance + the Launcher scope
+    // (all-Spaces/prefer/current-Space-only) in Search + the Pinned-tabs boundary
+    // default (off/domain/page) + the navigation-dedup toggle (off/on) in Tabs +
+    // the Auto-archive toggle (off/on) + the BackupRestore "Include settings"
+    // Off/On toggle → 3 + 3 + 3 + 3 + 2 + 2 + 2 = eighteen radios. The Search
+    // default-engine picker is a dropdown (8 options don't fit a segmented
+    // control) and the custom-URL + custom-keyword + idle-minutes fields are
+    // text/number inputs — none contribute radios.
     const radios = container.querySelectorAll('input[type="radio"]');
-    expect(radios).toHaveLength(13);
+    expect(radios).toHaveLength(18);
   });
 
   test('renders the Pinned tabs group with the boundary-default control (no Options code)', () => {
@@ -97,17 +119,40 @@ describe('Options', () => {
     expect(getByText('Lock pinned tabs to their site')).not.toBeNull();
   });
 
+  test('renders the Tabs group with the navigation-dedup toggle (navigation-tab-dedup)', () => {
+    const { getByText } = render(Options, { props: {} });
+    // The "Tabs" group heading + the toggle's label, rendered purely from the
+    // declarative registry (no Options.svelte code for this setting).
+    expect(getByText('Tabs')).not.toBeNull();
+    expect(getByText('Switch to an already-open tab')).not.toBeNull();
+  });
+
   test('shows the manifest version', () => {
     const { getByText } = render(Options, { props: {} });
     expect(getByText('v0.0.0')).not.toBeNull();
   });
 
+  test('links out to the privacy policy in a new tab', () => {
+    const { container } = render(Options, { props: {} });
+    const link = container.querySelector(
+      '[data-testid="options-privacy-link"]',
+    ) as HTMLAnchorElement;
+    expect(link).not.toBeNull();
+    expect(link.getAttribute('href')).toBe('https://lunma.app/privacy');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toContain('noopener');
+    expect(link.textContent?.trim()).toBe('Privacy policy');
+  });
+
   test('pre-selects the saved density', async () => {
     chromeMock.data['lunma.settings'] = { density: 'compact' };
     const { container } = render(Options, { props: {} });
+    // Scope to the density radio directly — other segmented controls (e.g. the
+    // Search-group Launcher scope) also carry a checked default, so a global
+    // `input:checked` would no longer uniquely identify the density selection.
     await waitFor(() => {
-      const checked = container.querySelector('input:checked') as HTMLInputElement;
-      expect(checked?.value).toBe('compact');
+      const compact = container.querySelector('input[value="compact"]') as HTMLInputElement;
+      expect(compact?.checked).toBe(true);
     });
   });
 
@@ -131,6 +176,8 @@ describe('Options', () => {
           defaultSearchEngine: 'google',
           customSearchUrl: '',
           customSearchKeyword: '',
+          launcherScope: 'prefer-current-space',
+          dedupNewTabNavigations: true,
           autoArchiveEnabled: true,
           autoArchiveIdleMinutes: 720,
           autoArchiveRetentionDays: 7,
@@ -156,6 +203,8 @@ describe('Options', () => {
           defaultSearchEngine: 'google',
           customSearchUrl: '',
           customSearchKeyword: '',
+          launcherScope: 'prefer-current-space',
+          dedupNewTabNavigations: true,
           autoArchiveEnabled: true,
           autoArchiveIdleMinutes: 720,
           autoArchiveRetentionDays: 7,
@@ -180,6 +229,8 @@ describe('Options', () => {
           defaultSearchEngine: 'google',
           customSearchUrl: '',
           customSearchKeyword: '',
+          launcherScope: 'prefer-current-space',
+          dedupNewTabNavigations: true,
           autoArchiveEnabled: true,
           autoArchiveIdleMinutes: 720,
           autoArchiveRetentionDays: 7,
@@ -591,5 +642,54 @@ describe('Options Connectors section (smart-folders, design D10)', () => {
       });
       expect(container.querySelectorAll('[data-testid="connector-row"]')).toHaveLength(1);
     });
+  });
+});
+
+describe('Options — Result sources (least-privilege-permissions D5)', () => {
+  test('renders an Enable control per ungranted optional source', async () => {
+    const { container, getByText } = render(Options, { props: {} });
+    await waitFor(() =>
+      expect(container.querySelector('[data-testid="result-sources-section"]')).not.toBeNull(),
+    );
+    expect(getByText('Result sources')).not.toBeNull();
+    // Both ungranted by default → both show their Enable button, no "Enabled" pill.
+    await waitFor(() => {
+      const labels = [
+        ...container.querySelectorAll('[data-testid="result-sources-section"] button'),
+      ].map((b) => (b.textContent ?? '').trim());
+      expect(labels).toEqual(['Enable history results', 'Enable bookmark results']);
+    });
+    expect(container.querySelector('[data-testid="result-source-history-granted"]')).toBeNull();
+  });
+
+  test('clicking Enable requests the matching permission', async () => {
+    const { container } = render(Options, { props: {} });
+    await waitFor(() =>
+      expect(container.querySelector('[data-testid="result-sources-section"]')).not.toBeNull(),
+    );
+    const btn = await waitFor(() => {
+      const b = [
+        ...container.querySelectorAll('[data-testid="result-sources-section"] button'),
+      ].find((el) => (el.textContent ?? '').includes('Enable bookmark results'));
+      if (!b) throw new Error('no enable button yet');
+      return b as HTMLButtonElement;
+    });
+    await fireEvent.click(btn);
+    expect(chromeMock.permissionsRequest).toHaveBeenCalledWith({ permissions: ['bookmarks'] });
+  });
+
+  test('a granted source shows an Enabled indicator, not a button', async () => {
+    installChromeMock('Alt+L', { history: true });
+    const { container } = render(Options, { props: {} });
+    await waitFor(() =>
+      expect(
+        container.querySelector('[data-testid="result-source-history-granted"]'),
+      ).not.toBeNull(),
+    );
+    // History granted → no history Enable button; bookmarks still offered.
+    const labels = [
+      ...container.querySelectorAll('[data-testid="result-sources-section"] button'),
+    ].map((b) => (b.textContent ?? '').trim());
+    expect(labels).toEqual(['Enable bookmark results']);
   });
 });

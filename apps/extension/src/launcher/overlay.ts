@@ -1,10 +1,11 @@
 import type { SidebarCommand } from '../shared/bus';
-import type { LauncherResult } from '../shared/launcher-contract';
+import type { LauncherResult, OptionalResultSource } from '../shared/launcher-contract';
 import { sourceBadgeLabel } from '../shared/launcher-contract';
 import { modifierLabel } from '../shared/platform';
 import type { SearchEngine } from '../shared/search-engines';
 import { faviconUrl } from '../ui/favicon';
 import overlayStyles from './overlay.css?inline';
+import { isDedupEligibleSource } from './shared/already-open';
 import { buildSearchUrl, resolveEngine } from './shared/web-actions';
 
 /**
@@ -90,7 +91,19 @@ export function shouldDismissOnFocusOut(
   let hintEl: HTMLElement | null = null;
   let hintVerbEl: HTMLElement | null = null;
   let hintEnginesEl: HTMLElement | null = null;
+  // Footer action hint (tab-dedup): "↵ Open" by default, "↵ Switch  ⇧↵ New tab"
+  // when the focused row's URL is already open in the active Space.
+  let actionHintEl: HTMLElement | null = null;
+  // "Enable ⟨source⟩ results" strip (least-privilege-permissions D5): one button
+  // per ungranted optional source the SW reported. The overlay can't call
+  // `chrome.permissions`, so a click routes to the options page via the SW.
+  let enableEl: HTMLElement | null = null;
+  let ungrantedSources: OptionalResultSource[] = [];
   let results: LauncherResult[] = [];
+  // The `results[].url` values already open in the active Space, from the latest
+  // suggestions response (tab-dedup). The stateless overlay has no `AppState`, so
+  // membership here is its only "already open" signal.
+  let openUrls = new Set<string>();
   let selected = 0;
   let isOpen = false;
   let windowId = -1;
@@ -319,7 +332,17 @@ export function shouldDismissOnFocusOut(
     listEl.id = LIST_ID;
     listEl.setAttribute('aria-label', 'Search results');
 
-    card.append(inputRow, hintEl, listEl);
+    // Footer action hint (tab-dedup) — below the list; hidden until there are
+    // results. Its contents are (re)built by `updateActionHint()`.
+    actionHintEl = el('div', 'action-hint');
+    actionHintEl.style.display = 'none';
+
+    // "Enable ⟨source⟩ results" strip — below the action hint; hidden until the
+    // SW reports an ungranted optional source. Rebuilt by `renderEnableSources()`.
+    enableEl = el('div', 'enable-sources');
+    enableEl.style.display = 'none';
+
+    card.append(inputRow, hintEl, listEl, actionHintEl, enableEl);
     scrim.append(card);
     shadow.append(scrim);
 
@@ -382,6 +405,7 @@ export function shouldDismissOnFocusOut(
     cycleIndex = 0;
     isOpen = true;
     results = [];
+    ungrantedSources = [];
     selected = 0;
     if (input) input.value = '';
     render();
@@ -448,6 +472,7 @@ export function shouldDismissOnFocusOut(
     openGen++;
     if (host?.isConnected) host.remove();
     results = [];
+    ungrantedSources = [];
     // Drop the active engine so a reopened overlay starts clean (Escape also
     // closes, so this covers Escape-clears-the-engine per the keyboard model).
     activeEngine = null;
@@ -516,6 +541,7 @@ export function shouldDismissOnFocusOut(
     renderEngineUi(); // refresh the "⇥ Tab" hint for the current prefix
     if (q.trim() === '') {
       results = [];
+      ungrantedSources = [];
       selected = 0;
       render();
       return;
@@ -530,6 +556,11 @@ export function shouldDismissOnFocusOut(
   function renderEngineMode(): void {
     const q = (input?.value ?? '').trim();
     results = activeEngine && q !== '' ? [engineResult(activeEngine, q)] : [];
+    // Engine mode is a client-built fresh search — no SW round-trip, so no
+    // dedup signal applies (tab-dedup): never flag the engine row as open, and no
+    // ungranted-source affordance (that rides the default-mode suggestions).
+    openUrls = new Set();
+    ungrantedSources = [];
     selected = 0;
     render();
     renderEngineUi();
@@ -651,6 +682,8 @@ export function shouldDismissOnFocusOut(
     if (debounce) clearTimeout(debounce);
     if (q.trim() === '') {
       results = [];
+      openUrls = new Set();
+      ungrantedSources = [];
       selected = 0;
     } else {
       debounce = setTimeout(() => {
@@ -677,13 +710,21 @@ export function shouldDismissOnFocusOut(
         windowId,
       });
       if (mine !== latest) return; // stale — superseded by a newer keystroke
-      const payload = res as { results?: unknown } | undefined;
+      const payload = res as
+        | { results?: unknown; openUrls?: unknown; ungrantedSources?: unknown }
+        | undefined;
       results = Array.isArray(payload?.results) ? (payload.results as LauncherResult[]) : [];
+      openUrls = new Set(Array.isArray(payload?.openUrls) ? (payload.openUrls as string[]) : []);
+      ungrantedSources = Array.isArray(payload?.ungrantedSources)
+        ? (payload.ungrantedSources as OptionalResultSource[])
+        : [];
       selected = 0;
       render();
     } catch {
       if (mine === latest) {
         results = [];
+        openUrls = new Set();
+        ungrantedSources = [];
         render();
       }
     }
@@ -714,7 +755,7 @@ export function shouldDismissOnFocusOut(
       const r = results[selected];
       if (r) {
         e.preventDefault();
-        act(r);
+        act(r, { shiftKey: e.shiftKey });
       }
     }
   }
@@ -724,6 +765,13 @@ export function shouldDismissOnFocusOut(
     if (n === 0) return;
     selected = (selected + delta + n) % n; // wrap at both ends
     applySelection();
+  }
+
+  /** Tab-dedup: is `r`'s URL already open in the active Space? Only dedup-eligible
+   * sources are ever flagged; `openUrls` membership is the stateless overlay's
+   * only signal. */
+  function isResultAlreadyOpen(r: LauncherResult): boolean {
+    return isDedupEligibleSource(r.source) && openUrls.has(r.url);
   }
 
   function render(): void {
@@ -738,17 +786,24 @@ export function shouldDismissOnFocusOut(
         empty.textContent = 'No matches';
         listEl.append(empty);
       }
+      updateActionHint();
+      renderEnableSources();
       return;
     }
     results.forEach((r, i) => {
       const row = document.createElement('button');
       row.type = 'button';
-      row.className = i === selected ? 'row selected' : 'row';
+      const open = isResultAlreadyOpen(r);
+      row.className = `row${i === selected ? ' selected' : ''}${open ? ' already-open' : ''}`;
       // Listbox option semantics + a stable id for `aria-activedescendant`.
       row.id = optionId(i);
       row.setAttribute('role', 'option');
       row.setAttribute('aria-selected', i === selected ? 'true' : 'false');
       row.title = r.url;
+      // Mirror ResultRow's `data-source` hook (incl. `smart`) for cross-surface
+      // parity; the badge itself stays source-agnostic — no per-source colour
+      // token (launcher-fuzzy-smart-folders, Visual language).
+      row.dataset.source = r.source;
       const img = document.createElement('img');
       img.className = 'favicon';
       img.width = 16;
@@ -756,22 +811,47 @@ export function shouldDismissOnFocusOut(
       img.alt = '';
       withGlobeFallback(img); // set BEFORE src so a cached failure still swaps
       img.src = faviconUrl(r.url, 16);
+      // The title cell stacks the title over the optional "already open" line —
+      // the vanilla mirror of the Svelte ResultRow's `.title-block`.
+      const titleBlock = el('span', 'title-block');
       const title = el('span', 'title');
       title.textContent = r.title;
+      titleBlock.append(title);
+      if (open) {
+        const openLabel = el('span', 'already-open');
+        openLabel.textContent = 'already open';
+        titleBlock.append(openLabel);
+      }
+      // The trailing meta cluster: an optional cross-Space chip, then the source
+      // badge — the vanilla mirror of ResultRow's `.meta`.
+      const meta = el('span', 'meta');
+      if (r.spaceName) {
+        const chip = el('span', 'space-chip');
+        chip.title = `In ${r.spaceName}`;
+        const dot = el('span', 'space-dot');
+        if (r.spaceColor) dot.style.background = r.spaceColor;
+        const spaceName = el('span', 'space-name');
+        spaceName.textContent = r.spaceName;
+        chip.append(dot, spaceName);
+        meta.append(chip);
+      }
       const badge = el('span', 'badge');
       badge.textContent = sourceBadgeLabel(r.source);
+      meta.append(badge);
       const url = el('span', 'url');
       url.textContent = r.url;
-      row.append(img, title, badge, url);
+      row.append(img, titleBlock, meta, url);
       row.addEventListener('mouseenter', () => {
         selected = i;
         applySelection();
       });
-      row.addEventListener('click', () => act(r));
+      row.addEventListener('click', (e) => act(r, { shiftKey: e.shiftKey }));
       listEl?.append(row);
     });
     // Point the combobox at the freshly-rendered active option.
     input?.setAttribute('aria-activedescendant', optionId(selected));
+    updateActionHint();
+    renderEnableSources();
   }
 
   function applySelection(): void {
@@ -785,6 +865,75 @@ export function shouldDismissOnFocusOut(
     // Move the combobox's active-descendant pointer with the selection.
     if (rows[selected]) input?.setAttribute('aria-activedescendant', optionId(selected));
     rows[selected]?.scrollIntoView({ block: 'nearest' });
+    updateActionHint();
+  }
+
+  /** Refresh the footer action hint (tab-dedup) for the focused row: "↵ Switch
+   * ⇧↵ New tab" when it is already open, "↵ Open" otherwise, hidden when there
+   * are no results. */
+  function updateActionHint(): void {
+    if (!actionHintEl) return;
+    const focused = results[selected];
+    if (!focused) {
+      actionHintEl.style.display = 'none';
+      actionHintEl.textContent = '';
+      return;
+    }
+    actionHintEl.textContent = '';
+    const add = (kbd: string, verb: string): void => {
+      const k = el('span', 'action-kbd');
+      k.textContent = kbd;
+      const v = el('span', 'action-verb');
+      v.textContent = verb;
+      actionHintEl?.append(k, v);
+    };
+    if (isResultAlreadyOpen(focused)) {
+      add('↵', 'Switch');
+      actionHintEl.append(el('span', 'action-sep'));
+      add('⇧↵', 'New tab');
+    } else {
+      add('↵', 'Open');
+    }
+    actionHintEl.style.display = '';
+  }
+
+  /** "Enable history results" / "Enable bookmark results". */
+  const ENABLE_LABEL: Record<OptionalResultSource, string> = {
+    history: 'Enable history results',
+    bookmarks: 'Enable bookmark results',
+  };
+
+  /**
+   * Rebuild the "Enable ⟨source⟩ results" strip (least-privilege-permissions D5):
+   * one button per ungranted optional source the SW reported, shown only with a
+   * non-empty default-mode query. A click routes to the options page via the SW —
+   * the overlay is a content script and cannot call `chrome.permissions`.
+   */
+  function renderEnableSources(): void {
+    if (!enableEl) return;
+    enableEl.textContent = '';
+    if (activeEngine || (input?.value ?? '').trim() === '' || ungrantedSources.length === 0) {
+      enableEl.style.display = 'none';
+      return;
+    }
+    for (const src of ungrantedSources) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'enable-source';
+      btn.textContent = ENABLE_LABEL[src];
+      btn.addEventListener('click', () => openOptionsForGrant(src));
+      enableEl.append(btn);
+    }
+    enableEl.style.display = '';
+  }
+
+  /** Route "Enable …" to the options page's grant control via the SW (the
+   * overlay cannot touch `chrome.permissions`). Fire-and-forget, then close. */
+  function openOptionsForGrant(source: OptionalResultSource): void {
+    void chrome.runtime
+      .sendMessage({ type: 'lunma/open-options-grant', source })
+      .catch(() => undefined);
+    close();
   }
 
   /**
@@ -807,7 +956,7 @@ export function shouldDismissOnFocusOut(
       .catch(() => undefined);
   }
 
-  function act(r: LauncherResult): void {
+  function act(r: LauncherResult, modifiers?: { shiftKey: boolean }): void {
     switch (r.source) {
       case 'tab':
         if (r.tabId !== undefined) dispatch({ kind: 'focusTab', payload: { tabId: r.tabId } });
@@ -821,8 +970,12 @@ export function shouldDismissOnFocusOut(
           dispatch({ kind: 'openSavedTab', payload: { savedTabId: r.savedTabId, windowId } });
         }
         break;
-      default: // 'bookmark' | 'history' | 'websearch' | 'navigate' — all carry a url
-        dispatch({ kind: 'openUrl', payload: { url: r.url, windowId } });
+      default: // 'smart' | 'bookmark' | 'history' | 'websearch' | 'navigate' — all carry a url
+        // Shift+Enter forces a NEW tab, bypassing dedup (tab-dedup).
+        dispatch({
+          kind: 'openUrl',
+          payload: { url: r.url, windowId, ...(modifiers?.shiftKey ? { force: true } : {}) },
+        });
     }
     close();
   }

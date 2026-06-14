@@ -9,6 +9,12 @@ type SmartNode = Extract<PinNode, { kind: 'smart' }>;
 interface SmartFoldersChromeStub {
   storage: { local: { get: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn> } };
   alarms: { create: ReturnType<typeof vi.fn>; clear: ReturnType<typeof vi.fn> };
+  permissions: {
+    contains: ReturnType<typeof vi.fn>;
+    request: ReturnType<typeof vi.fn>;
+    onAdded: { addListener: ReturnType<typeof vi.fn>; removeListener: ReturnType<typeof vi.fn> };
+    onRemoved: { addListener: ReturnType<typeof vi.fn>; removeListener: ReturnType<typeof vi.fn> };
+  };
 }
 
 let chromeStub: SmartFoldersChromeStub;
@@ -23,6 +29,15 @@ function installChrome(): void {
       },
     },
     alarms: { create: vi.fn(), clear: vi.fn(async () => true) },
+    // The host-permission gate (least-privilege-permissions D8/D9) runs before
+    // every connector dispatch; default to GRANTED so these drain/handler suites
+    // exercise the fetch path. (A gate-specific suite lives in smart-folders.test.ts.)
+    permissions: {
+      contains: vi.fn(async () => true),
+      request: vi.fn(async () => true),
+      onAdded: { addListener: vi.fn(), removeListener: vi.fn() },
+      onRemoved: { addListener: vi.fn(), removeListener: vi.fn() },
+    },
   };
   (globalThis as unknown as { chrome: SmartFoldersChromeStub }).chrome = chromeStub;
 }

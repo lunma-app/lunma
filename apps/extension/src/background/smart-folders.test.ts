@@ -3,9 +3,12 @@ import { LunmaStore } from '../shared/store.svelte';
 import {
   CONNECTORS,
   collectSmartFolders,
+  fetchSmartFolderRuntime,
   isDue,
   normalizeBaseUrl,
+  reconcileSmartFolderGrants,
   refreshDueSmartFolders,
+  registerSmartFoldersPermissionSync,
   registerSmartFoldersRefreshKick,
   resetSmartFoldersInflight,
   SMART_FOLDERS_ALARM_NAME,
@@ -22,6 +25,13 @@ import {
 
 // ── test plumbing ──────────────────────────────────────────────────────────────
 
+interface PermissionsStub {
+  contains: ReturnType<typeof vi.fn>;
+  request: ReturnType<typeof vi.fn>;
+  onAdded: { addListener: ReturnType<typeof vi.fn>; removeListener: ReturnType<typeof vi.fn> };
+  onRemoved: { addListener: ReturnType<typeof vi.fn>; removeListener: ReturnType<typeof vi.fn> };
+}
+
 interface ChromeStub {
   storage: { local: { get: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn> } };
   alarms: { create: ReturnType<typeof vi.fn>; clear: ReturnType<typeof vi.fn> };
@@ -31,6 +41,7 @@ interface ChromeStub {
       removeListener: ReturnType<typeof vi.fn>;
     };
   };
+  permissions: PermissionsStub;
 }
 
 let chromeStub: ChromeStub;
@@ -52,6 +63,15 @@ function installChromeStub(): void {
     },
     alarms: { create: vi.fn(), clear: vi.fn(async () => true) },
     runtime: { onMessage: { addListener: vi.fn(), removeListener: vi.fn() } },
+    // The host-permission gate (design D8/D9) calls `chrome.permissions.contains`
+    // before every dispatch; default to GRANTED so the existing fetch/scheduling
+    // suites exercise the connectors. The gate suites flip it to ungranted.
+    permissions: {
+      contains: vi.fn(async () => true),
+      request: vi.fn(async () => true),
+      onAdded: { addListener: vi.fn(), removeListener: vi.fn() },
+      onRemoved: { addListener: vi.fn(), removeListener: vi.fn() },
+    },
   };
   (globalThis as unknown as { chrome: unknown }).chrome = chromeStub;
 }
@@ -144,6 +164,28 @@ describe('the CONNECTORS registry', () => {
     expect(CONNECTORS.rss.mintedIcon).toBe('rss');
   });
 
+  test('requiredOrigins: github.com fetches the api origin; everything else is same-origin (design D8)', () => {
+    // GitHub on github.com fetches api.github.com (a DIFFERENT origin) — the
+    // headline correctness case: gating on github.com would never authorize the
+    // fetch. GitHub Enterprise is same-origin under the baseUrl.
+    expect(CONNECTORS.github.requiredOrigins({ baseUrl: 'https://github.com' })).toEqual([
+      'https://api.github.com/*',
+    ]);
+    expect(CONNECTORS.github.requiredOrigins({ baseUrl: 'https://ghe.acme.com' })).toEqual([
+      'https://ghe.acme.com/*',
+    ]);
+    // GitLab, Jira, and RSS each fetch their own baseUrl origin (port preserved).
+    expect(
+      CONNECTORS.gitlab.requiredOrigins({ baseUrl: 'https://gitlab.example.com:8443/g' }),
+    ).toEqual(['https://gitlab.example.com:8443/*']);
+    expect(CONNECTORS.jira.requiredOrigins({ baseUrl: 'https://acme.atlassian.net' })).toEqual([
+      'https://acme.atlassian.net/*',
+    ]);
+    expect(
+      CONNECTORS.rss.requiredOrigins({ baseUrl: 'https://blog.example.com/feed.xml' }),
+    ).toEqual(['https://blog.example.com/*']);
+  });
+
   test('a github folder dispatches through CONNECTORS.github and its result reaches the drain', async () => {
     const runtime = { state: 'ok' as const, items: [], fetchedAt: 123 };
     const githubFetch = vi.spyOn(CONNECTORS.github, 'fetchRuntime').mockResolvedValue(runtime);
@@ -197,6 +239,167 @@ function makeStoreWithSmartFolders(nodes: SmartFolderNode[]): LunmaStore {
   store.state.pinnedBySpace.work = nodes;
   return store;
 }
+
+// ── host-permission gate (least-privilege-permissions design D8/D9) ─────────────
+
+describe('the host-permission gate', () => {
+  test('an ungranted origin short-circuits to needs-access without a fetch', async () => {
+    const glFetch = vi.spyOn(CONNECTORS.gitlab, 'fetchRuntime');
+    chromeStub.permissions.contains.mockResolvedValue(false);
+
+    const runtime = await fetchSmartFolderRuntime(
+      node({ source: 'gitlab', baseUrl: 'https://gitlab.example.com' }),
+    );
+
+    expect(runtime).toEqual({ state: 'needs-access', items: [], fetchedAt: expect.any(Number) });
+    expect(glFetch).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test('a github.com folder gates on the api origin it fetches, not github.com', async () => {
+    const ghFetch = vi.spyOn(CONNECTORS.github, 'fetchRuntime');
+    chromeStub.permissions.contains.mockResolvedValue(false);
+
+    const runtime = await fetchSmartFolderRuntime(
+      node({ source: 'github', baseUrl: 'https://github.com' }),
+    );
+
+    expect(runtime.state).toBe('needs-access');
+    expect(ghFetch).not.toHaveBeenCalled();
+    // The gate asks about api.github.com (the fetched origin), never github.com.
+    expect(chromeStub.permissions.contains).toHaveBeenCalledWith({
+      origins: ['https://api.github.com/*'],
+    });
+  });
+
+  test('an RSS feed on an ungranted origin shows needs-access, not error', async () => {
+    const rssFetch = vi.spyOn(CONNECTORS.rss, 'fetchRuntime');
+    chromeStub.permissions.contains.mockResolvedValue(false);
+
+    const runtime = await fetchSmartFolderRuntime(
+      node({ source: 'rss', baseUrl: 'https://blog.example.com/feed.xml' }),
+    );
+
+    expect(runtime.state).toBe('needs-access');
+    expect(rssFetch).not.toHaveBeenCalled();
+  });
+
+  test('needs-access precedes signed-out: the gate wins before the connector auth check', async () => {
+    // No connectors stored, so the github connector would return `signed-out` if
+    // reached — but the origin is ungranted, so the gate short-circuits first and
+    // the connector is never consulted.
+    const ghFetch = vi.spyOn(CONNECTORS.github, 'fetchRuntime');
+    chromeStub.permissions.contains.mockResolvedValue(false);
+
+    const runtime = await fetchSmartFolderRuntime(
+      node({ source: 'github', baseUrl: 'https://github.com' }),
+    );
+
+    expect(runtime.state).toBe('needs-access');
+    expect(ghFetch).not.toHaveBeenCalled();
+  });
+
+  test('a granted origin dispatches to the connector', async () => {
+    const result = { state: 'ok' as const, items: [], fetchedAt: 1 };
+    const glFetch = vi.spyOn(CONNECTORS.gitlab, 'fetchRuntime').mockResolvedValue(result);
+    chromeStub.permissions.contains.mockResolvedValue(true);
+    const glNode = node({ source: 'gitlab', baseUrl: 'https://gitlab.example.com' });
+
+    const runtime = await fetchSmartFolderRuntime(glNode);
+
+    expect(runtime).toBe(result);
+    expect(glFetch).toHaveBeenCalledWith(glNode, undefined);
+  });
+});
+
+// ── host-permission sync: grant heals, revoke gates (design D5/D9) ──────────────
+
+describe('reconcileSmartFolderGrants', () => {
+  test('on grant: a needs-access folder refetches (needs-access → pending → ok)', async () => {
+    const okRuntime = {
+      state: 'ok' as const,
+      items: [{ id: 'x', title: 't', url: 'https://u' }],
+      fetchedAt: 1,
+    };
+    vi.spyOn(CONNECTORS.gitlab, 'fetchRuntime').mockResolvedValue(okRuntime);
+    chromeStub.permissions.contains.mockResolvedValue(true);
+    const store = makeStoreWithSmartFolders([node({ id: 'sf-1', source: 'gitlab' })]);
+    store.state.smartFolders['sf-1'] = { state: 'needs-access', items: [], fetchedAt: Date.now() };
+    const events: SmartFoldersResultEvent[] = [];
+
+    await reconcileSmartFolderGrants({ store, enqueue: (e) => events.push(e) });
+
+    expect(events.map((e) => e.payload.runtime.state)).toEqual(['pending', 'ok']);
+    expect(events.at(-1)?.payload.folderId).toBe('sf-1');
+  });
+
+  test('on revoke: an ok folder whose origins are no longer granted drops to needs-access', async () => {
+    chromeStub.permissions.contains.mockResolvedValue(false);
+    const store = makeStoreWithSmartFolders([node({ id: 'sf-1', source: 'gitlab' })]);
+    store.state.smartFolders['sf-1'] = {
+      state: 'ok',
+      items: [{ id: 'x', title: 't', url: 'https://u' }],
+      fetchedAt: Date.now(),
+    };
+    const events: SmartFoldersResultEvent[] = [];
+
+    await reconcileSmartFolderGrants({ store, enqueue: (e) => events.push(e) });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.payload).toEqual({
+      folderId: 'sf-1',
+      runtime: { state: 'needs-access', items: [], fetchedAt: expect.any(Number) },
+    });
+  });
+
+  test('on grant: an already-ok, not-due folder is left alone (no needless poll)', async () => {
+    chromeStub.permissions.contains.mockResolvedValue(true);
+    const store = makeStoreWithSmartFolders([
+      node({ id: 'sf-1', source: 'gitlab', refreshMinutes: 30 }),
+    ]);
+    store.state.smartFolders['sf-1'] = { state: 'ok', items: [], fetchedAt: Date.now() };
+    const events: SmartFoldersResultEvent[] = [];
+
+    await reconcileSmartFolderGrants({ store, enqueue: (e) => events.push(e) });
+
+    expect(events).toHaveLength(0);
+  });
+
+  test('a folder already in needs-access is not re-enqueued on a still-ungranted change', async () => {
+    chromeStub.permissions.contains.mockResolvedValue(false);
+    const store = makeStoreWithSmartFolders([node({ id: 'sf-1', source: 'gitlab' })]);
+    store.state.smartFolders['sf-1'] = { state: 'needs-access', items: [], fetchedAt: Date.now() };
+    const events: SmartFoldersResultEvent[] = [];
+
+    await reconcileSmartFolderGrants({ store, enqueue: (e) => events.push(e) });
+
+    expect(events).toHaveLength(0);
+  });
+
+  test('registerSmartFoldersPermissionSync reconciles on a change and unsubscribes', async () => {
+    chromeStub.permissions.contains.mockResolvedValue(false);
+    const store = makeStoreWithSmartFolders([node({ id: 'sf-1', source: 'gitlab' })]);
+    store.state.smartFolders['sf-1'] = { state: 'ok', items: [], fetchedAt: Date.now() };
+    const events: SmartFoldersResultEvent[] = [];
+
+    const unsubscribe = registerSmartFoldersPermissionSync({
+      store,
+      enqueue: (e) => events.push(e),
+    });
+    const onAdded = chromeStub.permissions.onAdded.addListener.mock.calls[0]?.[0] as (
+      p: unknown,
+    ) => void;
+    expect(onAdded).toBeTypeOf('function');
+
+    onAdded({ origins: ['https://gitlab.example.com/*'] });
+    await vi.waitFor(() => expect(events.length).toBeGreaterThan(0));
+    expect(events[0]?.payload.runtime.state).toBe('needs-access');
+
+    unsubscribe();
+    expect(chromeStub.permissions.onAdded.removeListener).toHaveBeenCalled();
+    expect(chromeStub.permissions.onRemoved.removeListener).toHaveBeenCalled();
+  });
+});
 
 describe('scheduling', () => {
   test('isDue: a null/absent fetchedAt is always due; fresh is not; stale is', () => {

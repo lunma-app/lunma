@@ -12,12 +12,19 @@
     "sidePanel",
     "alarms",
     "favicon",
-    "bookmarks",
-    "history",
     "scripting"
   ],
-  "host_permissions": [
-    "<all_urls>"
+  "optional_permissions": [
+    "bookmarks",
+    "history"
+  ],
+  "optional_host_permissions": [
+    "https://github.com/*",
+    "https://api.github.com/*",
+    "https://gitlab.com/*",
+    "https://*.atlassian.net/*",
+    "https://*/*",
+    "http://*/*"
   ],
   "background": {
     "service_worker": "src/background/index.ts",

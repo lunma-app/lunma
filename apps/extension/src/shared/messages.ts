@@ -1,4 +1,9 @@
-import type { LauncherResult, SuggestionsQuery, SuggestionsResult } from './launcher-contract';
+import type {
+  LauncherResult,
+  OptionalResultSource,
+  SuggestionsQuery,
+  SuggestionsResult,
+} from './launcher-contract';
 import { log } from './logger';
 import type { AppState, WindowId } from './types';
 
@@ -35,6 +40,14 @@ export interface LauncherSuggestionsResponseMessage {
   type: 'lunma/launcher-suggestions-response';
   requestId: string;
   results: LauncherResult[];
+  /** The `results[].url` values already open in the requesting window's active
+   * Space (tab-dedup). Lets the stateless overlay flag "already open" rows by
+   * membership. Optional + backward-compatible (older handlers omit it). */
+  openUrls?: string[];
+  /** The optional result sources (`history`/`bookmarks`) not currently granted
+   * (least-privilege-permissions D5). Lets a surface offer "Enable ⟨source⟩
+   * results". Optional + backward-compatible (older handlers omit it). */
+  ungrantedSources?: OptionalResultSource[];
 }
 
 /**
@@ -154,6 +167,18 @@ export interface OpenNewTabLauncherMessage {
   windowId: WindowId;
 }
 
+/**
+ * Open-options-at-grant-location request (Alt+L overlay → SW, least-privilege-
+ * permissions D5). The overlay is a content script and cannot call
+ * `chrome.permissions`, so its "Enable ⟨source⟩ results" affordance routes here:
+ * the SW opens the options page at the Result sources grant control (`source`
+ * names which optional permission the user reached for). Fire-and-forget.
+ */
+export interface OpenOptionsGrantMessage {
+  type: 'lunma/open-options-grant';
+  source: OptionalResultSource;
+}
+
 export type LunmaMessage =
   | StateBroadcastMessage
   | StateRequestMessage
@@ -166,7 +191,8 @@ export type LunmaMessage =
   | BoundaryConfigMessage
   | BoundaryOpenElsewhereMessage
   | SidebarFocusMessage
-  | OpenNewTabLauncherMessage;
+  | OpenNewTabLauncherMessage
+  | OpenOptionsGrantMessage;
 
 export function broadcastState(method: string, state: AppState): void {
   const msg: StateBroadcastMessage = { type: 'lunma/state-broadcast', method, state };
@@ -331,7 +357,12 @@ export async function requestLauncherSuggestions(
   if (msg.type !== 'lunma/launcher-suggestions-response' || !Array.isArray(msg.results)) {
     throw new Error('requestLauncherSuggestions: malformed response');
   }
-  return { requestId: msg.requestId ?? requestId, results: msg.results };
+  return {
+    requestId: msg.requestId ?? requestId,
+    results: msg.results,
+    ...(Array.isArray(msg.openUrls) ? { openUrls: msg.openUrls } : {}),
+    ...(Array.isArray(msg.ungrantedSources) ? { ungrantedSources: msg.ungrantedSources } : {}),
+  };
 }
 
 /**
@@ -345,10 +376,18 @@ export async function requestLauncherSuggestions(
  * returns `true` to keep the response channel open. On a handler failure it
  * still replies (empty results) so the caller's promise resolves.
  *
+ * The handler returns `{ results, openUrls? }`: `openUrls` is the subset of
+ * result URLs already open in the active Space (tab-dedup), forwarded verbatim
+ * to the stateless overlay.
+ *
  * Returns an unregister function.
  */
 export function respondWithLauncherSuggestions(
-  handler: (query: SuggestionsQuery) => Promise<LauncherResult[]>,
+  handler: (query: SuggestionsQuery) => Promise<{
+    results: LauncherResult[];
+    openUrls?: string[];
+    ungrantedSources?: OptionalResultSource[];
+  }>,
 ): () => void {
   const listener = (
     raw: unknown,
@@ -366,8 +405,14 @@ export function respondWithLauncherSuggestions(
     };
     void Promise.resolve()
       .then(() => handler(query))
-      .then((results) => {
-        sendResponse({ type: 'lunma/launcher-suggestions-response', requestId, results });
+      .then(({ results, openUrls, ungrantedSources }) => {
+        sendResponse({
+          type: 'lunma/launcher-suggestions-response',
+          requestId,
+          results,
+          ...(openUrls && openUrls.length > 0 ? { openUrls } : {}),
+          ...(ungrantedSources && ungrantedSources.length > 0 ? { ungrantedSources } : {}),
+        });
       })
       .catch((err: unknown) => {
         log.error('respondWithLauncherSuggestions: handler threw', { err });

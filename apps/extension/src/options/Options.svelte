@@ -1,6 +1,12 @@
 <script lang="ts">
 import { onMount } from 'svelte';
 import { readConnectors, setConnectorToken } from '../shared/connectors';
+import {
+  hasApiPermission,
+  type OptionalApiPermission,
+  onPermissionsChange,
+  requestApiPermission,
+} from '../shared/permissions';
 import { modifierLabel } from '../shared/platform';
 import { BUILT_IN_ENGINES } from '../shared/search-engines';
 import {
@@ -36,6 +42,13 @@ let settings = $state<Settings>({ ...DEFAULTS });
 let launcherShortcutBound = $state<boolean | null>(null);
 
 const version = chrome.runtime.getManifest().version;
+
+// The privacy policy lives on the marketing site (apps/site), which never ships
+// in the extension bundle — so the options page links out to its canonical URL.
+// Mirrors apps/site `SITE_URL` + `PRIVACY_PATH`; the lunma.app domain is [VERIFY]
+// until launch (the release notes), the same placeholder the store
+// listing's privacy URL uses.
+const PRIVACY_URL = 'https://lunma.app/privacy';
 
 // Group declarations by `group`, preserving first-seen order.
 const groups = $derived.by(() => {
@@ -125,7 +138,13 @@ onMount(async () => {
   applyTint(settings.tint);
   void checkLauncherShortcut();
   void refreshConnectorHosts();
+  void refreshResultSources();
 });
+
+// Keep the result-source indicators live (least-privilege-permissions D5): a
+// grant from the inline control here, or a revoke in Chrome's own UI, refreshes
+// the row state without a reload.
+onMount(() => onPermissionsChange(() => void refreshResultSources()));
 
 // ── Connectors (smart-folders, design D10) ────────────────────────────────────
 // Per-instance access tokens for smart folders — a custom, storage.local-backed
@@ -185,6 +204,55 @@ async function clearConnector(host: string): Promise<void> {
   if (replacingHost === host) replacingHost = null;
   replacementToken = '';
   await refreshConnectorHosts();
+}
+
+// ── Result sources (least-privilege-permissions D5) ───────────────────────────
+// The launcher's history/bookmarks providers are OPTIONAL permissions, granted
+// in-context. This is the canonical grant control: the new-tab launcher offers
+// an inline "Enable …" affordance, and the Alt+L overlay (which can't call
+// `chrome.permissions`) routes its "Enable …" here via the SW (`#result-sources`).
+// Reads/requests go through `shared/permissions.ts`; `onPermissionsChange` keeps
+// the indicators live when a grant is revoked in Chrome's own UI.
+
+const RESULT_SOURCES: Array<{
+  name: OptionalApiPermission;
+  label: string;
+  desc: string;
+  cta: string;
+}> = [
+  {
+    name: 'history',
+    label: 'Browsing history',
+    desc: 'Show matching pages from your browsing history in the launcher.',
+    cta: 'Enable history results',
+  },
+  {
+    name: 'bookmarks',
+    label: 'Bookmarks',
+    desc: 'Show matching bookmarks in the launcher.',
+    cta: 'Enable bookmark results',
+  },
+];
+
+let resultSourceGranted = $state<Record<OptionalApiPermission, boolean>>({
+  history: false,
+  bookmarks: false,
+});
+
+async function refreshResultSources(): Promise<void> {
+  const [history, bookmarks] = await Promise.all([
+    hasApiPermission('history'),
+    hasApiPermission('bookmarks'),
+  ]);
+  resultSourceGranted = { history, bookmarks };
+}
+
+/** Grant an optional result source from this user gesture (extension page).
+ * `onPermissionsChange` also refreshes, but refresh here too so the indicator
+ * updates immediately on this surface. */
+async function enableResultSource(name: OptionalApiPermission): Promise<void> {
+  await requestApiPermission(name);
+  await refreshResultSources();
 }
 
 // Deep-link by hash: scroll the matching element into view on load and on hash
@@ -485,6 +553,41 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
       </section>
     </Surface>
 
+    <!-- Result sources (least-privilege-permissions D5): the launcher's optional
+         history/bookmarks providers, granted in-context. This is the canonical
+         grant control — the Alt+L overlay (which can't call chrome.permissions)
+         deep-links here via the SW (#result-sources). -->
+    <Surface variant="glass">
+      <section class="group" id="result-sources" data-testid="result-sources-section">
+        <h2 class="group-label">Result sources</h2>
+        <p class="connector-intro">
+          The launcher can also surface your browsing history and bookmarks. These are optional —
+          enable each when you want it, and revoke access anytime from Chrome's extension settings.
+        </p>
+
+        {#each RESULT_SOURCES as source (source.name)}
+          <div class="result-source-row" data-testid={`result-source-${source.name}`}>
+            <div class="result-source-cell">
+              <span class="result-source-label">{source.label}</span>
+              <span class="result-source-desc">{source.desc}</span>
+            </div>
+            {#if resultSourceGranted[source.name]}
+              <span
+                class="result-source-indicator"
+                data-testid={`result-source-${source.name}-granted`}
+              >
+                Enabled
+              </span>
+            {:else}
+              <Button variant="primary" onclick={() => void enableResultSource(source.name)}>
+                {source.cta}
+              </Button>
+            {/if}
+          </div>
+        {/each}
+      </section>
+    </Surface>
+
     <!-- Backup & restore (data-backup): export/import a portable JSON snapshot of
          Spaces and settings. Self-contained: export reads storage directly; import
          goes through the bus to the SW. -->
@@ -506,6 +609,15 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
         <TabRow title="GitHub — pull requests" />
       </section>
     </Surface>
+
+    <!-- Privacy policy lives on the marketing site (never bundled in the
+         extension), so this is a plain outbound link opening in a new tab — the
+         options page is a full tab, so no bus round-trip is needed. -->
+    <footer class="footer">
+      <a href={PRIVACY_URL} target="_blank" rel="noopener" data-testid="options-privacy-link">
+        Privacy policy
+      </a>
+    </footer>
   </main>
 </div>
 
@@ -582,6 +694,32 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
     font-size: var(--text-sm);
     font-weight: var(--weight-regular);
     color: var(--text-dim);
+  }
+
+  /* A quiet outbound link to the privacy policy, centred under the last card. */
+  .footer {
+    display: flex;
+    justify-content: center;
+    padding-top: var(--space-2);
+  }
+  .footer a {
+    color: var(--text-dim);
+    font-size: var(--text-sm);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    transition: color var(--motion-fast) var(--ease-standard);
+  }
+  .footer a:hover {
+    color: var(--text);
+  }
+  .footer a:focus-visible {
+    outline: var(--focus-width) solid var(--focus-color);
+    outline-offset: var(--focus-offset);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .footer a {
+      transition: none;
+    }
   }
 
   .column {
@@ -837,6 +975,40 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
   .connector-add-action {
     display: flex;
     justify-content: flex-end;
+  }
+
+  /* Result sources (least-privilege-permissions D5): one row per optional source
+   * — a label + description on the left, an Enabled pill or the primary Enable
+   * Button on the right. Mirrors the connector-row list rhythm. */
+  .result-source-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--divider);
+  }
+  .result-source-cell {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+  .result-source-label {
+    font: var(--weight-medium) var(--text-base) / 1.2 var(--font-sans);
+    color: var(--text);
+  }
+  .result-source-desc {
+    font: var(--weight-regular) var(--text-sm) / 1.35 var(--font-sans);
+    color: var(--text-muted);
+  }
+  .result-source-indicator {
+    flex-shrink: 0;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--r-pill);
+    background: var(--surface-2);
+    color: var(--text-faint);
+    font: var(--weight-medium) var(--text-2xs) / 1 var(--font-sans);
   }
 
   /* The live preview — three TabRows whose list inset (`--list-pad`) and row gap

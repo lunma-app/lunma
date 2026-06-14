@@ -45,6 +45,17 @@ export interface SourceConnector {
    * forges (lucide ships no GitHub brand glyph; github-connector D7),
    * `'folder-kanban'` for Jira, `'rss'` for the feed source. */
   readonly mintedIcon: string;
+  /**
+   * The host match patterns this connector ACTUALLY fetches for `node` — NOT
+   * necessarily the folder's `baseUrl` origin (least-privilege-permissions,
+   * design D8). The engine gates on `hasHostPermissions(requiredOrigins(node))`
+   * before dispatch and the editor requests this same set; keying on `baseUrl`
+   * directly would be wrong for GitHub, which fetches `api.github.com`, never
+   * `github.com`. A synchronous, pure derivation (mirrors `listingUrl`); a
+   * malformed `baseUrl` yields an empty pattern (treated as ungranted) rather
+   * than throwing.
+   */
+  requiredOrigins(node: Pick<SmartFolderNode, 'baseUrl'>): string[];
   /** Bounded, never throws; resolves every failure to a runtime state. Slices
    * its normalized results to the node's `maxItems` (rss-connector design D5). */
   fetchRuntime(

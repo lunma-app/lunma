@@ -354,4 +354,13 @@ describe('maxItems + listingUrl', () => {
       'https://gitlab.example.com/dashboard/merge_requests',
     );
   });
+
+  test('requiredOrigins is the same-origin baseUrl pattern, port preserved (D8)', () => {
+    expect(gitlabConnector.requiredOrigins({ baseUrl: 'https://gitlab.example.com' })).toEqual([
+      'https://gitlab.example.com/*',
+    ]);
+    expect(
+      gitlabConnector.requiredOrigins({ baseUrl: 'https://gitlab.example.com:8443/g' }),
+    ).toEqual(['https://gitlab.example.com:8443/*']);
+  });
 });

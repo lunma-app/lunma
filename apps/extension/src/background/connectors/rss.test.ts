@@ -266,3 +266,11 @@ describe('listingUrl', () => {
     expect(rssConnector.listingUrl(n)).toBe('https://example.com');
   });
 });
+
+describe('requiredOrigins', () => {
+  test('is the feed origin the connector fetches directly (D8/D9)', () => {
+    expect(rssConnector.requiredOrigins({ baseUrl: 'https://blog.example.com/feed.xml' })).toEqual([
+      'https://blog.example.com/*',
+    ]);
+  });
+});

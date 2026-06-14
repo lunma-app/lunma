@@ -38,6 +38,12 @@ type StorageListener = (
 ) => void;
 
 let suggestResults: LauncherResult[] = [];
+// tab-dedup: the `openUrls` the faked suggestions channel returns alongside the
+// results (the subset of result URLs the SW found open in the active Space).
+let suggestOpenUrls: string[] = [];
+// least-privilege-permissions D5: the ungranted optional sources the faked
+// suggestions channel reports (drives the "Enable …" affordance).
+let suggestUngranted: Array<'history' | 'bookmarks'> = [];
 let resolvedWindowId = 55;
 // Optional Space hue/chroma the faked `current-window` response carries (the SW
 // resolves these from the sender tab's active Space on the keydown path).
@@ -114,6 +120,8 @@ function installEnv(): void {
             type: 'lunma/launcher-suggestions-response',
             requestId: msg.requestId,
             results: suggestResults,
+            ...(suggestOpenUrls.length > 0 ? { openUrls: suggestOpenUrls } : {}),
+            ...(suggestUngranted.length > 0 ? { ungrantedSources: suggestUngranted } : {}),
           });
           if (deferSuggest) {
             return new Promise((resolve) => {
@@ -235,6 +243,8 @@ function lastCommand(): { kind: string; payload: Record<string, unknown> } | und
 
 beforeEach(() => {
   suggestResults = [];
+  suggestOpenUrls = [];
+  suggestUngranted = [];
   resolvedWindowId = 55;
   resolvedSpaceHue = undefined;
   resolvedSpaceChroma = undefined;
@@ -309,6 +319,67 @@ describe('Alt+L overlay', () => {
     expect(lastCommand()).toEqual({
       kind: 'openUrl',
       payload: { url: 'https://book/', windowId: 77 },
+    });
+  });
+
+  test('flags an already-open bookmark row and shows the Switch / New tab footer (tab-dedup)', async () => {
+    suggestResults = [
+      { id: 'bookmark:b', source: 'bookmark', title: 'Book', url: 'https://book/', score: 2 },
+    ];
+    suggestOpenUrls = ['https://book/'];
+    await loadOverlay();
+    openOverlay(100);
+    await typeAndAwaitRows('book', 1);
+    expect(shadow().querySelector('span.already-open')?.textContent?.trim()).toBe('already open');
+    expect(rows()[0]?.classList.contains('already-open')).toBe(true);
+    const hint = shadow().querySelector('.action-hint');
+    expect(hint?.textContent).toContain('Switch');
+    expect(hint?.textContent).toContain('New tab');
+  });
+
+  test('shows the default "Open" footer when the focused row is not already open', async () => {
+    suggestResults = [
+      { id: 'bookmark:b', source: 'bookmark', title: 'Book', url: 'https://book/', score: 2 },
+    ];
+    await loadOverlay();
+    openOverlay(100);
+    await typeAndAwaitRows('book', 1);
+    expect(shadow().querySelector('span.already-open')).toBeNull();
+    const hint = shadow().querySelector('.action-hint');
+    expect(hint?.textContent).toContain('Open');
+    expect(hint?.textContent).not.toContain('Switch');
+  });
+
+  test('Shift+Enter on an already-open row forces a new tab (force:true) and closes', async () => {
+    suggestResults = [
+      { id: 'bookmark:b', source: 'bookmark', title: 'Book', url: 'https://book/', score: 2 },
+    ];
+    suggestOpenUrls = ['https://book/'];
+    await loadOverlay();
+    openOverlay(100);
+    await typeAndAwaitRows('book', 1);
+    overlayInput().dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true }),
+    );
+    expect(lastCommand()).toEqual({
+      kind: 'openUrl',
+      payload: { url: 'https://book/', windowId: 100, force: true },
+    });
+    expect(host()).toBeNull();
+  });
+
+  test('plain Enter on an already-open row dedups (no force)', async () => {
+    suggestResults = [
+      { id: 'bookmark:b', source: 'bookmark', title: 'Book', url: 'https://book/', score: 2 },
+    ];
+    suggestOpenUrls = ['https://book/'];
+    await loadOverlay();
+    openOverlay(100);
+    await typeAndAwaitRows('book', 1);
+    key('Enter');
+    expect(lastCommand()).toEqual({
+      kind: 'openUrl',
+      payload: { url: 'https://book/', windowId: 100 },
     });
   });
 
@@ -858,5 +929,55 @@ describe('overlay dismiss-on-blur (launcher-sidebar-focus-reach)', () => {
       requestAnimationFrame(() => requestAnimationFrame(() => r(undefined))),
     );
     expect(host()).not.toBeNull();
+  });
+});
+
+describe('Alt+L overlay — enable ungranted sources (least-privilege-permissions D5)', () => {
+  function enableButtons(): HTMLButtonElement[] {
+    return Array.from(shadow().querySelectorAll('.enable-source'));
+  }
+
+  test('renders an Enable button per ungranted source the SW reports', async () => {
+    suggestResults = [];
+    suggestUngranted = ['history', 'bookmarks'];
+    await loadOverlay();
+    openOverlay(100);
+    typeRaw('nope');
+    await vi.waitFor(() => expect(enableButtons().length).toBe(2));
+    expect(enableButtons().map((b) => b.textContent)).toEqual([
+      'Enable history results',
+      'Enable bookmark results',
+    ]);
+  });
+
+  test('clicking Enable routes to the options grant control via the SW, then closes (no chrome.permissions)', async () => {
+    suggestResults = [];
+    suggestUngranted = ['history'];
+    await loadOverlay();
+    openOverlay(100);
+    typeRaw('nope');
+    await vi.waitFor(() => expect(enableButtons().length).toBe(1));
+
+    enableButtons()[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(chromeStub.runtime.sendMessage).toHaveBeenCalledWith({
+      type: 'lunma/open-options-grant',
+      source: 'history',
+    });
+    // The overlay never touches chrome.permissions (it has no such API here).
+    expect((chromeStub as unknown as { permissions?: unknown }).permissions).toBeUndefined();
+    // Activating closes the overlay.
+    expect(host()).toBeNull();
+  });
+
+  test('no Enable strip when the SW reports every source granted', async () => {
+    suggestResults = [
+      { id: 'tab:1', source: 'tab', title: 'One', url: 'https://one/', score: 3, tabId: 1 },
+    ];
+    suggestUngranted = [];
+    await loadOverlay();
+    openOverlay(100);
+    await typeAndAwaitRows('one', 1);
+    expect(enableButtons()).toHaveLength(0);
   });
 });

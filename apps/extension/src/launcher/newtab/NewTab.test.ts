@@ -18,6 +18,11 @@ interface ChromeMock {
 let mock: ChromeMock;
 /** Results the faked suggestions channel returns for any non-empty query. */
 let suggestResults: LauncherResult[] = [];
+/** Ungranted optional sources the faked suggestions channel reports (least-
+ * privilege-permissions D5) — drives the inline "Enable …" affordance. */
+let suggestUngranted: Array<'history' | 'bookmarks'> = [];
+/** `chrome.permissions.request` mock — the inline "Enable …" affordance calls it. */
+let permissionsRequestMock: ReturnType<typeof vi.fn>;
 /** This tab's own id, returned by the faked `chrome.tabs.getCurrent` (newtab-hearth
  * in-place open). `undefined` simulates a context with no own-tab id. */
 let currentTabId: number | undefined;
@@ -30,6 +35,7 @@ function installChrome(): void {
           type: 'lunma/launcher-suggestions-response',
           requestId: msg.requestId,
           results: suggestResults,
+          ...(suggestUngranted.length > 0 ? { ungrantedSources: suggestUngranted } : {}),
         });
       }
       return Promise.resolve(); // command path (ack arrives separately / not awaited)
@@ -37,6 +43,7 @@ function installChrome(): void {
     addListener: vi.fn(),
     removeListener: vi.fn(),
   };
+  permissionsRequestMock = vi.fn(() => Promise.resolve(true));
   (globalThis as unknown as { chrome: unknown }).chrome = {
     runtime: {
       sendMessage: mock.sendMessage,
@@ -46,6 +53,14 @@ function installChrome(): void {
     tabs: {
       getCurrent: () =>
         Promise.resolve(currentTabId === undefined ? undefined : { id: currentTabId }),
+    },
+    // The inline "Enable …" affordance requests via `requestApiPermission`, and
+    // `onMount` subscribes to `onPermissionsChange` (least-privilege-permissions D5).
+    permissions: {
+      request: permissionsRequestMock,
+      contains: vi.fn(() => Promise.resolve(false)),
+      onAdded: { addListener: vi.fn(), removeListener: vi.fn() },
+      onRemoved: { addListener: vi.fn(), removeListener: vi.fn() },
     },
   };
 }
@@ -73,6 +88,7 @@ async function typeQuery(input: HTMLInputElement, value: string): Promise<void> 
 
 beforeEach(() => {
   suggestResults = [];
+  suggestUngranted = [];
   currentTabId = undefined;
   installChrome();
 });
@@ -294,6 +310,96 @@ describe('NewTab (launcher search)', () => {
     await fireEvent.keyDown(input(container), { key: 'Escape' });
     await waitFor(() => expect(container.querySelector('[data-testid="result-list"]')).toBeNull());
     expect(container.querySelector('[data-testid="newtab-name"]')?.textContent).toBe('Work');
+  });
+
+  // tab-dedup: an active Space with a temp tab at `url` — so the new-tab surface's
+  // in-process `isUrlOpenInActiveSpace` flags a result at that URL.
+  function stateWithOpenTab(windowId: number, space: Space, tabId: number, url: string): AppState {
+    const state = stateWithActiveSpace(windowId, space);
+    state.spaceInstancesByWindow[windowId] = {
+      [space.id]: { spaceId: space.id, groupId: 1, tempTabIds: [tabId], tempTabTitles: {} },
+    };
+    state.liveTabsById[tabId] = {
+      tabId,
+      windowId,
+      title: 'Open',
+      url,
+      active: false,
+      status: 'complete',
+    };
+    return state;
+  }
+
+  test('flags an already-open bookmark result and switches the footer hint (tab-dedup)', async () => {
+    suggestResults = [
+      { id: 'bookmark:b', source: 'bookmark', title: 'Book', url: 'https://book/', score: 2 },
+    ];
+    const { container } = render(NewTabHarness, {
+      props: { windowId: 100, initialState: stateWithOpenTab(100, WORK, 55, 'https://book/') },
+    });
+    await typeQuery(input(container), 'book');
+    await waitFor(() =>
+      expect(container.querySelector('[data-testid="result-row"]')).not.toBeNull(),
+    );
+    expect(
+      container.querySelector('[data-testid="result-already-open"]')?.textContent?.trim(),
+    ).toBe('already open');
+    const hint = container.querySelector('[data-testid="newtab-action-hint"]');
+    expect(hint?.textContent).toContain('Switch');
+    expect(hint?.textContent).toContain('New tab');
+  });
+
+  test('shows the default "Open" footer hint when the focused result is not already open', async () => {
+    suggestResults = [
+      { id: 'bookmark:b', source: 'bookmark', title: 'Book', url: 'https://book/', score: 2 },
+    ];
+    const { container } = render(NewTabHarness, {
+      props: { windowId: 100, initialState: stateWithActiveSpace(100, WORK) },
+    });
+    await typeQuery(input(container), 'book');
+    await waitFor(() =>
+      expect(container.querySelector('[data-testid="result-row"]')).not.toBeNull(),
+    );
+    expect(container.querySelector('[data-testid="result-already-open"]')).toBeNull();
+    const hint = container.querySelector('[data-testid="newtab-action-hint"]');
+    expect(hint?.textContent).toContain('Open');
+    expect(hint?.textContent).not.toContain('Switch');
+  });
+
+  test('Shift+Enter on an already-open result forces a new tab (force:true)', async () => {
+    suggestResults = [
+      { id: 'bookmark:b', source: 'bookmark', title: 'Book', url: 'https://book/', score: 2 },
+    ];
+    const { container } = render(NewTabHarness, {
+      props: { windowId: 100, initialState: stateWithOpenTab(100, WORK, 55, 'https://book/') },
+    });
+    await typeQuery(input(container), 'book');
+    await waitFor(() =>
+      expect(container.querySelector('[data-testid="result-row"]')).not.toBeNull(),
+    );
+    await fireEvent.keyDown(input(container), { key: 'Enter', shiftKey: true });
+    expect(lastCommand()).toEqual({
+      kind: 'openUrl',
+      payload: { url: 'https://book/', windowId: 100, force: true },
+    });
+  });
+
+  test('plain Enter on an already-open result dedups (no force) — the handler focuses it', async () => {
+    suggestResults = [
+      { id: 'bookmark:b', source: 'bookmark', title: 'Book', url: 'https://book/', score: 2 },
+    ];
+    const { container } = render(NewTabHarness, {
+      props: { windowId: 100, initialState: stateWithOpenTab(100, WORK, 55, 'https://book/') },
+    });
+    await typeQuery(input(container), 'book');
+    await waitFor(() =>
+      expect(container.querySelector('[data-testid="result-row"]')).not.toBeNull(),
+    );
+    await fireEvent.keyDown(input(container), { key: 'Enter' });
+    expect(lastCommand()).toEqual({
+      kind: 'openUrl',
+      payload: { url: 'https://book/', windowId: 100 },
+    });
   });
 
   test('empty (query, no matches) shows a quiet empty line, not a dead box', async () => {
@@ -895,5 +1001,59 @@ describe('NewTab (refocus on reactivation, launcher-reach)', () => {
     window.dispatchEvent(new Event('focus'));
     await nextFrame();
     expect(document.activeElement).not.toBe(el);
+  });
+});
+
+describe('NewTab (enable ungranted result sources, least-privilege-permissions D5)', () => {
+  function input(container: HTMLElement): HTMLInputElement {
+    return container.querySelector('[data-testid="newtab-search"]') as HTMLInputElement;
+  }
+  const strip = (c: HTMLElement): HTMLElement | null =>
+    c.querySelector('[data-testid="newtab-enable-sources"]');
+
+  test('renders an Enable button per ungranted source the SW reports', async () => {
+    suggestResults = [
+      { id: 'tab:11', source: 'tab', title: 'Tab one', url: 'https://one/', score: 3, tabId: 11 },
+    ];
+    suggestUngranted = ['history', 'bookmarks'];
+    const { container } = render(NewTabHarness, {
+      props: { windowId: 100, initialState: stateWithActiveSpace(100, WORK) },
+    });
+    await typeQuery(input(container), 'one');
+    await waitFor(() => expect(strip(container)).not.toBeNull());
+    const labels = [...(strip(container)?.querySelectorAll('button') ?? [])].map((b) =>
+      (b.textContent ?? '').trim(),
+    );
+    expect(labels).toEqual(['Enable history results', 'Enable bookmark results']);
+  });
+
+  test('clicking an Enable button requests the matching permission inline', async () => {
+    suggestResults = [];
+    suggestUngranted = ['history'];
+    const { container } = render(NewTabHarness, {
+      props: { windowId: 100, initialState: stateWithActiveSpace(100, WORK) },
+    });
+    await typeQuery(input(container), 'nope');
+    await waitFor(() => expect(strip(container)).not.toBeNull());
+    const btn = [...(strip(container)?.querySelectorAll('button') ?? [])].find((b) =>
+      (b.textContent ?? '').includes('Enable history results'),
+    ) as HTMLButtonElement;
+    await fireEvent.click(btn);
+    expect(permissionsRequestMock).toHaveBeenCalledWith({ permissions: ['history'] });
+  });
+
+  test('no Enable strip when every optional source is granted', async () => {
+    suggestResults = [
+      { id: 'tab:11', source: 'tab', title: 'Tab one', url: 'https://one/', score: 3, tabId: 11 },
+    ];
+    suggestUngranted = [];
+    const { container } = render(NewTabHarness, {
+      props: { windowId: 100, initialState: stateWithActiveSpace(100, WORK) },
+    });
+    await typeQuery(input(container), 'one');
+    await waitFor(() =>
+      expect(container.querySelector('[data-testid="newtab-results"]')).not.toBeNull(),
+    );
+    expect(strip(container)).toBeNull();
   });
 });

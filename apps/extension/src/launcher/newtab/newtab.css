@@ -329,6 +329,29 @@ body,
 .engine-hint-sep {
   color: var(--text-dim);
 }
+
+/* Footer action hint (tab-dedup) — the Enter affordance under the results card:
+ * "↵ Open" by default, "↵ Switch  ⇧↵ New tab" when the focused row is already
+ * open. Same quiet register as the engine hint. */
+.action-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
+  padding: 0 var(--space-2);
+  font: var(--weight-regular) var(--text-sm) / 1.2 var(--font-sans);
+  color: var(--text-dim);
+  animation: fade-in var(--motion-fast) var(--ease-standard) both;
+}
+.action-hint-verb {
+  color: var(--text-muted);
+}
+/* A wider gap between the two action groups so "Switch" and "New tab" read as
+ * distinct affordances rather than one run-on phrase. */
+.action-hint-sep {
+  width: var(--space-2);
+}
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -336,6 +359,18 @@ body,
   to {
     opacity: 1;
   }
+}
+
+/* Enable ungranted optional sources (least-privilege-permissions D5): a calm
+ * strip of ghost Buttons under the results card. The Button primitive owns its
+ * ink/hover/focus; this only lays them out. Quiet — never competes with results. */
+.enable-sources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  padding: 0 var(--space-2);
+  animation: fade-in var(--motion-fast) var(--ease-standard) both;
 }
 
 /* Empty (query, no matches) — a quiet line inside the card, never a dead box. */
@@ -386,7 +421,8 @@ body,
     animation: none;
   }
   /* The chip entrance + hint fade are removed; identical end state. */
-  .engine-hint {
+  .engine-hint,
+  .action-hint {
     animation: none;
   }
   /* Instant full↔chip swap, instant idle↔searching pose change (the input snaps

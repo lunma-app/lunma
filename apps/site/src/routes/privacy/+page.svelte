@@ -102,8 +102,9 @@ const lastUpdated = '14 June 2026';
       </p>
       <p>
         How it signs in depends on the service. Some take an access token you
-        create and paste in; Lunma stores that token locally and sends it only to
-        the host it belongs to. Others ride the session you're already signed into,
+        create and paste in. That token is your authentication for that host:
+        Lunma stores it locally and sends it only to the host it belongs to.
+        Others ride the session you're already signed into,
         so the request carries your existing browser cookie to that host, the same
         as if you'd opened the site yourself. Either way the request goes straight
         to the service and the results come straight back.
@@ -137,6 +138,16 @@ const lastUpdated = '14 June 2026';
       <p>
         Lunma collects nothing from anyone, children included. There's no account
         to create and no age to enter.
+      </p>
+    </section>
+
+    <section>
+      <h2>Chrome's data policy</h2>
+      <p>
+        Lunma's use of information received from Chrome and Google APIs adheres to
+        the Chrome Web Store User Data Policy, including the Limited Use
+        requirements. In plain terms: Lunma reads what it needs to do the job you
+        asked for, on your own machine. None of it is sold or passed on.
       </p>
     </section>
 

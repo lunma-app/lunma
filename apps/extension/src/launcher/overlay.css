@@ -286,6 +286,15 @@
   background: var(--accent-soft);
 }
 
+/* An "already open" row (tab-dedup) carries a secondary line beneath its title,
+ * so the fixed single-line --row-h would clip it — let it grow with light
+ * vertical padding (the Comfort layout below is already auto-height + padded). */
+.row.already-open {
+  height: auto;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
 /* Comfort — the two-line scanning row mirroring ResultRow: the title (+ type) on
  * line 1, the url tiny + dimmed on line 2, the favicon spanning both rows.
  * Auto-height (the 40px tab token would clip line 2) with ~--space-2 (8px)
@@ -312,16 +321,74 @@
   border-radius: 3px;
   object-fit: contain;
 }
-.title {
+/* The title cell stacks the title over the optional "already open" line — mirror
+ * of src/ui/ResultRow.svelte's `.title-block`. A single-line row reads identically
+ * to before (the column collapses to just the title). */
+.title-block {
   grid-area: title;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+}
+.title {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font: 450 13px/1 var(--font-sans);
 }
-.badge {
+/* Secondary metadata for a deduped result — same muted/size register as the url
+ * line, never a chip (tab-dedup). */
+.already-open {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 400 12px/1 var(--font-sans);
+  color: var(--text-muted);
+}
+/* The trailing meta cluster: an optional cross-Space chip, then the source badge
+ * (mirrors ResultRow's `.meta`). */
+.meta {
   grid-area: badge;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Cross-Space marker — a colour dot in the foreign Space's identity colour plus
+ * its name (mirrors ResultRow's `.space-chip`). The dot's `background` is the
+ * Space's resolved `oklch(…)`, set inline from the result data. */
+.space-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.space-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--r-pill);
+}
+.space-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font: 600 9.5px/1 var(--font-sans);
+  color: var(--text-dim);
+}
+
+/* Tiny uppercased source chip mirroring ResultRow's `.badge`. Source-agnostic:
+ * one neutral treatment renders every `data-source` (tab/saved/smart/bookmark/
+ * history) — `smart` adds NO per-source colour token (launcher-fuzzy-smart-
+ * folders, Visual language). */
+.badge {
   align-self: center;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -346,6 +413,66 @@
   text-align: center;
   color: var(--text-muted);
   font: 400 13px/1.2 var(--font-sans);
+}
+
+/* Footer action hint (tab-dedup) — below the list: "↵ Open" by default,
+ * "↵ Switch  ⇧↵ New tab" when the focused row is already open. Quiet register,
+ * mirroring the Tab hint above the list. */
+.action-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border-soft);
+  color: var(--text-dim);
+  font: 400 12px/1.2 var(--font-sans);
+}
+.action-kbd {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  color: var(--text-dim);
+  font: 600 11px/1 var(--font-sans);
+}
+.action-verb {
+  color: var(--text-muted);
+}
+.action-sep {
+  width: 8px;
+}
+
+/* "Enable ⟨source⟩ results" strip (least-privilege-permissions D5) — below the
+ * action hint. Calm ghost buttons in the overlay's vanilla idiom (it imports no
+ * `ui/` primitive). A click routes to the options grant control via the SW. */
+.enable-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border-soft);
+}
+.enable-source {
+  appearance: none;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 4px 10px;
+  background: transparent;
+  color: var(--text-muted);
+  font: 500 12px/1.2 var(--font-sans);
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+.enable-source:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.enable-source:focus-visible {
+  outline: 2px solid var(--focus-color);
+  outline-offset: 2px;
 }
 
 @keyframes scrim-in {

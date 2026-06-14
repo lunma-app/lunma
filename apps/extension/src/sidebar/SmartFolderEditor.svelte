@@ -1,5 +1,7 @@
 <script lang="ts">
 import { dispatch } from '../shared/bus';
+import { requiredOriginsForNode } from '../shared/connector-origins';
+import { requestHostPermissions } from '../shared/permissions';
 import type { PinNode, SmartQuery, SmartSource, SpaceId } from '../shared/types';
 import Button from '../ui/Button.svelte';
 import SegmentedControl from '../ui/SegmentedControl.svelte';
@@ -185,22 +187,47 @@ function onQueryChange(next: string): void {
   if (!nameTouched) name = suggestedName(source, query);
 }
 
+/** Order-independent equality of two origin-pattern sets (each is normally one
+ * element; compared as sets so a future multi-origin connector still works). */
+function sameOrigins(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const setB = new Set(b);
+  return a.every((o) => setB.has(o));
+}
+
 function confirm(): void {
   if (!urlValid) return; // blocked — the inline message explains
+  const trimmedBaseUrl = baseUrl.trim();
   const payloadBase = {
     spaceId,
     source,
     name: name.trim() === '' ? suggestedName(source, query) : name.trim(),
-    baseUrl: baseUrl.trim(),
+    baseUrl: trimmedBaseUrl,
     maxItems: Number(maxItems),
     refreshMinutes: Number(refreshMinutes),
     // A feed has no canned query — omit it entirely (design D2).
     ...(isFeed ? {} : { query }),
   };
+  // Save FIRST (least-privilege-permissions design D4): the folder is created/
+  // updated before the permission dialog, so a deny/dismiss never loses the
+  // user's config — it simply lands in `needs-access` with the inline Grant
+  // affordance on its card.
   if (node) {
     dispatch({ kind: 'updateSmartFolder', payload: { ...payloadBase, folderId: node.id } });
   } else {
     dispatch({ kind: 'createSmartFolder', payload: payloadBase });
+  }
+  // Then request the connector's required host origins from THIS user gesture
+  // (the SW can't request — design D1). Only on a create or an origin-changing
+  // edit; an edit that leaves the origins unchanged shows no dialog. Fired
+  // synchronously (no await before it) so the gesture is preserved; the grant's
+  // `onPermissionsChange` heals the folder in the SW, no reload.
+  const nextOrigins = requiredOriginsForNode({ source, baseUrl: trimmedBaseUrl });
+  const prevOrigins = node
+    ? requiredOriginsForNode({ source: node.source, baseUrl: node.baseUrl })
+    : [];
+  if (!node || !sameOrigins(prevOrigins, nextOrigins)) {
+    void requestHostPermissions(nextOrigins);
   }
   onDone?.();
 }

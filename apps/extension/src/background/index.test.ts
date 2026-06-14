@@ -103,6 +103,15 @@ function installChrome(): void {
       clear: vi.fn(() => Promise.resolve(true)),
       onAlarm: { addListener },
     },
+    // The boot subscribes to permission changes to heal gated smart folders
+    // (least-privilege-permissions D5/D9); `contains` defaults to granted so the
+    // post-boot refresh exercises the connectors.
+    permissions: {
+      contains: vi.fn(() => Promise.resolve(true)),
+      request: vi.fn(() => Promise.resolve(true)),
+      onAdded: { addListener },
+      onRemoved: { addListener },
+    },
     windows: {
       // The fallback resolves the focused window via `getLastFocused` when there
       // is no active tab to read a windowId from (launcher-reach).

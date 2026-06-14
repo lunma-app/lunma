@@ -443,4 +443,16 @@ describe('maxItems + listingUrl', () => {
   test('listingUrl is the pull-requests dashboard', () => {
     expect(githubConnector.listingUrl(node())).toBe('https://github.com/pulls');
   });
+
+  test('requiredOrigins: github.com fetches api.github.com, GHE is same-origin (D8)', () => {
+    // The headline correctness case (least-privilege-permissions D8): a
+    // github.com folder fetches api.github.com, so the gate must request that —
+    // never github.com, which would never authorize the fetch.
+    expect(githubConnector.requiredOrigins({ baseUrl: 'https://github.com' })).toEqual([
+      'https://api.github.com/*',
+    ]);
+    expect(githubConnector.requiredOrigins({ baseUrl: 'https://ghe.example.com' })).toEqual([
+      'https://ghe.example.com/*',
+    ]);
+  });
 });

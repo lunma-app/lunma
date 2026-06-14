@@ -6,19 +6,13 @@ import { onStateBroadcast, requestLauncherSuggestions } from '../../shared/messa
 import { modifierLabel } from '../../shared/platform';
 import type { SearchEngine } from '../../shared/search-engines';
 import type { Tint } from '../../shared/settings';
-import type {
-  AppState,
-  IconName,
-  SavedTabId,
-  Space,
-  SpaceColor,
-  WindowId,
-} from '../../shared/types';
+import type { AppState, SavedTabId, Space, SpaceColor, WindowId } from '../../shared/types';
 import '@lunma/tokens/tokens.css';
 import '@lunma/tokens/fonts.css';
 import '@lunma/tokens/recipes.css';
 import './newtab.css';
-import type { LauncherResult } from '../../shared/launcher-contract';
+import type { LauncherResult, OptionalResultSource } from '../../shared/launcher-contract';
+import { onPermissionsChange, requestApiPermission } from '../../shared/permissions';
 import {
   colourToOklch,
   colourToOn,
@@ -28,6 +22,7 @@ import {
   SPACE_CHROMA,
 } from '../../shared/space-hue';
 import Aurora from '../../ui/Aurora.svelte';
+import Button from '../../ui/Button.svelte';
 import Chip from '../../ui/Chip.svelte';
 import FaviconTile from '../../ui/FaviconTile.svelte';
 import { faviconCacheKey, faviconFor, faviconUrl } from '../../ui/favicon';
@@ -37,6 +32,7 @@ import type { ResultListApi } from '../../ui/ResultList.svelte';
 import ResultList from '../../ui/ResultList.svelte';
 import SearchField from '../../ui/SearchField.svelte';
 import Surface from '../../ui/Surface.svelte';
+import { isDedupEligibleSource, isUrlOpenInActiveSpace } from '../shared/already-open';
 import { buildSearchUrl, resolveEngine } from '../shared/web-actions';
 
 interface Props {
@@ -106,8 +102,16 @@ onMount(() => {
   };
   document.addEventListener('visibilitychange', refocusIdleHome);
   window.addEventListener('focus', refocusIdleHome);
+  // A permission grant/revoke (here via the inline "Enable …" affordance, or in
+  // Chrome's own UI) may change which optional sources contribute — re-run the
+  // current query so newly-enabled results appear (or a revoked source drops)
+  // without a reload (least-privilege-permissions D5).
+  const unsubPerms = onPermissionsChange(() => {
+    if (query.trim() !== '' && activeEngine === null) void runQuery(query);
+  });
   return () => {
     unsubscribe();
+    unsubPerms();
     document.removeEventListener('visibilitychange', refocusIdleHome);
     window.removeEventListener('focus', refocusIdleHome);
   };
@@ -228,11 +232,18 @@ const DEBOUNCE_MS = 120;
 
 let query = $state('');
 let suggestResults = $state<LauncherResult[]>([]);
+// The optional result sources (history/bookmarks) the SW reports as ungranted
+// for the current query (least-privilege-permissions D5). Drives the inline
+// "Enable ⟨source⟩ results" affordance; cleared when the query empties.
+let ungrantedSources = $state<OptionalResultSource[]>([]);
 let list = $state<ResultListApi | undefined>();
 // id of the result the roving selection currently highlights — mirrored onto the
 // search input's `aria-activedescendant` so the combobox announces it (a11y).
 const LISTBOX_ID = 'newtab-launcher-results';
 let activeOptionId = $state<string | null>(null);
+// The roving-focused result, reported by ResultList — drives the footer action
+// hint (tab-dedup). Null when the list is empty.
+let focusedResult = $state<LauncherResult | null>(null);
 // The SearchField instance, bound so we can restore focus after popping the
 // engine chip (its × lives in the leading slot, which unmounts on pop).
 let searchField = $state<{ focus: () => void } | undefined>();
@@ -299,6 +310,7 @@ function scheduleSearch(q: string): void {
   if (debounceHandle) clearTimeout(debounceHandle);
   if (q.trim() === '') {
     suggestResults = [];
+    ungrantedSources = [];
     return;
   }
   debounceHandle = setTimeout(() => {
@@ -310,11 +322,32 @@ async function runQuery(q: string): Promise<void> {
   const mine = ++latest;
   try {
     const res = await requestLauncherSuggestions(q, windowId);
-    if (mine === latest) suggestResults = res.results;
+    if (mine === latest) {
+      suggestResults = res.results;
+      ungrantedSources = res.ungrantedSources ?? [];
+    }
   } catch {
-    if (mine === latest) suggestResults = [];
+    if (mine === latest) {
+      suggestResults = [];
+      ungrantedSources = [];
+    }
   }
 }
+
+/** Enable an ungranted optional result source (least-privilege-permissions D5):
+ * the new-tab launcher is an extension page, so it requests the permission
+ * inline from this click. On grant `onPermissionsChange` (subscribed in
+ * `onMount`) re-runs the current query, so the newly-available results appear
+ * without a reload. */
+function enableSource(name: OptionalResultSource): void {
+  void requestApiPermission(name);
+}
+
+/** History first, then bookmarks — the affordance copy. */
+const ENABLE_LABEL: Record<OptionalResultSource, string> = {
+  history: 'Enable history results',
+  bookmarks: 'Enable bookmark results',
+};
 
 function onInput(value: string): void {
   query = value;
@@ -346,6 +379,7 @@ function resetToIdle(): void {
   cycleIndex = 0;
   query = '';
   suggestResults = [];
+  ungrantedSources = [];
   if (debounceHandle) clearTimeout(debounceHandle);
 }
 
@@ -400,8 +434,25 @@ function onKeydown(e: KeyboardEvent): void {
   list?.handleKeydown(e);
 }
 
-/** Act on a chosen result via the existing bus (never by mutating state). */
-function act(result: LauncherResult): void {
+// Tab-dedup (design D4): is this result already open in the active Space? Only
+// dedup-eligible link sources are ever flagged; derived from the live state
+// mirror, so it updates reactively as the Space's open tabs change. `tab`/`saved`
+// results carry their own focus semantics and are never marked.
+function alreadyOpenFor(result: LauncherResult): boolean {
+  return (
+    isDedupEligibleSource(result.source) &&
+    appState !== null &&
+    isUrlOpenInActiveSpace(appState, windowId, result.url)
+  );
+}
+
+// The focused row's already-open state, for the footer action hint.
+const footerAlreadyOpen = $derived(focusedResult !== null && alreadyOpenFor(focusedResult));
+
+/** Act on a chosen result via the existing bus (never by mutating state).
+ * Shift+Enter (`modifiers.shiftKey`) on a link result forces a NEW tab,
+ * bypassing dedup (tab-dedup). */
+function act(result: LauncherResult, modifiers?: { shiftKey: boolean }): void {
   switch (result.source) {
     case 'tab':
       if (result.tabId !== undefined) {
@@ -421,7 +472,10 @@ function act(result: LauncherResult): void {
       break;
     }
     default: // 'bookmark' | 'history' | 'websearch' | 'navigate' — open the carried url.
-      dispatch({ kind: 'openUrl', payload: { url: result.url, windowId } });
+      dispatch({
+        kind: 'openUrl',
+        payload: { url: result.url, windowId, ...(modifiers?.shiftKey ? { force: true } : {}) },
+      });
       break;
   }
 }
@@ -459,7 +513,7 @@ const faviconSrc = (result: LauncherResult): string => faviconFor(result.url);
         <div class="identity" data-testid="newtab-identity" aria-hidden={searching}>
           <div class="icon-tile">
             <Surface variant="glass" glow radius="lg" testid="newtab-icon">
-              <Icon name={activeSpace.icon as IconName} size={40} color="var(--space-c)" />
+              <Icon name={activeSpace.icon} size={40} color="var(--space-c)" />
             </Surface>
           </div>
           <h1 class="name" data-testid="newtab-name">{activeSpace.name}</h1>
@@ -471,7 +525,7 @@ const faviconSrc = (result: LauncherResult): string => faviconFor(result.url);
         </div>
         <div class="identity-chip" data-testid="newtab-identity-chip" aria-hidden={!searching}>
           <Surface variant="glass" testid="newtab-chip">
-            <Icon name={activeSpace.icon as IconName} size={16} color="var(--space-c)" />
+            <Icon name={activeSpace.icon} size={16} color="var(--space-c)" />
             <span class="chip-name">{activeSpace.name}</span>
           </Surface>
         </div>
@@ -561,8 +615,9 @@ const faviconSrc = (result: LauncherResult): string => faviconFor(result.url);
               <ResultList
                 {results}
                 {faviconSrc}
+                alreadyOpen={alreadyOpenFor}
                 listboxId={LISTBOX_ID}
-                onact={(result) => act(result)}
+                onact={(result, _index, modifiers) => act(result, modifiers)}
                 onescape={resetToIdle}
                 onready={(api) => {
                   list = api;
@@ -570,12 +625,33 @@ const faviconSrc = (result: LauncherResult): string => faviconFor(result.url);
                 onactivedescendant={(id) => {
                   activeOptionId = id;
                 }}
+                onfocuschange={(result) => {
+                  focusedResult = result;
+                }}
               />
               {#if results.length === 0}
                 <p class="empty" data-testid="newtab-empty">No matches</p>
               {/if}
             </Surface>
           </div>
+          <!-- Footer action hint (tab-dedup): the primary Enter action for the
+               focused row, switching to "↵ Switch  ⇧↵ New tab" when that row's
+               URL is already open in the active Space. Quiet, never competes with
+               the results. -->
+          {#if results.length > 0}
+            <p class="action-hint" data-testid="newtab-action-hint" aria-live="polite">
+              {#if footerAlreadyOpen}
+                <Kbd>↵</Kbd>
+                <span class="action-hint-verb">Switch</span>
+                <span class="action-hint-sep" aria-hidden="true"></span>
+                <Kbd>⇧↵</Kbd>
+                <span class="action-hint-verb">New tab</span>
+              {:else}
+                <Kbd>↵</Kbd>
+                <span class="action-hint-verb">Open</span>
+              {/if}
+            </p>
+          {/if}
           <!-- Polite count announcement for screen readers (the visible list is a
                listbox the combobox input controls). Off-screen, never focusable. -->
           <span class="sr-only" role="status" aria-live="polite" data-testid="newtab-results-status">
@@ -583,6 +659,22 @@ const faviconSrc = (result: LauncherResult): string => faviconFor(result.url);
               ? 'No matches'
               : `${results.length} result${results.length === 1 ? '' : 's'}`}
           </span>
+        {/if}
+
+        <!-- Enable ungranted optional sources (least-privilege-permissions D5):
+             a calm strip of ghost Buttons, one per ungranted source. The new-tab
+             surface is an extension page, so each requests its permission inline;
+             on grant `onPermissionsChange` re-queries and the results appear. Only
+             in default mode (engine mode skips the SW round-trip). -->
+        {#if !activeEngine && ungrantedSources.length > 0}
+          <div class="enable-sources" data-testid="newtab-enable-sources">
+            {#each ungrantedSources as src (src)}
+              <Button variant="ghost" onclick={() => enableSource(src)}>
+                <Icon name="key-round" size={12} />
+                <span>{ENABLE_LABEL[src]}</span>
+              </Button>
+            {/each}
+          </div>
         {/if}
       </div>
     {/if}

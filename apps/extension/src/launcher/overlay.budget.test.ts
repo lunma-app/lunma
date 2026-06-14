@@ -56,6 +56,14 @@ describe('overlay bundle budget', () => {
       `overlay bundle pulled in Svelte runtime module(s):\n  ${svelteInputs.join('\n  ')}`,
     ).toEqual([]);
 
+    // The launcher scorer (uFuzzy) runs SW-side only — it must never reach the
+    // overlay content-script graph (launcher-fuzzy-smart-folders, design D3).
+    const fuzzyInputs = moduleIds.filter((id) => id.includes('ufuzzy'));
+    expect(
+      fuzzyInputs,
+      `overlay bundle pulled in the uFuzzy matcher:\n  ${fuzzyInputs.join('\n  ')}`,
+    ).toEqual([]);
+
     const gzipBytes = gzipSync(Buffer.from(code)).length;
     expect(
       gzipBytes,

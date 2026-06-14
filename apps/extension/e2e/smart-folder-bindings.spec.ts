@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { BrowserContext, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 
 // smart-folder-item-bindings (task 5.2): the real-browser activation path with
@@ -37,12 +37,30 @@ async function openSidebar(page: Page, extensionId: string): Promise<void> {
   await expect(page.getByTestId('sidebar-content')).toBeVisible();
 }
 
+/**
+ * Harness grant (least-privilege-permissions): connector fetches are now gated on
+ * `hasHostPermissions(connector.requiredOrigins(node))`, which calls
+ * `chrome.permissions.contains` in the service worker. A real `request()` would
+ * pop a native Chrome dialog Playwright can't accept, so the harness forces the
+ * SW's `chrome.permissions.contains` to report the forge origin as granted — the
+ * production gate logic still runs; only the platform answer is stubbed. Without
+ * this the folder would resolve to `needs-access` and never fetch.
+ */
+async function grantForgeHost(context: BrowserContext): Promise<void> {
+  const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
+  await worker.evaluate(() => {
+    (chrome.permissions as unknown as { contains: () => Promise<boolean> }).contains = () =>
+      Promise.resolve(true);
+  });
+}
+
 /** A compact snapshot of the persisted facts this test asserts on, read straight
  * from `lunma.state` (the ids-only `smartItemBindings` slice IS persisted). */
 async function snapshot(page: Page): Promise<{
   spaceId: string | null;
   folderIds: string[];
-  bindings: Record<string, Record<string, Record<string, number>>>;
+  // The per-(item, window) slot is `{ tabId, allowGlob }` (smart-tab-boundary).
+  bindings: Record<string, Record<string, Record<string, { tabId: number; allowGlob: string }>>>;
   tempIds: number[];
   tabCount: number;
 }> {
@@ -53,7 +71,10 @@ async function snapshot(page: Page): Promise<{
         state?: {
           activeSpaceByWindow: Record<number, string | null>;
           pinnedBySpace: Record<string, Array<{ kind: string; id: string }>>;
-          smartItemBindings: Record<string, Record<string, Record<string, number>>>;
+          smartItemBindings: Record<
+            string,
+            Record<string, Record<string, { tabId: number; allowGlob: string }>>
+          >;
           spaceInstancesByWindow: Record<
             number,
             Record<string, { tempTabIds: number[] }> | undefined
@@ -103,6 +124,9 @@ test('a smart-folder row activates like a pinned tab: open bound, re-click focus
   });
 
   await openSidebar(page, extensionId);
+  // Grant the forge host so the connector fetch passes the host-permission gate
+  // (least-privilege-permissions) — otherwise the folder sits in `needs-access`.
+  await grantForgeHost(context);
   const spaceId = (await snapshot(page)).spaceId;
   expect(spaceId, 'a Default Space is active at boot').toBeTruthy();
 
@@ -148,7 +172,7 @@ test('a smart-folder row activates like a pinned tab: open bound, re-click focus
     .toEqual(['42']);
   const opened = await snapshot(page);
   const win = await page.evaluate(async () => (await chrome.windows.getCurrent({})).id as number);
-  const boundTabId = opened.bindings[folderId]?.['42']?.[String(win)];
+  const boundTabId = opened.bindings[folderId]?.['42']?.[String(win)]?.tabId;
   expect(boundTabId, 'item 42 is bound to a live tab in this window').toBeGreaterThan(0);
   // One new tab exists, and it is NOT in Temporary (the temp set is unchanged).
   expect(opened.tabCount).toBe(before.tabCount + 1);
@@ -166,7 +190,7 @@ test('a smart-folder row activates like a pinned tab: open bound, re-click focus
   await page.waitForTimeout(500);
   const reclicked = await snapshot(page);
   expect(reclicked.tabCount).toBe(opened.tabCount);
-  expect(reclicked.bindings[folderId]?.['42']?.[String(win)]).toBe(boundTabId);
+  expect(reclicked.bindings[folderId]?.['42']?.[String(win)]?.tabId).toBe(boundTabId);
 
   await page.bringToFront();
 

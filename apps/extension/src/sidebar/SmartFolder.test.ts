@@ -14,10 +14,20 @@ const { sendMock, openOptionsAtMock } = vi.hoisted(() => ({
 vi.mock('../shared/bus', () => ({ bus: { send: sendMock }, dispatch: sendMock }));
 vi.mock('./open-options', () => ({ openOptionsAt: openOptionsAtMock }));
 
+/** The `chrome.permissions.request` mock — the needs-access "Grant access"
+ * button calls it via `requestHostPermissions` (least-privilege-permissions). */
+let permissionsRequestMock: ReturnType<typeof vi.fn>;
+
 beforeEach(() => {
-  // `faviconFor` resolves the `_favicon` endpoint via chrome.runtime.getURL.
+  permissionsRequestMock = vi.fn(() => Promise.resolve(true));
+  // `faviconFor` resolves the `_favicon` endpoint via chrome.runtime.getURL;
+  // the needs-access grant goes through `chrome.permissions.request`.
   (globalThis as unknown as { chrome: unknown }).chrome = {
     runtime: { getURL: (path: string) => `chrome-extension://abc${path}` },
+    permissions: {
+      request: permissionsRequestMock,
+      contains: vi.fn(() => Promise.resolve(true)),
+    },
   };
   sendMock.mockClear();
   openOptionsAtMock.mockClear();
@@ -524,6 +534,46 @@ describe('SmartFolder — calm states (design D7)', () => {
       payload: { url: 'https://acme.atlassian.net', windowId: 100 },
     });
     expect(openOptionsAtMock).not.toHaveBeenCalled();
+  });
+
+  test('needs-access shows a calm grant prompt (no error card); activating requests the connector origins', async () => {
+    const store = makeStore({ state: 'needs-access', items: [], fetchedAt: 1 });
+    const { container } = renderSmart(store);
+    const prompt = container.querySelector('[data-testid="smart-needs-access"]') as HTMLElement;
+    expect(prompt).not.toBeNull();
+    expect(prompt.textContent).toContain('Lunma needs access to gitlab.example.com');
+    // It is the calm family — never the error note or the sign-in row.
+    expect(container.querySelector('[data-testid="smart-error-note"]')).toBeNull();
+    expect(container.querySelector('[data-testid="smart-signin-row"]')).toBeNull();
+    // No result rows in needs-access (the grant prompt replaces them).
+    expect(container.querySelector('[data-testid="smart-result-row"]')).toBeNull();
+
+    const grant = [...prompt.querySelectorAll('button')].find((b) =>
+      (b.textContent ?? '').includes('Grant access'),
+    ) as HTMLButtonElement;
+    await fireEvent.click(grant);
+    // GitLab is same-origin: the request carries the baseUrl origin.
+    expect(permissionsRequestMock).toHaveBeenCalledWith({
+      origins: ['https://gitlab.example.com/*'],
+    });
+    // The grant only requests — it never writes runtime state via the bus.
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  test('a needs-access github.com folder requests the api.github.com origin (D8)', async () => {
+    const ghNode = smartNode({ source: 'github', baseUrl: 'https://github.com' });
+    const store = makeStore({ state: 'needs-access', items: [], fetchedAt: 1 });
+    store.state.pinnedBySpace.work = [ghNode];
+    const { container } = renderSmart(store, { node: ghNode });
+    const prompt = container.querySelector('[data-testid="smart-needs-access"]') as HTMLElement;
+    expect(prompt.textContent).toContain('Lunma needs access to github.com');
+    const grant = [...prompt.querySelectorAll('button')].find((b) =>
+      (b.textContent ?? '').includes('Grant access'),
+    ) as HTMLButtonElement;
+    await fireEvent.click(grant);
+    expect(permissionsRequestMock).toHaveBeenCalledWith({
+      origins: ['https://api.github.com/*'],
+    });
   });
 
   test('error keeps last-known items with one dim "Couldn\'t reach ⟨host⟩" note', () => {

@@ -5,6 +5,7 @@ import {
   broadcastState,
   type LauncherToggleMessage,
   type OpenNewTabLauncherMessage,
+  type OpenOptionsGrantMessage,
   respondWithCurrentWindow,
   type SidebarFocusMessage,
 } from '../shared/messages';
@@ -21,6 +22,7 @@ import { installBusAdapter } from './bus-adapter';
 import type { PendingEvent } from './coordinator';
 import { ensureAtLeastOneSpace } from './default-space';
 import { registerLauncherSuggestionsHandler } from './launcher-suggestions-handler';
+import { openOptionsAtResultSources } from './open-options-grant';
 import { backfillOverlayIntoOpenTabs, injectOverlay } from './overlay-injection';
 import { resolvePinActiveTab } from './pin-active-tab';
 import { seedExistingTabs } from './seed-existing-tabs';
@@ -28,6 +30,7 @@ import { seedExistingWindows } from './seed-existing-windows';
 import {
   handleSmartFoldersAlarm,
   refreshDueSmartFolders,
+  registerSmartFoldersPermissionSync,
   registerSmartFoldersRefreshKick,
   type SmartFolderDeps,
   syncSmartFoldersAlarm,
@@ -168,6 +171,13 @@ const smartFolderDeps: SmartFolderDeps = { store, enqueue: enqueueAfterBoot };
 // so it never reads a half-loaded store.
 registerSmartFoldersRefreshKick(smartFolderDeps, bootReady);
 
+// Host-permission sync (least-privilege-permissions design D5/D9): observe
+// `chrome.permissions` grants/revocations and heal gated folders without a
+// reload — a granted origin refetches its `needs-access`/due folders, a revoked
+// one drops affected folders back to `needs-access`. Registered SYNCHRONOUSLY
+// (the change may wake a dormant SW); the reconcile pass defers to `bootReady`.
+registerSmartFoldersPermissionSync(smartFolderDeps, bootReady);
+
 // Initial poll-alarm sync from the loaded pinned trees (the alarm may have been
 // cleared by a browser restart; create/update/delete handlers retune it live),
 // plus a post-boot refresh-due kick: the runtime slice dies with the SW (never
@@ -193,6 +203,9 @@ void bootReady.then(() => {
 void bootReady.then(async () => {
   const settings = await readSettings();
   coordinator.setBoundaryDefault(settings.pinnedTabBoundaryDefault);
+  // Seed the navigation-dedup mirror (navigation-tab-dedup) so the tab handler
+  // reads the live value synchronously on the drain.
+  coordinator.setDedupNewTabNavigations(settings.dedupNewTabNavigations);
   await coordinator.refreshBoundTabBoundaries();
 });
 
@@ -268,6 +281,20 @@ chrome.runtime.onMessage.addListener((raw: unknown, sender: chrome.runtime.Messa
   void openNewTabLauncher(m.windowId);
 });
 
+// Open-options-at-grant-location (least-privilege-permissions D5): the Alt+L
+// overlay can't call `chrome.permissions`, so its "Enable history/bookmark
+// results" affordance routes here — the SW opens the options page at the Result
+// sources grant control. Registered SYNCHRONOUSLY; UI-only, never enqueues. The
+// `source` is carried for parity but both optional permissions live in the same
+// section, so the SW simply opens it.
+chrome.runtime.onMessage.addListener((raw: unknown, sender: chrome.runtime.MessageSender): void => {
+  if (sender.id !== chrome.runtime.id) return;
+  if (!raw || typeof raw !== 'object') return;
+  const m = raw as Partial<OpenOptionsGrantMessage>;
+  if (m.type !== 'lunma/open-options-grant') return;
+  void openOptionsAtResultSources();
+});
+
 // Sync the auto-archive sweep alarm to the current settings (auto-archive):
 // register it (at the threshold-derived period) only while the master switch is
 // on, and clear it otherwise. Clearing first means an enabled re-sync is always
@@ -288,6 +315,9 @@ async function syncAutoArchiveAlarm(settings: Settings): Promise<void> {
 // or retuning the threshold takes effect without a reload.
 watchSettings((settings) => {
   coordinator.setBoundaryDefault(settings.pinnedTabBoundaryDefault);
+  // Push the live navigation-dedup toggle (navigation-tab-dedup) so flipping it
+  // takes effect without a reload.
+  coordinator.setDedupNewTabNavigations(settings.dedupNewTabNavigations);
   void coordinator.refreshBoundTabBoundaries();
   void syncAutoArchiveAlarm(settings);
 });

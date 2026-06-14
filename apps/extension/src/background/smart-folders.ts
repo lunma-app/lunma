@@ -1,4 +1,5 @@
 import { log } from '../shared/logger';
+import { hasHostPermissions, onPermissionsChange } from '../shared/permissions';
 import type { LunmaStore } from '../shared/store.svelte';
 import type { AppState, FolderId, PinNode, SmartFolderRuntime, SmartSource } from '../shared/types';
 import type { ConnectorCaches, SourceConnector } from './connectors/connector';
@@ -98,7 +99,16 @@ export async function fetchSmartFolderRuntime(
   node: Pick<SmartFolderNode, 'source' | 'baseUrl' | 'query' | 'maxItems'>,
   caches?: ConnectorCaches,
 ): Promise<SmartFolderRuntime> {
-  return CONNECTORS[node.source].fetchRuntime(node, caches);
+  const connector = CONNECTORS[node.source];
+  // Host-permission gate (least-privilege-permissions design D8/D9): a folder
+  // whose connector-required origins are not ALL granted resolves to
+  // `needs-access` WITHOUT a network request. This runs BEFORE the connector's
+  // own auth short-circuit, so host access precedes `signed-out`; it applies to
+  // every source, RSS included.
+  if (!(await hasHostPermissions(connector.requiredOrigins(node)))) {
+    return { state: 'needs-access', items: [], fetchedAt: Date.now() };
+  }
+  return connector.fetchRuntime(node, caches);
 }
 
 // ── scheduling ─────────────────────────────────────────────────────────────────
@@ -256,4 +266,64 @@ export function registerSmartFoldersRefreshKick(
   };
   chrome.runtime.onMessage.addListener(listener);
   return () => chrome.runtime.onMessage.removeListener(listener);
+}
+
+// ── host-permission sync (least-privilege-permissions design D5/D9) ──────────────
+
+/**
+ * Re-evaluate every smart folder's host grant after a permission change and
+ * enqueue the right result event (the drain applies + broadcasts each):
+ *   - **granted** and the folder is in `needs-access` or due → refetch (the gate
+ *     in {@link fetchSmartFolderRuntime} now passes, so `needs-access` → `pending`
+ *     → `ok`). An already-`ok`, not-due folder is left alone (no needless poll).
+ *   - **ungranted** and not already `needs-access` → drop to `needs-access`
+ *     (a revoke returns the folder to its gated state).
+ * Re-checks each folder via `hasHostPermissions` (the source of truth) rather
+ * than matching the change's raw match patterns. One `ConnectorCaches` per pass,
+ * like a poll cycle. Exported for tests.
+ */
+export async function reconcileSmartFolderGrants(deps: SmartFolderDeps): Promise<void> {
+  const now = Date.now();
+  const folders = collectSmartFolders(deps.store.state);
+  const caches: ConnectorCaches = new Map();
+  await Promise.all(
+    folders.map(async (node) => {
+      const granted = await hasHostPermissions(CONNECTORS[node.source].requiredOrigins(node));
+      const state = deps.store.state.smartFolders[node.id]?.state;
+      if (granted) {
+        if (state === 'needs-access' || isDue(node, deps.store.state.smartFolders, now)) {
+          await startSmartFolderRefresh(deps, node, caches).completion;
+        }
+        return;
+      }
+      if (state !== 'needs-access') {
+        deps.enqueue({
+          source: 'connector',
+          kind: 'smartFolders.result',
+          payload: {
+            folderId: node.id,
+            runtime: { state: 'needs-access', items: [], fetchedAt: now },
+          },
+        });
+      }
+    }),
+  );
+}
+
+/**
+ * Subscribe (in the SW) to `chrome.permissions` grants/revocations and heal
+ * smart folders without a reload (design D5/D9). Any change — added or removed —
+ * triggers a full {@link reconcileSmartFolderGrants} pass (granting one origin
+ * may unblock several folders; the source-of-truth re-check is cheap). The pass
+ * defers to `whenReady` so a change that wakes a dormant SW never reads a
+ * half-loaded store (mirrors {@link registerSmartFoldersRefreshKick}). Returns
+ * an unsubscribe.
+ */
+export function registerSmartFoldersPermissionSync(
+  deps: SmartFolderDeps,
+  whenReady: Promise<unknown> = Promise.resolve(),
+): () => void {
+  return onPermissionsChange(() => {
+    void whenReady.then(() => reconcileSmartFolderGrants(deps));
+  });
 }

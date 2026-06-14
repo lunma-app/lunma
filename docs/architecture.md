@@ -67,11 +67,13 @@ lunma/                              # pnpm workspace root (private)
 
 > **Status:** the launcher **overlay** is now **wired** (`launcher-v1`). It ships
 > a `content_scripts` entry injecting `apps/extension/src/launcher/overlay.ts` at
-> `document_start` on `<all_urls>`, the `bookmarks` + `history` permissions, the
-> `<all_urls>` host permission, and a `toggle-launcher` command (`Alt+L`). The
-> broad host access lands *with* the feature, not before (see
-> [ADR 0001](adr/0001-launcher-v1-shape.md)); the increase triggers Chrome's
-> re-enable-on-update prompt (called out in the change's manual verification).
+> `document_start` on `<all_urls>` and a `toggle-launcher` command (`Alt+L`).
+> `history` + `bookmarks` are **optional** permissions and connector host access is
+> requested at runtime — not at install — under the least-privilege grant model
+> (`least-privilege-permissions`; see "Permissions and the runtime grant model"
+> below). The overlay content-script `matches` stay on `<all_urls>`, which keeps
+> the item in Chrome's broad-host review tier (see
+> [ADR 0001](adr/0001-launcher-v1-shape.md)).
 >
 > The **new-tab page** (`launcher/newtab/`) was wired earlier by
 > `lunma-new-tab-home` (`chrome_url_overrides.newtab`); `launcher-v1` turned its
@@ -85,6 +87,67 @@ A **second declarative content script** (`content/tab-boundary.ts`, `pinned-tab-
 The new-tab page (`launcher/newtab/`) is its own page and a full Svelte app. It is a **read-only state consumer** for its idle home, exactly like the sidebar: `main.ts` resolves its window (`chrome.windows.getCurrent`) and seeds from a `state-request` snapshot (with boot-retry backoff), then `NewTab.svelte` stays live by subscribing to `state-broadcast`. For search it queries the **launcher-suggestions channel** and dispatches result actions over the bus (`focusTab` / `focusSavedTab` / `openSavedTab` / `openUrl`). Both surfaces share the search engine via `apps/extension/src/launcher/shared/`.
 
 **Home-tab orchestration.** A Chrome group cannot be empty and a window cannot be empty, so an empty Space always forces a tab into existence. With Lunma owning the new-tab page, that forced tab is the Space's **home**. The coordinator recognises a home tab by its live URL (`isNewTabUrl(url)` in `apps/extension/src/shared/new-tab.ts`, matching `chrome://newtab/` and the extension's resolved newtab URL) and treats it as a *transient* property of the live tab (never persisted): a home tab is grouped into the active Space (so the window shows it) but is **never** added to `tempTabIds` — so it is unlisted in the sidebar's Temporary list. On `tabs.onUpdated` to a non-newtab URL it ceases to be a home tab and is adopted as an ordinary temporary tab. Empty-Space activation **reuses** the window's focused tab when it is already a home tab (else opens one), and leaving a Space whose only window tab is its home **closes** that home tab (the instance returns to `groupId === -1`) — so visiting empty Spaces never accumulates blank tabs, and **Clear** lands cleanly on the home with no stray tab re-added to the list.
+
+## Permissions and the runtime grant model
+
+`least-privilege-permissions` splits the manifest into what the **core workspace
+needs at install** and what each optional capability requests **in-context, the
+first time the user reaches for it**:
+
+- **Required `permissions`:** `tabs`, `tabGroups`, `storage`, `sidePanel`,
+  `alarms`, `scripting`, `favicon` (`commands` is declared via the top-level
+  `commands` key). `favicon` is **retained** — Chrome's `_favicon/` page-URL
+  endpoint (`ui/favicon.ts`, the favicon fallback for every tile/row) requires it
+  (`design.md` D6).
+- **No `<all_urls>` host permission.** The install prompt no longer asks for
+  all-sites, history, or bookmarks.
+- **`optional_permissions`:** `history`, `bookmarks` — the launcher's two
+  suggestion providers.
+- **`optional_host_permissions`:** the known connector SaaS hosts
+  (`https://github.com/*`, `https://api.github.com/*`, `https://gitlab.com/*`,
+  `https://*.atlassian.net/*`) plus the self-hosted fallbacks `https://*/*` and
+  `http://*/*`, so an arbitrary user-entered connector `baseUrl` can be requested
+  at runtime.
+
+**One foundation module.** All `chrome.permissions` access goes through
+`shared/permissions.ts` (`hasApiPermission` / `requestApiPermission`,
+`hasHostPermissions` / `requestHostPermissions` with all-granted-over-a-set
+semantics, `originPatternForBaseUrl`, and `onPermissionsChange`). No `remove*` is
+exported — revocation happens through Chrome's own UI and is *observed*. No other
+module touches `chrome.permissions.*` directly (a guard test asserts the
+background never `request*`s).
+
+**The SW queries/observes; surfaces request.** `chrome.permissions.request()`
+needs a user gesture and is callable only from an extension-page context, and
+`chrome.permissions` is not exposed to content scripts at all. So:
+
+- The **service worker** only `has*`-queries (gating connector fetches and the
+  launcher's history/bookmarks providers) and observes `onPermissionsChange` (to
+  heal/refetch gated smart folders without a reload). It never `request*`s.
+- **Extension-page surfaces** (sidebar smart-folder card + editor, the new-tab
+  launcher, the options **Result sources** section) own the gesture-bound
+  `request*` calls.
+- The **Alt+L overlay** is a content script, so it cannot request inline: its
+  "Enable …" affordance sends `lunma/open-options-grant` to the SW, which opens
+  the options Result sources control (`#result-sources`).
+
+**Connector fetches are gated.** Each connector declares the origins it actually
+fetches via `requiredOrigins(node)` — keyed by the shared, pure
+`requiredOriginsForNode(node)` in `shared/connector-origins.ts` (so the SW gate
+and the surface request share one derivation; surfaces can't import
+`background/connectors`). GitHub on github.com fetches `api.github.com` (a
+different origin), so the gate requests `https://api.github.com/*`, never
+`github.com`. A folder whose required origins aren't all granted resolves to a
+calm `needs-access` runtime state **without a network request**, ahead of the
+connector's own `signed-out` auth check.
+
+**The broad-host constraint is not escaped.** The launcher overlay and the
+pinned-tab boundary content scripts must stay on `<all_urls>` at `document_start`
+(the launcher must be summonable on any page; the boundary must catch clicks
+before navigation). Broad content-script `matches` alone keep the item in
+Chrome's broad-host **manual-review** tier — so least-privilege here is about a
+calmer install prompt and connector hosts requested only when used, **not** about
+avoiding review.
 
 ## The store pattern (thin store)
 

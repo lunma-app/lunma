@@ -209,9 +209,14 @@ export interface SmartFolderItem {
  * `liveTabsById`, rebuilt by connector polls after a SW restart. A refresh that
  * begins while items exist keeps `items` (the list never blinks) and flips
  * `state` to `'pending'`.
+ *
+ * `'needs-access'` (least-privilege-permissions, design D3/D8) means the
+ * folder's connector-required host origins are not all granted; it is produced
+ * by the engine's pre-dispatch gate WITHOUT any network request, and precedes
+ * the connector's own `'signed-out'` auth short-circuit.
  */
 export interface SmartFolderRuntime {
-  state: 'pending' | 'ok' | 'signed-out' | 'error';
+  state: 'pending' | 'ok' | 'signed-out' | 'error' | 'needs-access';
   items: SmartFolderItem[];
   fetchedAt: number | null;
 }

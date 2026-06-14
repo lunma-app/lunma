@@ -294,4 +294,10 @@ describe('maxItems + listingUrl', () => {
       `https://acme.atlassian.net/issues/?jql=${jql}`,
     );
   });
+
+  test('requiredOrigins is the same-origin baseUrl pattern (D8)', () => {
+    expect(jiraConnector.requiredOrigins({ baseUrl: 'https://acme.atlassian.net' })).toEqual([
+      'https://acme.atlassian.net/*',
+    ]);
+  });
 });

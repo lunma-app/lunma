@@ -8,10 +8,24 @@ type SmartNode = Extract<PinNode, { kind: 'smart' }>;
 const { sendMock } = vi.hoisted(() => ({ sendMock: vi.fn(() => Promise.resolve()) }));
 vi.mock('../shared/bus', () => ({ bus: { send: sendMock }, dispatch: sendMock }));
 
+/** `chrome.permissions.request` — confirm requests the connector's required host
+ * origins from the user gesture (least-privilege-permissions D4). */
+let permissionsRequestMock: ReturnType<typeof vi.fn>;
+
 beforeEach(() => {
   sendMock.mockClear();
+  permissionsRequestMock = vi.fn(() => Promise.resolve(true));
+  (globalThis as unknown as { chrome: unknown }).chrome = {
+    permissions: {
+      request: permissionsRequestMock,
+      contains: vi.fn(() => Promise.resolve(true)),
+    },
+  };
 });
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  delete (globalThis as unknown as { chrome?: unknown }).chrome;
+});
 
 const urlInput = (c: HTMLElement): HTMLInputElement =>
   c.querySelector('[data-testid="smart-folder-url"]') as HTMLInputElement;
@@ -425,6 +439,55 @@ describe('SmartFolderEditor — edit mode', () => {
         maxItems: 30,
         refreshMinutes: 30,
       },
+    });
+  });
+});
+
+describe('SmartFolderEditor — host-permission request on confirm (least-privilege-permissions D4)', () => {
+  test('confirming a new GitHub folder requests the api.github.com origin from the gesture', async () => {
+    const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
+    await pickSource(container, 'github'); // swaps the URL to https://github.com
+    await fireEvent.click(confirmBtn(container));
+    expect(permissionsRequestMock).toHaveBeenCalledWith({ origins: ['https://api.github.com/*'] });
+  });
+
+  test('a denied host dialog still creates the folder (never blocks — it lands in needs-access)', async () => {
+    permissionsRequestMock.mockResolvedValue(false);
+    const onDone = vi.fn();
+    const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work', onDone } });
+    await fireEvent.input(urlInput(container), { target: { value: 'https://gitlab.example.com' } });
+    await fireEvent.click(confirmBtn(container));
+    // The folder is created regardless of the (denied) grant; onDone still fires.
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'createSmartFolder',
+        payload: expect.objectContaining({ baseUrl: 'https://gitlab.example.com' }),
+      }),
+    );
+    expect(permissionsRequestMock).toHaveBeenCalledWith({
+      origins: ['https://gitlab.example.com/*'],
+    });
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
+  test('a query-only edit (origins unchanged) requests no host permission', async () => {
+    const { container } = render(SmartFolderEditorHarness, {
+      props: { spaceId: 'work', node: existingNode() },
+    });
+    await fireEvent.click(container.querySelector('input[value="authored"]') as HTMLInputElement);
+    await fireEvent.click(confirmBtn(container));
+    expect(sendMock).toHaveBeenCalledWith(expect.objectContaining({ kind: 'updateSmartFolder' }));
+    expect(permissionsRequestMock).not.toHaveBeenCalled();
+  });
+
+  test('an origin-changing edit requests the new origins', async () => {
+    const { container } = render(SmartFolderEditorHarness, {
+      props: { spaceId: 'work', node: existingNode() },
+    });
+    await fireEvent.input(urlInput(container), { target: { value: 'https://gitlab.other.com' } });
+    await fireEvent.click(confirmBtn(container));
+    expect(permissionsRequestMock).toHaveBeenCalledWith({
+      origins: ['https://gitlab.other.com/*'],
     });
   });
 });

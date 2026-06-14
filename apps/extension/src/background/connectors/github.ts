@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { requiredOriginsForNode } from '../../shared/connector-origins';
 import { readConnectors } from '../../shared/connectors';
 import type { SmartFolderItem, SmartFolderRuntime, SmartQuery } from '../../shared/types';
 import {
@@ -287,11 +288,22 @@ function listingUrl(node: Pick<SmartFolderNode, 'baseUrl' | 'query'>): string {
   return `${node.baseUrl}/pulls`;
 }
 
+/**
+ * The origin this connector fetches (least-privilege-permissions design D8):
+ * github.com folders fetch `api.github.com` (a DIFFERENT origin), GHE is
+ * same-origin. Delegates to the shared {@link requiredOriginsForNode} so the SW
+ * gate and the surfaces' grant request share one derivation.
+ */
+function requiredOrigins(node: Pick<SmartFolderNode, 'baseUrl'>): string[] {
+  return requiredOriginsForNode({ source: 'github', baseUrl: node.baseUrl });
+}
+
 /** The GitHub `SourceConnector` — the registry's `github` entry. */
 export const githubConnector: SourceConnector = {
   source: 'github',
   defaultBaseUrl: 'https://github.com',
   mintedIcon: 'folder-git-2',
+  requiredOrigins,
   fetchRuntime,
   listingUrl,
 };

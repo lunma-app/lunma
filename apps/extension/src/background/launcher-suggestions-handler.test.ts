@@ -17,16 +17,28 @@ interface ChromeStub {
   bookmarks: { search: ReturnType<typeof vi.fn> };
   history: { search: ReturnType<typeof vi.fn> };
   storage: { sync: { get: ReturnType<typeof vi.fn> } };
+  permissions: {
+    contains: ReturnType<typeof vi.fn>;
+    request: ReturnType<typeof vi.fn>;
+    onAdded: { addListener: ReturnType<typeof vi.fn>; removeListener: ReturnType<typeof vi.fn> };
+    onRemoved: { addListener: ReturnType<typeof vi.fn>; removeListener: ReturnType<typeof vi.fn> };
+  };
 }
 
 interface StubData {
   tabs?: chrome.tabs.Tab[];
   bookmarks?: chrome.bookmarks.BookmarkTreeNode[];
   history?: chrome.history.HistoryItem[];
+  /** Stored `lunma.settings` (partial; missing fields degrade to DEFAULTS). */
+  settings?: Record<string, unknown>;
+  /** Optional-permission grants (least-privilege-permissions D5). Each defaults
+   * to GRANTED, so existing suites consult both optional providers unchanged. */
+  granted?: { bookmarks?: boolean; history?: boolean };
 }
 
 function installChromeStub(data: StubData = {}): {
   deliver: (msg: unknown, send: (r: unknown) => void) => unknown;
+  chromeStub: ChromeStub;
 } {
   let registered: ((raw: unknown, sender: unknown, send: unknown) => unknown) | null = null;
   const chromeStub: ChromeStub = {
@@ -42,11 +54,29 @@ function installChromeStub(data: StubData = {}): {
     tabs: { query: vi.fn(async () => data.tabs ?? []) },
     bookmarks: { search: vi.fn(async () => data.bookmarks ?? []) },
     history: { search: vi.fn(async () => data.history ?? []) },
-    // `readSettings()` reads here; an empty object resolves to DEFAULTS (google).
-    storage: { sync: { get: vi.fn(async () => ({})) } },
+    // `readSettings()` reads here; an empty object resolves to DEFAULTS (google,
+    // launcherScope `prefer-current-space`).
+    storage: {
+      sync: {
+        get: vi.fn(async () => (data.settings ? { 'lunma.settings': data.settings } : {})),
+      },
+    },
+    // The handler gates `bookmarks`/`history` on `hasApiPermission` (D5); resolve
+    // each query from `data.granted` (defaulting to granted).
+    permissions: {
+      contains: vi.fn(async (q: { permissions?: string[] }) => {
+        const name = q.permissions?.[0];
+        if (name === 'bookmarks') return data.granted?.bookmarks ?? true;
+        if (name === 'history') return data.granted?.history ?? true;
+        return true;
+      }),
+      request: vi.fn(async () => true),
+      onAdded: { addListener: vi.fn(), removeListener: vi.fn() },
+      onRemoved: { addListener: vi.fn(), removeListener: vi.fn() },
+    },
   };
   (globalThis as unknown as { chrome: ChromeStub }).chrome = chromeStub;
-  return { deliver: (msg, send) => registered?.(msg, {}, send) };
+  return { deliver: (msg, send) => registered?.(msg, {}, send), chromeStub };
 }
 
 function request(query: string, windowId = 100, requestId = 'r1') {
@@ -56,11 +86,14 @@ function request(query: string, windowId = 100, requestId = 'r1') {
 /** Await a sendResponse callback that the async handler resolves on a microtask. */
 function deferred() {
   let resolve!: (r: unknown) => void;
-  const promise = new Promise<{ type: string; requestId: string; results: LauncherResult[] }>(
-    (res) => {
-      resolve = res as (r: unknown) => void;
-    },
-  );
+  const promise = new Promise<{
+    type: string;
+    requestId: string;
+    results: LauncherResult[];
+    openUrls?: string[];
+  }>((res) => {
+    resolve = res as (r: unknown) => void;
+  });
   return { send: (r: unknown) => resolve(r), promise };
 }
 
@@ -132,6 +165,80 @@ describe('registerLauncherSuggestionsHandler', () => {
     expect(reply.results.some((r) => r.source === 'saved' && r.savedTabId === 's1')).toBe(true);
   });
 
+  // ── optional-permission gating (least-privilege-permissions D5) ────────────
+  describe('optional-permission gating', () => {
+    const bm = [
+      { id: 'b1', title: 'Docs bookmark', url: 'https://bm-docs/' },
+    ] as chrome.bookmarks.BookmarkTreeNode[];
+    const hist = [
+      { id: 'h1', title: 'Docs history', url: 'https://hist-docs/', lastVisitTime: 1 },
+    ] as chrome.history.HistoryItem[];
+
+    test('with both granted, the engine consults bookmarks and history', async () => {
+      const { deliver, chromeStub } = installChromeStub({ bookmarks: bm, history: hist });
+      registerLauncherSuggestionsHandler(new LunmaStore({ idFactory: () => 'id-1' }));
+      const { send, promise } = deferred();
+      deliver(request('docs', 100, 'r-both'), send);
+      const reply = await promise;
+      expect(chromeStub.bookmarks.search).toHaveBeenCalled();
+      expect(chromeStub.history.search).toHaveBeenCalled();
+      expect(reply.results.some((r) => r.source === 'bookmark')).toBe(true);
+      expect(reply.results.some((r) => r.source === 'history')).toBe(true);
+    });
+
+    test('ungranted history is omitted entirely — no chrome.history.* call, no error', async () => {
+      const { deliver, chromeStub } = installChromeStub({
+        bookmarks: bm,
+        history: hist,
+        granted: { history: false },
+      });
+      registerLauncherSuggestionsHandler(new LunmaStore({ idFactory: () => 'id-1' }));
+      const { send, promise } = deferred();
+      deliver(request('docs', 100, 'r-nohist'), send);
+      const reply = await promise;
+      expect(chromeStub.history.search).not.toHaveBeenCalled();
+      expect(reply.results.some((r) => r.source === 'history')).toBe(false);
+      // The remaining optional provider (bookmarks) still runs.
+      expect(chromeStub.bookmarks.search).toHaveBeenCalled();
+      expect(reply.results.some((r) => r.source === 'bookmark')).toBe(true);
+    });
+
+    test('ungranted bookmarks is omitted entirely — no chrome.bookmarks.* call, no error', async () => {
+      const { deliver, chromeStub } = installChromeStub({
+        bookmarks: bm,
+        history: hist,
+        granted: { bookmarks: false },
+      });
+      registerLauncherSuggestionsHandler(new LunmaStore({ idFactory: () => 'id-1' }));
+      const { send, promise } = deferred();
+      deliver(request('docs', 100, 'r-nobm'), send);
+      const reply = await promise;
+      expect(chromeStub.bookmarks.search).not.toHaveBeenCalled();
+      expect(reply.results.some((r) => r.source === 'bookmark')).toBe(false);
+      expect(chromeStub.history.search).toHaveBeenCalled();
+      expect(reply.results.some((r) => r.source === 'history')).toBe(true);
+    });
+
+    test('both ungranted: open tabs still run and no error is surfaced', async () => {
+      const { deliver, chromeStub } = installChromeStub({
+        tabs: [
+          { id: 7, windowId: 100, title: 'Docs site', url: 'https://docs.example/', active: false },
+        ] as chrome.tabs.Tab[],
+        bookmarks: bm,
+        history: hist,
+        granted: { bookmarks: false, history: false },
+      });
+      registerLauncherSuggestionsHandler(new LunmaStore({ idFactory: () => 'id-1' }));
+      const { send, promise } = deferred();
+      deliver(request('docs', 100, 'r-none'), send);
+      const reply = await promise;
+      expect(chromeStub.bookmarks.search).not.toHaveBeenCalled();
+      expect(chromeStub.history.search).not.toHaveBeenCalled();
+      // The always-on open-tabs source still contributes; the response is normal.
+      expect(reply.results.some((r) => r.source === 'tab')).toBe(true);
+    });
+  });
+
   test('leads with the websearch action row for a non-empty query', async () => {
     const { deliver } = installChromeStub();
     const store = new LunmaStore({ idFactory: () => 'id-1' });
@@ -195,6 +302,48 @@ describe('registerLauncherSuggestionsHandler', () => {
     expect(reply.results[0]?.source).toBe('websearch'); // leads, beyond the cap
   });
 
+  test('reports openUrls for a result already open in the active Space (tab-dedup)', async () => {
+    // No chrome tab at react.dev (so the navigate row survives, additive); but the
+    // store's active Space has a temp tab there → isUrlOpenInActiveSpace is true.
+    const { deliver } = installChromeStub();
+    const store = new LunmaStore({ idFactory: () => 'id-1' });
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [42], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[42] = {
+      tabId: 42,
+      windowId: 100,
+      title: 'React',
+      url: 'https://react.dev',
+      active: false,
+      status: 'complete',
+    };
+    registerLauncherSuggestionsHandler(store);
+
+    const { send, promise } = deferred();
+    deliver(request('react.dev', 100, 'r-open'), send);
+    const reply = await promise;
+    // The navigate row carries https://react.dev and that URL is open in the Space.
+    expect(
+      reply.results.some((r) => r.source === 'navigate' && r.url === 'https://react.dev'),
+    ).toBe(true);
+    expect(reply.openUrls).toContain('https://react.dev');
+  });
+
+  test('omits openUrls when nothing is open in the active Space', async () => {
+    const { deliver } = installChromeStub();
+    const store = new LunmaStore({ idFactory: () => 'id-1' });
+    registerLauncherSuggestionsHandler(store);
+
+    const { send, promise } = deferred();
+    deliver(request('react.dev', 100, 'r-noopen'), send);
+    const reply = await promise;
+    // No active Space / no open tabs → the field is omitted (kept off the wire).
+    expect(reply.openUrls).toBeUndefined();
+  });
+
   test('static analysis: never enqueues / mutates / persists / broadcasts', () => {
     const source = readFileSync(resolve(__dirname, 'launcher-suggestions-handler.ts'), 'utf-8');
     expect(source).not.toMatch(/\benqueue\b/);
@@ -206,6 +355,145 @@ describe('registerLauncherSuggestionsHandler', () => {
     expect(source).not.toMatch(/\bpersist\(/);
     // It only emits the suggestions response — never the broadcast helper.
     expect(source).not.toMatch(/broadcastState/);
+  });
+
+  // ── Current-Space scope (launcher-fuzzy-smart-folders, design D9) ──────────
+
+  /** A store with two Spaces, each owning one smart folder of one item; window
+   * 100's active Space is `work`. The two items match the same query (`parser`). */
+  function storeWithCrossSpaceSmart(): LunmaStore {
+    const store = new LunmaStore({ idFactory: () => 'id-1' });
+    store.state.spaces.push(
+      { id: 'work', name: 'Work', color: 'blue', icon: 'star' },
+      { id: 'home', name: 'Home', color: 'green', icon: 'star' },
+    );
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.pinnedBySpace.work = [
+      {
+        kind: 'smart',
+        id: 'sf-work',
+        name: 'Work PRs',
+        icon: 'git-pull-request',
+        source: 'github',
+        baseUrl: 'https://github.com',
+        query: 'authored',
+        maxItems: 20,
+        hideRead: false,
+        refreshMinutes: 10,
+      },
+    ];
+    store.state.pinnedBySpace.home = [
+      {
+        kind: 'smart',
+        id: 'sf-home',
+        name: 'Home Feed',
+        icon: 'rss',
+        source: 'rss',
+        baseUrl: 'https://h.example/feed',
+        maxItems: 20,
+        hideRead: false,
+        refreshMinutes: 10,
+      },
+    ];
+    store.state.smartFolders['sf-work'] = {
+      state: 'ok',
+      fetchedAt: 1,
+      items: [{ id: 'w1', title: 'parser fix', url: 'https://work/pr/1' }],
+    };
+    store.state.smartFolders['sf-home'] = {
+      state: 'ok',
+      fetchedAt: 1,
+      items: [{ id: 'h1', title: 'parser fix', url: 'https://home/post/1' }],
+    };
+    return store;
+  }
+
+  const smartByUrl = (reply: { results: LauncherResult[] }, url: string) =>
+    reply.results.find((r) => r.source === 'smart' && r.url === url);
+
+  test('global scope: cross-Space smart items appear and are not boosted', async () => {
+    const { deliver } = installChromeStub({ settings: { launcherScope: 'global' } });
+    const store = storeWithCrossSpaceSmart();
+    registerLauncherSuggestionsHandler(store);
+
+    const { send, promise } = deferred();
+    deliver(request('parser', 100, 'r-global'), send);
+    const reply = await promise;
+    const work = smartByUrl(reply, 'https://work/pr/1');
+    const home = smartByUrl(reply, 'https://home/post/1');
+    expect(work).toBeDefined();
+    expect(home).toBeDefined();
+    // Equal match + equal source + no boost → equal score (global is Space-blind).
+    expect(work?.score).toBeCloseTo(home?.score ?? -1, 10);
+  });
+
+  test('prefer-current-space scope: the in-Space item outscores its cross-Space peer', async () => {
+    // Default settings ⇒ prefer-current-space (no override needed).
+    const { deliver } = installChromeStub();
+    const store = storeWithCrossSpaceSmart();
+    registerLauncherSuggestionsHandler(store);
+
+    const { send, promise } = deferred();
+    deliver(request('parser', 100, 'r-prefer'), send);
+    const reply = await promise;
+    const work = smartByUrl(reply, 'https://work/pr/1');
+    const home = smartByUrl(reply, 'https://home/post/1');
+    expect(work).toBeDefined();
+    expect(home).toBeDefined();
+    // The active-Space (work) item carries the boost; both still reachable.
+    expect(work?.score ?? 0).toBeGreaterThan(home?.score ?? 0);
+  });
+
+  test('cross-Space items carry a Space marker (name + colour); in-Space items do not', async () => {
+    const { deliver } = installChromeStub(); // default prefer-current-space
+    const store = storeWithCrossSpaceSmart(); // active Space = "Work"
+    registerLauncherSuggestionsHandler(store);
+
+    const { send, promise } = deferred();
+    deliver(request('parser', 100, 'r-mark'), send);
+    const reply = await promise;
+    const home = smartByUrl(reply, 'https://home/post/1');
+    const work = smartByUrl(reply, 'https://work/pr/1');
+    // The other-Space ("Home") item is marked with its name + a paintable colour.
+    expect(home?.spaceName).toBe('Home');
+    expect(home?.spaceColor).toMatch(/^oklch\(/);
+    // The active-Space ("Work") item is NOT marked.
+    expect(work?.spaceName).toBeUndefined();
+    expect(work?.spaceColor).toBeUndefined();
+  });
+
+  test('current-space-only scope: cross-Space smart items are filtered out', async () => {
+    const { deliver } = installChromeStub({ settings: { launcherScope: 'current-space-only' } });
+    const store = storeWithCrossSpaceSmart();
+    registerLauncherSuggestionsHandler(store);
+
+    const { send, promise } = deferred();
+    deliver(request('parser', 100, 'r-strict'), send);
+    const reply = await promise;
+    expect(smartByUrl(reply, 'https://work/pr/1')).toBeDefined();
+    expect(smartByUrl(reply, 'https://home/post/1')).toBeUndefined();
+  });
+
+  test('current-space-only scope keeps global favorites (no owning Space)', async () => {
+    const { deliver } = installChromeStub({ settings: { launcherScope: 'current-space-only' } });
+    const store = storeWithCrossSpaceSmart();
+    // A favicon-row favorite (spaceId null) is global — it must survive the filter.
+    store.state.savedTabs.fav = {
+      id: 'fav',
+      spaceId: null,
+      title: 'parser favorite',
+      originalURL: 'https://fav/parser',
+      currentURL: null,
+    };
+    store.state.faviconRow = ['fav'];
+    registerLauncherSuggestionsHandler(store);
+
+    const { send, promise } = deferred();
+    deliver(request('parser', 100, 'r-strict-fav'), send);
+    const reply = await promise;
+    expect(reply.results.some((r) => r.source === 'saved' && r.savedTabId === 'fav')).toBe(true);
+    // …while the other Space's smart item is still hidden.
+    expect(smartByUrl(reply, 'https://home/post/1')).toBeUndefined();
   });
 
   test('concurrent with a drain: the response does not block on the queue', async () => {

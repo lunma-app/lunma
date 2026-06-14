@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { requiredOriginsForNode } from '../../shared/connector-origins';
 import { readConnectors } from '../../shared/connectors';
 import type { SmartFolderItem, SmartFolderRuntime, SmartQuery } from '../../shared/types';
 import {
@@ -279,11 +280,20 @@ function listingUrl(node: Pick<SmartFolderNode, 'baseUrl' | 'query'>): string {
   return `${node.baseUrl}/dashboard/merge_requests`;
 }
 
+/** The origin this connector fetches (least-privilege-permissions design D8):
+ * GitLab fetches same-origin under `{baseUrl}/api/v4`. Delegates to the shared
+ * {@link requiredOriginsForNode} so the SW gate and the surfaces share one
+ * derivation. */
+function requiredOrigins(node: Pick<SmartFolderNode, 'baseUrl'>): string[] {
+  return requiredOriginsForNode({ source: 'gitlab', baseUrl: node.baseUrl });
+}
+
 /** The GitLab `SourceConnector` — the registry's `gitlab` entry. */
 export const gitlabConnector: SourceConnector = {
   source: 'gitlab',
   defaultBaseUrl: 'https://gitlab.com',
   mintedIcon: 'folder-git-2',
+  requiredOrigins,
   fetchRuntime,
   listingUrl,
 };

@@ -163,7 +163,11 @@ const SmartFolderItemSchema = z.strictObject({
 });
 
 const SmartFolderRuntimeSchema = z.strictObject({
-  state: z.enum(['pending', 'ok', 'signed-out', 'error']),
+  // `needs-access` (least-privilege-permissions D3) mirrors the runtime union in
+  // `types.ts`. The slice is ephemeral (stripped by `toPersistable`, never read
+  // back from disk), so no migration is involved — this only keeps the schema's
+  // inferred type in lockstep with `SmartFolderRuntime`.
+  state: z.enum(['pending', 'ok', 'signed-out', 'error', 'needs-access']),
   items: z.array(SmartFolderItemSchema),
   fetchedAt: z.number().nullable(),
 });
