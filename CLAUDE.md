@@ -1,7 +1,7 @@
 # Lunma — agent instructions
 
 Lunma is an Arc-style vertical-workspace Chrome MV3 extension.
-Stack (pinned in [docs/02-tech-stack.md](docs/02-tech-stack.md); don't add
+Stack (pinned in [docs/tech-stack.md](docs/tech-stack.md); don't add
 alternatives without proposing a change): TypeScript strict, Svelte 5 (runes),
 Vite 8, Vitest 4, Biome 2, Stylelint 17, Zod 4, @crxjs/vite-plugin, pnpm,
 devbox, Node 24. The repo is a **pnpm workspace** — `apps/extension` (the
@@ -9,8 +9,8 @@ extension), `apps/site` (the marketing landing page; SvelteKit +
 `adapter-static`, build-time only, nothing ships in the extension bundle), and
 `packages/tokens` (`@lunma/tokens`, the shared CSS-only design language).
 
-Target architecture lives in [docs/01-vision.md](docs/01-vision.md) through
-[docs/06-migration.md](docs/06-migration.md), the OpenSpec specs under
+Target architecture lives in [docs/tech-stack.md](docs/tech-stack.md) and
+[docs/architecture.md](docs/architecture.md), the OpenSpec specs under
 [openspec/specs/](openspec/specs/), and in-flight changes under
 [openspec/changes/](openspec/changes/). Code, docs, and OpenSpec artifacts stay
 in lockstep — neither leads the other silently.
@@ -36,7 +36,7 @@ other (gated both ways by Biome); `@lunma/tokens` (`packages/tokens`) is CSS-onl
 (tokens + fonts + aurora/glass/glow recipes), with no JS/TS, so it sits outside
 the import DAG. Both apps depend on it via `workspace:*`.
 
-See [docs/03-architecture.md](docs/03-architecture.md) and the
+See [docs/architecture.md](docs/architecture.md) and the
 `architecture-integrity` capability.
 
 ## Quality gates

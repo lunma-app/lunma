@@ -4,7 +4,7 @@ A Chrome extension for vertical tab spaces. Spec-driven, TypeScript-strict, Svel
 
 - **Author:** The Lunma Authors
 - **Status:** Active development — pre-release
-- **Inspired by:** Arcify v4 by Nisarg Kolhe — Lunma is a clean-room reimplementation that builds on Arcify's ideas with its own architecture and codebase. See `docs/01-vision.md` for the full picture.
+- **Inspired by:** Arcify v4 by Nisarg Kolhe — Lunma is a clean-room reimplementation that builds on Arcify's ideas with its own architecture and codebase.
 
 ## What Lunma delivers
 
@@ -42,17 +42,14 @@ packages/tokens/   # @lunma/tokens — CSS-only shared design language (tokens +
 Both apps consume `@lunma/tokens` via `workspace:*`, so the site renders the
 extension's exact design language with zero copy-drift. The two apps never import
 each other (gated both ways by Biome). The extension's internal one-way layer DAG
-lives under `apps/extension/src/` (see `docs/03-architecture.md`).
+lives under `apps/extension/src/` (see `docs/architecture.md`).
 
 ## Reading order
 
-1. `docs/01-vision.md` — what Lunma is, the user experience, the principles
-2. `docs/02-tech-stack.md` — chosen stack with rationale
-3. `docs/03-architecture.md` — project layout, store pattern, event coordinator
-4. `docs/04-capabilities.md` — capability specs to flesh out (becomes `openspec/specs/`)
-5. `docs/05-roadmap.md` — 8-week implementation plan
-6. `docs/06-migration.md` — Arcify v4 user-data import path
-7. `docs/07-brand-identity.md` — Lunma brand & visual identity brief (non-normative)
+1. `docs/tech-stack.md` — the chosen stack and the rationale behind each choice
+2. `docs/architecture.md` — project layout, the store and event-coordinator patterns, the import DAG, and the MV3 boot sequence
+
+Capability behavior lives in the living specs under `openspec/specs/`; durable design decisions under `docs/adr/`.
 
 ## Develop
 

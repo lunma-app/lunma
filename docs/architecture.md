@@ -37,7 +37,7 @@ lunma/                              # pnpm workspace root (private)
 │  │  │  │  ├─ newtab/              # full Svelte page — empty-Space "home" (idle) + inline launcher search
 │  │  │  │  └─ shared/              # SearchEngine, scoring, providers, result/query types
 │  │  │  ├─ content/               # second declarative content script (tab-boundary.ts)
-│  │  │  └─ options/               # Options.svelte · main.ts   (+ planned onboarding/ — Phase 5)
+│  │  │  └─ options/               # Options.svelte · main.ts   (+ planned onboarding/)
 │  │  ├─ public/manifest.json       # MV3 manifest — crxjs derives build entries from it
 │  │  ├─ e2e/                       # Playwright specs + fixtures (playwright.config.ts in apps/extension)
 │  │  │                             # unit tests are co-located: src/**/*.test.ts (no top-level tests/)
@@ -79,7 +79,7 @@ that mutate the store. Everything else is read-only or settings-only.
 | Launcher overlay | `Alt+L` page injection, search UI | no (queries the suggestions channel) | no — dispatches `focusTab` / `focusSavedTab` / `openSavedTab` / `openUrl` over the bus |
 | Launcher newtab | Empty-Space home (Space identity) + inline search | yes (read-only: snapshot + `state-broadcast`, like the sidebar) + queries the suggestions channel | no — dispatches result actions over the bus |
 | Options | Settings UI + Connectors (per-host PATs) | reads `chrome.storage.sync` directly; reads `chrome.storage.local` for archived tabs + the `lunma.connectors` record | writes `chrome.storage.sync`; writes `lunma.connectors` in `chrome.storage.local` via `shared/connectors.ts` |
-| Onboarding | Static content + open links (Planned, Phase 5) | no | no |
+| Onboarding | Static content + open links (Planned) | no | no |
 
 ### Why the launcher overlay stays vanilla
 

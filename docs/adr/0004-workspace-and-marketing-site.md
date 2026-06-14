@@ -31,7 +31,7 @@ workspace packages; the root `package.json` is the private workspace root and
 
 - **Nx — rejected.** Its headline feature, enforced module boundaries
   (`@nx/enforce-module-boundaries`), is an ESLint rule. The repo deliberately
-  enforces its layer DAG with **Biome only** (`docs/02`); adding Nx would either
+  enforces its layer DAG with **Biome only** (`docs/tech-stack.md`); adding Nx would either
   leave its boundary rule unused or drag ESLint back in to fight Biome. Its
   generators / executors / project-graph are weight this two-app repo doesn't
   need.
@@ -39,7 +39,7 @@ workspace packages; the root `package.json` is the private workspace root and
   affected-only runs) only pays off at a scale (many packages, slow CI) this repo
   isn't at, and it bolts onto pnpm workspaces later with no lock-in.
 
-This narrows `docs/02`'s original "avoid monorepo tooling (pnpm workspaces, Nx,
+This narrows `docs/tech-stack.md`'s original "avoid monorepo tooling (pnpm workspaces, Nx,
 Turbo)" line — written when the repo was extension-only — to "pnpm workspaces yes
 (extension + site); Nx/Turbo deferred."
 
@@ -75,7 +75,7 @@ The site is a **SvelteKit** app with `prerender` enabled site-wide via
 `@sveltejs/adapter-static` → fully static output deployable to any host bound to
 `lunma.app`, no server runtime. This is a tech-stack addition **scoped to
 `apps/site`** (build-time only; nothing new ships in the extension bundle),
-recorded in `docs/02`.
+recorded in `docs/tech-stack.md`.
 
 - **Astro — rejected.** Strong for content sites, but it's a second framework
   paradigm in an otherwise pure-Svelte repo; the team is Svelte-native and the
@@ -115,6 +115,6 @@ recorded in `docs/02`.
 
 ## Related work
 
-- `docs/02-tech-stack.md` — the narrowed monorepo line + the scoped `apps/site` stack.
-- `docs/03-architecture.md` — the workspace project layout + the workspace package boundary.
+- `docs/tech-stack.md` — the narrowed monorepo line + the scoped `apps/site` stack.
+- `docs/architecture.md` — the workspace project layout + the workspace package boundary.
 - The `marketing-site` and `architecture-integrity` capability specs (produced by archiving `lunma-workspace-and-site`).

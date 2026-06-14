@@ -63,7 +63,7 @@ Mutations serialize through a single in-flight promise chain, so two methods nev
 
 ### Zod at the storage boundary
 
-Every read from `chrome.storage.local` goes through `SpacesSchema.parse(raw)`. Corrupted data fails loudly at the boundary, not three async hops later. A single `migrations[]` array indexed by `schemaVersion` carries the versioned-storage contract from [01-vision](01-vision.md).
+Every read from `chrome.storage.local` goes through `SpacesSchema.parse(raw)`. Corrupted data fails loudly at the boundary, not three async hops later. A single `migrations[]` array indexed by `schemaVersion` carries the versioned-storage contract.
 
 ### Bundled brand fonts
 
@@ -83,7 +83,7 @@ The extension pages (sidebar, new-tab, options) load the fonts by URL. The launc
 
 ### Biome over ESLint + Prettier
 
-Biome is one binary with about five lines of config, fast enough to run on save. It also enforces architecture integrity. The one-way layer DAG is encoded as per-layer `noRestrictedImports` overrides plus `noImportCycles` in `biome.json`, and a violation fails `biome check`. Biome lints inside `.svelte` `<script>` blocks, which covers the Svelte-heavy `ui` layer, so no separate import-graph tool is needed. See [03-architecture](03-architecture.md) for the full DAG.
+Biome is one binary with about five lines of config, fast enough to run on save. It also enforces architecture integrity. The one-way layer DAG is encoded as per-layer `noRestrictedImports` overrides plus `noImportCycles` in `biome.json`, and a violation fails `biome check`. Biome lints inside `.svelte` `<script>` blocks, which covers the Svelte-heavy `ui` layer, so no separate import-graph tool is needed. See [architecture](architecture.md) for the full DAG.
 
 ### Stylelint for the CSS token contract
 

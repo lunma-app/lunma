@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-05-29
-- **Implementing change:** `lunma-owned-store` (Phase 2, see [docs/05-roadmap.md](../05-roadmap.md))
+- **Implementing change:** `lunma-owned-store`
 
 ## Context
 
@@ -66,11 +66,10 @@ fields and sets `spaces: []` / `trash: {}` / `savedTabs: {}` /
 color: 'gray', icon: 'star' }` with a real uuid immediately after
 `loadState` (skipped only when the boot read outcome is `unavailable` —
 a transient `chrome.storage.local.get` failure that must not fabricate a
-Default over real, unread on-disk data; see `04-capabilities.md`).
+Default over real, unread on-disk data).
 Pre-release, this reset loses no shipped data. Orphan
 `Lunma/` bookmark folders are left untouched in Chrome (harmless; manually
-removable; re-ingestible by the Phase 6 Arcify import, which owns the
-bookmark→Lunma read path).
+removable).
 
 ## Consequences
 
@@ -81,10 +80,8 @@ bookmark→Lunma read path).
   name** while describing a bookmark-free `SavedTab` model (modified in
   place to avoid a tombstone spec). A future cosmetic rename could realign
   it.
-- Affected docs updated in the same change: `docs/03-architecture.md`
-  (AppState shape, boot sequence), `docs/04-capabilities.md` (Spaces,
-  saved tabs, binding, removed sync-discovery), `docs/06-migration.md`
-  (V2→V3 reset; Arcify import reframed as bookmark→Lunma ingestion).
+- Affected docs updated in the same change: `docs/architecture.md`
+  (AppState shape, boot sequence).
 
 What this ADR forecloses: treating the Chrome bookmark tree as the source
 of truth for Spaces or saved tabs; reintroducing folder adoption or

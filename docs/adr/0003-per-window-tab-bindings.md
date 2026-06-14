@@ -2,7 +2,6 @@
 
 - **Status:** Accepted
 - **Date:** 2026-06-05
-- **Implementing phase:** Phase 3 (see docs/05-roadmap.md)
 
 ## Context
 

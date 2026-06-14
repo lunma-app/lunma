@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-05-30
-- **Implementing phase:** Phase 2 (see docs/05-roadmap.md) — shipped by the `space-tab-groups` change
+- **Implementing change:** `space-tab-groups`
 
 ## Context
 
@@ -38,8 +38,7 @@ This decision records how we close that gap.
   them. `activateSpace` no longer discards anything. The active instance is
   `spaceInstancesByWindow[windowId]?.[activeSpaceByWindow[windowId]]`. A `groupId`
   of `-1` is the "no live Chrome group yet" sentinel. (Schema V4 + a V3→V4
-  migration that nests each existing instance under its `spaceId`; see
-  docs/06-migration.md.)
+  migration that nests each existing instance under its `spaceId`.)
 
   _Why not keep one-per-window and re-derive from Chrome on switch-back?_ Chrome
   groups carry no stable Lunma id, so re-discovering "which group was this

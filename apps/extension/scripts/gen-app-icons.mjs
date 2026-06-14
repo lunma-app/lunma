@@ -1,6 +1,6 @@
 // Generate the extension's manifest icon set (16 / 32 / 48 / 128 px) from the
 // on-brand Lunma mark — the "alcove arch + ember" the site favicon already uses
-// (docs/07-brand-identity.md §5/§11; canonical source: apps/site/static/favicon.svg).
+// (canonical source: apps/site/static/favicon.svg).
 //
 // Why a script (not committed PNGs only): the brand doc lists this manifest set as a
 // pending asset, and the mark is a gradient SVG that must rasterise faithfully. We
