@@ -1,7 +1,8 @@
 <script lang="ts">
 import type { FaviconSpec } from './apps';
 
-// A favicon stand-in: a brand-coloured rounded plate with the app initial.
+// A favicon stand-in: a brand-coloured rounded plate with the app's brand
+// glyph (simple-icons path, when set) or the app's initial (letter fallback).
 interface Props {
   fav: FaviconSpec;
   /** Pixel size of the glyph. */
@@ -16,8 +17,14 @@ let { fav, size = 16 }: Props = $props();
   style:--fh={fav.hue}
   style:--fc={fav.chroma ?? 0.14}
   style:--fz="{size}px"
-  aria-hidden="true">{fav.letter}</span
+  aria-hidden="true"
 >
+  {#if fav.path}
+    <svg class="icon" viewBox="0 0 24 24"><path d={fav.path} /></svg>
+  {:else}
+    {fav.letter}
+  {/if}
+</span>
 
 <style>
   .fav {
@@ -34,5 +41,11 @@ let { fav, size = 16 }: Props = $props();
     font-weight: var(--weight-bold);
     font-size: calc(var(--fz) * 0.56);
     line-height: 1;
+  }
+
+  .icon {
+    width: calc(var(--fz) * 0.62);
+    height: calc(var(--fz) * 0.62);
+    fill: currentColor;
   }
 </style>

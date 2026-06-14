@@ -318,3 +318,46 @@ product's one-glyph restraint.
 - **AND** each row SHALL carry exactly one pipeline-status indicator, never more than one
 - **AND** all text in the visual SHALL hold WCAG-AA contrast
 
+### Requirement: Product previews depict real apps with recognisable, freely-licensed glyphs, self-hosted
+
+The staged previews' favicon stand-ins (the `FaviconSpec` entries rendered by
+`apps/site/src/lib/mocks/Favicon.svelte` across the favourites tiles, sidebar
+tab rows, and launcher rows) SHALL render a recognisable brand glyph for every
+entry that depicts a real app, sourced from a freely-licensed icon set (CC0 or
+equivalent; `simple-icons`) and inlined into the prerendered static output at
+build time — no runtime fetch, no CDN, no icon font. Entries depicting generic
+content (untitled notes, articles, lists) SHALL keep the neutral letter plate.
+The glyph SHALL render in the plate's existing near-white foreground on the
+existing OKLCH plate colours — the previews' palette SHALL NOT adopt
+per-brand hex colours. The glyphs remain decorative and SHALL stay hidden from
+assistive technology, as the surrounding mock content already is.
+
+#### Scenario: Brand entries render their real glyph
+
+- **WHEN** a staged preview renders a favicon entry that depicts a real app
+  (e.g. WhatsApp, Gmail, Spotify, Figma, Linear, GitHub)
+- **THEN** the plate shows that app's brand glyph instead of a letter initial
+- **AND** the glyph renders in the plate's near-white foreground on the
+  entry's existing OKLCH plate colour, not in the brand's own hex
+
+#### Scenario: Generic entries keep the letter plate
+
+- **WHEN** a staged preview renders a favicon entry that depicts generic
+  content rather than a named app (e.g. "Standup notes", "Shopping list",
+  "Saved thread")
+- **THEN** the plate shows the neutral letter initial, as before
+
+#### Scenario: Glyphs are build-time inlined, never fetched
+
+- **WHEN** the site is built for deployment
+- **THEN** every brand glyph is present as inline SVG path data in the
+  prerendered static output
+- **AND** rendering the page issues no network request to any icon CDN, icon
+  font, or third-party origin for the glyphs
+
+#### Scenario: Glyphs stay decorative for assistive technology
+
+- **WHEN** a screen reader traverses a staged preview containing brand glyphs
+- **THEN** the glyphs are not announced (they remain inside the mock content
+  already hidden from assistive technology)
+

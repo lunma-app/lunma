@@ -19,17 +19,18 @@
     "@lunma/tokens": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "catalog:",
     "@sveltejs/adapter-static": "^3.0.10",
     "@sveltejs/kit": "^2.63.1",
     "@sveltejs/vite-plugin-svelte": "catalog:",
     "@types/culori": "catalog:",
+    "@types/node": "catalog:",
     "culori": "catalog:",
+    "jsdom": "catalog:",
+    "simple-icons": "16.23.0",
     "svelte": "catalog:",
     "svelte-check": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vitest": "catalog:",
-    "jsdom": "catalog:"
+    "vitest": "catalog:"
   }
 }

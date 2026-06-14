@@ -119,6 +119,7 @@ Resolved at project start; the `pnpm-lock.yaml` is the source of truth from here
 | `bits-ui` | 2.18.x | |
 | `@sveltejs/kit` | 2.x | **`apps/site` only** — build-time, nothing ships in the extension |
 | `@sveltejs/adapter-static` | 3.x | **`apps/site` only** — prerender to static output for `lunma.app` |
+| `simple-icons` | 16.x | **`apps/site` only** — build-time mock brand glyphs (CC0-1.0); nothing ships in the extension |
 
 When bumping: run `pnpm view <pkg> version` for each, prefer current minors, update `pnpm-lock.yaml`.
 
