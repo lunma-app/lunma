@@ -1,9 +1,8 @@
 <script lang="ts">
-import type { IconName } from '../shared/icon-names';
 import IconButton from './IconButton.svelte';
 
 interface Props {
-  icon?: IconName;
+  icon?: string;
   title?: string;
   ariaLabel?: string;
   disabled?: boolean;

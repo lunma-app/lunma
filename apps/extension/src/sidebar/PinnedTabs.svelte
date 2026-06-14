@@ -106,7 +106,7 @@ interface FolderView {
   kind: 'folder';
   id: FolderId;
   name: string;
-  icon: IconName;
+  icon: string;
   color: SpaceColor;
   expanded: boolean;
   children: TabView[];
@@ -207,7 +207,7 @@ const rows = $derived.by<TopRow[]>(() => {
         kind: 'folder',
         id: node.id,
         name: node.name,
-        icon: node.icon as IconName,
+        icon: node.icon,
         color: node.color as SpaceColor,
         expanded: isExpanded(node.id),
         children,
@@ -829,7 +829,7 @@ function tabMenuItems(row: TabView): MenuItem[] {
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <span class="close-slot" onpointerdown={(e) => e.stopPropagation()}>
             <IconButton
-              icon={'x' as IconName}
+              icon="x"
               ariaLabel="Close tab"
               title="Close tab"
               size={14}
@@ -925,7 +925,7 @@ function tabMenuItems(row: TabView): MenuItem[] {
                   <!-- svelte-ignore a11y_no_static_element_interactions -->
                   <span class="close-slot" onpointerdown={(e) => e.stopPropagation()}>
                     <IconButton
-                      icon={'x' as IconName}
+                      icon="x"
                       ariaLabel="Close tab"
                       title="Close tab"
                       size={14}

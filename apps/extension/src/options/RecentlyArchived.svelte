@@ -4,7 +4,7 @@ import { bus } from '../shared/bus';
 import { labelFor } from '../shared/label-for';
 import { log } from '../shared/logger';
 import { DEFAULTS, readSettings, watchSettings } from '../shared/settings';
-import type { ArchivedTab, IconName } from '../shared/types';
+import type { ArchivedTab } from '../shared/types';
 import Button from '../ui/Button.svelte';
 import { faviconFor, faviconUrl } from '../ui/favicon';
 import IconButton from '../ui/IconButton.svelte';
@@ -197,13 +197,13 @@ function confirmClearAll(): void {
             {#snippet trailing()}
               <span class="row-actions">
                 <IconButton
-                  icon={'rotate-ccw' as IconName}
+                  icon="rotate-ccw"
                   ariaLabel={`Restore ${item.title}`}
                   title="Restore"
                   onclick={() => restore(item.archivedAt, item.tabId)}
                 />
                 <IconButton
-                  icon={'trash-2' as IconName}
+                  icon="trash-2"
                   ariaLabel={`Delete ${item.title}`}
                   title="Delete"
                   onclick={() => deleteOne(item.archivedAt, item.tabId)}

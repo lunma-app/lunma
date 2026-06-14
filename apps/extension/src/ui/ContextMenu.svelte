@@ -4,7 +4,6 @@ export type { MenuItem } from './menu-types';
 
 <script lang="ts">
 import { onDestroy, type Snippet, tick } from 'svelte';
-import type { IconName } from '../shared/icon-names';
 import Icon from './Icon.svelte';
 import type { MenuItem } from './menu-types';
 import Surface from './Surface.svelte';
@@ -234,7 +233,7 @@ function onKeydown(event: KeyboardEvent): void {
             onclick={() => onPanelBack?.()}
           >
             <span class="back-icon" aria-hidden="true">
-              <Icon name={'chevron-left' as IconName} size={16} />
+              <Icon name="chevron-left" size={16} />
             </span>
             <span class="drill-title">{panelTitle}</span>
           </button>
@@ -261,7 +260,7 @@ function onKeydown(event: KeyboardEvent): void {
               <span class="label">{item.label}</span>
               {#if item.submenu}
                 <span class="submenu-affordance" aria-hidden="true">
-                  <Icon name={'chevron-right' as IconName} size={14} />
+                  <Icon name="chevron-right" size={14} />
                 </span>
               {/if}
             </button>

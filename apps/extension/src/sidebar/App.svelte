@@ -7,7 +7,7 @@ import { loadOnboarding, setAutoArchiveNoticeDismissed } from '../shared/onboard
 import { modifierLabel } from '../shared/platform';
 import { readSettings, type Tint, watchSettings } from '../shared/settings';
 import type { LunmaStore } from '../shared/store.svelte';
-import type { IconName, Space, SpaceColor, SpaceId, WindowId } from '../shared/types';
+import type { Space, SpaceColor, SpaceId, WindowId } from '../shared/types';
 import '@lunma/tokens/tokens.css';
 import '@lunma/tokens/fonts.css';
 import '@lunma/tokens/recipes.css';
@@ -623,7 +623,7 @@ function onCancel(): void {
                       onclick={() => onClearTemp(panel.space.id)}
                       title="Close all temporary tabs"
                     >
-                      <Icon name={'arrow-down' as IconName} size={12} /> Clear
+                      <Icon name="arrow-down" size={12} /> Clear
                     </Button>
                   {/snippet}
                 </Divider>

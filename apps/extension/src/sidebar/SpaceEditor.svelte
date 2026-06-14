@@ -32,7 +32,7 @@ import { normalizeSpaceName } from '../shared/space-names';
 import type { IconName, SpaceAutoArchive, SpaceId } from '../shared/types';
 import Button from '../ui/Button.svelte';
 import ColorSwatch from '../ui/ColorSwatch.svelte';
-import { DEFAULT_ICON } from '../shared/icon-names';
+import { DEFAULT_ICON, isIconName } from '../shared/icon-names';
 import IconPicker from '../ui/IconPicker.svelte';
 import SegmentedControl from '../ui/SegmentedControl.svelte';
 import { colourToOklch, colourToOn } from '../shared/space-hue';
@@ -154,7 +154,10 @@ function seed(): void {
   } else {
     name = mode.space.name;
     color = mode.space.color as SpaceColor;
-    icon = mode.space.icon as IconName;
+    // Stored space icons are plain strings; the picker model + dispatch contract
+    // are `IconName`. Narrow at the seam — a non-catalogue stored icon (legacy or
+    // imported) falls back to the default rather than a lying cast.
+    icon = isIconName(mode.space.icon) ? mode.space.icon : DEFAULT_ICON;
     const aa = mode.space.autoArchive;
     if (aa === undefined) {
       autoArchiveMode = 'inherit';

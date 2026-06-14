@@ -58,7 +58,7 @@ export function extractIconLiterals(text) {
   const found = new Set();
   const single =
     /\bname\s*=\s*["']([a-z][a-z0-9-]*)["']/g; // <Icon name="x">
-  const inBraces = /\bname=\{\s*["']([a-z][a-z0-9-]*)["']/g; // name={'x' as IconName}
+  const inBraces = /\b(?:name|icon|leadingIcon)=\{\s*["']([a-z][a-z0-9-]*)["']/g; // name={'x'} / icon={'x' as IconName}
   const iconProp = /\b(?:icon|leadingIcon)\s*[:=]\s*["']([a-z][a-z0-9-]*)["']/g; // icon: 'x' / icon="x"
   const ternary = /\?\s*["']([a-z][a-z0-9-]*)["']\s*:\s*["']([a-z][a-z0-9-]*)["']/g; // cond ? 'x' : 'y'
   for (const re of [single, inBraces, iconProp]) {

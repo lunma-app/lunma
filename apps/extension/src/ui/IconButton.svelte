@@ -1,5 +1,4 @@
 <script lang="ts">
-import type { IconName } from '../shared/icon-names';
 import Icon from './Icon.svelte';
 
 /**
@@ -11,8 +10,9 @@ import Icon from './Icon.svelte';
  * font sizes, radii, focus rings, or press transforms (component-library policy).
  */
 interface Props {
-  /** Any lucide icon name — rendered via the generic `Icon` primitive. */
-  icon: IconName;
+  /** Any lucide icon name — rendered via the generic `Icon` primitive, which
+   * accepts the full lucide set, NOT just the curated `IconName` catalogue. */
+  icon: string;
   /** Activation handler (skipped while `disabled`). */
   onclick: () => void;
   /** Native tooltip text (e.g. `"Open launcher (⌥L)"`). */

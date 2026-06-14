@@ -20,8 +20,6 @@
 // (`axis: 'x'`, e.g. the bottom Space switcher) so the index + drop-onto
 // hit-testing run along x instead of y.
 
-import type { IconName } from '../shared/icon-names';
-
 export interface DragData {
   /** Stable id of the dragged item: a `SavedTabId` (pinned) or `TabId` (temp), stringified. */
   id: string;
@@ -34,7 +32,7 @@ export interface DragData {
    * clone renders a Space chip tile instead of a `TabRow`. Carries the Space's
    * full canonical OKLCH (`hue`/`chroma`/`l`) plus its on-colour ink (`on`) so
    * the clone renders the SAME true colour + readable glyph as the live chip. */
-  chip?: { icon: IconName; hue: number; chroma: number; l: number; on: string };
+  chip?: { icon: string; hue: number; chroma: number; l: number; on: string };
 }
 
 /** Per-row drop-onto descriptor, aligned 1:1 (order + length) with a zone's

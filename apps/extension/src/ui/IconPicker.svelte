@@ -12,8 +12,11 @@ import { SPACE_ICONS } from './space-icons';
 import TextInput from './TextInput.svelte';
 
 interface Props {
-  /** Currently-selected icon. */
-  value: IconName;
+  /** Currently-selected icon — a plain icon-name string (the stored value may
+   * predate / fall outside the curated catalogue; it simply highlights no tile
+   * when it isn't a catalogue member). The picker only ever EMITS catalogue
+   * icons, so `onselect` stays `IconName`. */
+  value: string;
   /** Fired with the chosen icon on click / keyboard activation. */
   onselect: (icon: IconName) => void;
 }
@@ -43,7 +46,7 @@ const truncated = $derived(query.trim() !== '' && icons.length >= SEARCH_CAP);
 // never leaves focus past the end.
 let focusedIndex = $state(0);
 $effect(() => {
-  const sel = icons.indexOf(value);
+  const sel = icons.findIndex((i) => i === value);
   focusedIndex = sel >= 0 ? sel : 0;
 });
 

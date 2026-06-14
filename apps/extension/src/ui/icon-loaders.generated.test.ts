@@ -47,7 +47,7 @@ function sourceLiterals(): Set<string> {
   const found = new Set<string>();
   const patterns = [
     /\bname\s*=\s*["']([a-z][a-z0-9-]*)["']/g, // <Icon name="x">
-    /\bname=\{\s*["']([a-z][a-z0-9-]*)["']/g, // name={'x' as IconName}
+    /\b(?:name|icon|leadingIcon)=\{\s*["']([a-z][a-z0-9-]*)["']/g, // name={'x'} / icon={'x' as IconName}
     /\b(?:icon|leadingIcon)\s*[:=]\s*["']([a-z][a-z0-9-]*)["']/g, // icon: 'x' / icon="x"
   ];
   const ternary = /\?\s*["']([a-z][a-z0-9-]*)["']\s*:\s*["']([a-z][a-z0-9-]*)["']/g; // cond ? 'x' : 'y'

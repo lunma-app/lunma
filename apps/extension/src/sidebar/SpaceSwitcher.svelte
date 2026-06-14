@@ -1,7 +1,6 @@
 <script lang="ts">
 import '../ui/drop-line.css';
 import { dispatch } from '../shared/bus';
-import type { IconName } from '../shared/icon-names';
 import { log } from '../shared/logger';
 import { colourToOklch, colourToOn } from '../shared/space-hue';
 import type { Space, SpaceColor, WindowId } from '../shared/types';
@@ -118,7 +117,7 @@ function onChipPointerDown(event: PointerEvent, space: Space): void {
       title: space.name,
       faviconSrc: '',
       chip: {
-        icon: space.icon as IconName,
+        icon: space.icon,
         hue: ok.h,
         chroma: ok.c,
         l: ok.l,
@@ -200,7 +199,7 @@ function openOptions(): void {
           oncontextmenu={(event) => onChipContextMenu(event, space)}
         >
           {#snippet tile()}
-            <span class="tile"><Icon name={space.icon as IconName} size={12} /></span>
+            <span class="tile"><Icon name={space.icon} size={12} /></span>
           {/snippet}
           {#if isActive}
             <!-- The active chip reads as "lit from within": its Space-colour tile

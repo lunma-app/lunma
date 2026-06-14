@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { IconName, SpaceId } from '../shared/types';
+import type { SpaceId } from '../shared/types';
 import Icon from '../ui/Icon.svelte';
 import { useStore } from './store-context.svelte';
 
@@ -27,7 +27,7 @@ const count = $derived(store.state.archivedTabs.filter((e) => e.spaceId === spac
     aria-label={`Recently archived (${count})`}
     onclick={onOpen}
   >
-    <Icon name={'archive' as IconName} size={13} />
+    <Icon name="archive" size={13} />
     <span class="count">{count}</span>
   </button>
 {/if}

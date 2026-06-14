@@ -286,6 +286,7 @@ export const iconLoaders: Record<string, IconLoader> = {
   recycle: () => import('@lucide/svelte/icons/recycle'),
   rocket: () => import('@lucide/svelte/icons/rocket'),
   rose: () => import('@lucide/svelte/icons/rose'),
+  'rotate-ccw': () => import('@lucide/svelte/icons/rotate-ccw'),
   'rotate-cw': () => import('@lucide/svelte/icons/rotate-cw'),
   route: () => import('@lucide/svelte/icons/route'),
   router: () => import('@lucide/svelte/icons/router'),

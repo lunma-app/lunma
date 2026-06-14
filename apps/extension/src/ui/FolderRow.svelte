@@ -12,8 +12,10 @@ import RowMenu, { type RowMenuItem } from './RowMenu.svelte';
 interface Props {
   /** Folder name (the row label). */
   name: string;
-  /** Folder glyph (a lucide icon name). */
-  icon: IconName;
+  /** Folder glyph (a lucide icon name). A plain string: it's rendered via the
+   * generic `Icon` and seeds the picker's `value` (highlight only). The picker's
+   * `onSetIcon` output stays `IconName`. */
+  icon: string;
   /** Folder colour identity — tints the glyph and the drop-target highlight. */
   color: SpaceColor;
   /** Whether the folder is expanded (rotates the chevron 0°→90°). */
