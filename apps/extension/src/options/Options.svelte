@@ -46,8 +46,7 @@ const version = chrome.runtime.getManifest().version;
 // The privacy policy lives on the marketing site (apps/site), which never ships
 // in the extension bundle — so the options page links out to its canonical URL.
 // Mirrors apps/site `SITE_URL` + `PRIVACY_PATH`; the lunma.app domain is [VERIFY]
-// until launch (the release notes), the same placeholder the store
-// listing's privacy URL uses.
+// until launch, the same placeholder the store listing's privacy URL uses.
 const PRIVACY_URL = 'https://lunma.app/privacy';
 
 // Group declarations by `group`, preserving first-seen order.

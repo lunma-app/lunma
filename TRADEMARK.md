@@ -2,7 +2,7 @@
 
 > **DRAFT.** A starting policy; have a lawyer review before the repository goes
 > public. Securing the "Lunma" mark (or establishing common-law rights by being
-> the first to publish) is tracked in `the release notes`.
+> the first to publish) is a pre-launch task.
 
 The Lunma **code** is open source under the Apache License 2.0 — you are free to
 use, modify, and redistribute it. The Lunma **name, the "Lunma" wordmark, and the

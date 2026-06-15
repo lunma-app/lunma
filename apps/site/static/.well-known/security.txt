@@ -1,8 +1,7 @@
 # Lunma — security policy (RFC 9116, https://www.rfc-editor.org/rfc/rfc9116)
 # https://lunma.app — report a vulnerability to the address below.
-# Expires is bumped by hand; refresh before it lapses (tracked in
-# the release notes). Add Policy:/Encryption: once a disclosure
-# page or PGP key exists.
+# Expires is bumped by hand; refresh before it lapses. Add Policy:/Encryption:
+# once a disclosure page or PGP key exists.
 
 Contact: mailto:security@lunma.app
 Expires: 2027-06-14T00:00:00.000Z

@@ -15,7 +15,7 @@ Thanks for your interest in Lunma. A few things to know before you send a change
 > **Maintainer note (pre-launch):** the CLA and trademark policy are DRAFTs pending
 > legal review, and the acceptance mechanism (a CLA-assistant bot vs. DCO sign-off)
 > is still to be wired up. Until that is in place and reviewed, hold external
-> contributions. See `the release notes`.
+> contributions.
 
 ## How the project is built
 

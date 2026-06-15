@@ -4,7 +4,7 @@
 > qualified IP/open-source lawyer review and finalise it **before the repository
 > is made public and before accepting any outside contribution.** The "Project
 > Owner" below is currently the individual founder; replace it with your legal
-> entity if and when you incorporate. See `the release notes`.
+> entity if and when you incorporate.
 
 Thank you for your interest in contributing to Lunma (the "Project"), maintained
 by **The Lunma Authors** (the "Project Owner"). This Contributor License Agreement

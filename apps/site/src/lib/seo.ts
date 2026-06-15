@@ -4,8 +4,7 @@
 // Google requires), and the JSON-LD builders the <head> emits.
 import { CHROME_WEB_STORE_URL, GITHUB_URL, MIN_CHROMIUM } from '$lib/links';
 
-/** Canonical origin. [VERIFY] confirm `lunma.app` is the live domain at launch
- *  (tracked in the release notes). */
+/** Canonical origin. [VERIFY] confirm `lunma.app` is the live domain at launch. */
 export const SITE_URL = 'https://lunma.app';
 export const SITE_NAME = 'Lunma';
 
