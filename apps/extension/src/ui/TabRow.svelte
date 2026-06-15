@@ -479,6 +479,16 @@ const returnable = $derived(drifted && !!homeHost);
     opacity: 0;
     transition: opacity var(--motion-fast) var(--ease-standard);
   }
+  /* A trailing-only action (a row's close ✕, with no meta to swap against) sits with
+   * an EQUAL gap on top, bottom, and right — so its hover box reads as evenly inset
+   * rather than floating in or bleeding off the edge. Vertical centring already fixes
+   * the top/bottom gap at `(--row-h - --icon-btn) / 2`; the box otherwise right-aligns
+   * to the row's `--space-3` padding line, so pull it out until its right gap matches
+   * that vertical gap. Holds at every row density (the gap tracks `--row-h`). Swap
+   * rows (`.has-swap`) keep meta↔action in place, so they are excluded. */
+  .row-end:not(.has-swap) > .trailing {
+    margin-right: calc((var(--row-h) - var(--icon-btn)) / 2 - var(--space-3));
+  }
   /* Reveal the actions on row hover, when forced visible, or when an action is
    * keyboard-focused (so it's reachable by Tab) — but NOT on row :focus-within,
    * which would keep them stuck visible after a click focuses the row body. */
