@@ -25,7 +25,7 @@
 
 - [x] 5.1 `pnpm --filter @lunma/extension verify` green (tsc, biome incl. layer DAG, svelte-check, lint:styles, vitest).
 - [x] 5.2 `pnpm verify` green at the workspace root; `pnpm test:e2e` smoke unaffected.
-- [ ] 5.3 Manual smoke: open Options → Feed subscriptions; import a real OPML file (e.g. a Feedly export), confirm the folders appear in the target Space with the correct names and feed URLs; verify a bad OPML file shows the error message; verify the Export button appears after import and produces a valid OPML file.
+- [x] 5.3 Manual smoke: open Options → Feed subscriptions; import a real OPML file (e.g. a Feedly export), confirm the folders appear in the target Space with the correct names and feed URLs; verify a bad OPML file shows the error message; verify the Export button appears after import and produces a valid OPML file.
 
 ### Deviation (agreed during smoke test)
 `parseOpml` now pre-processes bare `&` not part of a valid XML entity reference by replacing with `&amp;` before parsing. The spec said "catch saxes errors and return whatever was collected" — but a bare `&` in `<head>` throws before any outlines are processed, returning `[]` and showing a misleading "No RSS feeds found" error. Lenient pre-processing is the standard approach used by all major feed readers.
