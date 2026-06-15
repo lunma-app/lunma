@@ -7,7 +7,7 @@
 // backdrop, the brand faces from app.css's h1/h2 + --font-sans body) and NOT the
 // extension's ui/ primitives. Every fact here is true to the shipping extension
 // and must stay in step with TrustBand.svelte (design D4).
-import { GITHUB_URL } from '$lib/links';
+import { GITHUB_URL, PRIVACY_EMAIL } from '$lib/links';
 import Seo from '$lib/Seo.svelte';
 import Wordmark from '$lib/Wordmark.svelte';
 
@@ -19,7 +19,7 @@ const description =
 
 // Hard-coded literal, bumped by hand on every edit — this is a static page, so
 // never Date.now() (which would also break the prerender's reproducibility).
-const lastUpdated = '14 June 2026';
+const lastUpdated = '15 June 2026';
 </script>
 
 <svelte:head>
@@ -175,9 +175,7 @@ const lastUpdated = '14 June 2026';
       <h2>Contact</h2>
       <p>
         If something here needs explaining, email
-        <!-- [VERIFY] replace [contact email] with the real privacy address before
-             launch (tracked in the release notes, store-mechanics). -->
-        <span class="placeholder">[contact email]</span>. The code is
+        <a href="mailto:{PRIVACY_EMAIL}">{PRIVACY_EMAIL}</a>. The code is
         <a href={GITHUB_URL} target="_blank" rel="noopener">public</a> too, so you
         can read what Lunma does and hold this page to it.
       </p>
@@ -279,13 +277,6 @@ const lastUpdated = '14 June 2026';
 
   a:hover {
     color: var(--text);
-  }
-
-  /* The contact address is a deliberate, visually obvious placeholder the author
-     replaces before launch (design D5). */
-  .placeholder {
-    color: var(--text-dim);
-    font-style: italic;
   }
 
   @media (prefers-reduced-motion: reduce) {
