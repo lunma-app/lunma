@@ -1,6 +1,6 @@
 ## Why
 
-Smart folders are a queue-from-anywhere platform, and an **RSS/Atom feed** is the
+Smart folders queue items from anywhere, and an **RSS/Atom feed** is the
 cheapest way to broaden them past "things assigned to me" into "my live web":
 a **Reading Space** of feed folders — Hacker News, a blog, a YouTube channel —
 pinned exactly where you work, each showing the latest posts with an unread mark

@@ -130,8 +130,8 @@ until the feed is exhausted. The editor labels it "Show up to N **unread**" for 
 feed, "Show at most N **items**" for a queue. **Alternative — `maxItems` as a
 total latest-N cap for feeds too** (the original D5): rejected because a small cap
 + read-hiding left the folder stranding older unread you could never reach; the
-unread budget keeps the pinned surface a glanceable, self-refilling queue (matching
-the queue-from-anywhere thesis). Migration defaults existing nodes to **20** (no
+unread budget keeps the pinned surface a glanceable, self-refilling queue.
+Migration defaults existing nodes to **20** (no
 behaviour change for queues).
 
 ### D6 — A per-connector `listingUrl` + "open all in a tab"
