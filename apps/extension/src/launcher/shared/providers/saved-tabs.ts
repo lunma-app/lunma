@@ -6,7 +6,7 @@ import type { SavedTab, SavedTabId, TabBinding, WindowId } from '../../../shared
  * results. Pure over `LunmaStore.state.savedTabs` + `state.tabBindings`. The
  * result URL is the live `currentURL` when bound, else the record's
  * `originalURL` home. Carries `savedTabId` always; and when the saved tab is
- * **bound to a live tab in `windowId`** (per-window-tab-bindings, ADR 0009),
+ * **bound to a live tab in `windowId`** (per-window-tab-bindings, ADR 0003),
  * also carries that window's `tabId` — the presence of `tabId` is the signal a
  * (stateless) surface uses to dispatch `focusSavedTab` rather than `openSavedTab`
  * (no surface needs to read bindings itself). The request's `windowId` selects

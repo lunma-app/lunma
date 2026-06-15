@@ -24,7 +24,7 @@ function liveTab(id: number, windowId: number, url: string): chrome.tabs.Tab {
 function installChromeStub(liveTabs: chrome.tabs.Tab[]): ChromeStub {
   const stub: ChromeStub = {
     tabs: {
-      // Per-window-tab-bindings (ADR 0009): recovery does ONE `query({})` and
+      // Per-window-tab-bindings (ADR 0003): recovery does ONE `query({})` and
       // buckets the result by windowId — no per-binding `tabs.get`.
       query: vi.fn(() => Promise.resolve(liveTabs)),
     },

@@ -1,4 +1,4 @@
-// Favicon-row / global-favorite handlers (split-coordinator-handlers, ADR 0010):
+// Favicon-row / global-favorite handlers (split-coordinator-handlers):
 // mint / decouple / couple / reorder global favorites. The store performs the
 // chrome-free record move; the coordinator owns the group/ungroup I/O for every
 // bound window (D5). Verbatim moves of the former coordinator closures.

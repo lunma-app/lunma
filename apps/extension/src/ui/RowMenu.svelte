@@ -103,7 +103,29 @@ $effect(() => {
   if (isOpen === prevOpen) return;
   prevOpen = isOpen;
   if (isOpen) void handleOpened();
+  else syncClosed();
 });
+
+/** Host-driven close: when the parent flips the bindable `open` straight to
+ * false (a panel confirm's `onDone` — e.g. the smart-folder editor's Add/Save —
+ * not the trigger / Esc / outside-click path), mirror `close()`'s teardown. The
+ * `{#if open}` empties the drawer, but WITHOUT this the absolutely-positioned
+ * drawer stays `revealed` at its measured editor height — an invisible overlay
+ * that sits over the rows below and swallows their clicks until the next remount
+ * (the "can't click tabs after adding a smart folder" bug) — and the outside
+ * listener / observer / close timer would leak. Idempotent, so the animated
+ * `close()` path (which sets `open=false` only after its outro) re-runs it
+ * harmlessly. */
+function syncClosed(): void {
+  if (closeTimer !== undefined) {
+    clearTimeout(closeTimer);
+    closeTimer = undefined;
+  }
+  closing = false;
+  revealed = false;
+  removeOutside();
+  resizeObserver?.disconnect();
+}
 
 // Move focus + re-measure when the drawer crosses the actions⇄drill boundary so
 // the new view is reachable (back button on drill-in; first action on return)

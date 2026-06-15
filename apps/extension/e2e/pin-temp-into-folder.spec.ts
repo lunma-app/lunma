@@ -23,7 +23,7 @@ interface StateSnap {
   nodes: PinNodeSnap[];
   savedIds: string[];
   tempTabIds: number[];
-  // Per-(saved tab, window) live bindings (per-window-tab-bindings, ADR 0009):
+  // Per-(saved tab, window) live bindings (per-window-tab-bindings, ADR 0003):
   // `{ [savedTabId]: { [windowId]: liveTabId } }`.
   bindings: Record<string, Record<number, number>>;
 }
@@ -106,7 +106,7 @@ function expectNoOrphans(snap: StateSnap): void {
 
 /** Assert the newly minted saved tab is bound and has left Temporary. */
 function expectBoundAndOutOfTemporary(snap: StateSnap, newId: string): void {
-  // Per-window bindings (ADR 0009): `bindings[newId]` is `{ [windowId]: liveTabId }`.
+  // Per-window bindings (ADR 0003): `bindings[newId]` is `{ [windowId]: liveTabId }`.
   // The drag minted a binding in the sidebar's (single) window — assert exactly one
   // live tab id, and that the bound tab left Temporary.
   const binding = snap.bindings[newId];

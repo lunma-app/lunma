@@ -3,7 +3,7 @@ import type { Component } from 'svelte';
 import { type IconName, isIconName } from '../shared/icon-names';
 // Allowlisted lazy loaders (generated from ICON_NAMES + source literals by
 // scripts/gen-icon-loaders.mjs) — replaces a wildcard glob that emitted a chunk
-// for all ~1,711 lucide icons at build time. See ADR 0014.
+// for all ~1,711 lucide icons at build time.
 import { iconLoaders } from './icon-loaders.generated';
 
 const componentCache: Map<string, Component> = new Map();

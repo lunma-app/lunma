@@ -91,7 +91,7 @@ export function computeArchiveCandidates(
 ): ArchiveCandidate[] {
   const { activeTabIds, pinnedTabIds, now, effectiveForSpace } = opts;
   // Every live tab id bound to a saved tab in any window (per-window-tab-bindings,
-  // ADR 0009) — Lunma-bound tabs survive auto-archive.
+  // ADR 0003) — Lunma-bound tabs survive auto-archive.
   const boundTabIds = new Set<TabId>(
     Object.values(snapshot.tabBindings).flatMap((binding) => Object.values(binding)),
   );

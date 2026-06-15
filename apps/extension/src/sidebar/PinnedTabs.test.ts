@@ -299,7 +299,7 @@ describe('PinnedTabs active treatment', () => {
   });
 });
 
-describe('PinnedTabs per-window drift (per-window-tab-bindings, ADR 0009)', () => {
+describe('PinnedTabs per-window drift (per-window-tab-bindings, ADR 0003)', () => {
   test('renders drift in the window whose bound tab navigated away, not the other', () => {
     const store = makeStore();
     // Same saved tab bound to a different live tab in each window: window 100's
@@ -383,7 +383,7 @@ describe('PinnedTabs per-window drift (per-window-tab-bindings, ADR 0009)', () =
   });
 });
 
-describe('PinnedTabs drag dispatch (ADR 0006 Layer 1)', () => {
+describe('PinnedTabs drag dispatch', () => {
   test('reordering a pinned row dispatches reorderPinned with the post-drop order', async () => {
     const store = makeStore();
     store.state.savedTabs['st-1'] = savedTab({ id: 'st-1', currentURL: null });

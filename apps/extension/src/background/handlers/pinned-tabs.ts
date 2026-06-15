@@ -80,7 +80,7 @@ export function pinnedTabHandlers(): Pick<
       // (grouped on creation, rule 2) — `ensureFavoriteUngrouped`'s ungroup + park
       // establishes the favorite invariant regardless of that prior membership.
       if (saved.spaceId === null) {
-        // A global favorite (favicon-row-model, ADR 0010 D3/D8): leave its live
+        // A global favorite (favicon-row-model D3/D8): leave its live
         // tab UNGROUPED (global) instead of adopting it into any Space's group,
         // so it stays visible across every Space switch. This is the formerly
         // unguarded-null call site — `addTabToSpaceGroup` keeps its
@@ -108,7 +108,7 @@ export function pinnedTabHandlers(): Pick<
     focusSavedTab: async (ctx, event) => {
       const { savedTabId, windowId } = event.payload;
       // Focus THIS window's bound tab only — never another window's slot
-      // (per-window-tab-bindings, ADR 0009).
+      // (per-window-tab-bindings, ADR 0003).
       const tabId = ctx.store.state.tabBindings[savedTabId]?.[windowId];
       if (tabId === undefined) {
         throw new Error(
@@ -148,7 +148,7 @@ export function pinnedTabHandlers(): Pick<
         throw new Error(`makeThisHome: currentURL is null for '${savedTabId}'`);
       }
       // Lunma-owned record: update originalURL in state only, no
-      // chrome.bookmarks.update (ADR 0005).
+      // chrome.bookmarks.update (ADR 0001).
       ctx.store.makeSavedTabHomeCurrent(savedTabId);
       ctx.markDirty();
     },
@@ -158,7 +158,7 @@ export function pinnedTabHandlers(): Pick<
         throw new Error(`deleteSavedTab: unknown savedTabId '${savedTabId}'`);
       }
       // Close EVERY bound live tab across all window slots (per-window-tab-
-      // bindings, ADR 0009), then drop the record. Best-effort per D7-bis: the
+      // bindings, ADR 0003), then drop the record. Best-effort per D7-bis: the
       // user wants the saved tab gone regardless of any tab's state.
       const boundTabIds = Object.values(ctx.store.state.tabBindings[savedTabId] ?? {});
       for (const tabId of boundTabIds) {
@@ -250,9 +250,9 @@ export function pinnedTabHandlers(): Pick<
       }
       // Capture every bound (window, tab) BEFORE removeSavedTab drops the slots:
       // each bound window's tab returns to THAT window's Temporary (per-window-
-      // tab-bindings, ADR 0009). A dormant window has no slot, so nothing to do.
+      // tab-bindings, ADR 0003). A dormant window has no slot, so nothing to do.
       const boundByWindow = Object.entries(ctx.store.state.tabBindings[savedTabId] ?? {});
-      // Second unguarded-null site (favicon-row-model, ADR 0010 D8): a global
+      // Second unguarded-null site (favicon-row-model D8): a global
       // favorite (`spaceId === null`) is referenced by `faviconRow`, never by
       // `pinnedBySpace`, so it must NOT be routed through
       // `removePinned(null, …)`. `removeSavedTab` below cleans BOTH placement

@@ -67,7 +67,7 @@ const TabBoundarySchema = z.discriminatedUnion('mode', [
 
 // A saved tab — a Lunma-owned record (a pinned tab or a favicon-row favorite),
 // NOT a Chrome bookmark. A `null` `spaceId` is the decoupled / global-favorite
-// state (favicon-row-model, ADR 0010).
+// state (favicon-row-model).
 const SavedTabSchema = z.strictObject({
   id: z.string(),
   spaceId: z.string().nullable(),
@@ -141,7 +141,7 @@ const LiveTabSchema = z.strictObject({
   favIconUrl: z.string().optional(),
 });
 
-// Per-(saved tab, window) live bindings (per-window-tab-bindings, ADR 0009):
+// Per-(saved tab, window) live bindings (per-window-tab-bindings, ADR 0003):
 // `{ [savedTabId]: { [windowId]: liveTabId } }`. Inner keys are `windowId`s,
 // coerced from their JSON string form.
 const TabBindingsSchema = z.record(z.string(), z.record(z.coerce.number(), z.number()));

@@ -1,4 +1,4 @@
-# 0007 — Tab-group materialization of Spaces
+# 0002 — Tab-group materialization of Spaces
 
 - **Status:** Accepted
 - **Date:** 2026-05-30

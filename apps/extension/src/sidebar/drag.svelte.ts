@@ -1,4 +1,4 @@
-// Custom pointer-based drag-and-drop for the sidebar lists (supersedes ADR 0003's
+// Custom pointer-based drag-and-drop for the sidebar lists (supersedes the prior
 // svelte-dnd-action choice). Interaction model: the source row STAYS in place
 // (dimmed), a floating clone follows the cursor with the grab offset, and a thin
 // insertion line marks where the item will land. Nothing reorders until drop.

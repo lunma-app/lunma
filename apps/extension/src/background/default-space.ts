@@ -2,7 +2,7 @@ import type { LunmaStore } from '../shared/store.svelte';
 
 /**
  * Guarantee `state.spaces` is non-empty. No-op when at least one Space exists.
- * Otherwise mints a single Lunma-owned Default Space (ADR 0005) — no Chrome
+ * Otherwise mints a single Lunma-owned Default Space (ADR 0001) — no Chrome
  * bookmark folder is created. Idempotent.
  */
 export async function ensureAtLeastOneSpace(store: LunmaStore): Promise<void> {

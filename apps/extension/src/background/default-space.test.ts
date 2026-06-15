@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from 'vitest';
 import { LunmaStore } from '../shared/store.svelte';
 import { ensureAtLeastOneSpace } from './default-space';
 
-// Lunma-owned model (ADR 0005): ensureAtLeastOneSpace mints a single Default
+// Lunma-owned model (ADR 0001): ensureAtLeastOneSpace mints a single Default
 // Space record with a real uuid and creates no Chrome bookmark folder.
 
 describe('ensureAtLeastOneSpace', () => {

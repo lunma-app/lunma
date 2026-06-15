@@ -7,7 +7,7 @@ import { ICON_NAMES } from '../shared/icon-names';
 import { iconLoaders } from './icon-loaders.generated';
 
 /**
- * Guards the generated icon-loader allowlist (ADR 0014). The lucide-name lookup
+ * Guards the generated icon-loader allowlist. The lucide-name lookup
  * and literal-extraction below intentionally re-implement
  * scripts/gen-icon-loaders.mjs: two independent derivations that must agree catch
  * a stale committed file. If a test here fails, run `pnpm gen:icons`.

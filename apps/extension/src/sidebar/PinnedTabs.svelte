@@ -125,7 +125,7 @@ type TopRow = TabView | FolderView | SmartRowView;
 function projectTab(id: SavedTabId): TabView | null {
   const saved = store.state.savedTabs[id];
   if (!saved) return null;
-  // Per-window-tab-bindings (ADR 0009, design D7): the sidebar is a per-window
+  // Per-window-tab-bindings (ADR 0003, design D7): the sidebar is a per-window
   // surface, so it reads ONLY this window's slot — bound/active/drift reflect
   // THIS window's bound tab, never another window's.
   const boundTabId = store.state.tabBindings[id]?.[windowId];
@@ -628,7 +628,7 @@ function chooseIcon(folderId: FolderId, icon: IconName): void {
 
 // --- dispatch + tab interactions ---------------------------------------------
 let confirmingDeleteId = $state<SavedTabId | null>(null);
-// Which row's boundary editor is open as the menu's drill-in (pinned-tab-domain-boundary).
+// Which row's boundary editor is open as the menu's drill-in.
 let editingBoundaryId = $state<SavedTabId | null>(null);
 
 // --- right-click menu (one shared instance, opened at the cursor) -------------

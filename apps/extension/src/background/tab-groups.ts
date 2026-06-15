@@ -95,7 +95,7 @@ export async function ensureGroupForSpace(
 }
 
 /**
- * Ungroup a single live tab (favicon-row-model, ADR 0010 D3): remove it from
+ * Ungroup a single live tab (favicon-row-model D3): remove it from
  * whatever Chrome tab group it currently sits in, leaving it **global**
  * (`groupId === -1`). Best-effort like the other wrappers — a Chrome refusal
  * (a stale/closed tab, or one already ungrouped) is swallowed, never thrown.

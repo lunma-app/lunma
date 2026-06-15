@@ -1,4 +1,4 @@
-# 0005 — Drop the Chrome-bookmark backing; Lunma owns its state (local-first)
+# 0001 — Drop the Chrome-bookmark backing; Lunma owns its state (local-first)
 
 - **Status:** Accepted
 - **Date:** 2026-05-29

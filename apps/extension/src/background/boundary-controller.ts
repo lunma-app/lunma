@@ -55,7 +55,7 @@ export class BoundaryController {
       const saved = savedTabs[savedTabId];
       if (!saved) continue;
       // A boundary is a property of the saved tab — arm/disarm EVERY window's
-      // bound tab (per-window-tab-bindings, ADR 0009).
+      // bound tab (per-window-tab-bindings, ADR 0003).
       for (const tabId of Object.values(slots)) {
         tasks.push(this.configureBoundary(tabId, saved));
       }

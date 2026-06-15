@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from 'vitest';
 import { closeTab, moveTabToStripStart, ungroupTabs } from './tab-groups';
 
-describe('ungroupTabs (favorite ungroup wrapper, ADR 0010 D3)', () => {
+describe('ungroupTabs (favorite ungroup wrapper, D3)', () => {
   test('ungroups a tab via chrome.tabs.ungroup', async () => {
     const ungroup = vi.fn(async () => undefined);
     (globalThis as unknown as { chrome: unknown }).chrome = { tabs: { ungroup } };

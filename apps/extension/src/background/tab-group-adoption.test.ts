@@ -610,7 +610,7 @@ describe('reconcileTabGroupsOnBoot — fresh-install conversion', () => {
   });
 });
 
-describe('reconcileTabGroupsOnBoot — favorite ungroup reconciliation (ADR 0010 D4)', () => {
+describe('reconcileTabGroupsOnBoot — favorite ungroup reconciliation (D4)', () => {
   test('a favorite restored still grouped is ungrouped at boot', async () => {
     const store = makeStore();
     store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });

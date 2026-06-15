@@ -287,14 +287,14 @@ function spaceWindowTabSet(store: LunmaStore, windowId: WindowId, spaceId: Space
   const temp = (s.spaceInstancesByWindow[windowId]?.[spaceId]?.tempTabIds ?? []).filter(
     (id) => s.liveTabsById[id]?.windowId === windowId,
   );
-  // Per-window-tab-bindings (ADR 0009): read each saved tab's slot for THIS
+  // Per-window-tab-bindings (ADR 0003): read each saved tab's slot for THIS
   // window directly.
   const bound: TabId[] = [];
   for (const [savedTabId, slots] of Object.entries(s.tabBindings)) {
     const tabId = slots[windowId];
     if (tabId === undefined) continue;
     const saved = s.savedTabs[savedTabId];
-    // A global favorite (`saved.spaceId === null`, favicon-row-model ADR 0010)
+    // A global favorite (`saved.spaceId === null`, favicon-row-model)
     // is INCIDENTALLY excluded here: `null !== <spaceId string>` is always true,
     // so a favorite never joins any materialized Space group at boot — its
     // ungrouping is handled by the favorite-ungroup reconciliation step below,
@@ -404,7 +404,7 @@ async function materializeActiveGroups(
 
 /**
  * Ungroup global favorites that Chrome restored still inside a group
- * (favicon-row-model, ADR 0010 D4 / Q2). After adoption + materialization, for
+ * (favicon-row-model D4 / Q2). After adoption + materialization, for
  * each favorite (`faviconRow` → `savedTabs[id].spaceId === null`) and each window
  * where its per-window bound tab is still grouped at boot
  * (`tabGroupById.get(tabId) >= 0`, the same boot tab→group map adoption read), the
@@ -447,7 +447,7 @@ async function ungroupRestoredFavorites(
  *   - **materializes** any still-missing active-Space group;
  *   - **ungroups** any global favorite (`spaceId === null`) Chrome restored still
  *     inside a group, so it is global again before a Space switch can hide it
- *     (favicon-row-model, ADR 0010 D4).
+ *     (favicon-row-model D4).
  * Order matters: convert (mint Spaces + assign tabs) → adopt (re-bind) →
  * materialize → ungroup-favorites, so a restored group is reused rather than
  * duplicated and favorites end ungrouped after the Space groups are settled.

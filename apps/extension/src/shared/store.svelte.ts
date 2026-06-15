@@ -554,7 +554,7 @@ export class LunmaStore {
 
   /**
    * Bind a saved tab to a live Chrome tab id IN A SPECIFIC WINDOW (per-window-
-   * tab-bindings, ADR 0009): set `tabBindings[savedTabId][windowId] = tabId`,
+   * tab-bindings, ADR 0003): set `tabBindings[savedTabId][windowId] = tabId`,
    * leaving any other window's slot untouched. Updates the single canonical
    * `currentURL` and enforces the bound-not-temp invariant for `windowId`.
    */
@@ -600,7 +600,7 @@ export class LunmaStore {
 
   /**
    * Apply restart-recovery results PER WINDOW (per-window-tab-bindings, ADR
-   * 0009). The map is keyed `savedTabId → windowId → result`: a non-null result
+   * 0003). The map is keyed `savedTabId → windowId → result`: a non-null result
    * rebinds `tabBindings[savedTabId][windowId]` to the matched tab id (and
    * enforces the bound-not-temp invariant for that window); a `null` result drops
    * that window's slot (no live tab matched). Other window slots are untouched.
@@ -639,7 +639,7 @@ export class LunmaStore {
     this.state.savedTabs[tab.id] = { ...tab };
     if (this.state.tabBindings[tab.id] === undefined) {
       // Dormant in every window: an empty per-window record (per-window-tab-
-      // bindings, ADR 0009).
+      // bindings, ADR 0003).
       this.state.tabBindings[tab.id] = {};
     }
   }
@@ -693,7 +693,7 @@ export class LunmaStore {
 
   /**
    * Insert a favorite into the flat global `faviconRow` at a clamped index
-   * (favicon-row-model, ADR 0010). No-op when the id is already present —
+   * (favicon-row-model). No-op when the id is already present —
    * mirrors {@link addPinned}'s idempotency. The favicon row is flat (not a
    * `PinNode[]` tree); favorites do not nest into folders in v1.
    */
@@ -721,8 +721,8 @@ export class LunmaStore {
   }
 
   /**
-   * Decouple a pinned saved tab into a global favorite (favicon-row-model, ADR
-   * 0010 D5 — the store half of `favoriteSavedTab`): set the record's
+   * Decouple a pinned saved tab into a global favorite (favicon-row-model — the
+   * store half of `favoriteSavedTab`): set the record's
    * `spaceId = null`, remove its id from its current `pinnedBySpace[oldSpaceId]`
    * placement, and append it to the flat `faviconRow`. A MOVE, never a copy —
    * the record ends in exactly one placement (the no-duplicate-placement rule).
@@ -746,7 +746,7 @@ export class LunmaStore {
   }
 
   /**
-   * Couple a global favorite to a Space (favicon-row-model, ADR 0010 D5 — the
+   * Couple a global favorite to a Space (favicon-row-model — the
    * store half of `pinSavedTab`): set the record's `spaceId = spaceId`, remove
    * its id from the flat `faviconRow`, and insert it into `pinnedBySpace[spaceId]`
    * at a clamped top-level index (via {@link addPinned}). A MOVE, never a copy —
@@ -1222,7 +1222,7 @@ export class LunmaStore {
   /**
    * Remove a SavedTab record entirely: drop it from `savedTabs`, its binding,
    * and every placement family — `pinnedBySpace` (the pinned tree) AND the flat
-   * `faviconRow` (favicon-row-model, ADR 0010 D6 chokepoint), so a deleted /
+   * `faviconRow` (favicon-row-model chokepoint), so a deleted /
    * unpinned favorite can never leak a dangling id. The coordinator's
    * `deleteSavedTab` handler closes any bound tab before calling this.
    */

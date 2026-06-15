@@ -1,6 +1,6 @@
 import { defineConfig } from '@playwright/test';
 
-// Layer 2 of the sidebar DnD testing strategy (ADR 0006): a single happy-path
+// Layer 2 of the sidebar DnD testing strategy: a single happy-path
 // smoke that drives the real pointer-drag controller in a real Chromium with
 // the built extension loaded. Layer 1 (component bus-dispatch assertions) lives
 // in Vitest under `src/sidebar/*.test.ts`.

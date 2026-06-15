@@ -1,4 +1,4 @@
-# 0012 — pnpm workspace + the marketing site
+# 0004 — pnpm workspace + the marketing site
 
 - **Status:** Accepted
 - **Date:** 2026-06-08

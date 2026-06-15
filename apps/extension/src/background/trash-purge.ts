@@ -5,7 +5,7 @@ const PURGE_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 /**
  * Auto-purge soft-deleted Spaces older than 30 days (spaces-and-tabs:
  * "Soft-delete via __trash__ folder with auto-purge"). Operates purely on
- * `state.trash` records (ADR 0005 — no Chrome bookmark folder to walk):
+ * `state.trash` records (ADR 0001 — no Chrome bookmark folder to walk):
  * removes each expired trash entry along with the saved-tab records that
  * belonged to it. `nowMs` is injectable for testing.
  */

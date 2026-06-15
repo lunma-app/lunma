@@ -1,96 +1,55 @@
 # Architecture Decision Records
 
-This directory holds Lunma's ADRs — kept design decisions about capabilities
-that are not yet implemented (or about cross-cutting concerns that don't
-belong to a single capability spec). ADRs are point-in-time decisions with
-rationale and alternatives; capability specs are normative contracts about
-behavior the current code obeys.
+ADRs record Lunma's durable architecture decisions — the choices that are costly to reverse later. They are a curated set, not a log: a decision that has been reversed, or that is cheap to change, does not get an ADR, and is removed if it stops holding. Each ADR captures the decision, why it was made, the alternatives, and what it commits the project to.
 
-OpenSpec capability specs are never written directly. They are produced by
-proposing OpenSpec changes whose `specs/<capability>/spec.md` deltas add,
-modify, or remove requirements; archiving the change applies the delta to
-`openspec/specs/<capability>/spec.md`. ADRs sit upstream of that workflow —
-they capture decisions that will later be turned into spec deltas by a real
-change.
+Capability specs under `openspec/specs/<capability>/spec.md` are the other half of the picture: normative, verifiable contracts about how the current code behaves. ADRs explain durable structure and rationale; specs define current behavior.
 
 ## Spec vs ADR
 
-| | OpenSpec spec | ADR |
+| | Capability spec | ADR |
 |---|---|---|
 | Lives under | `openspec/specs/<capability>/spec.md` | `docs/adr/NNNN-<title>.md` |
-| Produced when | an OpenSpec change is archived whose delta adds/modifies/removes requirements for the capability | a design decision is made ahead of implementation |
-| Edited how | never directly — only by archiving a new change with a delta | never (accepted ADRs are immutable; supersede with a new ADR) |
+| Defines | current behavior the code must obey | a durable architecture decision and its rationale |
 | Language | SHALL-language requirements + `#### Scenario:` blocks | prose: context, decision, alternatives, consequences |
-| Verifiable today? | Yes — drift is a bug | No — it's a kept promise about future work |
+| Verifiable today | yes — drift is a bug | no — it is the reasoning behind the structure |
+| Produced by | archiving an OpenSpec change whose delta adds, modifies, or removes requirements | recording a decision that shapes the architecture |
 
-When in doubt: if a developer reading the document would expect the *current*
-codebase to obey it, the content belongs in a capability spec — propose a
-change whose delta defines it. If they'd read it to understand *why* a
-future capability will be shaped a certain way, write an ADR.
+If a developer would expect the current code to obey it, it belongs in a capability spec — never hand-edit `openspec/specs/`; propose a change whose delta defines it. If they would read it to understand why the architecture is shaped a certain way, it is an ADR.
 
-## Workflow
+## Keeping the set lean
 
-1. **Capturing a decision ahead of time** — write an ADR. The implementing
-   phase's OpenSpec change later turns the ADR's decisions into spec
-   requirements via its `specs/<capability>/spec.md` delta; archiving the
-   change produces the living spec. The change's `proposal.md` /
-   `design.md` should cite the ADR for rationale.
-2. **Superseding an ADR** — never edit an accepted ADR. Write a new ADR that
-   says "supersedes ADR NNNN" and update the index below.
-3. **Data shape now, behavior later** — when ahead-of-time work touches the
-   data model (e.g. adding a field to `AppState`), the data-shape requirement
-   belongs in the appropriate **capability spec today** (usually
-   `storage-and-migrations`) — propose a change whose delta adds the
-   requirement, archive it. The surrounding behavior can still be captured
-   as an ADR until the implementing phase's change defines it.
+ADRs are curated to durable decisions. When a decision changes, update its ADR in place or remove it: the set reflects what holds today, not the history of how it got there. Capability specs and the OpenSpec change archive carry the development history; ADRs do not duplicate it.
 
 ## Index
 
-| # | Title | Status | Supersedes |
-|---|---|---|---|
-| 0001 | [Launcher v1 shape](0001-launcher-v1-shape.md) | Accepted | — |
-| 0002 | [Auto-archive v1 shape](0002-auto-archive-v1-shape.md) | Accepted | — |
-| 0003 | [Sidebar drag-and-drop library](0003-sidebar-dnd-library.md) | Superseded by 0006 | — |
-| 0004 | [Lucide Svelte icons](0004-lucide-svelte-icons.md) | Accepted | — |
-| 0005 | [Drop bookmark backing](0005-drop-bookmark-backing.md) | Accepted | — |
-| 0006 | [Custom sidebar pointer-drag](0006-custom-sidebar-drag.md) | Accepted | 0003 |
-| 0007 | [Tab-group materialization of Spaces](0007-tab-group-materialization.md) | Accepted | — |
-| 0008 | [Pinned-tab domain boundary](0008-pinned-tab-domain-boundary.md) | Accepted (D4 + D3 enum superseded by 0015) | — |
-| 0009 | [Per-window tab bindings](0009-per-window-tab-bindings.md) | Accepted | — |
-| 0010 | [Favicon row v1 shape](0010-favicon-row-v1-shape.md) | Accepted | 0009 |
-| 0011 | [Auto-archive restore + full loop](0011-auto-archive-restore-and-full-loop.md) | Accepted | 0002 (in part) |
-| 0012 | [pnpm workspace + the marketing site](0012-workspace-and-marketing-site.md) | Accepted | — |
-| 0013 | [English-only for v1; i18n deferred](0013-english-only-v1.md) | Accepted | — |
-| 0014 | [Restrict the lucide loader to a generated allowlist](0014-icon-loader-allowlist.md) | Accepted | 0004 (in part) |
-| 0015 | [Pinned-tab URL boundary](0015-pinned-tab-url-boundary.md) | Accepted | 0008 (D4 + D3 enum) |
-| 0016 | [CI on GitHub Actions](0016-ci-on-github-actions.md) | Accepted | — |
+| # | Decision |
+|---|---|
+| 0001 | [Lunma owns its state — local-first, no bookmark backing](0001-drop-bookmark-backing.md) |
+| 0002 | [Spaces materialize as Chrome tab groups](0002-tab-group-materialization.md) |
+| 0003 | [Per-window tab bindings](0003-per-window-tab-bindings.md) |
+| 0004 | [pnpm workspace and the marketing site](0004-workspace-and-marketing-site.md) |
 
 ## Format
-
-Use the following template for new ADRs:
 
 ```markdown
 # NNNN — <Title>
 
-- **Status:** Proposed | Accepted | Superseded by ADR-NNNN
+- **Status:** Accepted
 - **Date:** YYYY-MM-DD
-- **Implementing phase:** Phase N (see docs/05-roadmap.md)
 
 ## Context
 
-What is the situation? What forces are at play? What constraints apply?
+The situation, the forces at play, the constraints.
 
 ## Decision
 
-What was decided. Stated as a list of normative-ish bullets, but understand
-these aren't SHALL-language contracts — they're a kept promise.
+What was decided.
 
 ## Alternatives considered
 
-What else was on the table and why it was rejected.
+What else was on the table, and why it lost.
 
 ## Consequences
 
-What does this commit us to? What does it foreclose? What does the
-implementing phase have to do to satisfy this ADR?
+What this commits the project to, and what it forecloses.
 ```

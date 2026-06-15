@@ -213,7 +213,7 @@ describe('Coordinator handlers for windows', () => {
 
 // =====================================================================
 // Saved-tab sidebar command handlers (lunma-bookmark-bindings,
-// typed-message-bus). Lunma-owned records (ADR 0005): no chrome.bookmarks.
+// typed-message-bus). Lunma-owned records (ADR 0001): no chrome.bookmarks.
 // =====================================================================
 
 interface SavedTabChromeStub {

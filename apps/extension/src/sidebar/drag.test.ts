@@ -1,4 +1,4 @@
-// Unit tests for the custom pointer-drag controller (ADR 0006). These exercise
+// Unit tests for the custom pointer-drag controller. These exercise
 // the controller mechanics directly — press threshold, zone hit-testing,
 // insertion-index from row mid-points, the one-shot justDragged flag, and the
 // DropResult handed to the drop callback — independent of any component.

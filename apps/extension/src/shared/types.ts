@@ -89,7 +89,7 @@ export interface SpaceInstance {
 export interface SavedTab {
   id: SavedTabId;
   /**
-   * Coupling axis (favicon-row-model, ADR 0010 D1). A non-null `SpaceId` couples
+   * Coupling axis (favicon-row-model). A non-null `SpaceId` couples
    * the record to that Space — it is a **pinned** tab, referenced by
    * `pinnedBySpace[spaceId]`, and its bound live tab joins that Space's Chrome
    * group. A `null` `spaceId` is the **decoupled / global** state: the record is
@@ -231,7 +231,7 @@ export interface SmartFolderRuntime {
 export type TabBoundary = { mode: 'off' } | { mode: 'locked'; allow: string[] };
 
 /**
- * A saved tab's per-window live bindings (per-window-tab-bindings, ADR 0009): one
+ * A saved tab's per-window live bindings (per-window-tab-bindings, ADR 0003): one
  * live Chrome tab id per window in which the saved tab is currently bound. A
  * window's **absence** from this record means the saved tab is dormant in that
  * window; an **empty** record means dormant everywhere. Repurposed from the old
@@ -293,7 +293,7 @@ export interface AppState {
     [windowId: WindowId]: { [spaceId: SpaceId]: SpaceInstance } | undefined;
   };
   /**
-   * Per-(saved tab, window) live bindings (per-window-tab-bindings, ADR 0009).
+   * Per-(saved tab, window) live bindings (per-window-tab-bindings, ADR 0003).
    * The inner record holds one live Chrome tab id for each window in which the
    * saved tab is currently bound; a window's absence means dormant in that
    * window, an empty inner record means dormant everywhere.
@@ -306,8 +306,8 @@ export interface AppState {
   trash: { [spaceId: SpaceId]: TrashedSpace };
   pinnedBySpace: { [spaceId: SpaceId]: PinNode[] };
   /**
-   * Flat, global placement for **favicon-row favorites** (favicon-row-model,
-   * ADR 0010 D2): the ordered list of `SavedTabId`s whose record carries
+   * Flat, global placement for **favicon-row favorites** (favicon-row-model):
+   * the ordered list of `SavedTabId`s whose record carries
    * `spaceId === null`. A sibling to `pinnedBySpace`, but **not keyed by Space**
    * and **not** a `PinNode[]` tree — favorites do not nest into folders in v1.
    * A record is referenced here XOR in some `pinnedBySpace[spaceId]`, never both.

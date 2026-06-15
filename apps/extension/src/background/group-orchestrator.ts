@@ -51,7 +51,7 @@ export class GroupOrchestrator {
       const tabId = slots[windowId];
       if (tabId === undefined) continue;
       const saved = s.savedTabs[savedTabId];
-      // A global favorite (`saved.spaceId === null`, favicon-row-model ADR 0010)
+      // A global favorite (`saved.spaceId === null`, favicon-row-model)
       // is INCIDENTALLY excluded here: `null !== <spaceId string>` is always
       // true, so a favorite is never a member of any Space's group set — exactly
       // the ungrouped/global behaviour we want, handled by exclusion (D8).
@@ -115,7 +115,7 @@ export class GroupOrchestrator {
   }
 
   /**
-   * Enforce the favorite ungroup invariant (favicon-row-model, ADR 0010 D3): a
+   * Enforce the favorite ungroup invariant (favicon-row-model D3): a
    * bound `spaceId === null` favorite's live tab is left **ungrouped** (global),
    * so it is never collapsed when other Spaces' groups hide and stays visible
    * across every Space switch. Idempotent and best-effort.

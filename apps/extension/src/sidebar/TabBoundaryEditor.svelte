@@ -16,7 +16,7 @@ interface Props {
   boundary: TabBoundary | undefined;
   /** The tab's home URL — seeds the page glob when switching to Locked. */
   originalURL: string;
-  /** The live global default, for the Inherit caption (pinned-tab-url-boundary). */
+  /** The live global default, for the Inherit caption. */
   globalDefault: PinnedTabBoundaryDefault;
 }
 

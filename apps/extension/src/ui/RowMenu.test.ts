@@ -1,6 +1,14 @@
 import { fireEvent, render } from '@testing-library/svelte';
 import { describe, expect, test, vi } from 'vitest';
+import ExtCloseHarness from './RowMenu.extclose.test.harness.svelte';
 import RowMenuHarness from './RowMenu.test.harness.svelte';
+
+/** Flush the drawer's grow gate (two rAFs in `handleOpened`) so `revealed` lands. */
+function flushReveal(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+}
 
 const TRIGGER = '[data-testid="row-menu-trigger"]';
 const ITEM = '[data-testid="row-menu-item"]';
@@ -56,6 +64,35 @@ describe('RowMenu', () => {
       key: 'Escape',
     });
     expect(trigger(container).getAttribute('aria-expanded')).toBe('false');
+  });
+
+  // Regression (smart-folder editor onDone): a host that dismisses the morph by
+  // flipping the bindable `open` to false directly — not via trigger/Esc/outside —
+  // must still tear the drawer down. Otherwise the absolutely-positioned drawer
+  // lingers `revealed` (empty but full editor height), an invisible overlay that
+  // swallows clicks on the rows below until the next remount ("can't click tabs
+  // after adding a smart folder").
+  test('a host-driven close (open→false) collapses the drawer instead of leaving it revealed', async () => {
+    const { container } = render(ExtCloseHarness);
+    const t = trigger(container);
+
+    await fireEvent.click(t); // open the morph
+    await flushReveal();
+    const drawer = container.querySelector('.drawer') as HTMLElement;
+    expect(drawer.classList.contains('revealed')).toBe(true);
+
+    await fireEvent.click(document.querySelector('[data-menu-id="edit"]') as HTMLButtonElement);
+    expect(document.querySelector('[data-testid="editor-panel"]')).not.toBeNull();
+
+    // Confirm dismisses the whole morph by setting `open = false` (the onDone path).
+    await fireEvent.click(
+      document.querySelector('[data-testid="editor-confirm"]') as HTMLButtonElement,
+    );
+
+    expect(t.getAttribute('aria-expanded')).toBe('false');
+    expect(document.querySelector('[data-testid="editor-panel"]')).toBeNull();
+    // The drawer must have collapsed — not stayed expanded as an invisible overlay.
+    expect(drawer.classList.contains('revealed')).toBe(false);
   });
 
   test('a disabled item renders muted + aria-disabled, stays inert, and keeps the drawer open', async () => {

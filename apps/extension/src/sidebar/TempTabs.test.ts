@@ -358,7 +358,7 @@ describe('TempTabs', () => {
   });
 });
 
-describe('TempTabs drag dispatch (ADR 0006 Layer 1)', () => {
+describe('TempTabs drag dispatch', () => {
   test('dragging a temp row into the Pinned zone dispatches pinTab at the drop index', async () => {
     const { container } = render(TempTabsHarness, { props: { store: makeStore(), windowId: 100 } });
     await Promise.resolve(); // let the zone-registration $effect run

@@ -17,7 +17,7 @@ export function boundaryHandlers(): Pick<HandlersMap, 'setTabBoundary'> {
       ctx.markDirty();
       // `saved` is the live store record, so it already reflects the new
       // boundary after the mutator ran. Push to EVERY window's bound tab
-      // (per-window-tab-bindings, ADR 0009).
+      // (per-window-tab-bindings, ADR 0003).
       const slots = ctx.store.state.tabBindings[savedTabId] ?? {};
       await Promise.all(
         Object.values(slots).map((tabId) => ctx.boundary.configureBoundary(tabId, saved)),

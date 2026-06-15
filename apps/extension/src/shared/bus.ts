@@ -39,7 +39,7 @@ export type SidebarCommand =
       kind: 'openSavedTab';
       payload: { savedTabId: SavedTabId; windowId: WindowId; replaceTabId?: TabId };
     }
-  // Per-window-tab-bindings (ADR 0009): focus/go-home act on THIS window's bound
+  // Per-window-tab-bindings (ADR 0003): focus/go-home act on THIS window's bound
   // tab, so both carry the activating `windowId`.
   | { kind: 'focusSavedTab'; payload: { savedTabId: SavedTabId; windowId: WindowId } }
   | { kind: 'goHome'; payload: { savedTabId: SavedTabId; windowId: WindowId } }
@@ -65,7 +65,7 @@ export type SidebarCommand =
     }
   | { kind: 'unpinTab'; payload: { savedTabId: SavedTabId; windowId: WindowId } }
   | { kind: 'reorderPinned'; payload: { spaceId: SpaceId; nodes: PinNode[] } }
-  // Favicon-row-model (ADR 0010): space-less twins of pin/unpin/reorder. Kept
+  // Favicon-row-model: space-less twins of pin/unpin/reorder. Kept
   // separate from pinTab/unpinTab rather than overloaded with a null mode, so
   // the null-`spaceId` guard stays explicit (design D7/D8).
   // Mint a global favorite from a live tab (non-destructive — the tab stays open).

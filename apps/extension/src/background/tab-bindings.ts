@@ -7,9 +7,9 @@ import { store } from './store-singleton';
 // The five former free functions (openSavedTab, focusSavedTab, goHome,
 // makeThisHome, deleteSavedTab) and the ConfirmFn type are deleted — they now
 // live as coordinator handlers behind `bus.send(...)`. Saved tabs are
-// Lunma-owned records (ADR 0005); recovery matches them to live tabs by URL.
+// Lunma-owned records (ADR 0001); recovery matches them to live tabs by URL.
 //
-// Per-window-tab-bindings (ADR 0009): bindings are per `(saved tab, window)`, so
+// Per-window-tab-bindings (ADR 0003): bindings are per `(saved tab, window)`, so
 // recovery runs PER WINDOW. One `chrome.tabs.query({})` is bucketed by window;
 // each stale window slot is rebound by URL among that window's live tabs only
 // (first-claim-wins per window), and cleared when nothing matches.

@@ -115,7 +115,7 @@ export const EventPolicy: Record<PendingEventKind, EventPolicyEntry> = {
   pinTab: {},
   unpinTab: {},
   reorderPinned: {},
-  // Favicon-row-model (ADR 0010): per-click distinct, like pin/unpin/reorder.
+  // Favicon-row-model: per-click distinct, like pin/unpin/reorder.
   favoriteTab: {},
   favoriteSavedTab: {},
   pinSavedTab: {},

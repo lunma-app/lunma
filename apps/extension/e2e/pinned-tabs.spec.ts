@@ -1,7 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 
-// ADR 0006 Layer-2 smoke: drive the real custom pointer-drag controller in a
+// Layer-2 smoke: drive the real custom pointer-drag controller in a
 // real Chromium with the built extension loaded. Covers the happy path —
 // pin a temporary tab by dragging it into the Pinned section (persists across
 // a sidebar reload), then reorder two pinned tabs.
