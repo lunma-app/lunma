@@ -552,8 +552,9 @@ only locally. CI (`.github/workflows/ci.yml`) runs the same `pnpm -r verify` gat
 whose `biome check` step is what fails on a layer-DAG or import-cycle violation (and
 on a planted cross-app import) — so `architecture-integrity` holds at the merge
 boundary, not just on the author's machine. A parallel `e2e` job runs the Playwright
-MV3 smoke under `xvfb-run`, and merge to `main` is gated on both the `verify` and
-`e2e` checks. See [ADR 0016](adr/0016-ci-on-github-actions.md) and the
+MV3 smoke under `xvfb-run`. (Enforcing these as a *merge gate* via branch
+protection is **deferred** — it needs a paid plan while the repo is private; see
+[ADR 0016](adr/0016-ci-on-github-actions.md) D5.) See also the
 `release-engineering` capability.
 
 ## Logging

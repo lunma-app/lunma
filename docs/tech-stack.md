@@ -163,8 +163,10 @@ then runs `pnpm -r verify`. A stale `pnpm-lock.yaml` fails the frozen install. A
 parallel `e2e` job runs the Playwright MV3 smoke under `xvfb-run` — the e2e fixture
 loads the unpacked extension via `--load-extension`, which Chromium permits only
 headed, so CI needs a virtual display. **devbox stays the local-dev story only**;
-CI needs the pinned Node + pnpm, not the local shell. Merges to `main` are gated on
-the `verify` + `e2e` checks. See [ADR 0016](adr/0016-ci-on-github-actions.md).
+CI needs the pinned Node + pnpm, not the local shell. CI runs `verify` + `e2e` on
+every PR and push to `main`; enforcing them as a *merge gate* (branch protection)
+needs a paid plan while the repo is private, so that gate is **deferred** — free
+once the repo goes public (see [ADR 0016](adr/0016-ci-on-github-actions.md) D5).
 
 ## Why this stack is a good fit for MV3 specifically
 

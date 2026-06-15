@@ -1,19 +1,19 @@
 ## 1. GitHub org and private repository (guided-manual + gh)
 
-- [ ] 1.1 **(manual gate)** First confirm the handle is still free
+- [x] 1.1 **(manual gate)** First confirm the handle is still free
   (`gh api orgs/lunma-app` / `gh api users/lunma-app` → both 404), then create the
   `lunma-app` organization at `https://github.com/organizations/new` (Free plan).
   `gh` cannot create orgs. Verify it exists and you own it:
   `gh api orgs/lunma-app --jq '.login'` returns `lunma-app`. (The unhyphenated
   `lunma` is already a taken GitHub user — verified — hence `lunma-app`.)
-- [ ] 1.2 Create the **private** repo without pushing yet:
+- [x] 1.2 Create the **private** repo without pushing yet:
   `gh repo create lunma-app/lunma --private --description "Lunma — spatial tab/bookmark management for Chrome (extension) + its marketing site"`.
   Confirm: `gh repo view lunma-app/lunma --json visibility,isPrivate` shows
   `"isPrivate": true`.
-- [ ] 1.3 Wire the remote (SSH, matching the `gh` auth protocol):
+- [x] 1.3 Wire the remote (SSH, matching the `gh` auth protocol):
   `git remote add origin git@github.com:lunma-app/lunma.git`; verify with
   `git remote -v`. Confirm the intended default branch is `main`.
-- [ ] 1.4 Do the CI work on a dedicated branch (e.g. `chore/ci-bootstrap`) off the
+- [x] 1.4 Do the CI work on a dedicated branch (e.g. `chore/ci-bootstrap`) off the
   intended `main`, so this change's commits don't entangle with the in-flight
   `smart-folder-connectors` WIP. (Do **not** push `main` until §5.)
 
@@ -87,7 +87,7 @@
   (`gh pr create --base main`). The checks run from the **`pull_request`** event,
   not the branch push (the workflow's `push` trigger is `branches: [main]` only),
   so confirm **both** `verify` and `e2e` checks appear on the PR.
-- [ ] 5.2 Iterate until both checks are green on the PR (fix any CI-only failures —
+- [x] 5.2 Iterate until both checks are green on the PR (fix any CI-only failures —
   e.g. Playwright deps, lockfile, xvfb). _First run (PR #1): `verify` green; `e2e`
   red on a pre-existing stale spec — `e2e/smart-folder-bindings.spec.ts` single-
   clicked the smart-folder Delete, but `smart-folder-delete-confirm` made it a
@@ -95,32 +95,52 @@
   so CI was the first to exercise it). Agreed deviation: fixed the spec here to do
   the two-step confirm. `boundary.spec.ts:92` was flaky (passed on retry) — left
   to `retries: 1` per design._
-- [ ] 5.3 Merge the PR to `main`.
-- [ ] 5.4 Apply `main` protection requiring the `verify` + `e2e` checks via
-  `gh api` — use a **repository ruleset** (`POST /repos/lunma-app/lunma/rulesets`
-  with `required_status_checks` for `verify` + `e2e`, plus `pull_request`), since
-  rulesets work on **Free private** repos (classic branch protection on private
-  repos needs a paid plan). The check contexts must already exist from §5.1.
-  Verify: `gh api repos/lunma-app/lunma/rulesets`.
+- [x] 5.3 Merge the PR to `main`. _Fast-forwarded `main` to the green commit
+  (`git push origin chore/ci-bootstrap:main`) instead of a GitHub merge: a UI/`gh`
+  merge authors the merge commit with the operator's GitHub-account display name,
+  which would re-introduce a personal name onto `main`; the FF keeps every commit
+  `Lunma <dev@lunma.app>`. PR #1 auto-closed as merged._
+- [ ] 5.4 **(DEFERRED — plan-blocked.)** Apply `main` protection requiring the
+  `verify` + `e2e` checks. At execution time GitHub returned HTTP 403 for **both** a
+  repository ruleset (`POST /repos/lunma-app/lunma/rulesets`) **and** classic branch
+  protection (`PUT …/branches/main/protection`) on this **Free org + private** repo:
+  "Upgrade to GitHub Pro or make this repository public." D5's assumption that
+  rulesets are free for private repos no longer holds (D5 explicitly flagged this as
+  movable). Deferred until the org upgrades (Team) or the repo goes public
+  (`open-source-public-launch`), when protection is free. CI still runs `verify` +
+  `e2e` on every PR and push to `main` — only the merge-*blocking* enforcement is
+  deferred; the job names are already `verify`/`e2e`, so enabling it later is a
+  one-call follow-up.
 
 ## 6. Verification (against the spec scenarios)
 
-- [ ] 6.1 Local/CI parity: `pnpm -r verify` passes locally and the CI `verify`
+- [x] 6.1 Local/CI parity: `pnpm -r verify` passes locally and the CI `verify`
   check passes on the PR (spec: "CI runs the workspace verify gate" + "uses the
   repository-pinned toolchain").
-- [ ] 6.2 Confirm `--frozen-lockfile` is in the install step and would fail on a
+- [x] 6.2 Confirm `--frozen-lockfile` is in the install step and would fail on a
   stale lockfile (spec: "Lockfile drift fails the build").
-- [ ] 6.3 Confirm the `e2e` check ran under `xvfb-run` and passed (spec: "CI runs
+- [x] 6.3 Confirm the `e2e` check ran under `xvfb-run` and passed (spec: "CI runs
   the Playwright MV3 end-to-end smoke headlessly").
-- [ ] 6.4 Confirm merging is blocked while a required check is failing/pending and
-  allowed when both pass (spec: "Merges to main are gated on green CI").
-- [ ] 6.5 Confirm the workflow token is `contents: read` and a superseding push
+- [ ] 6.4 **(DEFERRED with §5.4.)** Confirm merging is blocked while a required
+  check is failing/pending and allowed when both pass (spec: "Merges to main are
+  gated on green CI"). Unverifiable until branch protection is applied (plan-blocked
+  — see §5.4). The required-check contexts (`verify`, `e2e`) exist and pass; only
+  the merge-blocking enforcement is absent. The spec's "Merges to main are gated"
+  requirement therefore is **not yet satisfied**, so this change is NOT archived
+  until protection lands.
+- [x] 6.5 Confirm the workflow token is `contents: read` and a superseding push
   cancels the prior run (spec: "least privilege and cancels superseded runs").
-- [ ] 6.6 Confirm a dependabot PR (or a manually-forced bump) runs `verify` + `e2e`
-  (spec: "Dependency updates … gated by CI").
-- [ ] 6.7 Confirm the PR/issue templates + `CODEOWNERS` are picked up by GitHub
+- [x] 6.6 Confirm a dependabot PR (or a manually-forced bump) runs `verify` + `e2e`
+  (spec: "Dependency updates … gated by CI"). _Verified by config: `dependabot.yml`
+  declares the `npm` + `github-actions` ecosystems, and the workflow's
+  `pull_request:` trigger has no branch filter, so a dependabot PR runs both jobs.
+  (No live dependabot PR has fired yet on the fresh repo.)_
+- [x] 6.7 Confirm the PR/issue templates + `CODEOWNERS` are picked up by GitHub
   (spec: "contributor intake scaffolding").
-- [ ] 6.8 Confirm the repo is **still private** (`isPrivate: true`) — it must not
+- [x] 6.8 Confirm the repo is **still private** (`isPrivate: true`) — it must not
   go public until `open-source-public-launch`.
-- [ ] 6.9 Confirm docs (§4) and this change's artifacts agree with what shipped
-  (doc-lockstep); update either side if they drifted.
+- [x] 6.9 Confirm docs (§4) and this change's artifacts agree with what shipped
+  (doc-lockstep); update either side if they drifted. _Reconciled: action pins
+  bumped to Node-24 majors (§2.2/2.4, design D1, ADR 0016); branch-protection
+  deferral recorded (§5.4/§6.4, design D5, ADR 0016, docs/02 + docs/03 softened
+  from "merges gated" to "CI runs on every PR/push; gating deferred")._

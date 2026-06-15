@@ -145,6 +145,18 @@ with a `gh api` call documented in `tasks.md`, using a **repository ruleset**
   adds an external GitHub App + a config file for one branch's rules; overkill,
   and it wants broad repo permissions this private solo repo shouldn't grant.
 
+- **Execution-time outcome — DEFERRED (plan-blocked):** at apply time GitHub
+  returned HTTP 403 for **both** the ruleset *and* classic branch protection on the
+  Free + private repo ("Upgrade to GitHub Pro or make this repository public") —
+  rulesets are **no longer free for private repos**, contradicting the assumption
+  above (the hedge anticipated exactly this). So `main` protection is **deferred**
+  until the org upgrades (Team) or the repo goes public (`open-source-public-launch`),
+  when protection is free. CI still runs `verify` + `e2e` on every PR + push to
+  `main`; only the merge-*blocking* enforcement is deferred, and enabling it later is
+  a one-`gh api` call (job names already `verify`/`e2e`). The change is archived only
+  once protection lands — the spec's "Merges to main are gated" requirement is unmet
+  until then.
+
 ### D6 — Contributor scaffolding now, even without a public consumer yet
 
 Ship the PR template, issue templates (+ `config.yml` disabling blank issues),
