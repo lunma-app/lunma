@@ -72,6 +72,6 @@ sequence).
 - **Tests** — `pinned-tabs`/coordinator handler tests gain cross-Space cases
   (dormant open switches Space + groups visibly; bound focus switches Space;
   same-Space activation does **not** re-activate; a favorite never switches).
-- **Docs** — `docs/04-capabilities.md` #4 (`lunma-bookmark-bindings`) notes the
-  activation-time Space switch; #5 (`launcher`) cross-links it from the saved-result
-  action. No other docs (no layer-DAG, schema, or stack change).
+- **Docs** — the `openspec/specs/lunma-bookmark-bindings` spec notes the
+  activation-time Space switch; the `openspec/specs/launcher` spec cross-links it
+  from the saved-result action. No other docs (no layer-DAG, schema, or stack change).

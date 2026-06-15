@@ -95,7 +95,7 @@ A tab SHALL be excluded from auto-archive candidacy if ANY of these hold:
 
 - The tab is pinned in Chrome (`pinned === true`).
 - The tab is the active tab of any window at sweep time.
-- The tab id is a Lunma-bound live tab — it appears as a value in `state.tabBindings`. The bound-tab set SHALL be built as `new Set(Object.values(tabBindings).flatMap((binding) => Object.values(binding)))` (the per-window-tab-bindings map, ADR 0009 — superseding the pre-V9 flat `bookmarkBindings` the original ADR named).
+- The tab id is a Lunma-bound live tab — it appears as a value in `state.tabBindings`. The bound-tab set SHALL be built as `new Set(Object.values(tabBindings).flatMap((binding) => Object.values(binding)))` (the per-window-tab-bindings map, ADR 0003 — superseding the pre-V9 flat `bookmarkBindings` the original ADR named).
 - The tab's owning Space resolves to auto-archive **off** (see "Per-Space override resolution") — either the global toggle is off and the Space inherits, or the Space's override is `{ mode: 'off' }`.
 
 A tab with no `tabLastActivity` entry SHALL NOT be archived (it was just opened and carries no staleness signal). A remaining candidate SHALL be archived only when `(now - tabLastActivity[id]) >= effectiveThresholdMs` where `effectiveThresholdMs` is **its owning Space's** resolved threshold (not necessarily the global one). Only temporary tabs (those tracked in a Space instance's `tempTabIds`, never saved tabs) are eligible. Exclusion SHALL be checked via O(1) Set membership against pre-computed sets.
@@ -130,7 +130,7 @@ The candidate computation SHALL be a pure, separately-testable function `compute
 `state.archivedTabs` SHALL be bounded by BOTH an entry count and a TTL, enforced by `store.pruneArchivedTabs(now, ttlMs)` at the end of every sweep (even when the candidate set was empty):
 
 - **Entry count**: AT MOST `ARCHIVE_MAX_ENTRIES` (100) — FIXED. Beyond that, the oldest entries by `archivedAt` SHALL be discarded (FIFO).
-- **TTL**: entries older than `ttlMs` from `archivedAt` SHALL be discarded. `ttlMs` is the **user-tunable** retention window `autoArchiveRetentionDays × 24 × 60 × 60 × 1000` (default 7 days), computed by the sweep handler from settings and passed to `pruneArchivedTabs`; `store.pruneArchivedTabs` defaults `ttlMs` to `ARCHIVE_TTL_MS` (the store-level 30-day fallback) when omitted. (This supersedes ADR 0002's "fixed 30-day TTL, no adjustable retention" — see ADR 0011; the entry-count cap remains fixed.)
+- **TTL**: entries older than `ttlMs` from `archivedAt` SHALL be discarded. `ttlMs` is the **user-tunable** retention window `autoArchiveRetentionDays × 24 × 60 × 60 × 1000` (default 7 days), computed by the sweep handler from settings and passed to `pruneArchivedTabs`; `store.pruneArchivedTabs` defaults `ttlMs` to `ARCHIVE_TTL_MS` (the store-level 30-day fallback) when omitted. (This supersedes the original auto-archive design's "fixed 30-day TTL, no adjustable retention"; the entry-count cap remains fixed.)
 
 An entry SHALL be retained only if it is both within the 100 most recent AND younger than the configured retention window — whichever bound activates first wins.
 
@@ -153,7 +153,7 @@ An entry SHALL be retained only if it is both within the 100 most recent AND you
 
 ### Requirement: Archived record content
 
-Each entry the sweep appends SHALL be an `ArchivedTab` populated from the closed tab: `tabId` (its historical Chrome tab id), `url` (the tab's URL at archive time), `title` (its title at archive time), `spaceId` (the Space the temporary tab belonged to), and `archivedAt` (the sweep's `now` in epoch milliseconds). No additional fields SHALL be written — page snapshots, favicon URLs, scroll, and form state are out of scope ([docs/01-vision.md](docs/01-vision.md)).
+Each entry the sweep appends SHALL be an `ArchivedTab` populated from the closed tab: `tabId` (its historical Chrome tab id), `url` (the tab's URL at archive time), `title` (its title at archive time), `spaceId` (the Space the temporary tab belonged to), and `archivedAt` (the sweep's `now` in epoch milliseconds). No additional fields SHALL be written — page snapshots, favicon URLs, scroll, and form state are out of scope.
 
 #### Scenario: Archived entry carries url, title, spaceId, and archivedAt
 
@@ -166,7 +166,7 @@ The auto-archive capability SHALL own three settings persisted to `chrome.storag
 
 - `autoArchiveEnabled` — a `toggle` (boolean) declaration, default `true`.
 - `autoArchiveIdleMinutes` — a `number` declaration, default `720` (12 hours). A positive integer; the sweep handler SHALL treat values `< 1` as `1` (a one-minute floor); no upper bound. (The default is in minutes; 720 = 12h.)
-- `autoArchiveRetentionDays` — a `number` declaration, default `7`, `min: 1`. The retention TTL in days after which an archived tab is permanently deleted (the sweep converts it to `ttlMs` for `pruneArchivedTabs`); a positive integer floored at 1; no upper bound. (Supersedes ADR 0002's fixed-30-day retention.)
+- `autoArchiveRetentionDays` — a `number` declaration, default `7`, `min: 1`. The retention TTL in days after which an archived tab is permanently deleted (the sweep converts it to `ttlMs` for `pruneArchivedTabs`); a positive integer floored at 1; no upper bound. (Supersedes the original fixed-30-day retention.)
 
 These declarations SHALL be the authoritative source of these keys' names, types, and defaults. Any future change to a name, type, or default MUST land via a `specs/auto-archive/spec.md` delta. The `settings` capability provides the generic `toggle`/`number` rendering; it SHALL NOT redefine these keys.
 

@@ -1,7 +1,7 @@
 ## Context
 
 `ui/Tooltip.svelte` wraps bits-ui's headless `Tooltip` and is the only primitive
-built on bits-ui (`docs/02-tech-stack.md`: "Bits provides only behaviour"). Today
+built on bits-ui (`docs/tech-stack.md`: "Bits provides only behaviour"). Today
 it renders, **per instance**, a full `Provider → Root → Trigger → Portal →
 Content` tree, with `<Bits.Content forceMount>` plus a manual presence gate
 inside the content child snippet:
@@ -141,8 +141,8 @@ provider/root wrappers, no tooltip ARIA) is unchanged and remains covered.
 
 ### Decision: No `docs/` changes
 
-`docs/02-tech-stack.md` (bits-ui "provides only behaviour") and
-`docs/03-architecture.md` (primitive list, includes `Tooltip`) already describe
+`docs/tech-stack.md` (bits-ui "provides only behaviour") and
+`docs/architecture.md` (primitive list, includes `Tooltip`) already describe
 the primitive correctly; moving presence ownership fully to bits-ui reaffirms the
 tech-stack stance rather than altering it. No doc section is edited. (Recorded per
 the deviation policy: if implementation reveals a doc that describes the old

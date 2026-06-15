@@ -6,7 +6,7 @@ context: |
   Biome 2, Stylelint 17, Zod 4, @crxjs/vite-plugin, pnpm, devbox, Node 24.
   Surfaces: SW (background), sidebar (side panel), launcher overlay
   + new-tab page, options, onboarding. Stack pinned in
-  `docs/02-tech-stack.md` — do not introduce alternatives without
+  `docs/tech-stack.md` — do not introduce alternatives without
   proposing a change.
 
   The one-way import-layer DAG and the primitive→token CSS contract are
@@ -14,10 +14,10 @@ context: |
   overrides + `noImportCycles`, run by `biome check`) for the layer
   boundaries, and Stylelint (`pnpm lint:styles`) for `font-size`/`z-index`
   tokens in `src/ui` primitives. `pnpm verify` runs the full gate. See the
-  `architecture-integrity` capability and `docs/03-architecture.md`.
+  `architecture-integrity` capability and `docs/architecture.md`.
 
-  Source of truth for the target architecture: `docs/01-vision.md`
-  through `docs/06-migration.md`. These docs and OpenSpec artifacts
+  Source of truth for the target architecture: `docs/tech-stack.md`
+  and `docs/architecture.md`. These docs and OpenSpec artifacts
   must stay in lockstep — neither leads the other silently.
 
   Policy on user value (binding for Phase 2 onward; Phase 1 archives

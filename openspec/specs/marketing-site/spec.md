@@ -42,7 +42,7 @@ The page SHALL explicitly communicate the product's trust posture — local-only
 
 - **WHEN** the page (including the FAQ and the `FAQPage` structured data generated from the same entries) describes where data is stored or whether it syncs
 - **THEN** it SHALL state that Spaces, pinned tabs, favourites, and settings are stored locally (`chrome.storage.local`) and persist across restarts
-- **AND** it SHALL NOT claim that favourites or pinned tabs are Chrome bookmarks, nor that Lunma's data syncs across devices (the shipped model is local-only; saved tabs are Lunma-owned records, not bookmarks — see `lunma-bookmark-bindings` and ADR 0005)
+- **AND** it SHALL NOT claim that favourites or pinned tabs are Chrome bookmarks, nor that Lunma's data syncs across devices (the shipped model is local-only; saved tabs are Lunma-owned records, not bookmarks — see `lunma-bookmark-bindings` and ADR 0001)
 - **AND** any mention of browser bookmarks SHALL be limited to what is true: the launcher can search the user's existing browser bookmarks (read-only)
 
 ### Requirement: Composes the shared design language, not a copy

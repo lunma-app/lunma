@@ -19,7 +19,7 @@ For `source: 'chrome'`, the union SHALL cover exactly:
 
 The `tabGroups.onRemoved` payload SHALL carry the removed group's id (`{ groupId: number }`); the `tabGroups.onUpdated` payload SHALL carry the updated group descriptor (`{ group: chrome.tabGroups.TabGroup }`). These are the lifecycle-hint events Lunma observes so a user's manual ungroup/close or Chrome-side rename of a Lunma-tracked group reconciles (see the `spaces-and-tabs` "Chrome tab-group lifecycle reconciliation" requirement). Lunma SHALL register the corresponding `chrome.tabGroups.onRemoved` / `chrome.tabGroups.onUpdated` listeners in `apps/extension/src/background/index.ts`, deferring their enqueue until boot completes like the other chrome listeners.
 
-The `bookmarks.onCreated` and `bookmarks.onRemoved` kinds SHALL NOT exist — Lunma no longer observes the Chrome bookmark tree (Spaces and saved tabs are Lunma-owned; see ADR 0005). Their `EventPolicy` entries and coordinator handlers SHALL be removed.
+The `bookmarks.onCreated` and `bookmarks.onRemoved` kinds SHALL NOT exist — Lunma no longer observes the Chrome bookmark tree (Spaces and saved tabs are Lunma-owned; see ADR 0001). Their `EventPolicy` entries and coordinator handlers SHALL be removed.
 
 For `source: 'sidebar'`, the union SHALL cover the kinds enumerated by the `typed-message-bus` capability spec. Variants with `source: 'sidebar'` SHALL additionally carry a `correlationId: string` field (the sessionId-prefixed wire id allocated by the bus client); chrome variants SHALL NOT.
 

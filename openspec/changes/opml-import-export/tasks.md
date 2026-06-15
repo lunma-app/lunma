@@ -19,7 +19,7 @@
 
 ## 4. Docs (lockstep)
 
-- [x] 4.1 `docs/04-capabilities.md`: add the new `opml-import-export` capability entry; update #12 smart-folders to note the `importOpml` bus command.
+- [x] 4.1 `openspec/specs/`: add the new `opml-import-export` capability entry; update the smart-folders spec to note the `importOpml` bus command.
 
 ## 5. Quality gates
 

@@ -292,7 +292,7 @@ interface ArchivedTab {
 }
 ```
 
-No additional fields SHALL be added in v1. Page snapshots, favicon URLs, scroll positions, and form state are explicitly out of scope (per [docs/01-vision.md](../../../docs/01-vision.md)).
+No additional fields SHALL be added in v1. Page snapshots, favicon URLs, scroll positions, and form state are explicitly out of scope.
 
 A fresh `LunmaStore` constructed with no persisted state SHALL initialize `state.archivedTabs` to `[]`.
 

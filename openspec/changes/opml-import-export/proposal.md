@@ -62,14 +62,13 @@ archives (prerequisite).
   `importOpml` handler (loops `createSmartFolder` logic).
 - `apps/extension/src/options/Options.svelte` — mount the new
   `FeedSubscriptions` card in the Options layout.
-- `docs/04-capabilities.md` — update #12 smart-folders (new `importOpml`
+- `openspec/specs/` — update the smart-folders spec (new `importOpml`
   command) and document the new `opml-import-export` capability.
 
 **Untouched**
-- `docs/01-vision.md`, `docs/02-tech-stack.md` (no new dependency — `saxes`
-  already promoted in `rss-connector`), `docs/03-architecture.md` (import DAG
-  unchanged — `shared/opml.ts` sits in the `shared/` layer),
-  `docs/05-*`, `docs/06-migration.md`.
+- `docs/tech-stack.md` (no new dependency — `saxes` already promoted in
+  `rss-connector`), `docs/architecture.md` (import DAG unchanged —
+  `shared/opml.ts` sits in the `shared/` layer).
 
 **Primitives composed (no new primitives)**
 - `Button` (primary + ghost variants), `Surface` (glass card), `Toast`,

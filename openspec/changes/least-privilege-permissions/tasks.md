@@ -42,8 +42,8 @@
 
 ## 7. Docs (lockstep — required before archive)
 
-- [x] 7.1 Update `docs/03-architecture.md` with the permission/grant model: required vs optional permissions, the "SW queries/observes, surfaces request" split, and the load-bearing-content-script constraint (broad-host review is not escaped).
-- [x] 7.2 Update `docs/04-capabilities.md` to add the `runtime-permissions` capability and note the smart-folders (`needs-access`) and launcher (graceful degradation) changes.
+- [x] 7.1 Update `docs/architecture.md` with the permission/grant model: required vs optional permissions, the "SW queries/observes, surfaces request" split, and the load-bearing-content-script constraint (broad-host review is not escaped).
+- [x] 7.2 Update `openspec/specs/` to add the `runtime-permissions` capability and note the smart-folders (`needs-access`) and launcher (graceful degradation) changes.
 
 ## 8. Quality gate
 

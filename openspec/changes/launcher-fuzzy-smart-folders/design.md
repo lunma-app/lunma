@@ -22,7 +22,7 @@ are imported by `background/` and `launcher/shared/`, **never** by `overlay.ts`
 `web-actions`), so a fuzzy library never enters the `<15KB` content-script bundle
 the verify-time budget guard polices; (2) "keeps the stack pinned" still binds —
 adding uFuzzy is an explicit pinned-stack amendment, recorded here and in
-`docs/02-tech-stack.md`.
+`docs/tech-stack.md`.
 
 Smart-folder items already live in `store.state.smartFolders` (the ephemeral,
 broadcast-only runtime slice the SW owns), keyed by `FolderId`, each item
@@ -204,11 +204,11 @@ internal to `launcher/shared`).
 
 ### D8 — Pinned-stack amendment recorded in docs
 
-`docs/02-tech-stack.md` gains: an At-a-glance row (*Fuzzy search → uFuzzy
+`docs/tech-stack.md` gains: an At-a-glance row (*Fuzzy search → uFuzzy
 (`@leeoniya/ufuzzy`)*), a "Non-obvious choices" subsection (why uFuzzy, and the
 key constraint — **SW-side only, never in the overlay bundle**, so the byte
 budget and the no-Svelte/no-fuzzy overlay guard are untouched), and a pinned
-version row. `docs/04-capabilities.md` §5 is updated: the provider list (now
+version row. The `openspec/specs/launcher` spec is updated: the provider list (now
 five), the scoring model (uFuzzy fuzzy/typo-tolerant, folder-name field), and the
 de-dup precedence string. No other docs change (no layer-DAG or schema impact).
 
@@ -340,7 +340,7 @@ open tabs and history.
 - **Cold start: smart rows missing until the first poll** → Accepted (matches the
   sidebar folder's own behaviour); empty contributes nothing, no error.
 - **Pinned-stack precedent: "we added one fuzzy lib, why not more deps?"** →
-  Mitigation: the amendment is scoped and justified in `docs/02-tech-stack.md`
+  Mitigation: the amendment is scoped and justified in `docs/tech-stack.md`
   (SW-side only, measured, overlay guard still green); the "What to avoid" list
   and the overlay budget guard remain the gate for anything page-bound.
 

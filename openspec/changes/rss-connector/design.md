@@ -58,7 +58,7 @@ was rejected: feed XML in the wild (CDATA, entities, namespaces, mixed RSS/Atom)
 is exactly where regex parsers rot. **Alternatives:** `fast-xml-parser` (heavier,
 builds a whole tree we'd then walk); `htmlparser2` (also in-tree, but HTML-lenient
 semantics we don't want for XML); hand-rolled (brittle). `saxes` is a tech-stack
-addition → `docs/02-tech-stack.md` dependency row (an ADR is optional; the row +
+addition → `docs/tech-stack.md` dependency row (an ADR is optional; the row +
 this decision log suffice).
 
 ### D2 — RSS is feed-shaped: `query` becomes source-optional, `baseUrl` holds the feed URL
@@ -275,5 +275,5 @@ precedent).
   shape), confirm the exact URLs during apply.
 - **Response byte cap value** (e.g. 2–5 MB) — pick a concrete bound in
   implementation.
-- **`saxes` ADR** — a dependency row in `docs/02-tech-stack.md` is planned; decide
+- **`saxes` ADR** — a dependency row in `docs/tech-stack.md` is planned; decide
   at apply whether it also warrants a short ADR (the lucide/drag precedent).

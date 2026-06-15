@@ -63,7 +63,7 @@ a day.
   Because the launcher scorer runs only in the service worker (both surfaces are
   thin clients that render returned results), uFuzzy never enters the overlay's
   `<15KB` content-script bundle — the prior "no fuzzy dependency / small overlay"
-  rationale does not apply here. `docs/02-tech-stack.md` is amended in this same
+  rationale does not apply here. `docs/tech-stack.md` is amended in this same
   change to record the dependency and its rationale.
 
 ## Capabilities
@@ -133,13 +133,12 @@ modified either.
 - **Dependency** — adds `@leeoniya/ufuzzy` (service-worker / background bundle
   only; absent from the overlay content-script bundle, which the verify-time
   budget guard continues to enforce).
-- **Docs updated in this change** — `docs/02-tech-stack.md` (uFuzzy stack
-  amendment), `docs/04-capabilities.md` §5 (the launcher provider list, scoring
-  model, de-dup precedence, and the current-Space scope) and §7 (the
+- **Docs updated in this change** — `docs/tech-stack.md` (uFuzzy stack
+  amendment), the `openspec/specs/launcher` spec (the launcher provider list, scoring
+  model, de-dup precedence, the current-Space scope, and the
   `launcherScope` setting in the `Search` group). **Untouched:**
-  `docs/03-architecture.md` (no layer-DAG change), `docs/01-vision.md`,
-  `05-roadmap.md`, `06-migration.md`, and the
-  `smart-folders`/`storage-and-migrations` capability docs (no schema or
+  `docs/architecture.md` (no layer-DAG change) and the
+  `smart-folders`/`storage-and-migrations` capability specs (no schema or
   persistence change — the consumed `smartFolders` slice is ephemeral, and the
   `launcherScope` setting degrades to its default via the per-field `.catch`, so
   no settings migration).

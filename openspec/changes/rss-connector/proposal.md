@@ -6,8 +6,8 @@ a **Reading Space** of feed folders — Hacker News, a blog, a YouTube channel �
 pinned exactly where you work, each showing the latest posts with an unread mark
 that clears as you read. It is the purest expression of Lunma's no-server stance:
 public feeds, fetched directly on-device, **nothing to authenticate and nothing
-that leaves the machine**. This realises the `the distribution notes` connector
-roadmap's "RSS / reading" bet, and the read-state + per-folder max-items +
+that leaves the machine**. This realises the connector roadmap's "RSS /
+reading" bet, and the read-state + per-folder max-items +
 open-all machinery it lands is reused by the **named downstream change
 `readlater-connector`** (Readwise/Instapaper/Pocket — planned, not in this
 change).
@@ -86,7 +86,7 @@ reading folder feel alive and resolvable instead of an eternal list of twenty.
   present transitively; promoted to a direct dependency). The MV3 service worker
   has **no `DOMParser`**, so feed XML cannot be parsed with the platform; a spike
   confirmed `saxes` parses RSS 2.0 + Atom + CDATA + missing-guid fallback in one
-  pass. `docs/02-tech-stack.md` gains a dependency row for it.
+  pass. `docs/tech-stack.md` gains a dependency row for it.
 
 **New public types / fields / methods**
 - `SmartSource` widens to `'gitlab' | 'github' | 'jira' | 'rss'`.
@@ -114,12 +114,10 @@ reading folder feel alive and resolvable instead of an eternal list of twenty.
   primitive is added.**
 
 **Docs updated (lockstep, in this change)**
-- `docs/04-capabilities.md` (#12 smart-folders scope; #3 storage-and-migrations).
-- `docs/02-tech-stack.md` (the `saxes` dependency row).
-- `the distribution notes` (connector decision log — RSS ships).
-- **Untouched:** `docs/01-vision.md`, `docs/03-architecture.md` (the import DAG is
-  unchanged — `background/connectors/rss.ts` sits in the same layer as its peers),
-  `docs/05-*`, `docs/06-migration.md`.
+- `openspec/specs/smart-folders` and `openspec/specs/storage-and-migrations`.
+- `docs/tech-stack.md` (the `saxes` dependency row).
+- **Untouched:** `docs/architecture.md` (the import DAG is unchanged —
+  `background/connectors/rss.ts` sits in the same layer as its peers).
 
 **Engine / coordinator**
 - The source-agnostic engine (`smart-folders.ts` scheduling, in-flight guard,

@@ -3,7 +3,7 @@
 ## 1. Dependency + stack amendment
 
 - [x] 1.1 Add `@leeoniya/ufuzzy` to `apps/extension/package.json` (runtime dep); `pnpm install`, commit the lockfile change.
-- [x] 1.2 Amend `docs/02-tech-stack.md`: At-a-glance row (Fuzzy search → uFuzzy), a "Non-obvious choices" subsection (why uFuzzy; **SW-side only, never in the overlay bundle** so the byte budget + no-Svelte/no-fuzzy overlay guard stay green), and a pinned version row.
+- [x] 1.2 Amend `docs/tech-stack.md`: At-a-glance row (Fuzzy search → uFuzzy), a "Non-obvious choices" subsection (why uFuzzy; **SW-side only, never in the overlay bundle** so the byte budget + no-Svelte/no-fuzzy overlay guard stay green), and a pinned version row.
 
 ## 2. Contract — the `smart` source + `folderName`
 
@@ -42,7 +42,7 @@
 
 - [x] 8.1 Update `scoring.test.ts` / `search-engine.test.ts` / `providers/providers.test.ts` for `scoreCandidates`, the `smart` source, the new precedence, fuzzy/typo, and folder-name matching (cover every new spec scenario).
 - [x] 8.2 Confirm the overlay budget guard (`launcher/overlay.budget.test.ts`) still passes — no `node_modules/svelte/` import and gzipped size < 15KB, with uFuzzy absent from the overlay graph (assertion added).
-- [x] 8.3 Update `docs/04-capabilities.md` §5: five providers (add smart-folder items), the fuzzy/typo + folder-name scoring model, the `tab > saved > smart > bookmark > history` precedence, and the current-Space scope; §7 for the `launcherScope` setting.
+- [x] 8.3 Update the `openspec/specs/launcher` spec: five providers (add smart-folder items), the fuzzy/typo + folder-name scoring model, the `tab > saved > smart > bookmark > history` precedence, the current-Space scope, and the `launcherScope` setting.
 
 ## 9. Verify
 
@@ -57,7 +57,7 @@
 - [x] 10.4 `scoring.ts`: add `activeSpaceId?` param + a bounded `SPACE_BOOST` for in-Space results; `search-engine.ts` `runSearch` forwards it; unit-tested (in-Space outscores cross-Space peer; never boosts a non-match or a global row).
 - [x] 10.5 `settings.ts`: add `LauncherScope` type + `launcherScope` enum declaration (`Search` group, default `prefer-current-space`); fix dependent `Settings` fixtures + the Options radio-count test.
 - [x] 10.6 Handler: read `launcherScope` + `activeSpaceByWindow[windowId]`; filter Lunma sources for `current-space-only`, forward the active Space for `prefer-current-space`; handler-tested across all three modes (incl. favorites kept in strict mode).
-- [x] 10.7 Artifacts updated in-change: proposal (What Changes / Capabilities / Impact), design (D5/D6/D9), spec (`spaceId` field + the *Launcher Space scope* requirement + scenarios), and `docs/04-capabilities.md` §5/§7.
+- [x] 10.7 Artifacts updated in-change: proposal (What Changes / Capabilities / Impact), design (D5/D6/D9), spec (`spaceId` field + the *Launcher Space scope* requirement + scenarios), and the `openspec/specs/launcher` spec.
 
 ## 11. Cross-Space marker (added during apply, user-directed — design D10)
 
@@ -66,4 +66,4 @@
 - [x] 11.3 `ui/ResultRow.svelte` + `ui/ResultList.svelte`: render a `.meta` cluster (`.space-chip` colour-dot + name, then the source badge); forward `spaceName`/`spaceColor`. Dot `background` is the only data-driven inline style.
 - [x] 11.4 Overlay: mirror the `.meta`/`.space-chip` in `overlay.ts` + `overlay.css` (stateless — paints `result.spaceColor` directly, no palette import). Budget guard still green (no svelte/uFuzzy, < 15KB).
 - [x] 11.5 Tests: handler (cross-Space carries `spaceName`+`spaceColor`, in-Space doesn't), `ResultRow` (chip renders only with `spaceName`, dot paints the colour).
-- [x] 11.6 Artifacts/docs updated: proposal (What Changes / Impact), design (D10 + the Visual language section revised — the one new colour is the Space dot, AA held), spec (`spaceName`/`spaceColor` field + marker clause + scenario), `docs/04-capabilities.md` §5.
+- [x] 11.6 Artifacts/docs updated: proposal (What Changes / Impact), design (D10 + the Visual language section revised — the one new colour is the Space dot, AA held), spec (`spaceName`/`spaceColor` field + marker clause + scenario), the `openspec/specs/launcher` spec.

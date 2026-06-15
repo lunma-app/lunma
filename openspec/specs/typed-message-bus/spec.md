@@ -17,7 +17,7 @@ The `SidebarCommand` discriminated union SHALL be exported from the same module.
 
 Each `SidebarCommand` variant SHALL carry only plain-data fields — no functions, no Chrome objects, no Promises. Confirmation flows that previously took a callback (e.g. `deleteBookmark`) SHALL be resolved on the sidebar side before `bus.send` is called.
 
-The `SidebarCommand['createSpace']` payload SHALL have the shape `{ name: string; color: SpaceColor; icon: IconName; windowId: WindowId }`. The `IconName` type is the lucide-icon string-literal union exported from `apps/extension/src/shared/icon-names.ts`. The SW handler mints a Lunma-owned Space record (`store.createSpace`) with the user-supplied colour and icon, and auto-activates it in the supplied window — all within a single coordinator drain cycle. No Chrome bookmark folder is created; Spaces are Lunma-owned records per ADR 0005.
+The `SidebarCommand['createSpace']` payload SHALL have the shape `{ name: string; color: SpaceColor; icon: IconName; windowId: WindowId }`. The `IconName` type is the lucide-icon string-literal union exported from `apps/extension/src/shared/icon-names.ts`. The SW handler mints a Lunma-owned Space record (`store.createSpace`) with the user-supplied colour and icon, and auto-activates it in the supplied window — all within a single coordinator drain cycle. No Chrome bookmark folder is created; Spaces are Lunma-owned records per ADR 0001.
 
 The `SidebarCommand['recolourSpace']` payload SHALL have the shape `{ spaceId: SpaceId; color: SpaceColor }`. The SW handler SHALL call `store.recolourSpace(spaceId, color)`. The handler SHALL throw a descriptive Error when `spaceId` is not present in `state.spaces`.
 
@@ -328,7 +328,7 @@ The `SidebarCommand` union SHALL include an `unpinTab` kind with payload `{ save
 
 ### Requirement: reorderPinned command
 
-The `SidebarCommand` union SHALL include a `reorderPinned` kind with payload `{ spaceId: SpaceId; nodes: PinNode[] }` carrying the full post-drop pinned tree (all three node kinds — `tab`, `folder`, `smart` — round-trip losslessly). The SW handler SHALL call `store.setPinned(spaceId, nodes)`. The sidebar SHALL NOT mutate its local order optimistically; the custom pointer-drag controller leaves the rendered list untouched during a drag, and the resulting broadcast is authoritative (ADR 0006, supersedes ADR 0003). The handler SHALL throw a descriptive Error if `spaceId` is absent from `state.spaces`.
+The `SidebarCommand` union SHALL include a `reorderPinned` kind with payload `{ spaceId: SpaceId; nodes: PinNode[] }` carrying the full post-drop pinned tree (all three node kinds — `tab`, `folder`, `smart` — round-trip losslessly). The SW handler SHALL call `store.setPinned(spaceId, nodes)`. The sidebar SHALL NOT mutate its local order optimistically; the custom pointer-drag controller leaves the rendered list untouched during a drag, and the resulting broadcast is authoritative (supersedes the earlier dnd-library drag model). The handler SHALL throw a descriptive Error if `spaceId` is absent from `state.spaces`.
 
 #### Scenario: Sidebar dispatches reorderPinned with the post-drop tree
 
@@ -338,7 +338,7 @@ The `SidebarCommand` union SHALL include a `reorderPinned` kind with payload `{ 
 
 ### Requirement: reorderTemp command
 
-The `SidebarCommand` union SHALL include a `reorderTemp` kind with payload `{ windowId: WindowId; tabIds: TabId[] }` carrying the full post-drop tab-id order of a window's Temporary list. The SW handler SHALL call `store.reorderTemp(windowId, tabIds)`, which reorders `spaceInstancesByWindow[windowId].tempTabIds` to match (ignoring ids no longer present and appending any present id the payload omitted). The sidebar SHALL NOT mutate its local order optimistically; the resulting broadcast is authoritative (ADR 0006). The command carries only plain data.
+The `SidebarCommand` union SHALL include a `reorderTemp` kind with payload `{ windowId: WindowId; tabIds: TabId[] }` carrying the full post-drop tab-id order of a window's Temporary list. The SW handler SHALL call `store.reorderTemp(windowId, tabIds)`, which reorders `spaceInstancesByWindow[windowId].tempTabIds` to match (ignoring ids no longer present and appending any present id the payload omitted). The sidebar SHALL NOT mutate its local order optimistically; the resulting broadcast is authoritative. The command carries only plain data.
 
 #### Scenario: Sidebar dispatches reorderTemp with the post-drop order
 

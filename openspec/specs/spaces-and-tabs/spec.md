@@ -861,7 +861,7 @@ Clicking a row SHALL dispatch `bus.send({ kind: 'focusTab', payload: { tabId } }
 
 The sidebar's Temporary list SHALL render an active Space's temporary tabs in the order of `spaceInstancesByWindow[windowId].tempTabIds` (the array order). The user SHALL be able to reorder temporary tabs by dragging; a completed reorder SHALL dispatch a `reorderTemp` command carrying the full post-drop tab-id order, and the resulting authoritative state broadcast SHALL define the rendered order (no optimistic update is layered on top). Reordering SHALL be expressed by reordering the `tempTabIds` array; no separate order field SHALL be persisted, and no `chrome.tabs.onMoved` listener SHALL be required for this ordering.
 
-> Supersedes the prior most-recent-first ordering (archived `sidebar-temp-tabs`, which ordered by `tabLastActivity` via a pure `orderTempTabs` helper). The sidebar redesign moved the Temporary list to a directly drag-reorderable model alongside the Pinned list (ADR 0006); `orderTempTabs` is removed. A future `tab-sort-options` change MAY reintroduce alternate sort modes layered over the array order.
+> Supersedes the prior most-recent-first ordering (archived `sidebar-temp-tabs`, which ordered by `tabLastActivity` via a pure `orderTempTabs` helper). The sidebar redesign moved the Temporary list to a directly drag-reorderable model alongside the Pinned list; `orderTempTabs` is removed. A future `tab-sort-options` change MAY reintroduce alternate sort modes layered over the array order.
 
 #### Scenario: Temp tabs render in tempTabIds array order
 
@@ -1889,7 +1889,7 @@ scrolling horizontally. (An earlier single-row strip of bare floating icons was
 superseded on user feedback; see the `sidebar-favicon-row` design + tasks.)
 
 The grid SHALL **re-hue with the active (centred) Space** rather than staying a
-neutral island (ADR 0010 D6): it inherits the sidebar's scoped per-Space colour tokens
+neutral island: it inherits the sidebar's scoped per-Space colour tokens
 (`--space-h` and the `--space-c` family; see Requirement: Per-Space colour identity on
 the sidebar) and SHALL carry visible Space-derived colour at every immersive tint
 level (`subtle | standard | vivid`). The re-hue SHALL ride the active-Space colour

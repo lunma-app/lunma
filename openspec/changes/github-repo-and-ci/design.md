@@ -40,7 +40,7 @@ section, no `src/ui/` primitive work) — noted here by explicit exemption.
   merge to `main`.
 - Reproducibility: the manual/account steps (org, repo, branch protection) are
   captured as exact `gh`/`git` commands in `tasks.md`, not tribal knowledge.
-- Doc-lockstep: `docs/02`, `docs/03`, and a new ADR record the CI choices.
+- Doc-lockstep: `docs/tech-stack.md` and `docs/architecture.md` record the CI choices.
 
 **Non-Goals:**
 
@@ -51,7 +51,7 @@ section, no `src/ui/` primitive work) — noted here by explicit exemption.
 - Open-sourcing: CLA/DCO enforcement, history squash, archive exclusion, public
   flip (→ `open-source-public-launch`).
 - CI build caching beyond the pnpm store (Turborepo task-graph caching is
-  explicitly deferred per ADR 0012 / `docs/02`).
+  explicitly deferred per the workspace ADR / `docs/tech-stack.md`).
 - Multi-OS or multi-Node matrices — Linux + Node 24 only.
 
 ## Decisions
@@ -68,7 +68,7 @@ store keyed on `pnpm-lock.yaml`.
   a Nix bootstrap + cold-cache latency for zero gain here — devbox's value is
   reproducing the *local* shell, and CI doesn't need the local shell, only the
   pinned Node + pnpm, which setup-node + corepack give directly. devbox stays the
-  local-dev story (`docs/02`).
+  local-dev story (`docs/tech-stack.md`).
 - **A separate `pnpm/action-setup` with a hardcoded version — rejected:** it
   would duplicate the pnpm version outside `packageManager` and invite drift; the
   drift-prevention requirement in the spec is the whole point.
@@ -95,7 +95,7 @@ package.
   the two packages' gates are quick, and a matrix adds fan-out/caching complexity
   for marginal wall-clock benefit at this repo size. Keep it simple; revisit if
   CI gets slow. Turborepo-style task-graph caching is the documented escape hatch
-  and is deferred (ADR 0012).
+  and is deferred (the workspace ADR).
 - **Matrix per package — rejected (for now):** premature at two packages; the
   decision is reversible without changing the spec (the spec requires the gate to
   run, not how it is sharded).
@@ -223,5 +223,5 @@ repo settings) and remove the branch-protection ruleset; no code is affected.
 
 - **None blocking.** Whether to later shard `verify` into a matrix (D3) or switch
   e2e to `--headless=new` (D4) are explicitly deferred and reversible without spec
-  changes. The new ADR is `docs/adr/0016-ci-on-github-actions.md` (`0016` is the
-  next free number; 0001–0015 exist).
+  changes. The CI tooling decisions are recorded in this `design.md` rather than a
+  standalone ADR.

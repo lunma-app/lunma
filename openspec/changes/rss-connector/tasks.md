@@ -42,9 +42,9 @@
 
 ## 7. Docs (lockstep — same change)
 
-- [x] 7.1 `docs/04-capabilities.md`: update #12 smart-folders (the `rss` source, read-state, `maxItems`, open-all, source-adaptive editor) and #3 storage-and-migrations (V6, the persisted `smartReadState` slice; fixed the data-backup `AppStateV6Schema` reference).
-- [x] 7.2 `docs/02-tech-stack.md`: add the `saxes` dependency row (DOM-free SAX XML parser for feed parsing in the SW; note the no-`DOMParser` constraint) to both the at-a-glance + pinned-versions tables. Decision: **no separate ADR** — the dependency row + the design D1 decision log suffice (the design explicitly allows this; the lucide/drag precedent had ADRs but the row is sufficient here).
-- [x] 7.3 `the distribution notes`: add a decision-log entry — RSS ships as the fourth smart-folder source (the first feed/reading connector; `readlater-connector` named as the next, reusing this machinery; OPML/autodiscovery/multi-feed noted as RSS follow-ups).
+- [x] 7.1 `openspec/specs/smart-folders` and `openspec/specs/storage-and-migrations`: update smart-folders (the `rss` source, read-state, `maxItems`, open-all, source-adaptive editor) and storage-and-migrations (V6, the persisted `smartReadState` slice; fixed the data-backup `AppStateV6Schema` reference).
+- [x] 7.2 `docs/tech-stack.md`: add the `saxes` dependency row (DOM-free SAX XML parser for feed parsing in the SW; note the no-`DOMParser` constraint) to both the at-a-glance + pinned-versions tables. Decision: **no separate ADR** — the dependency row + the design D1 decision log suffice (the design explicitly allows this; the lucide/drag precedent had ADRs but the row is sufficient here).
+- [x] 7.3 `openspec/specs/smart-folders`: record that RSS ships as the fourth smart-folder source (the first feed/reading connector; `readlater-connector` named as the next, reusing this machinery; OPML/autodiscovery/multi-feed noted as RSS follow-ups).
 
 ## 8. Quality gates
 
@@ -64,6 +64,6 @@ lockstep), reusing the shipped read-state / collapse / footer machinery.
 - [x] 9.2 The read TRIGGER moved from "open" to "consumed": `openSmartItem` no longer marks read; the store marks a feed item read when its bound tab **deactivates** (swept in `setActiveTab`, per-window) or **closes** (`onTabRemoved`). So an opened entry stays put until you move on, then drains + backfills.
 - [x] 9.3 The feed resting state is **drained** (`hideRead` defaults `true`); the footer is a "Show recently read" peek. Schema default + create-handler flipped to `true`; pruning contract widened to the `FEED_BUFFER` window.
 - [x] 9.4 Tests updated/added: connector keeps-whole-feed; SmartFolder draining-queue (budget window, backfill-on-read, drained default, badge `N+`/caught-up); coordinator open-keeps-unread / navigate-away-drains / close-drains; migration `hideRead` default `true`.
-- [x] 9.5 Docs + artifacts (this `proposal`/`design`/`specs`, `docs/04-capabilities.md` #12) brought into lockstep with the draining model + new read trigger.
+- [x] 9.5 Docs + artifacts (this `proposal`/`design`/`specs`, `openspec/specs/smart-folders`) brought into lockstep with the draining model + new read trigger.
 - [x] 9.6 Empty-state parity (user feedback): a settled-but-empty smart folder shows a quiet note (parity with a normal folder's "Empty — drag tabs here") instead of a blank list — "Nothing here right now." (queue), "No entries yet." (empty feed), "You're all caught up." (caught-up feed); yields to the ghost/sign-in/error states. Covered in `SmartFolder.test.ts`.
 - [x] 9.7 Consume = close the tab (user feedback): when a feed entry is consumed by navigating away (deactivate), its now-inactive bound tab is closed (`chrome.tabs.remove`) so the reading queue leaves no tab trail. `markConsumedFeedItems` returns the newly-consumed inactive bound tabs; the `setActiveTab` callers (`tabs.onActivated`, the `openSmartItem` seed, pinned-tab activation) close them. The active entry is never closed; an already-read item is never re-closed; the close-trigger path is already a close. Covered in `coordinator.smart-folders.test.ts`.

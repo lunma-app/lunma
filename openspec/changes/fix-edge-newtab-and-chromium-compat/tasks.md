@@ -23,7 +23,7 @@
 
 ## 5. Docs reconciliation
 
-- [ ] 5.1 `docs/01-vision.md` (the line stating "Chrome MV3 only"): update to Chrome + Edge (Chromium), consistent with `the distribution notes` and the shipped site/manifest positioning.
+- [ ] 5.1 Confirm no `docs/` file needs editing: the Chrome + Edge (Chromium) positioning already lives in the shipped site/manifest positioning and the launch checklist.
 
 ## 6. Verify
 

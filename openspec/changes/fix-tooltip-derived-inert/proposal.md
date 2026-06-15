@@ -18,7 +18,7 @@ The user-visible value: the tooltip's positioned layer is guaranteed to tear dow
 asynchronous row churn, and the `derived_inert` console noise (which buries real
 errors during development) is removed. It also realigns the primitive with the
 documented stance that bits-ui "provides only behaviour"
-(`docs/02-tech-stack.md`). The observable tooltip behaviour (shows on hover,
+(`docs/tech-stack.md`). The observable tooltip behaviour (shows on hover,
 transform-only instant-feel entrance, reduced-motion suppression, ARIA) is
 preserved unchanged, so no caller is affected.
 
@@ -71,8 +71,8 @@ _None._
   new primitive and adds none. Callers continue to compose `Tooltip` unchanged.
 - **New public types/files/methods:** none. The `Tooltip` `Props` interface and
   exports are unchanged.
-- **`docs/`:** no doc content changes. `docs/02-tech-stack.md` ("Bits provides
-  only behaviour") and `docs/03-architecture.md` (primitive list) already describe
+- **`docs/`:** no doc content changes. `docs/tech-stack.md` ("Bits provides
+  only behaviour") and `docs/architecture.md` (primitive list) already describe
   this primitive accurately and are left untouched; the change reaffirms rather
   than alters them.
 - **Dependencies/systems:** bits-ui `2.18.1` unchanged; Svelte `5.55.9` unchanged

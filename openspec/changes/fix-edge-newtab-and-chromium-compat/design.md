@@ -28,9 +28,8 @@ Temporary tab permanently. A second, independent Chrome-only literal lives in
 
 This was found by a multi-agent Edge-compatibility audit (19 raised, 16 confirmed
 after adversarial verification, 3 rejected). Chrome+Edge is a committed target
-(`the distribution notes` §222 already flags this exact NTP override as "Edge is
-fussier here than Chrome"; the launch checklist gates the "works on Edge" claim
-on it).
+(the launch checklist gates the "works on Edge" claim on it, and already flags
+this exact NTP override as Edge-fragile).
 
 ## Goals / Non-Goals
 
@@ -102,10 +101,9 @@ description). _Alternative considered:_ interpolating the detected brand name in
 copy — rejected as brittle (UA brand strings are noisy) for no user benefit; the
 neutral phrasing reads correctly on every Chromium fork.
 
-**Doc change required:** `docs/01-vision.md` (the line stating "Chrome MV3 only")
-→ Chrome + Edge (Chromium), matching `the distribution notes` and the shipped
-site/manifest positioning. No other `docs/` file needs editing (distribution and
-the launch checklist already say Chrome+Edge).
+**Doc change required:** none. The Chrome + Edge (Chromium) positioning already
+lives in the shipped site/manifest positioning and the launch checklist; no
+`docs/` file needs editing.
 
 ## Visual language
 

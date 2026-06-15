@@ -5,8 +5,8 @@ the sidebar as a Temporary tab** instead of being treated as the empty-Space
 home — the bug a user reported. The same Chrome-only assumption breaks the
 "Open keyboard shortcuts" recovery button (it opens a browser error page on
 Edge). Both are user-visible breakage on a browser the product explicitly
-markets support for (the site, `the distribution notes`, and the launch
-checklist all commit to Chrome **and** Edge). This change makes Lunma's
+markets support for (the site and the launch checklist both commit to Chrome
+**and** Edge). This change makes Lunma's
 home-tab recognition and its shortcut-binding affordance portable across
 Chromium forks (Chrome, Edge, Brave) so Edge users get the same behaviour
 Chrome users already have.
@@ -44,8 +44,6 @@ consumers inherit the same literal; one source fix repairs all of them.
 - **Regression coverage**: `new-tab.test.ts` gains `edge://newtab/` /
   `brave://newtab/` cases, and the onCreated/home-tab classification path gets
   an Edge-scheme case so the bug cannot silently return.
-- **Doc reconciliation**: `docs/01-vision.md` no longer says "Chrome MV3 only"
-  (it contradicts the shipped Chrome+Edge positioning).
 
 **Non-goals (verified portable by the audit; explicitly out of scope):** script
 injection / boundary gates (http(s) whitelist), favicon handling (`_favicon`
@@ -91,10 +89,9 @@ _None._
   the chrome-tabs onCreated / `coordinator.home-tab.test.ts` home-tab path (+
   an `edge://newtab/` case); `apps/extension/src/options/Options.test.ts:522`
   (asserts the host-derived URL, not the hardcoded literal).
-- **Docs updated:** `docs/01-vision.md` (drop "Chrome MV3 only" → Chrome+Edge).
-  **Docs left untouched:** `the distribution notes` and the launch checklist
-  already commit to Chrome+Edge and already flag the NTP override as Edge-fragile;
-  `docs/02-tech-stack.md` through `docs/06-migration.md` are unaffected.
+- **Docs:** none need updating. The shipped site/manifest positioning and the
+  launch checklist already commit to Chrome+Edge and already flag the NTP
+  override as Edge-fragile; the remaining `docs/` files are unaffected.
 - **No** changes to: import-layer DAG, dependencies, Zod schemas / migrations,
   message bus, or any persisted state (home-tab status is derived, never
   persisted).

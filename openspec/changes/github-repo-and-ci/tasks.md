@@ -66,20 +66,19 @@
 
 ## 4. Documentation (doc-lockstep — required this change)
 
-- [x] 4.1 `docs/02-tech-stack.md` — add a CI/release-engineering note: CI runs the
+- [x] 4.1 `docs/tech-stack.md` — add a CI/release-engineering note: CI runs the
   same pinned toolchain (Node 24, corepack-pinned `pnpm@11.3.0`) and the same
   `pnpm -r verify` gate as local; the e2e smoke runs under `xvfb-run` (headed-MV3
   requirement); devbox remains the local-dev story only. Cross-reference the
   existing corepack/`packageManager` toolchain rows rather than restating the pin
   (avoid two statements of the same fact drifting apart).
-- [x] 4.2 `docs/03-architecture.md` — add a short "Continuous integration"
+- [x] 4.2 `docs/architecture.md` — add a short "Continuous integration"
   subsection: CI enforces the `architecture-integrity` layer-DAG rules (via
   `biome check` inside `pnpm -r verify`) on every PR, not just locally; merge to
   `main` is gated on `verify` + `e2e`.
-- [x] 4.3 New ADR `docs/adr/0016-ci-on-github-actions.md` recording D1–D5
+- [x] 4.3 Record D1–D5 in this change's `design.md`
   (setup-node+corepack over devbox-in-CI; two jobs; single `pnpm -r verify` over a
-  matrix; `xvfb-run` for e2e; imperative branch protection / rulesets). Add it to
-  `docs/adr/README.md`.
+  matrix; `xvfb-run` for e2e; imperative branch protection / rulesets).
 
 ## 5. First CI run + branch protection
 
@@ -141,6 +140,6 @@
   go public until `open-source-public-launch`.
 - [x] 6.9 Confirm docs (§4) and this change's artifacts agree with what shipped
   (doc-lockstep); update either side if they drifted. _Reconciled: action pins
-  bumped to Node-24 majors (§2.2/2.4, design D1, ADR 0016); branch-protection
-  deferral recorded (§5.4/§6.4, design D5, ADR 0016, docs/02 + docs/03 softened
-  from "merges gated" to "CI runs on every PR/push; gating deferred")._
+  bumped to Node-24 majors (§2.2/2.4, design D1); branch-protection
+  deferral recorded (§5.4/§6.4, design D5, docs/tech-stack.md + docs/architecture.md
+  softened from "merges gated" to "CI runs on every PR/push; gating deferred")._

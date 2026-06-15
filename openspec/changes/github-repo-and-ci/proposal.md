@@ -77,20 +77,17 @@ component-library and visual-quality policies by explicit exemption).
   `lunma-app/lunma` repo, the `origin` remote, and the `main` branch-protection
   ruleset. Recorded as reproducible `gh`/`git` commands in `tasks.md`.
 - **Docs updated in this change (doc-lockstep):**
-  - `docs/02-tech-stack.md` — add a CI/release-engineering note (the toolchain is
+  - `docs/tech-stack.md` — add a CI/release-engineering note (the toolchain is
     pinned for both local `verify` and CI; corepack-pinned pnpm, Node 24, the
     xvfb requirement for e2e).
-  - `docs/03-architecture.md` — a short "Continuous integration" subsection
+  - `docs/architecture.md` — a short "Continuous integration" subsection
     noting CI runs the same `pnpm -r verify` gate the layer-DAG rules are checked
     by, so architecture-integrity is enforced on every PR, not just locally.
-  - `docs/adr/0016-ci-on-github-actions.md` — a new ADR recording the CI tooling
-    choices (setup-node+corepack over devbox-in-CI; xvfb for MV3 e2e; single
-    `pnpm -r verify` job over a per-package matrix; imperative branch protection
-    via a ruleset). `0016` is the next free number (0001–0015 exist); also added
-    to `docs/adr/README.md`.
-- **Docs explicitly left untouched:** `docs/01-vision.md`, `docs/04-capabilities.md`,
-  `docs/05-roadmap.md`, `docs/06-migration.md`, `the distribution notes`,
-  `docs/07-brand-identity.md` (no product behaviour, roadmap, or brand surface
+  - The CI tooling choices (setup-node+corepack over devbox-in-CI; xvfb for MV3
+    e2e; single `pnpm -r verify` job over a per-package matrix; imperative branch
+    protection via a ruleset) are recorded in this change's `design.md`.
+- **Docs explicitly left untouched:** the capability specs under
+  `openspec/specs/` (no product behaviour, roadmap, or brand surface
   changes here).
 - **Dependencies:** none added to any `package.json`. CI consumes the existing
   pinned toolchain and the already-present `@playwright/test`; Playwright's

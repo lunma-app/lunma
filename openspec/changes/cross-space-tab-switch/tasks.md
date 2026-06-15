@@ -19,7 +19,7 @@
 
 ## 4. Docs
 
-- [ ] 4.1 `docs/04-capabilities.md` #4 (`lunma-bookmark-bindings`): note the activation-time Space switch for coupled saved tabs (favorites excluded); #5 (`launcher`) cross-link it from the saved-result action (selecting a cross-Space saved result switches to its Space).
+- [ ] 4.1 The `openspec/specs/lunma-bookmark-bindings` spec: note the activation-time Space switch for coupled saved tabs (favorites excluded); the `openspec/specs/launcher` spec: cross-link it from the saved-result action (selecting a cross-Space saved result switches to its Space).
 
 ## 5. Verify
 
