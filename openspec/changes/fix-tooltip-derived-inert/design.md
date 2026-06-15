@@ -112,9 +112,14 @@ This is the **single binding form** — there is no "keep it on bare
 `.lunma-tooltip`, fall back to the attribute selector if it doesn't fire"
 alternative (a fork would leave the CSS contract unsettled, which
 names-are-normative forbids). The `var(--motion-fast)` / `var(--ease-emphasised)`
-tokens and the `@media (prefers-reduced-motion: reduce) { animation: none }`
-guard are retained unchanged; no new tokens or hard-coded values are introduced
-(component-library policy). The keyframe plays once when the element mounts open
+tokens are retained unchanged and no new tokens or hard-coded values are
+introduced (component-library policy). The `@media (prefers-reduced-motion:
+reduce) { animation: none }` guard is kept, but moved onto the **same**
+`:global(.lunma-tooltip[data-state='instant-open'])` selector (specificity 0,2,0)
+as the entrance — once the entrance is anchored to the presence attribute, a
+guard on bare `.lunma-tooltip` (0,1,0) would lose the specificity battle and fail
+to suppress the animation. Same guard, same `none` value, same end state; only
+the selector is realigned so it reliably wins. The keyframe plays once when the element mounts open
 (state `instant-open`); on close `data-state` flips to `closed`, the rule stops
 matching, and nothing animates out — matching today's no-exit-animation behaviour.
 

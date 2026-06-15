@@ -1,4 +1,4 @@
-import { render } from '@testing-library/svelte';
+import { fireEvent, render } from '@testing-library/svelte';
 import { describe, expect, test } from 'vitest';
 import TooltipHarness from './Tooltip.test.harness.svelte';
 
@@ -41,8 +41,9 @@ describe('Tooltip', () => {
 
   test('tooltip content is not visible in the DOM when closed', () => {
     const { container } = render(TooltipHarness, { props: { label: 'Delete item' } });
-    // Bits uses forceMount + an open guard — the .lunma-tooltip div only renders
-    // when the tooltip is open. In a non-interactive test it starts closed.
+    // bits-ui owns presence: when closed it unmounts the floating subtree, so
+    // the .lunma-tooltip div is absent from the DOM. In a non-interactive test
+    // the tooltip starts closed.
     expect(container.querySelector('.lunma-tooltip')).toBeNull();
   });
 
@@ -51,5 +52,26 @@ describe('Tooltip', () => {
       props: { label: 'Delete item', enabled: false },
     });
     expect(container.querySelector('.lunma-tooltip')).toBeNull();
+  });
+
+  test('the tooltip layer is gone after its host unmounts', async () => {
+    // Observable, automatable half of the spec's "unmounts with its trigger"
+    // scenario: once the trigger's host is removed, the portaled tooltip layer
+    // must not linger. The tooltip is portaled to document.body, so we look
+    // there, not in the render container.
+    const { container, unmount } = render(TooltipHarness, { props: { label: 'Return to host' } });
+    const trigger = container.querySelector('[data-testid="trigger"]') as HTMLButtonElement;
+
+    // Attempt to drive the open state (delayDuration 0). bits-ui opens a tooltip
+    // on pointer-enter / focus.
+    await fireEvent.pointerEnter(trigger);
+    await fireEvent.focus(trigger);
+
+    // Note: jsdom has no real RAF/floating/getAnimations, so bits-ui may not
+    // fully open the tooltip here. Either way, the teardown guarantee is what
+    // this asserts; the derived_inert-free half is covered by the manual
+    // Chromium check (task 4.3 / design.md verification split).
+    unmount();
+    expect(document.body.querySelector('.lunma-tooltip')).toBeNull();
   });
 });

@@ -30,18 +30,11 @@ const { label, side = 'top', enabled = true, children }: Props = $props();
         {/snippet}
       </Bits.Trigger>
       <Bits.Portal>
-        <Bits.Content
-          {side}
-          sideOffset={6}
-          forceMount
-          class="lunma-tooltip-content"
-        >
-          {#snippet child({ props, open })}
-            {#if open}
-              <div {...props} class="lunma-tooltip">
-                {label}
-              </div>
-            {/if}
+        <Bits.Content {side} sideOffset={6} class="lunma-tooltip-content">
+          {#snippet child({ props })}
+            <div {...props} class="lunma-tooltip">
+              {label}
+            </div>
           {/snippet}
         </Bits.Content>
       </Bits.Portal>
@@ -64,8 +57,15 @@ const { label, side = 'top', enabled = true, children }: Props = $props();
     pointer-events: none;
     z-index: var(--z-dropdown);
     box-shadow: var(--shadow-md);
-    /* Slight transform-only entrance — Bits handles mount/unmount, no
-     * opacity transition (the user wanted instantaneous). */
+  }
+
+  /* Slight transform-only entrance, anchored to bits-ui's presence state
+   * rather than the (incidental) per-open mount. With delayDuration /
+   * skipDelayDuration 0 an open resolves to `instant-open`; bits-ui spreads
+   * `data-state` onto the content via `props`. Bits owns mount/unmount, and
+   * there is no opacity-only fade or exit animation (the user wanted it to
+   * read as instantaneous). */
+  :global(.lunma-tooltip[data-state='instant-open']) {
     animation: lunma-tooltip-in var(--motion-fast) var(--ease-emphasised);
   }
 
@@ -81,7 +81,8 @@ const { label, side = 'top', enabled = true, children }: Props = $props();
   }
 
   @media (prefers-reduced-motion: reduce) {
-    :global(.lunma-tooltip) {
+    /* Match the entrance selector's specificity so the guard reliably wins. */
+    :global(.lunma-tooltip[data-state='instant-open']) {
       animation: none;
     }
   }
