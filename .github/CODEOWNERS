@@ -1,4 +1,4 @@
-# Every path is owned by the repository owner until finer-grained ownership is
-# warranted. @lunma-app/maintainers is the authenticated GitHub account that owns the repo;
-# GitHub silently no-ops an unknown owner, so this handle must stay valid.
+# Every path is owned by the maintainers team until finer-grained ownership is
+# warranted. GitHub silently no-ops an unknown owner, so the team must exist
+# (create @lunma-app/maintainers) and stay valid.
 * @lunma-app/maintainers
