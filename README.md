@@ -52,7 +52,7 @@ lives under `apps/extension/src/` (see `docs/03-architecture.md`).
 4. `docs/04-capabilities.md` — capability specs to flesh out (becomes `openspec/specs/`)
 5. `docs/05-roadmap.md` — 8-week implementation plan
 6. `docs/06-migration.md` — Arcify v4 user-data import path
-7. `docs/08-brand-identity.md` — Lunma brand & visual identity brief (non-normative)
+7. `docs/07-brand-identity.md` — Lunma brand & visual identity brief (non-normative)
 
 ## Develop
 

@@ -90,7 +90,7 @@ component-library and visual-quality policies by explicit exemption).
     to `docs/adr/README.md`.
 - **Docs explicitly left untouched:** `docs/01-vision.md`, `docs/04-capabilities.md`,
   `docs/05-roadmap.md`, `docs/06-migration.md`, `the distribution notes`,
-  `docs/08-brand-identity.md` (no product behaviour, roadmap, or brand surface
+  `docs/07-brand-identity.md` (no product behaviour, roadmap, or brand surface
   changes here).
 - **Dependencies:** none added to any `package.json`. CI consumes the existing
   pinned toolchain and the already-present `@playwright/test`; Playwright's
