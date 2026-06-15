@@ -58,7 +58,7 @@ section, no `src/ui/` primitive work) — noted here by explicit exemption.
 
 ### D1 — `actions/setup-node` + corepack, not devbox-in-CI
 
-Provision Node with `actions/setup-node@v4` (`node-version: 24`) and enable
+Provision Node with `actions/setup-node@v6` (`node-version: 24`) and enable
 corepack to activate the pnpm version pinned in `packageManager`. Cache the pnpm
 store keyed on `pnpm-lock.yaml`.
 

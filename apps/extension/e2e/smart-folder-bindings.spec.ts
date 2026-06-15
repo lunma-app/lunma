@@ -196,7 +196,13 @@ test('a smart-folder row activates like a pinned tab: open bound, re-click focus
 
   // --- delete the folder: the bound tab demotes to Temporary, nothing closes -
   await page.getByTestId('folder-row-menu-trigger').click();
-  await page.locator('[data-menu-id="delete"]').click();
+  // Delete is a two-step confirm (smart-folder-delete-confirm): the first
+  // activation arms a danger "Delete — confirm" (the menu stays open), the
+  // second dispatches the delete.
+  const deleteItem = page.locator('[data-menu-id="delete"]');
+  await deleteItem.click();
+  await expect(deleteItem).toHaveText(/Delete — confirm/);
+  await deleteItem.click();
 
   // The folder's bindings drop; its still-open tab reappears in Temporary; the
   // tab itself is NOT closed (tab count holds).

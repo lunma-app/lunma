@@ -23,8 +23,8 @@
   top-level `permissions: { contents: read }`; `concurrency: { group: "${{ github.workflow }}-${{ github.ref }}", cancel-in-progress: true }`.
 - [x] 2.2 `verify` job (ubuntu-latest), in this exact step order (the cache step
   needs a real store path, which only exists after corepack activates pnpm):
-  1. `actions/checkout@v4`
-  2. `actions/setup-node@v4` with `node-version: 24`
+  1. `actions/checkout@v6`
+  2. `actions/setup-node@v6` with `node-version: 24`
   3. `run: corepack enable` (activates the `packageManager`-pinned `pnpm@11.3.0`;
      do **not** specify a pnpm version anywhere else — no `pnpm/action-setup` with
      a hardcoded version). Set `COREPACK_ENABLE_DOWNLOAD_PROMPT: 0` in the job
@@ -32,7 +32,7 @@
   4. `id: pnpm-store` → `run: echo "dir=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"`
      (resolve the store path into a step output — `actions/cache` `path:` is a
      static string, not a shell substitution).
-  5. `actions/cache@v4` with `path: ${{ steps.pnpm-store.outputs.dir }}`,
+  5. `actions/cache@v5` with `path: ${{ steps.pnpm-store.outputs.dir }}`,
      `key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}`,
      `restore-keys: ${{ runner.os }}-pnpm-`.
   6. `run: pnpm install --frozen-lockfile`
@@ -46,7 +46,9 @@
   applies).
 - [x] 2.4 Pin every third-party action to a major tag (or SHA). Confirm the two
   job names are exactly `verify` and `e2e` (the names §5.4 will require in branch
-  protection — keep them in lockstep).
+  protection — keep them in lockstep). _Pins are the current Node-24 majors —
+  `checkout@v6`, `setup-node@v6`, `cache@v5`; the originally-drafted `@v4` ran on
+  the deprecated Node-20 action runtime (surfaced as a CI warning, agreed bump)._
 
 ## 3. Repo hygiene files
 
@@ -81,12 +83,18 @@
 
 ## 5. First CI run + branch protection
 
-- [ ] 5.1 Commit §2–§4 on the `chore/ci-bootstrap` branch and push it; open a PR
+- [x] 5.1 Commit §2–§4 on the `chore/ci-bootstrap` branch and push it; open a PR
   (`gh pr create --base main`). The checks run from the **`pull_request`** event,
   not the branch push (the workflow's `push` trigger is `branches: [main]` only),
   so confirm **both** `verify` and `e2e` checks appear on the PR.
 - [ ] 5.2 Iterate until both checks are green on the PR (fix any CI-only failures —
-  e.g. Playwright deps, lockfile, xvfb).
+  e.g. Playwright deps, lockfile, xvfb). _First run (PR #1): `verify` green; `e2e`
+  red on a pre-existing stale spec — `e2e/smart-folder-bindings.spec.ts` single-
+  clicked the smart-folder Delete, but `smart-folder-delete-confirm` made it a
+  two-step arm+confirm and never updated this e2e spec (`verify` doesn't run e2e,
+  so CI was the first to exercise it). Agreed deviation: fixed the spec here to do
+  the two-step confirm. `boundary.spec.ts:92` was flaky (passed on retry) — left
+  to `retries: 1` per design._
 - [ ] 5.3 Merge the PR to `main`.
 - [ ] 5.4 Apply `main` protection requiring the `verify` + `e2e` checks via
   `gh api` — use a **repository ruleset** (`POST /repos/lunma-app/lunma/rulesets`
