@@ -56,7 +56,6 @@ lunma/                              # pnpm workspace root (private)
 │     └─ package.json               # exports: ./tokens.css · ./fonts.css · ./recipes.css
 ├─ openspec/                        # config.yaml · specs/ (one per capability) · changes/ (in-flight)
 ├─ docs/                            # this folder
-├─ tooling/                       # build and release tooling
 ├─ pnpm-workspace.yaml              # apps/* · packages/*
 ├─ biome.json                       # workspace-wide: the layer DAG + cross-app import guards
 ├─ package.json                     # workspace root (private; `pnpm -r verify` fans out to every package)
