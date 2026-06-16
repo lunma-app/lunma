@@ -451,3 +451,41 @@ The `smartFolders` slice of `AppState` (smart-folder runtime results — see the
 - **WHEN** `loadState()` reads persisted state at boot
 - **THEN** the loaded state SHALL NOT contain a `smartFolders` field from disk
 - **AND** `smartFolders` SHALL only be populated by connector result events
+
+### Requirement: Smart-folder read-state is persisted and pruned
+
+The `smartReadState` slice of `AppState` SHALL be **persisted** to
+`chrome.storage.local` — kept by `persist(state)`, NOT stripped like the ephemeral
+`smartFolders` and `liveTabsById` slices — so read marks survive SW sleeps and
+Chrome restarts. The slice maps each feed folder id to an array of its read item
+ids (shape: a record from folder id to a list of item-id strings). It SHALL store
+**ids only** (never item titles or URLs — the work/reading-sensitive payload stays
+off disk, mirroring `smartItemBindings`). It SHALL be **pruned to the fetched
+window**: after a folder's successful fetch, any stored read id no longer present
+in the fetched item set SHALL be dropped (`pruneSmartReadState`), and a folder's
+entry SHALL be removed when the folder is deleted — so the slice can never exceed
+the connector's bounded fetch (the feed connector's `FEED_BUFFER`, capped at 200;
+the queue connectors' `maxItems`). The slice SHALL be part of the current-version schema
+(`SmartReadStateSchema`, with `.default({})` so pre-v6 envelopes parse) and
+included in the schema-to-type coherence check.
+
+#### Scenario: persist keeps smartReadState
+
+- **WHEN** `persist(state)` runs with a populated `state.smartReadState`
+- **THEN** the object written under the storage key SHALL contain the `smartReadState` field (ids only), unlike the stripped `smartFolders` / `liveTabsById` slices
+
+#### Scenario: Read-state is pruned to the live window
+
+- **GIVEN** a folder whose `smartReadState` holds 18 read ids
+- **WHEN** a successful fetch returns an item set that includes only 12 of those ids
+- **THEN** `pruneSmartReadState` drops the 6 absent ids, leaving at most the fetched set
+
+#### Scenario: Deleting a folder drops its read-state
+
+- **WHEN** a smart folder is deleted
+- **THEN** its `smartReadState[folderId]` entry is removed
+
+#### Scenario: A pre-v6 envelope loads with empty read-state
+
+- **WHEN** `loadState()` reads a persisted envelope written before this slice existed
+- **THEN** `smartReadState` SHALL default to `{}` and validate under the current-version schema

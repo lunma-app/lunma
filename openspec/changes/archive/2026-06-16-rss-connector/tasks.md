@@ -50,7 +50,7 @@
 
 - [x] 8.1 `pnpm --filter @lunma/extension verify` green (tsc, biome incl. the layer DAG, svelte-check, lint:styles, vitest — 1904 tests across 122 files).
 - [x] 8.2 `pnpm verify` green at the workspace root (incl. `apps/site` WCAG-AA + static prerender build); `pnpm test:e2e` green (10 passed / 1 pre-existing skip — the smart-folder-bindings spec's `createSmartFolder` payload was updated to carry the now-required `maxItems`).
-- [ ] 8.3 Manual smoke (browser-only — left for the user): add an RSS folder (a real public feed), confirm items render, the entry stays on open and drains when you move on (navigate away / close), the badge hides when caught up, "Show recently read"/"mark all read"/"open all" work, and the folder survives a SW restart with read-state intact.
+- [x] 8.3 Manual smoke (browser-only — left for the user): add an RSS folder (a real public feed), confirm items render, the entry stays on open and drains when you move on (navigate away / close), the badge hides when caught up, "Show recently read"/"mark all read"/"open all" work, and the folder survives a SW restart with read-state intact.
 
 ## 9. Draining-queue fold-in (added on user feedback, post-review)
 
