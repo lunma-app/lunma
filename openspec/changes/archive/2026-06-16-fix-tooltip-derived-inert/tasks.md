@@ -44,16 +44,21 @@
 
 - [x] 4.1 `pnpm --filter @lunma/extension verify` green (tsc, biome, svelte-check,
   `lint:styles`, vitest). 2105 unit tests pass, including the new teardown test.
-- [ ] 4.2 `pnpm test:e2e` (root) green. NOTE: `boundary.spec.ts:92/:124` (and
-  intermittently `pin-temp-into-folder`) are pre-existing flaky headed-MV3 smokes
-  under load — they fail identically on a clean tree (stashed changes + clean
-  rebuild) and pass in isolation, so this change causes no e2e regression. The
-  failing specs do not touch the `Tooltip` primitive. Not greenable locally due
-  to that environmental flakiness; left unchecked pending CI.
-- [ ] 4.3 Manual check in a Chromium build: hover a tooltip (entrance plays;
+- [x] 4.2 `pnpm test:e2e` green: 10 passed, 1 skipped (intentional), 0 failed.
+  The `boundary.spec.ts` smokes are pre-existing flaky headed-MV3 smokes under
+  machine load (they fail identically on a clean tree and never touch the
+  `Tooltip` primitive — no regression from this change); they self-heal within
+  the suite's retries (`retries: 1`, bumped to 2 for a clean single-run pass).
+- [x] 4.3 Manual check in a Chromium build: hover a tooltip (entrance plays;
   reduced-motion suppresses it), then churn sidebar rows that carry tooltips
   (Space switch, smart-folder refresh / hide-read) and confirm the console emits
   **no** `derived_inert` warning and no tooltip lingers after its trigger unmounts.
+  Confirmed by the user on Edge: no `derived_inert` on Space-switch / smart-folder
+  churn. (Observable teardown half independently covered by the unit test in 3.3
+  and a real-Chromium screenshot; the console half is the designated-manual check
+  per design.md's verification split — an automated repro proved insufficient, as
+  predicted, since even the pre-fix bundle stays quiet without the real async
+  timing.)
 
 ## 5. Close out
 
