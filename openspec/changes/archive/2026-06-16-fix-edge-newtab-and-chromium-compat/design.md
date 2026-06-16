@@ -101,9 +101,11 @@ description). _Alternative considered:_ interpolating the detected brand name in
 copy — rejected as brittle (UA brand strings are noisy) for no user benefit; the
 neutral phrasing reads correctly on every Chromium fork.
 
-**Doc change required:** none. The Chrome + Edge (Chromium) positioning already
-lives in the shipped site/manifest positioning and the launch checklist; no
-`docs/` file needs editing.
+**Doc change required:** one line. The Chrome + Edge (Chromium) positioning
+already lives in the shipped site/manifest positioning and the launch checklist;
+the only stale reference is `docs/architecture.md`'s `isNewTabUrl` home-tab note,
+reworded to the scheme-agnostic match (`chrome`/`edge`/`brave`://newtab + the
+resolved extension URL) to stay in lockstep with the code.
 
 ## Visual language
 

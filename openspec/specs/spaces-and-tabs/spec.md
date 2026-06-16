@@ -1995,9 +1995,17 @@ loading flash — an unresolved active Space shows a neutral home until the next
 broadcast). The full launcher search is out of scope (deferred to `launcher-v1`);
 any search affordance on this page is a non-functional placeholder.
 
-A tab whose live URL is the new-tab page (recognised by `isNewTabUrl(url)`, which
-matches `chrome://newtab/` and the extension's resolved newtab URL) is a **home
-tab** — a transient property of the live tab, never persisted. When the user
+A tab whose live URL is the new-tab page (recognised by `isNewTabUrl(url)`) is a
+**home tab** — a transient property of the live tab, never persisted. Because each
+Chromium fork namespaces its internal pages under its own scheme, `isNewTabUrl`
+SHALL match the host browser's own internal new-tab URL across forks —
+`chrome://newtab`, `edge://newtab`, or `brave://newtab` (each with an optional
+trailing slash, query, or hash) — AND the extension's resolved newtab URL
+(`chrome.runtime.getURL(NEWTAB_PAGE_PATH)`). This recognises a fresh tab BOTH
+during the transient window when the browser reports its own internal scheme (e.g.
+`edge://newtab/` on Edge before the override resolves) AND after it resolves to the
+`chrome-extension://` override page. `isNewTabUrl` SHALL NOT match sibling internal
+pages (e.g. `chrome://settings`, `edge://settings`) or real web URLs. When the user
 navigates a home tab to a real URL it ceases to be a home tab.
 
 #### Scenario: The new-tab page renders the active Space's home
@@ -2012,6 +2020,13 @@ navigates a home tab to a real URL it ceases to be a home tab.
 - **GIVEN** a home tab (URL `chrome://newtab/`) in Space "Work"
 - **WHEN** the user navigates it to `https://example.com/`
 - **THEN** `isNewTabUrl` SHALL no longer match it and it SHALL be treated as an ordinary tab
+
+#### Scenario: An Edge new tab is recognised as a home tab in its internal-scheme window
+
+- **GIVEN** on a non-Chrome Chromium fork a fresh tab opens against the `chrome_url_overrides.newtab` override and `tabs.onCreated` reports its URL as `edge://newtab/` (Edge) or `brave://newtab/` (Brave) before it resolves to the `chrome-extension://` page
+- **THEN** `isNewTabUrl('edge://newtab/')` and `isNewTabUrl('brave://newtab/')` SHALL each be true
+- **AND** the tab SHALL be treated as a home tab — grouped into the active Space and NOT added to `tempTabIds`
+- **AND** `isNewTabUrl('edge://settings/')` SHALL be false (a sibling internal page is not a home tab)
 
 #### Scenario: A window whose only tab is a home tab still tracks its active Space
 

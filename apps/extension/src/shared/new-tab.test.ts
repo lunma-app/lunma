@@ -20,6 +20,20 @@ describe('isNewTabUrl', () => {
     expect(isNewTabUrl('chrome://newtab')).toBe(true);
   });
 
+  test('matches other Chromium forks’ internal new-tab schemes (Edge, Brave)', () => {
+    installChrome();
+    expect(isNewTabUrl('edge://newtab/')).toBe(true);
+    expect(isNewTabUrl('edge://newtab')).toBe(true);
+    expect(isNewTabUrl('brave://newtab/')).toBe(true);
+  });
+
+  test('does not match sibling internal pages or look-alike web URLs', () => {
+    installChrome();
+    expect(isNewTabUrl('edge://settings/')).toBe(false);
+    expect(isNewTabUrl('edge://newtab-foo')).toBe(false);
+    expect(isNewTabUrl('https://newtab')).toBe(false);
+  });
+
   test('matches the extension-resolved newtab URL', () => {
     installChrome((path) => `chrome-extension://abcdef/${path}`);
     expect(isNewTabUrl(RESOLVED)).toBe(true);

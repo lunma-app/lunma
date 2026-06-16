@@ -1,6 +1,7 @@
 import { fireEvent, render, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { getExtensionsShortcutsUrl } from '../shared/platform';
 import Options from './Options.svelte';
 
 interface ChromeMock {
@@ -512,14 +513,35 @@ describe('Options — launcher shortcut guidance', () => {
     expect(container.querySelector('.shortcut-card')).toBeNull();
   });
 
-  test('the guidance button opens the chrome shortcuts page', async () => {
+  test('the guidance button opens the host browser shortcuts page (default Chrome)', async () => {
     const mock = installChromeMock('');
     const { container } = render(Options, { props: {} });
     await waitFor(() => {
       expect(container.querySelector('.shortcut-action button')).not.toBeNull();
     });
     (container.querySelector('.shortcut-action button') as HTMLButtonElement).click();
-    expect(mock.tabsCreate).toHaveBeenCalledWith({ url: 'chrome://extensions/shortcuts' });
+    // Default (non-Edge) host resolves to the chrome:// scheme.
+    expect(getExtensionsShortcutsUrl()).toBe('chrome://extensions/shortcuts');
+    expect(mock.tabsCreate).toHaveBeenCalledWith({ url: getExtensionsShortcutsUrl() });
+  });
+
+  test('on Edge the guidance button opens the edge shortcuts page', async () => {
+    const original = navigator.userAgent;
+    Object.defineProperty(navigator, 'userAgent', {
+      value: `${original} Edg/120.0.0.0`,
+      configurable: true,
+    });
+    try {
+      const mock = installChromeMock('');
+      const { container } = render(Options, { props: {} });
+      await waitFor(() => {
+        expect(container.querySelector('.shortcut-action button')).not.toBeNull();
+      });
+      (container.querySelector('.shortcut-action button') as HTMLButtonElement).click();
+      expect(mock.tabsCreate).toHaveBeenCalledWith({ url: 'edge://extensions/shortcuts' });
+    } finally {
+      Object.defineProperty(navigator, 'userAgent', { value: original, configurable: true });
+    }
   });
 });
 

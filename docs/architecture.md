@@ -160,8 +160,9 @@ always forces a tab into existence. With Lunma owning the new-tab page, that
 forced tab is the Space's **home tab**.
 
 - The coordinator recognises a home tab by its live URL (`isNewTabUrl(url)` in
-  `apps/extension/src/shared/new-tab.ts`, matching `chrome://newtab/` and the
-  extension's resolved newtab URL).
+  `apps/extension/src/shared/new-tab.ts`, matching any Chromium fork's internal
+  new-tab scheme — `chrome`/`edge`/`brave`://newtab — and the extension's
+  resolved newtab URL).
 - A home tab is a transient property of the live tab, never persisted. It is
   grouped into the active Space so the window shows it, but is never added to
   `tempTabIds`, so it stays unlisted in the sidebar's Temporary list.

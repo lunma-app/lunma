@@ -7,7 +7,7 @@ import {
   onPermissionsChange,
   requestApiPermission,
 } from '../shared/permissions';
-import { modifierLabel } from '../shared/platform';
+import { getExtensionsShortcutsUrl, modifierLabel } from '../shared/platform';
 import { BUILT_IN_ENGINES } from '../shared/search-engines';
 import {
   DEFAULTS,
@@ -295,10 +295,11 @@ async function checkLauncherShortcut(): Promise<void> {
   }
 }
 
-/** Open Chrome's keyboard-shortcuts page so the user can bind `Alt+L` — the
- * only way to set a `chrome.commands` shortcut (extensions can't do it). */
+/** Open the host browser's keyboard-shortcuts page so the user can bind `Alt+L`
+ * — the only way to set a `chrome.commands` shortcut (extensions can't do it).
+ * The URL resolves to the running browser's own scheme (Edge vs Chrome). */
 function openShortcutsPage(): void {
-  void chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
+  void chrome.tabs.create({ url: getExtensionsShortcutsUrl() });
 }
 
 function onSelect(decl: SettingDeclaration, value: string): void {
@@ -364,7 +365,7 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
         <div class="shortcut-text">
           <span class="shortcut-title">Set the launcher shortcut</span>
           <span class="shortcut-desc">
-            {modifierLabel}L isn’t currently bound. Chrome has to set the keyboard shortcut —
+            {modifierLabel}L isn’t currently bound. Your browser has to set the keyboard shortcut —
             open its shortcuts page to bind it.
           </span>
           <div class="shortcut-action">
@@ -561,7 +562,7 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
         <h2 class="group-label">Result sources</h2>
         <p class="connector-intro">
           The launcher can also surface your browsing history and bookmarks. These are optional —
-          enable each when you want it, and revoke access anytime from Chrome's extension settings.
+          enable each when you want it, and revoke access anytime from your browser's extension settings.
         </p>
 
         {#each RESULT_SOURCES as source (source.name)}

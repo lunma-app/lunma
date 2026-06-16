@@ -89,9 +89,12 @@ _None._
   the chrome-tabs onCreated / `coordinator.home-tab.test.ts` home-tab path (+
   an `edge://newtab/` case); `apps/extension/src/options/Options.test.ts:522`
   (asserts the host-derived URL, not the hardcoded literal).
-- **Docs:** none need updating. The shipped site/manifest positioning and the
-  launch checklist already commit to Chrome+Edge and already flag the NTP
-  override as Edge-fragile; the remaining `docs/` files are unaffected.
+- **Docs:** one line in `docs/architecture.md` (the `isNewTabUrl` home-tab
+  recognition note) is reworded from "matching `chrome://newtab/`" to the
+  scheme-agnostic match (`chrome`/`edge`/`brave`://newtab + resolved extension
+  URL), so the doc stays in lockstep with task 1.1. The shipped site/manifest
+  positioning and the launch checklist already commit to Chrome+Edge and already
+  flag the NTP override as Edge-fragile; no other `docs/` file is affected.
 - **No** changes to: import-layer DAG, dependencies, Zod schemas / migrations,
   message bus, or any persisted state (home-tab status is derived, never
   persisted).

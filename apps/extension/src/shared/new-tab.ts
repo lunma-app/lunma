@@ -12,15 +12,20 @@ export const NEWTAB_PAGE_PATH = 'src/launcher/newtab/index.html';
  * property is derived from the live URL, never persisted: the moment the user
  * navigates a home tab elsewhere it stops matching and becomes an ordinary tab.
  *
- * Matches both the bare `chrome://newtab/` Chrome reports for an overridden NTP
- * and the extension's resolved newtab URL (`chrome.runtime.getURL`), since
- * Chrome may surface either depending on navigation timing. `startsWith` on the
- * resolved URL tolerates a trailing query/hash. Chrome being unavailable (unit
- * tests without a stub) degrades to the `chrome://newtab/` check only.
+ * Matches any Chromium fork's own internal new-tab URL — `chrome://newtab`,
+ * `edge://newtab`, or `brave://newtab` (each with an optional trailing slash,
+ * query, or hash) — which the browser reports transiently for an overridden NTP,
+ * plus the extension's resolved newtab URL (`chrome.runtime.getURL`), which it
+ * surfaces after the override resolves. Either may appear depending on
+ * navigation timing. The anchored regex rejects sibling internal pages
+ * (`edge://settings`, `edge://newtab-foo`) and real web URLs (`https://newtab`).
+ * `startsWith` on the resolved URL tolerates a trailing query/hash. Chrome being
+ * unavailable (unit tests without a stub) degrades to the internal-scheme check
+ * only.
  */
 export function isNewTabUrl(url: string | undefined): boolean {
   if (!url) return false;
-  if (url === 'chrome://newtab/' || url === 'chrome://newtab') return true;
+  if (/^(chrome|edge|brave):\/\/newtab\/?(?:[?#].*)?$/.test(url)) return true;
   try {
     const resolved = chrome?.runtime?.getURL?.(NEWTAB_PAGE_PATH);
     if (resolved && (url === resolved || url.startsWith(resolved))) return true;

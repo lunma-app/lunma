@@ -3,7 +3,7 @@
   "name": "Lunma",
   "short_name": "Lunma",
   "version": "0.0.0",
-  "description": "Spatial tab and bookmark management for Chrome.",
+  "description": "Spatial tab and bookmark management — Arc-style Spaces and vertical tabs.",
   "minimum_chrome_version": "123",
   "permissions": [
     "tabs",
