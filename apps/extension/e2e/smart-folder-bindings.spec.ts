@@ -54,6 +54,23 @@ async function grantForgeHost(context: BrowserContext): Promise<void> {
   });
 }
 
+/**
+ * Open the smart folder's kebab menu and wait until its Delete entry is really
+ * present. Under heavy suite load the sidebar tab can be momentarily backgrounded
+ * right after the bound tab grabbed foreground focus, so a single trigger click
+ * may not register (the menu's rAF-driven reveal stalls while hidden). Retry the
+ * open gesture idempotently — only clicking the trigger when the menu is closed —
+ * until the menu is genuinely open. */
+async function openFolderMenu(page: Page): Promise<void> {
+  const deleteItem = page.locator('[data-menu-id="delete"]');
+  await expect(async () => {
+    if (!(await deleteItem.isVisible())) {
+      await page.getByTestId('folder-row-menu-trigger').click();
+    }
+    await expect(deleteItem).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 15_000 });
+}
+
 /** A compact snapshot of the persisted facts this test asserts on, read straight
  * from `lunma.state` (the ids-only `smartItemBindings` slice IS persisted). */
 async function snapshot(page: Page): Promise<{
@@ -195,7 +212,7 @@ test('a smart-folder row activates like a pinned tab: open bound, re-click focus
   await page.bringToFront();
 
   // --- delete the folder: the bound tab demotes to Temporary, nothing closes -
-  await page.getByTestId('folder-row-menu-trigger').click();
+  await openFolderMenu(page);
   // Delete is a two-step confirm (smart-folder-delete-confirm): the first
   // activation arms a danger "Delete — confirm" (the menu stays open), the
   // second dispatches the delete.

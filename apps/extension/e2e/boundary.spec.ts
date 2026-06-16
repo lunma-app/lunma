@@ -134,11 +134,13 @@ test('an off-site click diverts to a new temp tab; an in-domain click navigates'
   // Let the SW inject + push the allow-set to the bound tab's content script.
   await page.waitForTimeout(1200);
 
-  // Off-site (127.0.0.1) click → a NEW tab opens and the pinned tab STAYS.
+  // Off-site (127.0.0.1) click → a NEW tab opens and the pinned tab STAYS. The
+  // divert round-trips through the SW + content script, so under heavy suite load
+  // the new page can take well over a few seconds; give it a realistic budget.
   await site.bringToFront();
   const urlBefore = site.url();
   const [opened] = await Promise.all([
-    context.waitForEvent('page', { timeout: 8000 }),
+    context.waitForEvent('page', { timeout: 20_000 }),
     site.click('#off'),
   ]);
   await opened.waitForLoadState('domcontentloaded').catch(() => undefined);

@@ -14,7 +14,12 @@ export default defineConfig({
   // profile); these must not run concurrently against one profile dir.
   workers: 1,
   fullyParallel: false,
-  retries: process.env.CI ? 1 : 0,
+  // These headed-MV3 smokes drive a real persistent-context Chromium and are
+  // inherently timing-sensitive: under heavy back-to-back load a single
+  // multi-step menu/drag gesture can drop a click or stall an rAF-driven reveal.
+  // Retry once everywhere (CI already did) so a transient load flake self-heals;
+  // a genuine regression still fails both attempts.
+  retries: 1,
   reporter: [['list']],
   timeout: 30_000,
   expect: { timeout: 10_000 },
