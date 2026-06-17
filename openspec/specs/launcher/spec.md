@@ -213,6 +213,16 @@ mutating Lunma state directly:
   dispatch `openUrl { url, windowId, force: true }` when Shift+Enter is pressed
   (secondary action — force a new tab regardless of dedup).
 
+Cross-reference (non-normative): when a selected `saved` result is **coupled**
+(carries a non-null `spaceId`) and its owning Space differs from the requesting
+window's active Space — the cross-Space marker case — the dispatched
+`openSavedTab`/`focusSavedTab` switches the window to that Space as part of
+activation, so the opened/focused tab is visible in its now-active group. This is
+emergent behaviour of the `lunma-bookmark-bindings` handlers
+(`background/handlers/pinned-tabs.ts`), **not** a new launcher dispatch — the
+launcher keeps sending the same two commands. Favicon-row favorites (no `spaceId`)
+and `smart`/`tab`/`bookmark`/`history` results never switch the window's Space.
+
 `isUrlOpenInActiveSpace(state, windowId, url): boolean` is a pure helper in
 `apps/extension/src/launcher/shared/already-open.ts` that mirrors the logic of
 `findTabInActiveSpace` in `handlers/queries.ts` (same scope: current window, active
