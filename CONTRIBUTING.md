@@ -30,6 +30,13 @@ Lunma uses an **OpenSpec** workflow — non-trivial changes start as a proposal 
 - Run `pnpm verify` at the workspace root before opening a pull request (it fans out
   to every package: type-check, Biome, svelte-check, Stylelint, and tests).
 - Keep code, docs, and OpenSpec artifacts in lockstep — neither leads the other.
+- **Dependency cooldown.** `pnpm-workspace.yaml` sets a `minimumReleaseAge`, so a
+  package version published too recently is rejected by `pnpm install
+  --frozen-lockfile` (and therefore by CI). Don't hand-bump a dependency to a
+  brand-new (e.g. same-day) release — let it age past the cooldown first.
+  Dependency updates normally arrive via Dependabot (weekly; routine minor/patch
+  bumps batched into one PR, majors solo), which carries a matching 7-day
+  `cooldown` so it never proposes a version that would fail the frozen install.
 
 ## Reporting issues
 
