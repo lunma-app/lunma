@@ -6,15 +6,19 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    # Wait out fresh releases before proposing them. This exceeds pnpm's
+    # ~1-day `minimumReleaseAge` (pnpm-workspace.yaml), so Dependabot never opens
+    # a bump that `pnpm install --frozen-lockfile` would then reject in CI — and
+    # it gives every release a bake-in window (supply-chain hygiene).
+    cooldown:
+      default-days: 7
     groups:
-      # Keep the noise down: batch routine minor/patch bumps into one PR each
-      # for dev- and production-scoped deps. Majors still come through solo so
-      # they get individual review.
-      dev-dependencies:
-        dependency-type: "development"
-        update-types: ["minor", "patch"]
-      production-dependencies:
-        dependency-type: "production"
+      # One PR for ALL routine minor/patch bumps (dev + prod together): a single
+      # lockfile write per cycle, so grouped PRs can't conflict with each other
+      # on pnpm-lock.yaml the way separate dev/prod groups did. Majors still come
+      # through solo so they get individual review.
+      dependencies:
+        patterns: ["*"]
         update-types: ["minor", "patch"]
     ignore:
       # @types/node tracks the Node runtime major; we pin to the Node 24 line
@@ -28,6 +32,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     groups:
       github-actions:
         patterns: ["*"]
