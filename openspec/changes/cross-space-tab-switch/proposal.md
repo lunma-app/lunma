@@ -51,11 +51,15 @@ that thing" includes "go to where it lives."
   Lunma SHALL activate that Space in the window as part of the activation (open +
   group, or focus). Favorites (`spaceId === null`) are unaffected.
 
-The `launcher` capability is **not** modified: *Acting on a launcher result* still
-dispatches the same `openSavedTab`/`focusSavedTab` commands; the Space switch is
-emergent handler behaviour, not a new dispatch. The `spaces-and-tabs` activation
-contract is **reused, not changed** (the handler invokes the existing activation
-sequence).
+- `launcher`: **behaviourally unchanged** — *Acting on a launcher result* still
+  dispatches the same `openSavedTab`/`focusSavedTab` commands; the Space switch is
+  emergent handler behaviour, not a new dispatch. The requirement gains a single
+  **non-normative cross-reference** (no new `SHALL`, no behaviour change) noting
+  that a coupled cross-Space `saved` result switches Space via the
+  `lunma-bookmark-bindings` handlers.
+
+The `spaces-and-tabs` activation contract is **reused, not changed** (the handler
+invokes the existing activation sequence).
 
 ## Impact
 
@@ -73,5 +77,6 @@ sequence).
   (dormant open switches Space + groups visibly; bound focus switches Space;
   same-Space activation does **not** re-activate; a favorite never switches).
 - **Docs** — the `openspec/specs/lunma-bookmark-bindings` spec notes the
-  activation-time Space switch; the `openspec/specs/launcher` spec cross-links it
-  from the saved-result action. No other docs (no layer-DAG, schema, or stack change).
+  activation-time Space switch; the `openspec/specs/launcher` spec gains a
+  non-normative cross-reference from the saved-result action (behaviourally
+  unchanged). No other docs (no layer-DAG, schema, or stack change).

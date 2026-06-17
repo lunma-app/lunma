@@ -46,6 +46,34 @@ export function findSpaceIdByGroupId(state: AppState, groupId: number): SpaceId 
   return null;
 }
 
+/**
+ * The Space that owns `tabId` in `windowId`, or `null` when none does
+ * (focused-tab-switches-space, design D2). Resolution order, all from store state:
+ *
+ * 1. The Space whose **per-window instance** lists the tab as temporary
+ *    (`spaceInstancesByWindow[windowId][spaceId].tempTabIds` includes `tabId`).
+ * 2. Else, a **coupled pinned tab** bound to it in this window
+ *    (`tabBindings[savedId][windowId] === tabId` with `savedTabs[savedId].spaceId
+ *    !== null`) → that `spaceId`.
+ * 3. Else `null` — an ungrouped/untracked tab, or a global favorite (its binding
+ *    resolves to `spaceId === null`, which step 2 excludes). A `null` owner never
+ *    drives a Space switch on activation.
+ */
+export function spaceOwningTab(state: AppState, windowId: WindowId, tabId: TabId): SpaceId | null {
+  const instances = state.spaceInstancesByWindow[windowId];
+  if (instances) {
+    for (const instance of Object.values(instances)) {
+      if (instance.tempTabIds.includes(tabId)) return instance.spaceId;
+    }
+  }
+  for (const [savedId, slots] of Object.entries(state.tabBindings)) {
+    if (slots[windowId] !== tabId) continue;
+    const spaceId = state.savedTabs[savedId]?.spaceId;
+    if (spaceId != null) return spaceId;
+  }
+  return null;
+}
+
 /** The saved-tab id currently bound to `tabId`, or `undefined`. Used to re-push
  * boundary config when a bound tab finishes (re)loading. */
 export function savedTabIdForBoundTab(state: AppState, tabId: TabId): SavedTabId | undefined {

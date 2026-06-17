@@ -371,12 +371,16 @@ describe('Coordinator handler: openSavedTab for a favorite', () => {
 describe('null-spaceId favorite flows through coordinator paths without crashing (D8)', () => {
   test('open ungrouped → excluded from a rebuilt Space group → removeSavedTab cleans it', async () => {
     const { coordinator, store } = makeCoordinator();
-    store.state.spaces.push(space('work'));
-    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaces.push(space('work'), space('away'));
+    // Start on a DIFFERENT Space so step (2) is a genuine cross-Space switch INTO
+    // work (cross-space-tab-switch: activating the already-active Space no-ops, so
+    // the stale-group rebuild must be driven by a real switch, not a re-activate).
+    store.state.activeSpaceByWindow[100] = 'away';
     // work's persisted groupId is STALE (999, not in Chrome) so activation rebuilds
     // its group from the membership filter — which must exclude the favorite.
     store.state.spaceInstancesByWindow[100] = {
       work: { spaceId: 'work', groupId: 999, tempTabIds: [17], tempTabTitles: {} },
+      away: { spaceId: 'away', groupId: 2, tempTabIds: [18], tempTabTitles: {} },
     };
     store.state.savedTabs.fav = {
       id: 'fav',
@@ -388,10 +392,13 @@ describe('null-spaceId favorite flows through coordinator paths without crashing
     store.state.faviconRow = ['fav'];
     store.state.tabBindings.fav = {};
     store.state.liveTabsById[17] = live(17, 100, 'https://t/', 't');
+    store.state.liveTabsById[18] = live(18, 100, 'https://a/', 'a');
+    chrome.addGroup({ id: 2, windowId: 100, collapsed: false });
     chrome.addTab({ id: 17, windowId: 100, groupId: -1 });
+    chrome.addTab({ id: 18, windowId: 100, groupId: 2 });
 
     // (1) openSavedTab a dormant favorite → ungrouped, bound (the null branch).
-    // (2) re-activate work → its group is rebuilt from [17]; the favorite excluded.
+    // (2) switch away → work → work's group is rebuilt from [17]; the favorite excluded.
     // (3) deleteSavedTab → removeSavedTab closes the bound tab + cleans faviconRow.
     coordinator.enqueue(
       sidebar({ kind: 'openSavedTab', payload: { savedTabId: 'fav', windowId: 100 } }, 'c1'),

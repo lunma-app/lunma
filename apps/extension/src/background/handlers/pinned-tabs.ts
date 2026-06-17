@@ -4,6 +4,7 @@
 
 import { log } from '../../shared/logger';
 import { closeTab } from '../tab-groups';
+import { activateSpaceInWindow } from './activation';
 import type { HandlersMap } from './context';
 import { spaceExists } from './queries';
 
@@ -91,8 +92,14 @@ export function pinnedTabHandlers(): Pick<
         // drain race exists.
         await ctx.groups.ensureFavoriteUngrouped(tabId);
       } else {
-        // A pinned/saved tab belongs to its Space — when opened it joins that
-        // Space's Chrome group in the window (not just temp tabs).
+        // A pinned/saved tab belongs to its Space. If that Space is not the
+        // window's active one (e.g. a cross-Space open from the launcher),
+        // switch to it FIRST (cross-space-tab-switch D3) so the target group is
+        // the shown one when the new tab joins it — otherwise the tab lands in a
+        // hidden background group. The helper no-ops for a same-Space open, so
+        // the sidebar's always-same-Space clicks are unchanged.
+        await activateSpaceInWindow(ctx, windowId, saved.spaceId);
+        // Now joins the active Space's Chrome group in the window (not just temp tabs).
         await ctx.groups.addTabToSpaceGroup(windowId, saved.spaceId, tabId);
       }
       ctx.markDirty();
@@ -114,6 +121,22 @@ export function pinnedTabHandlers(): Pick<
         throw new Error(
           `focusSavedTab: saved tab '${savedTabId}' is dormant in window ${windowId} or unknown`,
         );
+      }
+      // When the bound tab is coupled (`spaceId !== null`) and lives in a Space
+      // other than the window's active one, switch the window to that Space FIRST
+      // (cross-space-tab-switch D3) so the tab is focused into its now-shown group
+      // rather than forcing Chrome to expand a hidden one. A favorite
+      // (`spaceId === null`) or a same-Space focus never switches, so the sidebar
+      // is unchanged. The store activation here must be persisted/broadcast, so
+      // mark dirty only when the switch actually runs.
+      const savedRecord = ctx.store.state.savedTabs[savedTabId];
+      if (
+        savedRecord &&
+        savedRecord.spaceId !== null &&
+        savedRecord.spaceId !== ctx.store.state.activeSpaceByWindow[windowId]
+      ) {
+        await activateSpaceInWindow(ctx, windowId, savedRecord.spaceId);
+        ctx.markDirty();
       }
       const tab = await chrome.tabs.update(tabId, { active: true });
       if (tab?.windowId !== undefined) {

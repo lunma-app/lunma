@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { createInitialState } from '../../shared/store.svelte';
 import type { AppState } from '../../shared/types';
-import { findTabInActiveSpace } from './queries';
+import { findTabInActiveSpace, spaceOwningTab } from './queries';
 
 function makeState(): AppState {
   return createInitialState();
@@ -126,5 +126,74 @@ describe('findTabInActiveSpace', () => {
       status: 'complete',
     };
     expect(findTabInActiveSpace(state, 100, 'https://example.com')).toBeNull();
+  });
+});
+
+describe('spaceOwningTab', () => {
+  test('returns the Space whose per-window instance lists the tab as temporary', () => {
+    const state = makeState();
+    state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    state.spaces.push({ id: 'home', name: 'Home', color: 'red', icon: 'star' });
+    state.activeSpaceByWindow[100] = 'work';
+    state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [17], tempTabTitles: {} },
+      home: { spaceId: 'home', groupId: 2, tempTabIds: [30], tempTabTitles: {} },
+    };
+    expect(spaceOwningTab(state, 100, 30)).toBe('home');
+    expect(spaceOwningTab(state, 100, 17)).toBe('work');
+  });
+
+  test('returns the bound Space of a coupled pinned tab', () => {
+    const state = makeState();
+    state.spaces.push({ id: 'home', name: 'Home', color: 'red', icon: 'star' });
+    state.spaceInstancesByWindow[100] = {
+      home: { spaceId: 'home', groupId: 2, tempTabIds: [], tempTabTitles: {} },
+    };
+    state.savedTabs['p1'] = {
+      id: 'p1',
+      spaceId: 'home',
+      title: 'P1',
+      originalURL: 'https://p1/',
+      currentURL: null,
+    };
+    state.tabBindings['p1'] = { 100: 77 };
+    expect(spaceOwningTab(state, 100, 77)).toBe('home');
+  });
+
+  test('returns null for a global favorite (bound with spaceId === null)', () => {
+    const state = makeState();
+    state.savedTabs['f1'] = {
+      id: 'f1',
+      spaceId: null,
+      title: 'F1',
+      originalURL: 'https://f1/',
+      currentURL: null,
+    };
+    state.tabBindings['f1'] = { 100: 88 };
+    expect(spaceOwningTab(state, 100, 88)).toBeNull();
+  });
+
+  test('returns null for an ungrouped/untracked tab', () => {
+    const state = makeState();
+    state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [17], tempTabTitles: {} },
+    };
+    expect(spaceOwningTab(state, 100, 999)).toBeNull();
+  });
+
+  test('a coupled pin bound in another window does not own the tab in this window', () => {
+    const state = makeState();
+    state.spaces.push({ id: 'home', name: 'Home', color: 'red', icon: 'star' });
+    state.savedTabs['p1'] = {
+      id: 'p1',
+      spaceId: 'home',
+      title: 'P1',
+      originalURL: 'https://p1/',
+      currentURL: null,
+    };
+    state.tabBindings['p1'] = { 200: 77 };
+    // Tab 77 is bound in window 200, not 100 — querying window 100 yields null.
+    expect(spaceOwningTab(state, 100, 77)).toBeNull();
   });
 });

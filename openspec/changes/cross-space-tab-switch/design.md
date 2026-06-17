@@ -97,6 +97,30 @@ Alternative considered: switch to the smart folder's Space on smart-item
 activation. Rejected for this change; revisit if users ask for it (the result
 already carries the folder's `spaceId`, so it stays a small follow-up).
 
+### D5 — The idempotent helper makes an explicit same-Space re-activate a no-op
+
+`activateSpaceInWindow` no-ops when `spaceId === activeSpaceByWindow[windowId]`
+(D1/D2), and the `activateSpace` command handler now delegates to it. So
+explicitly re-activating the **already-active** Space — previously a full
+orchestration pass that, as a side effect, rebuilt a stale Chrome group — becomes
+a no-op (store + groups untouched; the handler still `markDirty`s).
+
+This was surfaced during implementation (it changes the command's same-Space
+behaviour) and accepted because the path is **production-unreachable**: no surface
+ever dispatches `activateSpace` for the active Space. `SpaceSwitcher` guards
+explicitly (clicking the active chip opens its editor, dispatching nothing) and
+the swipe carousel only ever commits to an *adjacent* Space; the launcher and
+options never dispatch it. The stale-group self-heal still happens on every
+genuine switch and on tab-lifecycle events — only the (unreachable) re-activate
+trigger is dropped. One favorites test that used a same-Space re-activate purely
+to force a rebuild was rewired to drive it through a genuine cross-Space switch.
+
+Alternative rejected: move the gate into the coupled-tab callers and leave the
+helper unguarded so the command is byte-for-byte unchanged. Rejected — it
+duplicates the "switch only if different" decision at two call sites and
+contradicts the single-idempotent-helper shape (D1), for the sake of a behaviour
+no surface can trigger.
+
 ## Risks / Trade-offs
 
 - **Extra group orchestration on a cross-Space open could add visible work/flicker**

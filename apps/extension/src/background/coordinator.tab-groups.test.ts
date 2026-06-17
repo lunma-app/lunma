@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { LiveTab, Space } from '../shared/types';
 import type { PendingEvent } from './coordinator';
-import { makeCoordinator, sidebar, tabCreated } from './coordinator.test-helpers';
+import { makeCoordinator, sidebar, tabActivated, tabCreated } from './coordinator.test-helpers';
 import { installTabGroupsChrome, type TabGroupsController } from './tab-groups.test-helpers';
 
 function space(id: string, name = id, color = 'blue'): Space {
@@ -840,5 +840,347 @@ describe('tab-group lifecycle hints (non-destructive)', () => {
     // The Space is in trash and no instance holds 42 → forgetSpaceGroup no-ops.
     expect(store.state.spaces.find((s) => s.id === 'work')).toBeUndefined();
     expect(store.state.trash.work).toBeDefined();
+  });
+});
+
+// =====================================================================
+// Cross-Space saved-tab activation (cross-space-tab-switch). Activating a
+// COUPLED (pinned) saved tab whose Space is not the window's active one switches
+// the window to that Space — open joins the now-shown group, focus lands in it.
+// Favorites and same-Space activations never switch.
+// =====================================================================
+
+/** Did any group get collapsed during the drain? The fingerprint of a Space
+ * switch's orchestration (a same-Space/favorite activation never collapses). */
+function didOrchestrateSwitch(calls: string[]): boolean {
+  return calls.some((c) => c.startsWith('tabGroups.update:collapsed=true'));
+}
+
+describe('cross-Space saved-tab activation switches Space', () => {
+  test('opening a dormant pin from another Space switches the window and groups it visibly', async () => {
+    const { coordinator, store, broadcast } = makeCoordinator();
+    store.state.spaces.push(space('work'), space('home'));
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [17], tempTabTitles: {} },
+      home: { spaceId: 'home', groupId: 2, tempTabIds: [30], tempTabTitles: {} },
+    };
+    store.state.savedTabs.p1 = {
+      id: 'p1',
+      spaceId: 'home',
+      title: 'P1',
+      originalURL: 'https://p1/',
+      currentURL: null,
+    };
+    store.state.tabBindings.p1 = {};
+    for (const id of [17, 30]) store.state.liveTabsById[id] = live(id, 100);
+    chrome.addGroup({ id: 1, windowId: 100, collapsed: false });
+    chrome.addGroup({ id: 2, windowId: 100, collapsed: true });
+    chrome.addTab({ id: 17, windowId: 100, groupId: 1 });
+    chrome.addTab({ id: 30, windowId: 100, groupId: 2 });
+
+    coordinator.enqueue(
+      sidebar({ kind: 'openSavedTab', payload: { savedTabId: 'p1', windowId: 100 } }, 'c1'),
+    );
+    await coordinator.idle();
+
+    // The window switched to Home: Home's group is shown, Work's collapsed.
+    expect(store.state.activeSpaceByWindow[100]).toBe('home');
+    expect(chrome.groups.get(2)?.collapsed).toBe(false);
+    expect(chrome.groups.get(1)?.collapsed).toBe(true);
+    // The broadcast the sidebar receives carries the switched active Space (this is
+    // what drives the sidebar's reconcile to glide to Home — App.test.ts).
+    const lastBroadcast = broadcast.mock.calls.at(-1)?.[0];
+    expect(lastBroadcast?.state.activeSpaceByWindow[100]).toBe('home');
+    // The new tab is bound and joins Home's now-visible group (not hidden in a bg one).
+    const boundTabId = store.state.tabBindings.p1?.[100];
+    expect(typeof boundTabId).toBe('number');
+    if (typeof boundTabId === 'number') {
+      expect(chrome.tabs.get(boundTabId)?.groupId).toBe(2);
+    }
+  });
+
+  test('opening a dormant pin already in the active Space does NOT re-activate', async () => {
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push(space('work'));
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [17], tempTabTitles: {} },
+    };
+    store.state.savedTabs.p2 = {
+      id: 'p2',
+      spaceId: 'work',
+      title: 'P2',
+      originalURL: 'https://p2/',
+      currentURL: null,
+    };
+    store.state.tabBindings.p2 = {};
+    store.state.liveTabsById[17] = live(17, 100);
+    chrome.addGroup({ id: 1, windowId: 100, collapsed: false });
+    chrome.addTab({ id: 17, windowId: 100, groupId: 1 });
+
+    coordinator.enqueue(
+      sidebar({ kind: 'openSavedTab', payload: { savedTabId: 'p2', windowId: 100 } }, 'c1'),
+    );
+    await coordinator.idle();
+
+    // Same Space → no orchestration ran; the new tab still joins Work's group.
+    expect(store.state.activeSpaceByWindow[100]).toBe('work');
+    expect(didOrchestrateSwitch(chrome.calls)).toBe(false);
+    const boundTabId = store.state.tabBindings.p2?.[100];
+    expect(typeof boundTabId).toBe('number');
+    if (typeof boundTabId === 'number') {
+      expect(chrome.tabs.get(boundTabId)?.groupId).toBe(1);
+    }
+  });
+
+  test('opening a dormant favorite never switches the window Space', async () => {
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push(space('work'), space('home'));
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [17], tempTabTitles: {} },
+    };
+    store.state.savedTabs.f1 = {
+      id: 'f1',
+      spaceId: null,
+      title: 'F1',
+      originalURL: 'https://f1/',
+      currentURL: null,
+    };
+    store.state.faviconRow = ['f1'];
+    store.state.tabBindings.f1 = {};
+    store.state.liveTabsById[17] = live(17, 100);
+    chrome.addGroup({ id: 1, windowId: 100, collapsed: false });
+    chrome.addTab({ id: 17, windowId: 100, groupId: 1 });
+
+    coordinator.enqueue(
+      sidebar({ kind: 'openSavedTab', payload: { savedTabId: 'f1', windowId: 100 } }, 'c1'),
+    );
+    await coordinator.idle();
+
+    // A global favorite (spaceId === null) is ungrouped and never switches.
+    expect(store.state.activeSpaceByWindow[100]).toBe('work');
+    expect(didOrchestrateSwitch(chrome.calls)).toBe(false);
+    const boundTabId = store.state.tabBindings.f1?.[100];
+    expect(typeof boundTabId).toBe('number');
+    if (typeof boundTabId === 'number') {
+      expect(chrome.tabs.get(boundTabId)?.groupId).toBe(-1);
+    }
+  });
+
+  test('focusing a bound saved tab in another Space switches the window first', async () => {
+    const winUpdate = vi.fn(async () => ({ id: 100 }) as chrome.windows.Window);
+    (
+      globalThis as unknown as { chrome: { windows: { update: typeof winUpdate } } }
+    ).chrome.windows = { update: winUpdate };
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push(space('work'), space('home'));
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [17], tempTabTitles: {} },
+      home: { spaceId: 'home', groupId: 2, tempTabIds: [], tempTabTitles: {} },
+    };
+    store.state.savedTabs.p3 = {
+      id: 'p3',
+      spaceId: 'home',
+      title: 'P3',
+      originalURL: 'https://p3/',
+      currentURL: 'https://p3/',
+      boundary: { mode: 'off' },
+    };
+    store.state.tabBindings.p3 = { 100: 31 };
+    for (const id of [17, 31]) store.state.liveTabsById[id] = live(id, 100);
+    chrome.addGroup({ id: 1, windowId: 100, collapsed: false });
+    chrome.addGroup({ id: 2, windowId: 100, collapsed: true });
+    chrome.addTab({ id: 17, windowId: 100, groupId: 1 });
+    chrome.addTab({ id: 31, windowId: 100, groupId: 2 });
+
+    coordinator.enqueue(
+      sidebar({ kind: 'focusSavedTab', payload: { savedTabId: 'p3', windowId: 100 } }, 'c1'),
+    );
+    await coordinator.idle();
+
+    // Switched to Home BEFORE focusing; the bound tab is focused, no new tab opened.
+    expect(store.state.activeSpaceByWindow[100]).toBe('home');
+    expect(chrome.groups.get(2)?.collapsed).toBe(false);
+    expect(chrome.groups.get(1)?.collapsed).toBe(true);
+    expect(chrome.tabs.get(31)?.active).toBe(true);
+    expect(winUpdate).toHaveBeenCalledWith(100, { focused: true });
+    expect(chrome.calls.some((c) => c.startsWith('tabs.create'))).toBe(false);
+  });
+
+  test('focusing a bound saved tab in the active Space does NOT switch', async () => {
+    const winUpdate = vi.fn(async () => ({ id: 100 }) as chrome.windows.Window);
+    (
+      globalThis as unknown as { chrome: { windows: { update: typeof winUpdate } } }
+    ).chrome.windows = { update: winUpdate };
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push(space('work'));
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [42], tempTabTitles: {} },
+    };
+    store.state.savedTabs.p4 = {
+      id: 'p4',
+      spaceId: 'work',
+      title: 'P4',
+      originalURL: 'https://p4/',
+      currentURL: 'https://p4/',
+      boundary: { mode: 'off' },
+    };
+    store.state.tabBindings.p4 = { 100: 42 };
+    store.state.liveTabsById[42] = live(42, 100);
+    chrome.addGroup({ id: 1, windowId: 100, collapsed: false });
+    chrome.addTab({ id: 42, windowId: 100, groupId: 1 });
+
+    coordinator.enqueue(
+      sidebar({ kind: 'focusSavedTab', payload: { savedTabId: 'p4', windowId: 100 } }, 'c1'),
+    );
+    await coordinator.idle();
+
+    // Same Space → no orchestration; the tab is simply focused.
+    expect(store.state.activeSpaceByWindow[100]).toBe('work');
+    expect(didOrchestrateSwitch(chrome.calls)).toBe(false);
+    expect(chrome.tabs.get(42)?.active).toBe(true);
+    expect(winUpdate).toHaveBeenCalledWith(100, { focused: true });
+  });
+});
+
+// =====================================================================
+// Activation-driven cross-Space switch (focused-tab-switches-space). Activating
+// a tab whose owning Space is not the window's active one switches the window to
+// that Space — the open/temporary-tab gap cross-space-tab-switch left open. Every
+// activation path (launcher open-tab, sidebar temp-tab click, Chrome tab strip,
+// keyboard) funnels through `tabs.onActivated`, so this one chokepoint covers all.
+// =====================================================================
+
+describe('activating a cross-Space tab switches the window Space', () => {
+  test('activating a temp tab that lives in another Space switches + broadcasts the new active Space', async () => {
+    const { coordinator, store, broadcast } = makeCoordinator();
+    store.state.spaces.push(space('work'), space('home'));
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [17], tempTabTitles: {} },
+      home: { spaceId: 'home', groupId: 2, tempTabIds: [30], tempTabTitles: {} },
+    };
+    for (const id of [17, 30]) store.state.liveTabsById[id] = live(id, 100);
+    chrome.addGroup({ id: 1, windowId: 100, collapsed: false });
+    chrome.addGroup({ id: 2, windowId: 100, collapsed: true });
+    chrome.addTab({ id: 17, windowId: 100, groupId: 1 });
+    chrome.addTab({ id: 30, windowId: 100, groupId: 2 });
+
+    // Tab 30 lives in Home — activating it (e.g. an open-tab launcher result, or a
+    // Chrome tab-strip click) moves the window to Home.
+    coordinator.enqueue(tabActivated(30, 100));
+    await coordinator.idle();
+
+    // The window switched to Home: Home's group is shown, Work's collapsed.
+    expect(store.state.activeSpaceByWindow[100]).toBe('home');
+    expect(chrome.groups.get(2)?.collapsed).toBe(false);
+    expect(chrome.groups.get(1)?.collapsed).toBe(true);
+    // The broadcast the sidebar reconciles against carries the switched Space.
+    const lastBroadcast = broadcast.mock.calls.at(-1)?.[0];
+    expect(lastBroadcast?.state.activeSpaceByWindow[100]).toBe('home');
+  });
+
+  test('activating a temp tab already in the active Space does NOT re-switch', async () => {
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push(space('work'), space('home'));
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [17, 22], tempTabTitles: {} },
+      home: { spaceId: 'home', groupId: 2, tempTabIds: [30], tempTabTitles: {} },
+    };
+    for (const id of [17, 22, 30]) store.state.liveTabsById[id] = live(id, 100);
+    chrome.addGroup({ id: 1, windowId: 100, collapsed: false });
+    chrome.addGroup({ id: 2, windowId: 100, collapsed: true });
+
+    coordinator.enqueue(tabActivated(22, 100));
+    await coordinator.idle();
+
+    // Same Space → the idempotent helper no-ops; no orchestration ran.
+    expect(store.state.activeSpaceByWindow[100]).toBe('work');
+    expect(didOrchestrateSwitch(chrome.calls)).toBe(false);
+  });
+
+  test('activating a global favorite never switches the window Space', async () => {
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push(space('work'), space('home'));
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [17], tempTabTitles: {} },
+      home: { spaceId: 'home', groupId: 2, tempTabIds: [], tempTabTitles: {} },
+    };
+    store.state.savedTabs.f1 = {
+      id: 'f1',
+      spaceId: null,
+      title: 'F1',
+      originalURL: 'https://f1/',
+      currentURL: null,
+    };
+    store.state.faviconRow = ['f1'];
+    store.state.tabBindings.f1 = { 100: 88 };
+    for (const id of [17, 88]) store.state.liveTabsById[id] = live(id, 100);
+    chrome.addGroup({ id: 1, windowId: 100, collapsed: false });
+    chrome.addGroup({ id: 2, windowId: 100, collapsed: true });
+
+    // 88 is a bound global favorite (spaceId === null) — no owning Space.
+    coordinator.enqueue(tabActivated(88, 100));
+    await coordinator.idle();
+
+    expect(store.state.activeSpaceByWindow[100]).toBe('work');
+    expect(didOrchestrateSwitch(chrome.calls)).toBe(false);
+  });
+
+  test('activating an ungrouped/untracked tab never switches the window Space', async () => {
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push(space('work'));
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [17], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[17] = live(17, 100);
+    chrome.addGroup({ id: 1, windowId: 100, collapsed: false });
+
+    // 999 is untracked — no instance lists it, no binding holds it.
+    coordinator.enqueue(tabActivated(999, 100));
+    await coordinator.idle();
+
+    expect(store.state.activeSpaceByWindow[100]).toBe('work');
+    expect(didOrchestrateSwitch(chrome.calls)).toBe(false);
+  });
+
+  test('a single activation produces a single switch — the re-fired onActivated in the now-active Space does NOT switch again (D4)', async () => {
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push(space('work'), space('home'));
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [17], tempTabTitles: {} },
+      home: { spaceId: 'home', groupId: 2, tempTabIds: [30, 31], tempTabTitles: {} },
+    };
+    for (const id of [17, 30, 31]) store.state.liveTabsById[id] = live(id, 100);
+    chrome.addGroup({ id: 1, windowId: 100, collapsed: false });
+    chrome.addGroup({ id: 2, windowId: 100, collapsed: true });
+
+    // First activation: tab 30 in Home → switch to Home (one collapse of Work).
+    coordinator.enqueue(tabActivated(30, 100));
+    await coordinator.idle();
+    expect(store.state.activeSpaceByWindow[100]).toBe('home');
+    const collapsesAfterFirst = chrome.calls.filter((c) =>
+      c.startsWith('tabGroups.update:collapsed=true'),
+    ).length;
+    expect(collapsesAfterFirst).toBe(1);
+
+    // The switch's own focus-tab activation re-fires onActivated for a tab now in
+    // the active Space (Home). It must NOT switch again — the owner equals the
+    // active Space, so the helper no-ops: still exactly one switch.
+    coordinator.enqueue(tabActivated(31, 100));
+    await coordinator.idle();
+    expect(store.state.activeSpaceByWindow[100]).toBe('home');
+    const collapsesAfterSecond = chrome.calls.filter((c) =>
+      c.startsWith('tabGroups.update:collapsed=true'),
+    ).length;
+    expect(collapsesAfterSecond).toBe(1);
   });
 });

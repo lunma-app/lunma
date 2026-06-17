@@ -9,8 +9,14 @@ import { log } from '../../shared/logger';
 import { isNewTabUrl } from '../../shared/new-tab';
 import { resolveBoundaryAllow } from '../../shared/url-boundary';
 import { closeTab } from '../tab-groups';
+import { activateSpaceInWindow } from './activation';
 import type { HandlersMap } from './context';
-import { findTabInActiveSpace, isTrackedTab, savedTabIdForBoundTab } from './queries';
+import {
+  findTabInActiveSpace,
+  isTrackedTab,
+  savedTabIdForBoundTab,
+  spaceOwningTab,
+} from './queries';
 
 export function chromeTabHandlers(): Pick<
   HandlersMap,
@@ -171,13 +177,31 @@ export function chromeTabHandlers(): Pick<
       }
       ctx.markDirty();
     },
-    'tabs.onActivated': (ctx, event) => {
+    'tabs.onActivated': async (ctx, event) => {
       const { activeInfo } = event.payload;
       // Navigating to another tab consumes the feed entry you were on
       // (rss-connector, the draining queue): the store marks it read and returns
       // its bound tab(s) to CLOSE (consume = close — no tab trail).
       const consumed = ctx.store.setActiveTab(activeInfo.windowId, activeInfo.tabId);
       for (const tabId of consumed) ctx.runSideEffect(() => closeTab(tabId));
+      // The focused tab's Space is always the Space on screen
+      // (focused-tab-switches-space, design D1). When the activated tab has an
+      // owning Space in this window that differs from the window's active Space,
+      // switch to it — the same store-activation + group-orchestration sequence a
+      // manual switch runs. `activateSpaceInWindow` no-ops for a same-Space owner
+      // (the common case) and `spaceOwningTab` returns `null` for global favorites
+      // / ungrouped tabs, so neither switches. The re-fired `onActivated` from the
+      // switch's own focus-tab activation lands on a tab now in the active Space →
+      // owner equals active Space → the helper no-ops: one switch per activation
+      // (D4). Caller-agnostic — fixes launcher, sidebar, Chrome tab strip, and
+      // keyboard at once, since they all funnel through this event.
+      const owningSpace = spaceOwningTab(ctx.store.state, activeInfo.windowId, activeInfo.tabId);
+      if (
+        owningSpace !== null &&
+        owningSpace !== ctx.store.state.activeSpaceByWindow[activeInfo.windowId]
+      ) {
+        await activateSpaceInWindow(ctx, activeInfo.windowId, owningSpace);
+      }
       ctx.markDirty();
     },
   };
