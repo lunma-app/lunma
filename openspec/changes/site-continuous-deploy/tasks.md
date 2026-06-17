@@ -1,23 +1,47 @@
 ## 1. Cloudflare Pages project + domain (guided-manual + wrangler)
 
-- [ ] 1.1 **(manual gate)** Create a Cloudflare Pages project named `lunma` of the
+- [x] 1.1 **(manual gate)** Create a Cloudflare Pages project named `lunma` of the
   **direct-upload** type (no connected Git repo — CI pushes the prebuilt output,
   design D2). Confirm it exists: `wrangler pages project list` shows `lunma`.
-- [ ] 1.2 Bind the custom domain: add `lunma.app` (apex) as a custom domain on the
+  → Done: `CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=… wrangler pages project
+  create lunma --production-branch main`; `wrangler pages project list` shows
+  `lunma` (Git Provider: No → direct-upload), domain `lunma.pages.dev`.
+- [x] 1.2 Bind the custom domain: add `lunma.app` (apex) as a custom domain on the
   `lunma` Pages project, on the already-Cloudflare-managed `lunma.app` zone, and
   add a `www.lunma.app` → apex redirect. Confirm the apex domain shows "Active" in
   the project's Custom domains. (Account state — record the exact dashboard/CLI
   steps here for reproducibility.)
-- [ ] 1.3 Mint a Cloudflare API token scoped to **Account › Cloudflare Pages ›
+  → Done: apex attached via API —
+  `curl -X POST .../accounts/$ACCT/pages/projects/lunma/domains -d '{"name":"lunma.app"}'`.
+  The API attach does **not** auto-create the apex DNS record, so it was added in
+  the dashboard: **DNS → Records** `lunma.app` `CNAME → lunma.pages.dev`, **Proxied**
+  (Cloudflare flattens the apex CNAME). `www → apex` 301 via **Rules → Redirect
+  Rules → "Redirect from WWW to root"** template (pattern `https://www.*` →
+  `https://${1}`, 301, preserve query string) plus the Cloudflare-created proxied
+  `www` record; verified live (`curl -sI https://www.lunma.app/` → `301
+  location: https://lunma.app/`). Apex edge cert is serving (TLS terminates; an
+  un-deployed apex returns `522`); the Pages domain finishes validating to
+  **Active** once the first production deployment exists (§7) — the documented
+  "bound, awaiting deployment" state, not a misconfiguration.
+- [x] 1.3 Mint a Cloudflare API token scoped to **Account › Cloudflare Pages ›
   Edit** only (least privilege, design D3/risks). Note the Account ID. Do **not**
   grant DNS/Workers/other scopes.
+  → Done: an **account-owned** API token (Manage Account → API Tokens), single
+  policy *Cloudflare Pages: Read + Edit* at **Entire Account** scope (the Pages
+  template's pair; "Edit" implies write). No DNS/Workers/other scopes — the apex
+  DNS record (1.2) was therefore added via the dashboard, not this token.
 
 ## 2. GitHub repo secrets
 
-- [ ] 2.1 Set the two repo secrets (never committed):
+- [x] 2.1 Set the two repo secrets (never committed):
   `gh secret set CLOUDFLARE_API_TOKEN` (the Pages:Edit token from 1.3) and
   `gh secret set CLOUDFLARE_ACCOUNT_ID` (the account id). Confirm with
   `gh secret list` showing both names (values are masked).
+  → Done on `lunma-app/lunma`: both `CLOUDFLARE_API_TOKEN` and
+  `CLOUDFLARE_ACCOUNT_ID` set (values piped via stdin, never echoed/committed);
+  `gh secret list -R lunma-app/lunma` shows both. The token is also stored in
+  1Password ("Cloudflare Pages deploy — lunma"); the local `/tmp` stash used for
+  the setup commands was securely deleted.
 
 ## 3. Deploy workflow (`.github/workflows/deploy.yml`)
 
