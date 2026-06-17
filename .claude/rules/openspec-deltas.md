@@ -16,5 +16,6 @@ paths:
 - Keep `tasks.md` checkboxes current as you implement. Any deviation from
   proposal/design/specs requires user agreement AND same-change updates to the
   artifact plus any affected `docs/` file (CLAUDE.md deviation policy).
-- There is no `openspec` CLI installed here; the workflow runs through the
-  `openspec-*` skills.
+- The OpenSpec workflow runs through the `openspec-*` skills, which drive the
+  `openspec` CLI (install it globally: `npm i -g @fission-ai/openspec` — see
+  CONTRIBUTING.md).

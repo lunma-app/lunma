@@ -23,6 +23,10 @@ Lunma uses an **OpenSpec** workflow — non-trivial changes start as a proposal 
 `openspec/changes/` before code. See [`CLAUDE.md`](CLAUDE.md) and the docs under
 [`docs/`](docs/) for the architecture, the one-way import DAG, and the quality gates.
 
+- The OpenSpec workflow (and the repo's Claude Code skills under `.claude/skills/`)
+  drive the `openspec` CLI. Install it globally before working a change:
+  `npm i -g @fission-ai/openspec`.
+
 - Run `pnpm verify` at the workspace root before opening a pull request (it fans out
   to every package: type-check, Biome, svelte-check, Stylelint, and tests).
 - Keep code, docs, and OpenSpec artifacts in lockstep — neither leads the other.

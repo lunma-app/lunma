@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # SessionStart(compact): re-inject the active OpenSpec change list after
-# compaction. There is no `openspec` CLI in this repo, so read the dir directly.
+# compaction. Reads the changes dir directly so it stays robust even when the
+# `openspec` CLI isn't on PATH (the CLI is the canonical workflow tool — see
+# CONTRIBUTING.md — but this hook avoids depending on it at session start).
 set -euo pipefail
 cd "${CLAUDE_PROJECT_DIR:-.}"
 

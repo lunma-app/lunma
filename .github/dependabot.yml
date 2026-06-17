@@ -16,6 +16,12 @@ updates:
       production-dependencies:
         dependency-type: "production"
         update-types: ["minor", "patch"]
+    ignore:
+      # @types/node tracks the Node runtime major; we pin to the Node 24 line
+      # (engines: ">=24", devbox nodejs@24). Hold major bumps until we move
+      # runtimes, so the type defs can't outrun the installed Node.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   # The actions pinned in .github/workflows/ci.yml.
   - package-ecosystem: "github-actions"
