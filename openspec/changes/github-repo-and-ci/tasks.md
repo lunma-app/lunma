@@ -143,3 +143,26 @@
   bumped to Node-24 majors (§2.2/2.4, design D1); branch-protection
   deferral recorded (§5.4/§6.4, design D5, docs/tech-stack.md + docs/architecture.md
   softened from "merges gated" to "CI runs on every PR/push; gating deferred")._
+
+## 7. e2e smoke-gesture reliability (assert-and-retry `dragTo`)
+
+- [x] 7.1 Root-cause the intermittent `e2e` failure on
+  `pin-temp-into-folder.spec.ts`: the third drag (filing a temp tab into the
+  just-renamed folder) pressed on a **stale bounding box** under CI load, so no
+  drag started and `savedIds` stayed 2 where 3 was expected. Confirmed unrelated
+  to product/CI-config code — it failed off a pure-docs commit and passed on the
+  dependabot PRs off the same `main`; `verify` (which doesn't run e2e) is green.
+- [x] 7.2 Convert the shared `dragTo` helper into an **assert-and-retry** gesture
+  (design D7): scroll both ends into view and re-measure each attempt; accept an
+  optional `settled?: () => Promise<boolean>` predicate; verify it via
+  `expect.poll(settled, { timeout: 2_000 }).toBe(true)` and replay the pointer
+  sequence (bounded — 4 attempts) only when the drop didn't register.
+- [x] 7.3 Pass a `settled` predicate (exact `savedIds.length === N`) at each of the
+  three drag call sites; keep the existing `expect.poll(...).toBe(N)` assertions
+  as the authoritative checks.
+- [x] 7.4 Verify determinism locally: `pnpm --filter @lunma/extension build` then
+  `playwright test pin-temp-into-folder.spec.ts --repeat-each=3` → 3/3 green.
+  _CI-load confirmation lands when the `e2e` job re-runs on the PR._
+- [x] 7.5 Record the new `release-engineering` requirement ("End-to-end smoke
+  gestures are deterministic under CI load") in this change's spec delta + design
+  D7; update the Risks bullet from "quarantine in a follow-up" to "fixed here".

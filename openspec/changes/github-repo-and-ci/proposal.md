@@ -35,6 +35,12 @@ adds are therefore plumbing for that named `open-source-public-launch` change.
     `--load-extension`, which Chromium permits only headed or `--headless=new`);
   - `concurrency` with cancel-in-progress per ref, and least-privilege
     `permissions: contents: read`.
+- **Deterministic e2e smoke gestures.** The Playwright smoke's multi-step pointer
+  gestures use an assert-and-retry `dragTo` helper (re-measure each end, verify the
+  drop registered against the exact expected state, replay if it didn't) so a
+  transient under-load stall self-heals instead of failing the required `e2e`
+  check — added when `pin-temp-into-folder` surfaced a stale-bounding-box flake.
+  See the `release-engineering` spec requirement and design D7.
 - **Branch protection** on `main` requiring the `verify` and `e2e` checks to pass
   before merge — configured imperatively via `gh api` (GitHub branch rules are
   account state, not a repo file), documented in `tasks.md` so it is reproducible.
@@ -72,6 +78,10 @@ component-library and visual-quality policies by explicit exemption).
   - `.github/ISSUE_TEMPLATE/config.yml` (disable blank issues, point elsewhere)
   - `.github/CODEOWNERS`
   - `.github/dependabot.yml`
+- **Modified files (test-infra only, no `src/` change):**
+  - `apps/extension/e2e/pin-temp-into-folder.spec.ts` — `dragTo` hardened to an
+    assert-and-retry gesture (D7); the three drag call sites pass a `settled`
+    predicate. No product/runtime code changes.
 - **New OpenSpec spec:** `openspec/specs/release-engineering/spec.md` (on archive).
 - **External / account state (not files):** the `lunma-app` org, the private
   `lunma-app/lunma` repo, the `origin` remote, and the `main` branch-protection

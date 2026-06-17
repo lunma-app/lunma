@@ -170,16 +170,42 @@ and `CODEOWNERS` in this change though their real consumer is
   "smallest plumbing" reading, but the user's call governs and the files are
   harmless. Recorded so the inclusion is not a silent deviation.
 
+### D7 — Harden flaky smoke gestures with assert-and-retry, not quarantine
+
+The `pin-temp-into-folder` smoke began failing the `e2e` check intermittently in
+CI: its third drag — filing a temp tab into a just-renamed folder — pressed on a
+stale bounding box under load, so no drag started and the pin was never minted
+(`savedIds` stayed 2 where 3 was expected). Rather than quarantine the spec or
+lean harder on Playwright's run-level `retries`, the shared `dragTo` helper
+becomes an **assert-and-retry gesture**: it re-measures both ends each attempt and
+verifies a caller-supplied "drop registered" predicate (the exact expected
+`savedIds` count), replaying the pointer sequence (bounded, 4 attempts) only when
+nothing committed — safe because a stale-box no-op changed no state.
+
+- **Why not quarantine:** the spec guards a shipped no-orphan guarantee; skipping
+  it would blind the gate to a real regression class.
+- **Why not just raise `retries`:** run-level retries re-run the *whole* spec and
+  read as "flaky-but-passing"; an in-gesture retry targets the exact fragile step
+  and keeps a real regression failing fast — the predicate asserts exact state, so
+  a broken drop exhausts retries and fails.
+- **Backward-compatible signature (deviation, recorded):** `dragTo` gains an
+  optional fourth `settled?: () => Promise<boolean>` argument; call shapes without
+  it keep the original single-pass behaviour. This helper is named in neither the
+  proposal nor prior design, so its addition is logged here per the deviation
+  policy.
+
 ## Risks / Trade-offs
 
 - **[`gh` cannot create orgs]** → The org is a guided manual web step
   (`github.com/organizations/new`); `tasks.md` documents it as a manual gate
   before the `gh repo create` step. Everything after the org exists is scripted.
 - **[Playwright e2e flakiness under xvfb / MV3 service-worker timing]** → The
-  config already sets `retries: 1` under CI and `workers: 1`; `trace:
-  retain-on-failure` aids debugging. If a spec is irreducibly flaky in CI it can
-  be quarantined in a follow-up — out of scope to fix specs here. The `e2e` check
-  staying required (D2/spec) means flakiness is visible, not hidden.
+  config sets `retries: 1` under CI and `workers: 1`; `trace: retain-on-failure`
+  aids debugging. The first flake to actually surface — `pin-temp-into-folder`'s
+  stale-box drag — is fixed in this change via the assert-and-retry `dragTo`
+  gesture (D7), not quarantined; should another spec prove irreducibly flaky it
+  gets the same gesture-level hardening. The `e2e` check staying required
+  (D2/spec) means flakiness is visible, not hidden.
 - **[Private-repo Actions minutes consumption]** → Private repos draw on the
   account's included Actions minutes. The two-job-per-push cost is modest;
   `concurrency: cancel-in-progress` curbs waste from rapid pushes. Re-verify the

@@ -57,6 +57,33 @@ context — the suite MUST run under a virtual display (`xvfb-run`).
 - **WHEN** any Playwright e2e spec fails
 - **THEN** the `e2e` check fails and is reported as a failing status
 
+### Requirement: End-to-end smoke gestures are deterministic under CI load
+
+Multi-step pointer gestures in the Playwright MV3 smoke SHALL be **assert-and-retry**:
+each attempt re-measures its target geometry and verifies the exact expected
+post-gesture state committed before proceeding, and MUST replay the pointer
+sequence a bounded number of times when it did not. The smoke is the gate's most
+timing-sensitive
+layer — it drives a real pointer against a live, rAF-rendered side panel — so this
+keeps a transient under-load stall (a pointer-down landing on a stale bounding
+box, so no drag starts) from failing the required `e2e` check, while a genuine
+product regression still fails because the success predicate asserts the exact
+expected state, not merely that a gesture ran.
+
+#### Scenario: A stale-layout drag self-heals
+- **WHEN** a smoke drag is issued against a row whose bounding box has shifted
+  (e.g. immediately after an inline-rename commit re-renders the list) so the
+  initial pointer-down lands off-row and no drag starts
+- **THEN** the gesture helper observes the expected state did not commit and
+  replays the pointer sequence against freshly-measured geometry
+- **AND** the spec passes without consuming a Playwright-level retry
+
+#### Scenario: A real regression still fails
+- **WHEN** the underlying drop behaviour is broken so the expected state never
+  commits regardless of geometry
+- **THEN** the gesture helper exhausts its bounded retries and the spec fails,
+  surfacing the regression on the `e2e` check
+
 ### Requirement: Merges to main are gated on green CI
 
 The `main` branch SHALL be protected so that changes cannot be merged unless the

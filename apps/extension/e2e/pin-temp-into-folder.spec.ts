@@ -119,16 +119,45 @@ function expectBoundAndOutOfTemporary(snap: StateSnap, newId: string): void {
 
 /** Pointer-drag a row to the centre of a target (past the 5px start threshold).
  * The target centre lands in a row's drop-onto band (middle 50%), which is what
- * turns a drop onto a folder/tab into a file-in / fold gesture. */
-async function dragTo(page: Page, row: Locator, target: Locator): Promise<void> {
-  const r = await row.boundingBox();
-  const z = await target.boundingBox();
-  if (!r || !z) throw new Error('dragTo: missing bounding box');
-  await page.mouse.move(r.x + r.width / 2, r.y + r.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(r.x + r.width / 2, r.y + r.height / 2 + 8, { steps: 3 });
-  await page.mouse.move(z.x + z.width / 2, z.y + z.height / 2, { steps: 12 });
-  await page.mouse.up();
+ * turns a drop onto a folder/tab into a file-in / fold gesture.
+ *
+ * Assert-and-retry gesture (mirrors the `openFolderMenu` hardening): a single
+ * pointer sequence is timing-sensitive under CI load — when issued against a
+ * stale bounding box (e.g. right after an inline-rename commit re-renders the
+ * list) the `mouse.down()` lands off-row, no drag starts, and the drop is a
+ * silent no-op. So re-measure both ends each attempt (scroll into view first),
+ * and — when the caller passes a `settled` predicate describing the expected
+ * post-drop state — verify the drop registered and replay the sequence if it
+ * did not. The predicate is checked against the EXACT expected state, so a
+ * genuinely-successful (if slow) drop is never re-dragged into a duplicate. */
+async function dragTo(
+  page: Page,
+  row: Locator,
+  target: Locator,
+  settled?: () => Promise<boolean>,
+): Promise<void> {
+  const ATTEMPTS = 4;
+  for (let attempt = 1; attempt <= ATTEMPTS; attempt += 1) {
+    await row.scrollIntoViewIfNeeded();
+    await target.scrollIntoViewIfNeeded();
+    const r = await row.boundingBox();
+    const z = await target.boundingBox();
+    if (!r || !z) throw new Error('dragTo: missing bounding box');
+    await page.mouse.move(r.x + r.width / 2, r.y + r.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(r.x + r.width / 2, r.y + r.height / 2 + 8, { steps: 3 });
+    await page.mouse.move(z.x + z.width / 2, z.y + z.height / 2, { steps: 12 });
+    await page.mouse.up();
+    if (!settled) return;
+    try {
+      await expect.poll(settled, { timeout: 2_000 }).toBe(true);
+      return;
+    } catch {
+      if (attempt === ATTEMPTS)
+        throw new Error(`dragTo: drop did not register after ${ATTEMPTS} attempts`);
+      // Stale-box no-op: nothing changed, so replaying the sequence is safe.
+    }
+  }
 }
 
 const tempRows = (page: Page): Locator => page.getByTestId('temp-tabs').getByTestId('tab-row');
@@ -149,7 +178,9 @@ test('temp→pinned drops file into folders, fold onto tabs (auto-rename), witho
   // --- (c) drop between rows / into the empty zone → a top-level pin --------
   await expect(pinnedTabRows(page)).toHaveCount(0);
   let before = await snapshot(page);
-  await dragTo(page, tempRows(page).first(), page.getByTestId('pinned-tabs'));
+  await dragTo(page, tempRows(page).first(), page.getByTestId('pinned-tabs'), async () => {
+    return (await snapshot(page)).savedIds.length === 1;
+  });
   await expect.poll(async () => (await snapshot(page)).savedIds.length).toBe(1);
 
   let snap = await snapshot(page);
@@ -162,7 +193,9 @@ test('temp→pinned drops file into folders, fold onto tabs (auto-rename), witho
 
   // --- (b) drop ONTO the top-level pinned tab → fold the two into a folder --
   before = snap;
-  await dragTo(page, tempRows(page).first(), pinnedTabRows(page).first());
+  await dragTo(page, tempRows(page).first(), pinnedTabRows(page).first(), async () => {
+    return (await snapshot(page)).savedIds.length === 2;
+  });
   await expect.poll(async () => (await snapshot(page)).savedIds.length).toBe(2);
   await expect
     .poll(async () => (await snapshot(page)).nodes.some((n) => n.kind === 'folder'))
@@ -195,7 +228,9 @@ test('temp→pinned drops file into folders, fold onto tabs (auto-rename), witho
   // does not).
   before = await snapshot(page);
   await expect(page.getByTestId('folder-children')).toBeVisible();
-  await dragTo(page, tempRows(page).first(), page.getByTestId('folder-children'));
+  await dragTo(page, tempRows(page).first(), page.getByTestId('folder-children'), async () => {
+    return (await snapshot(page)).savedIds.length === 3;
+  });
   await expect.poll(async () => (await snapshot(page)).savedIds.length).toBe(3);
 
   snap = await snapshot(page);
