@@ -1,0 +1,101 @@
+name: Deploy site
+
+# Builds apps/site with the repo-pinned toolchain and publishes it to Cloudflare
+# Pages via `wrangler pages deploy`. Kept deliberately SEPARATE from ci.yml
+# (design D1): this is the one workflow holding a write-scoped Cloudflare token,
+# so ci.yml's `verify`/`e2e` gate stays strictly `contents: read`.
+#
+# Trigger is `push` only — never `pull_request` (design D3): GitHub does not
+# expose repo secrets to fork-PR workflows, so driving deploy off push means the
+# Cloudflare token is reachable only by code that already landed on a branch in
+# THIS repo, today and after the public flip. `main` publishes production
+# (lunma.app); any other branch publishes a `*.pages.dev` preview.
+on:
+  push:
+    branches: ['**']
+
+# Least privilege: the deploy authenticates to Cloudflare with the API token
+# (secrets below), not GITHUB_TOKEN, so the workflow only needs to read the repo.
+permissions:
+  contents: read
+
+# Serialize deploys per ref so two pushes can't race the same deployment. No
+# cancel-in-progress: a half-cancelled production publish is worse than waiting.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      # Let corepack fetch the packageManager-pinned pnpm non-interactively.
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: 0
+    steps:
+      # --- Setup: identical to ci.yml's proven steps (no second toolchain) ---
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      # Activate the pnpm version pinned in the root package.json
+      # `packageManager` field — do NOT pin pnpm anywhere else (drift guard).
+      - run: corepack enable
+      # Resolve the store path into a step output: actions/cache `path:` is a
+      # static string, and the store only exists once corepack activates pnpm.
+      - id: pnpm-store
+        run: echo "dir=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v5
+        with:
+          path: ${{ steps.pnpm-store.outputs.dir }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+      - run: pnpm install --frozen-lockfile
+
+      # --- Build the static site with the pinned toolchain (design D2) ---
+      - run: pnpm --filter @lunma/site build
+
+      # --- Publish the prebuilt output to Cloudflare Pages (design D6) ---
+      # `cloudflare/wrangler-action` runs wrangler without adding it to any
+      # package.json; pinned to a major tag like the other actions and tracked by
+      # dependabot's github-actions ecosystem. `--branch` is derived from the ref
+      # so `main` -> production (lunma.app) and any other branch -> a preview.
+      - id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy apps/site/build --project-name=lunma --branch=${{ github.ref_name }}
+
+      # --- Post-deploy liveness smoke (design D7) ---
+      # On main: assert the production apex + the load-bearing /privacy URL (the
+      # field extension-release-pipeline needs for the Chrome Web Store listing)
+      # both serve 200, polling to absorb CDN first-propagation lag.
+      - name: Smoke production (lunma.app)
+        if: github.ref_name == 'main'
+        run: |
+          for url in https://lunma.app/ https://lunma.app/privacy; do
+            echo "Probing $url"
+            ok=
+            for attempt in $(seq 1 10); do
+              code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$url" || echo 000)
+              if [ "$code" = "200" ]; then ok=1; echo "  200 OK (attempt $attempt)"; break; fi
+              echo "  got $code, retrying in 6s (attempt $attempt/10)"
+              sleep 6
+            done
+            if [ -z "$ok" ]; then echo "::error::$url did not return 200 within the retry window"; exit 1; fi
+          done
+
+      # On a preview deploy, assert the returned *.pages.dev URL (not the apex).
+      - name: Smoke preview (*.pages.dev)
+        if: github.ref_name != 'main'
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.deployment-url }}
+        run: |
+          if [ -z "$PREVIEW_URL" ]; then echo "::error::no preview deployment-url from wrangler-action"; exit 1; fi
+          echo "Probing $PREVIEW_URL"
+          for attempt in $(seq 1 10); do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$PREVIEW_URL" || echo 000)
+            if [ "$code" = "200" ]; then echo "  200 OK (attempt $attempt)"; exit 0; fi
+            echo "  got $code, retrying in 6s (attempt $attempt/10)"
+            sleep 6
+          done
+          echo "::error::$PREVIEW_URL did not return 200 within the retry window"; exit 1

@@ -1,0 +1,17 @@
+# Cloudflare Pages response headers (design D5). adapter-static copies static/ to
+# the build root, and Cloudflare Pages reads a root `_headers` as config (it is
+# not served as a file). These carry the hardening a CSP <meta> tag CANNOT
+# express — the Content-Security-Policy itself is emitted per-page by SvelteKit's
+# `kit.csp` hash mode (see svelte.config.js), since meta cannot carry
+# frame-ancestors / HSTS / nosniff.
+/*
+  # Force HTTPS for two years incl. subdomains (eligible for preload lists).
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+  # Never let a response be MIME-sniffed into a different type.
+  X-Content-Type-Options: nosniff
+  # Clickjacking: refuse to be framed (frame-ancestors is ignored in <meta>).
+  X-Frame-Options: DENY
+  # Leak only the origin cross-site, full path same-origin.
+  Referrer-Policy: strict-origin-when-cross-origin
+  # Deny the powerful features this static marketing page never uses.
+  Permissions-Policy: accelerometer=(), autoplay=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=(), xr-spatial-tracking=()

@@ -142,6 +142,10 @@ devbox is the local-dev story only; CI needs the pinned Node plus pnpm, not the 
 
 Planned: enforcing these checks as a branch-protection merge gate, deferred until the repo is public.
 
+## Continuous deployment (marketing site)
+
+The marketing site (`apps/site`) is deployed to **Cloudflare Pages** from CI — a separate workflow, `.github/workflows/deploy.yml`, not a job on `ci.yml`. On every push it builds the static output with the *same* pinned toolchain described above (Node 24 + Corepack-pinned pnpm + frozen install — no second build environment) and publishes the prebuilt `apps/site/build/` via `wrangler` (the official `cloudflare/wrangler-action`, pinned and dependabot-tracked like the other actions — no `package.json` dependency). A push to `main` publishes production (`lunma.app`); any other branch publishes a `*.pages.dev` preview. The workflow never triggers on `pull_request`, so the Cloudflare token stays off fork PRs. See `docs/architecture.md` § "Continuous deployment" and the `release-engineering` capability.
+
 ## Fit for MV3
 
 | MV3 constraint | How this stack handles it |
