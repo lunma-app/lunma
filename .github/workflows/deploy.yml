@@ -60,16 +60,16 @@ jobs:
       # so `main` -> production (lunma.app) and any other branch -> a preview.
       - id: deploy
         uses: cloudflare/wrangler-action@v3
-        env:
-          # wrangler-action installs wrangler on the fly with `pnpm add`, which
-          # refuses a bare write to a workspace ROOT (ERR_PNPM_ADDING_TO_ROOT).
-          # This flag permits it; the install is ephemeral (CI only) — no committed
-          # dependency, so design D6 (pinned action, zero package.json deps) holds.
-          npm_config_ignore_workspace_root_check: "true"
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy apps/site/build --project-name=lunma --branch=${{ github.ref_name }}
+          # Run inside the apps/site PACKAGE, not the workspace root: the action
+          # installs wrangler on the fly with `pnpm add`, which pnpm refuses at a
+          # workspace root (ERR_PNPM_ADDING_TO_ROOT) but allows in a package. The
+          # install is ephemeral (CI only) — no committed dep, design D6 holds.
+          workingDirectory: apps/site
+          # Path is now relative to workingDirectory (apps/site/build).
+          command: pages deploy build --project-name=lunma --branch=${{ github.ref_name }}
 
       # --- Post-deploy liveness smoke (design D7) ---
       # On main: assert the production apex + the load-bearing /privacy URL (the
