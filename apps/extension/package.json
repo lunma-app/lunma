@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@leeoniya/ufuzzy": "1.0.19",
-    "@lucide/svelte": "^1.16.0",
+    "@lucide/svelte": "^1.20.0",
     "@lunma/tokens": "workspace:*",
     "bits-ui": "^2.18.1",
     "saxes": "6.0.0",
