@@ -1,0 +1,61 @@
+name: Identity
+
+# Every commit in a pull request must use an `@lunma.app` author AND committer
+# email (the Dependabot bot is allowed). Keeps personal emails (gmail, etc.) out
+# of the public history — signing alone doesn't check the committer email. Job
+# name `identity` is a required status check on `main` (see open-source-public-launch
+# §4). Inline scan — no third-party action.
+on:
+  pull_request:
+
+# Least privilege: the check only reads the PR commits.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  identity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.3
+        with:
+          # Full range so every PR commit is inspectable, not just the merge tip.
+          fetch-depth: 0
+      - name: Check author + committer email on every PR commit
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # Allowed identities: any @lunma.app address, plus the Dependabot bot.
+          allowed() {
+            case "$1" in
+              *@lunma.app) return 0 ;;
+            esac
+            [[ "$1" == *"dependabot[bot]@users.noreply.github.com" ]] && return 0
+            return 1
+          }
+          fail=0
+          for sha in $(git rev-list "$BASE_SHA".."$HEAD_SHA"); do
+            subject="$(git show -s --format='%s' "$sha")"
+            ae="$(git show -s --format='%ae' "$sha")"
+            ce="$(git show -s --format='%ce' "$sha")"
+            if ! allowed "$ae"; then
+              echo "::error::Commit $sha ($subject) has a non-lunma.app author email: $ae"
+              fail=1
+            fi
+            if ! allowed "$ce"; then
+              echo "::error::Commit $sha ($subject) has a non-lunma.app committer email: $ce"
+              fail=1
+            fi
+          done
+          if [ "$fail" -ne 0 ]; then
+            echo ""
+            echo "Every commit's author and committer email must be an @lunma.app address."
+            echo "Set your identity in this clone:  git config user.email you@lunma.app"
+            exit 1
+          fi
+          echo "All PR commits use an allowed identity."
