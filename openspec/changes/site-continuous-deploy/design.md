@@ -190,22 +190,36 @@ ignore the `'unsafe-inline'`. Verified at apply time: all three routes (`/`,
   — defer all headers to a later change:* was the original D5; overridden by the
   user's "full headers now" decision.
 
-### D6 — `wrangler` via the pinned `cloudflare/wrangler-action`, zero new deps
+### D6 — `wrangler` via pinned `pnpm dlx`, zero new deps
 
 `github-repo-and-ci` added zero dependencies to any `package.json` and pinned
-every third-party action. This change holds that line: the deploy step uses the
-official `cloudflare/wrangler-action`, pinned to a major tag/SHA like the
-workflow's other actions, rather than adding `wrangler` to a `package.json`. The
-action's version is dependabot-tracked through the `github-actions` ecosystem
-already declared in `.github/dependabot.yml`, so it stays current the same way
-`checkout`/`setup-node`/`cache` do.
+every third-party tool. This change holds that line: the deploy step runs the
+**pinned `wrangler` via `pnpm dlx wrangler@<version>`** (a plain `run:` step),
+rather than adding `wrangler` to a `package.json`. The version is pinned in the
+workflow and bumped manually (not dependabot-tracked, since `pnpm dlx` is neither
+a `package.json` dep nor a pinned action — an accepted trade for the
+zero-committed-deps posture).
+
+**Implementation-time revision (agreed deviation).** D6 originally specified the
+official `cloudflare/wrangler-action` (pinned, dependabot-tracked via the
+`github-actions` ecosystem). At apply time that action proved unworkable in this
+strict pnpm monorepo: its on-the-fly `wrangler` install hit four successive walls
+— `pnpm add` at the workspace root is blocked (`ERR_PNPM_ADDING_TO_ROOT`); forcing
+it into `apps/site` made it auto-pick npm, which can't resolve our `workspace:*`
+deps (`EUNSUPPORTEDPROTOCOL`); and forcing pnpm there hit pnpm 11's build-script
+gate on wrangler's `esbuild`/`workerd` deps (`ERR_PNPM_IGNORED_BUILDS`). `pnpm dlx`
+isolates the install (build scripts run, no workspace coupling) and was verified
+to run wrangler cleanly. The switch keeps D6's actual goal — **zero committed
+deps** — intact; only the invocation mechanism changed. (User-agreed during
+implementation.)
 
 - *Alternative — `pnpm add -D wrangler` (catalog-pinned), `pnpm exec wrangler …`:*
   gives a locally-runnable deploy/rollback and dependabot-via-npm tracking, but
-  adds the project's first new dependency and a second tool to pin. Chosen
-  against (user decision during exploration) to preserve the zero-new-deps
-  posture; the action covers the CI need, and manual `wrangler` can be run ad hoc
-  with `pnpm dlx wrangler` if ever needed without a committed dep.
+  adds the project's first committed dependency and needs `esbuild`/`workerd` in
+  pnpm's build allowlist. Chosen against to preserve the zero-committed-deps
+  posture; `pnpm dlx` covers the CI need without a committed dep.
+- *Alternative — `cloudflare/wrangler-action`:* the original D6 choice; abandoned
+  at apply time for the monorepo-incompatibility reasons above.
 
 ### D7 — Post-deploy liveness smoke
 

@@ -150,9 +150,9 @@ do. No `src/ui/` primitives are composed or added (none apply).
   contributor- or content-facing change here — the public-launch README edits
   belong to `open-source-public-launch`).
 - **Dependencies:** **none added to any `package.json`** — preserving
-  `github-repo-and-ci`'s zero-new-deps posture. `wrangler` runs via the official
-  **`cloudflare/wrangler-action`**, pinned to a major tag/SHA exactly like the
-  workflow's other third-party actions (D6); its version lives in the workflow
-  pin, dependabot-tracked through the `github-actions` ecosystem already declared
-  in `.github/dependabot.yml`.
+  `github-repo-and-ci`'s zero-new-deps posture. `wrangler` runs via
+  **`pnpm dlx wrangler@<version>`** (pinned in the workflow), not a committed dep.
+  (D6 originally specified `cloudflare/wrangler-action`; it proved incompatible
+  with this strict pnpm monorepo at apply time and was swapped for `pnpm dlx` —
+  same zero-committed-deps goal, agreed deviation. See design D6.)
 - **No new `host_permissions`, manifest, or runtime surface.**

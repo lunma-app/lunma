@@ -57,11 +57,16 @@
   --frozen-lockfile`.
 - [x] 3.3 Build the site: `pnpm --filter @lunma/site build` → produces
   `apps/site/build/`.
-- [x] 3.4 Publish via the pinned `cloudflare/wrangler-action` (design D6 — no
-  `package.json` dep), pinned to a major tag/SHA like the other actions. Pass the
-  two secrets; command `pages deploy apps/site/build --project-name=lunma` with
+- [x] 3.4 Publish wrangler with no `package.json` dep (design D6). Pass the two
+  secrets as env; command `pages deploy apps/site/build --project-name=lunma` with
   `--branch` derived from `github.ref_name` so `main` → production and any other
   branch → a preview deployment.
+  → **Deviation (agreed):** the pinned `cloudflare/wrangler-action` could not
+  install wrangler in this strict pnpm monorepo (root-add guard →
+  npm `workspace:` protocol → pnpm build-script gate). Switched to
+  `pnpm dlx wrangler@3.114.14` in a `run:` step (isolated install, zero committed
+  deps — D6's goal holds); the `*.pages.dev` URL is parsed from wrangler stdout
+  for the preview smoke. design D6 + proposal + docs updated to match.
 - [x] 3.5 Add the post-deploy liveness smoke (design D7): on the **production**
   (`main`) deploy, `curl --fail` `https://lunma.app/` and
   `https://lunma.app/privacy` expecting `200`, with a bounded retry/poll to absorb
