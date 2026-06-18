@@ -141,18 +141,20 @@ import { altKeyLabel } from '$lib/platform.svelte';
   {/snippet}
 </Chapter>
 
-<Chapter index={6} kicker="Smart folders" title="Pin a live queue, not just a page." layout="right" color="pink">
+<Chapter index={6} kicker="Smart folders" title="A folder that fills itself." layout="right" color="pink">
   {#snippet copy()}
     <p>
-      A smart folder fills itself from a service you keep checking. Point one at GitLab
-      or GitHub and your review queue lands in the Space: the merge requests and pull
-      requests waiting on you, each with its pipeline status, kept current on its own. It
-      works with your self-hosted instance, and like everything in Lunma it stays on your
-      device. More connectors are on the way.
+      A smart folder fills itself from a service you keep checking, so you stop reopening
+      the site to see what moved. Point one at a code host like GitLab or GitHub and the
+      work waiting on you lands in your Space, kept current on its own. An issue tracker
+      like Jira or an RSS feed you follow fills the same way. It works with your own
+      self-hosted instance, and like everything in Lunma it stays on your device. There's
+      no Lunma server behind it, and more connectors are on the way.
     </p>
   {/snippet}
   {#snippet visual()}
-    <!-- A smart folder of live GitLab merge requests — the shipped v1 connector. One
+    <!-- A smart folder of live GitLab merge requests — one concrete example of the
+         shipped connectors (the copy names the others: GitHub, Jira, RSS). One
          pipeline-status dot per row (the one-glyph restraint), from the semantic tone
          tokens. Sits directly in the glass panel like the auto-archive list. -->
     <SmartFolderMock />

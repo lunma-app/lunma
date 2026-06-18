@@ -286,13 +286,14 @@ heading, copy, and a staged product visual) and compose the shared design langua
 (`@lunma/tokens` + the site's own mock components), not re-roll primitives.
 
 The claim SHALL be **factual** and stated in the brand voice. The page SHALL name the
-connectors that ship — **GitLab and GitHub** — and SHALL NOT name or imply that any other
-connector (for example Jira, Notion, or a calendar) is available. A calm, name-free and
-date-free indication that further connectors are planned is permitted; naming an unshipped
-connector or promising a date is not. The copy SHALL state that smart folders work with a
-self-hosted instance and that data stays on the visitor's device (no Lunma server),
-consistent with the shipped connectors. The beat SHALL hold WCAG-AA contrast and SHALL
-introduce no motion that violates the page's reduced-motion contract.
+connectors that ship — **GitLab, GitHub, Jira, and RSS feeds** — and SHALL NOT name or
+imply that any **unshipped** connector (for example Notion or a calendar) is available.
+A calm, name-free and date-free indication that further connectors are planned is
+permitted; naming an unshipped connector or promising a date is not. The copy SHALL
+state that smart folders work with a self-hosted instance and that data stays on the
+visitor's device (no Lunma server), consistent with the shipped connectors. The beat
+SHALL hold WCAG-AA contrast and SHALL introduce no motion that violates the page's
+reduced-motion contract.
 
 The staged visual SHALL show the capability rather than only assert it: a smart-folder
 header with an item count over merge-request rows, each row carrying exactly one
@@ -308,8 +309,8 @@ product's one-glyph restraint.
 #### Scenario: The beat names the connectors that ship
 
 - **WHEN** the smart-folders beat renders its copy
-- **THEN** it SHALL name GitLab and GitHub as the available connectors
-- **AND** it SHALL NOT name or imply any unshipped connector (Jira, Notion, calendar, etc.) is available
+- **THEN** it SHALL name the shipped connectors — GitLab, GitHub, Jira, and RSS feeds — as available
+- **AND** it SHALL NOT name or imply any unshipped connector (Notion, a calendar, etc.) is available
 - **AND** any indication of future connectors SHALL be name-free and date-free
 
 #### Scenario: The beat frames smart folders as local and self-hostable
