@@ -2,7 +2,7 @@
 // canonical origin, the keyword-tuned page meta, the FAQ as data (so the visible
 // FAQ and the FAQPage JSON-LD render from a single source — no drift, which
 // Google requires), and the JSON-LD builders the <head> emits.
-import { CHROME_WEB_STORE_URL, GITHUB_URL, MIN_CHROMIUM } from '$lib/links';
+import { CHROME_WEB_STORE_URL, GITHUB_URL, LAUNCHED, MIN_CHROMIUM } from '$lib/links';
 
 /** Canonical origin. [VERIFY] confirm `lunma.app` is the live domain at launch. */
 export const SITE_URL = 'https://lunma.app';
@@ -76,7 +76,9 @@ export function softwareAppLd(): Record<string, unknown> {
     operatingSystem: `Chrome, Edge (Chromium ${MIN_CHROMIUM}+)`,
     description: SITE_DESCRIPTION,
     url: SITE_URL,
-    downloadUrl: CHROME_WEB_STORE_URL, // [VERIFY] real listing at launch
+    // Pre-launch there is no listing, so we don't advertise a downloadUrl (gated
+    // on LAUNCHED, like the install CTAs). At launch it becomes the real listing.
+    ...(LAUNCHED ? { downloadUrl: CHROME_WEB_STORE_URL } : {}), // [VERIFY] real listing at launch
     softwareHelp: GITHUB_URL,
     offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
     isAccessibleForFree: true,
