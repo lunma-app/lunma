@@ -1,5 +1,11 @@
 <script lang="ts">
-import { CHROME_WEB_STORE_URL, EDGE_ADDONS_URL, GITHUB_URL, PRIVACY_PATH } from '$lib/links';
+import {
+  CHROME_WEB_STORE_URL,
+  EDGE_ADDONS_URL,
+  GITHUB_URL,
+  LAUNCHED,
+  PRIVACY_PATH,
+} from '$lib/links';
 import Wordmark from '$lib/Wordmark.svelte';
 </script>
 
@@ -11,8 +17,13 @@ import Wordmark from '$lib/Wordmark.svelte';
            store/repo links beside it. -->
       <a href={PRIVACY_PATH}>Privacy</a>
       <a href={GITHUB_URL} target="_blank" rel="noopener">GitHub</a>
-      <a href={CHROME_WEB_STORE_URL} target="_blank" rel="noopener">Chrome Web Store</a>
-      <a href={EDGE_ADDONS_URL} target="_blank" rel="noopener">Edge Add-ons</a>
+      <!-- Store links are gated on LAUNCHED, like the install CTAs: pre-launch
+           there is no Lunma listing, so we omit them rather than point at a store
+           homepage. They appear (with the real listing URLs) when the flag flips. -->
+      {#if LAUNCHED}
+        <a href={CHROME_WEB_STORE_URL} target="_blank" rel="noopener">Chrome Web Store</a>
+        <a href={EDGE_ADDONS_URL} target="_blank" rel="noopener">Edge Add-ons</a>
+      {/if}
     </p>
   </div>
   <p class="tagline">Free and open source. For Chrome and Edge (Chromium 123+).</p>
