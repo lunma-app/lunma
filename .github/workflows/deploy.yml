@@ -54,25 +54,27 @@ jobs:
       - run: pnpm --filter @lunma/site build
 
       # --- Publish the prebuilt output to Cloudflare Pages (design D6) ---
-      # `cloudflare/wrangler-action` runs wrangler without adding it to any
-      # package.json; pinned to a major tag like the other actions and tracked by
-      # dependabot's github-actions ecosystem. `--branch` is derived from the ref
-      # so `main` -> production (lunma.app) and any other branch -> a preview.
-      - id: deploy
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          # Install + run wrangler inside the apps/site PACKAGE (not the workspace
-          # root) and force pnpm: at the root `pnpm add` trips the root guard
-          # (ERR_PNPM_ADDING_TO_ROOT); in apps/site the action otherwise auto-picks
-          # npm, which can't resolve our `workspace:*` deps (EUNSUPPORTEDPROTOCOL).
-          # In a package dir with pnpm, the on-the-fly install just works — and it's
-          # ephemeral (CI only), so design D6 (pinned action, zero committed deps) holds.
-          packageManager: pnpm
-          workingDirectory: apps/site
-          # Path is relative to workingDirectory (apps/site/build).
-          command: pages deploy build --project-name=lunma --branch=${{ github.ref_name }}
+      # Run the PINNED wrangler via `pnpm dlx`, NOT `cloudflare/wrangler-action`.
+      # The action's on-the-fly install fights this strict pnpm monorepo at every
+      # turn — root-add guard (ERR_PNPM_ADDING_TO_ROOT), npm can't resolve our
+      # `workspace:*` deps (EUNSUPPORTEDPROTOCOL), and pnpm's build-script gate
+      # (ERR_PNPM_IGNORED_BUILDS on esbuild/workerd). `pnpm dlx` isolates the
+      # install (build scripts run, no workspace coupling) and keeps the
+      # zero-committed-deps posture D6 requires; D6 already names this path.
+      # `--branch` from the ref: `main` -> production (lunma.app), else a preview.
+      - name: Publish to Cloudflare Pages
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # Capture output while still streaming it to the log, then extract the
+          # *.pages.dev deployment URL wrangler prints (used by the preview smoke).
+          out=$(pnpm dlx wrangler@3.114.14 pages deploy apps/site/build \
+            --project-name=lunma --branch="${{ github.ref_name }}" 2>&1 | tee /dev/stderr)
+          url=$(printf '%s\n' "$out" | grep -oE 'https://[a-z0-9.-]+\.pages\.dev' | tail -1)
+          echo "deployment-url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployment URL: ${url:-<none captured>}"
 
       # --- Post-deploy liveness smoke (design D7) ---
       # On main: assert the production apex + the load-bearing /privacy URL (the
