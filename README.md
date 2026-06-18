@@ -71,10 +71,9 @@ Non-trivial work starts with an OpenSpec change under `openspec/changes/`
 
 Lunma is licensed under the **Apache License 2.0** — see [`LICENSE`](LICENSE). The
 Lunma name and logo are **not** covered by that license; see [`TRADEMARK.md`](TRADEMARK.md)
-(fork the code freely, but don't ship it as "Lunma"). Contributions are accepted under
-Apache-2.0 on an inbound-equals-outbound basis, certified with a Developer Certificate
-of Origin `Signed-off-by` trailer (`git commit -s`) — not a CLA. See [`DCO`](DCO) and
-[`CONTRIBUTING.md`](CONTRIBUTING.md).
+(fork the code freely, but don't ship it as "Lunma"). Contributions are accepted
+under Apache-2.0, certified with a Developer Certificate of Origin sign-off
+(`git commit -s`). See [`DCO`](DCO) and [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 Lunma is an independent, clean-room reimplementation by a different author, with no code
 shared from Arcify v4 (GPL-3.0, author: Nisarg Kolhe), which it credits as inspiration.
