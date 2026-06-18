@@ -5,17 +5,14 @@ name: Deploy site
 # (design D1): this is the one workflow holding a write-scoped Cloudflare token,
 # so ci.yml's `verify`/`e2e` gate stays strictly `contents: read`.
 #
-# Trigger is `push` only — never `pull_request` (design D3): GitHub does not
-# expose repo secrets to fork-PR workflows, so driving deploy off push means the
-# Cloudflare token is reachable only by code that already landed on a branch in
-# THIS repo, today and after the public flip. `main` publishes production
-# (lunma.app); any other HUMAN branch publishes a `*.pages.dev` preview.
-# Dependabot branches are excluded (`branches-ignore`): Dependabot-triggered runs
-# are denied repo secrets by GitHub, so a deploy on them can only fail — CI (which
-# needs no secrets) gates those instead.
+# Trigger is `push` to `main` ONLY — never `pull_request` (design D3): GitHub does
+# not expose repo secrets to fork-PR workflows, and we publish only the production
+# branch. No per-branch previews: they publish public `*.pages.dev` URLs that never
+# auto-clean and would serve unreleased work. Preview locally with
+# `pnpm --filter @lunma/site preview`; CI (`verify`/`e2e`) gates branches and PRs.
 on:
   push:
-    branches-ignore: ['dependabot/**']
+    branches: [main]
 
 # Least privilege: the deploy authenticates to Cloudflare with the API token
 # (secrets below), not GITHUB_TOKEN, so the workflow only needs to read the repo.
@@ -64,27 +61,20 @@ jobs:
       # (ERR_PNPM_IGNORED_BUILDS on esbuild/workerd). `pnpm dlx` isolates the
       # install (build scripts run, no workspace coupling) and keeps the
       # zero-committed-deps posture D6 requires; D6 already names this path.
-      # `--branch` from the ref: `main` -> production (lunma.app), else a preview.
+      # `--branch=main` -> the production deployment serving lunma.app.
       - name: Publish to Cloudflare Pages
-        id: deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          # Capture output while still streaming it to the log, then extract the
-          # *.pages.dev deployment URL wrangler prints (used by the preview smoke).
-          out=$(pnpm dlx wrangler@3.114.14 pages deploy apps/site/build \
-            --project-name=lunma --branch="${{ github.ref_name }}" 2>&1 | tee /dev/stderr)
-          url=$(printf '%s\n' "$out" | grep -oE 'https://[a-z0-9.-]+\.pages\.dev' | tail -1)
-          echo "deployment-url=$url" >> "$GITHUB_OUTPUT"
-          echo "Deployment URL: ${url:-<none captured>}"
+          pnpm dlx wrangler@3.114.14 pages deploy apps/site/build \
+            --project-name=lunma --branch=main
 
       # --- Post-deploy liveness smoke (design D7) ---
-      # On main: assert the production apex + the load-bearing /privacy URL (the
-      # field extension-release-pipeline needs for the Chrome Web Store listing)
-      # both serve 200, polling to absorb CDN first-propagation lag.
+      # Assert the production apex + the load-bearing /privacy URL (the field
+      # extension-release-pipeline needs for the Chrome Web Store listing) both
+      # serve 200, polling to absorb CDN first-propagation lag.
       - name: Smoke production (lunma.app)
-        if: github.ref_name == 'main'
         run: |
           for url in https://lunma.app/ https://lunma.app/privacy; do
             echo "Probing $url"
@@ -97,19 +87,3 @@ jobs:
             done
             if [ -z "$ok" ]; then echo "::error::$url did not return 200 within the retry window"; exit 1; fi
           done
-
-      # On a preview deploy, assert the returned *.pages.dev URL (not the apex).
-      - name: Smoke preview (*.pages.dev)
-        if: github.ref_name != 'main'
-        env:
-          PREVIEW_URL: ${{ steps.deploy.outputs.deployment-url }}
-        run: |
-          if [ -z "$PREVIEW_URL" ]; then echo "::error::no preview deployment-url from wrangler-action"; exit 1; fi
-          echo "Probing $PREVIEW_URL"
-          for attempt in $(seq 1 10); do
-            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$PREVIEW_URL" || echo 000)
-            if [ "$code" = "200" ]; then echo "  200 OK (attempt $attempt)"; exit 0; fi
-            echo "  got $code, retrying in 6s (attempt $attempt/10)"
-            sleep 6
-          done
-          echo "::error::$PREVIEW_URL did not return 200 within the retry window"; exit 1

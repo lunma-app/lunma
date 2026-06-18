@@ -797,9 +797,10 @@ token, stored as a repo secret), so isolating it keeps that gate untouchable. It
 builds the static output with the repo-pinned toolchain (no second build
 environment) and runs `wrangler pages deploy apps/site/build` → `lunma.app`. This
 is **build-time only**: nothing from `apps/site` or this deploy ships in the
-extension bundle. Production publishes from `main`; other branches publish
-`*.pages.dev` previews; it never triggers on `pull_request` (so the token is
-never exposed to a fork PR). After a production publish, a post-deploy smoke
+extension bundle. It deploys **`main` only** (production) — no per-branch
+previews (they would publish public, never-cleaned `*.pages.dev` URLs); it never
+triggers on `pull_request` (so the token is never exposed to a fork PR). After a
+production publish, a post-deploy smoke
 asserts `lunma.app/` and `lunma.app/privacy` both serve `200` before the run is
 green.
 

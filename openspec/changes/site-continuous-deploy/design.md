@@ -110,11 +110,13 @@ landed on a branch in *this* repo (i.e. by a maintainer), today and after the
 public flip. Branch vs. production is selected from `github.ref` and passed as
 `wrangler`'s `--branch`.
 
-**Apply-time refinement:** the trigger is `branches-ignore: ['dependabot/**']`
-(not `branches: ['**']`). Dependabot-authored pushes are denied repo secrets by
-GitHub, so a deploy on a `dependabot/**` branch can only fail (no Cloudflare
-token); CI — which needs no secrets — gates those instead. Human branches still
-get previews; `main` still publishes production.
+**Apply-time refinement:** the trigger is `branches: [main]` — `main` only, no
+per-branch previews. Previews were dropped because each one publishes a public,
+never-auto-cleaned `*.pages.dev` URL that would serve unreleased branch work;
+local `pnpm --filter @lunma/site preview` covers the maintainer need, and CI
+(`verify`/`e2e`) already gates branches and PRs. This also moots the
+Dependabot-branch deploy failures (Dependabot pushes aren't `main`). `main`
+publishes production.
 
 - *Alternative — deploy on `pull_request` for PR previews:* gives preview URLs on
   every PR including forks, but would either leak the token to forks or require
