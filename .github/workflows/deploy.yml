@@ -63,12 +63,15 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          # Run inside the apps/site PACKAGE, not the workspace root: the action
-          # installs wrangler on the fly with `pnpm add`, which pnpm refuses at a
-          # workspace root (ERR_PNPM_ADDING_TO_ROOT) but allows in a package. The
-          # install is ephemeral (CI only) — no committed dep, design D6 holds.
+          # Install + run wrangler inside the apps/site PACKAGE (not the workspace
+          # root) and force pnpm: at the root `pnpm add` trips the root guard
+          # (ERR_PNPM_ADDING_TO_ROOT); in apps/site the action otherwise auto-picks
+          # npm, which can't resolve our `workspace:*` deps (EUNSUPPORTEDPROTOCOL).
+          # In a package dir with pnpm, the on-the-fly install just works — and it's
+          # ephemeral (CI only), so design D6 (pinned action, zero committed deps) holds.
+          packageManager: pnpm
           workingDirectory: apps/site
-          # Path is now relative to workingDirectory (apps/site/build).
+          # Path is relative to workingDirectory (apps/site/build).
           command: pages deploy build --project-name=lunma --branch=${{ github.ref_name }}
 
       # --- Post-deploy liveness smoke (design D7) ---
