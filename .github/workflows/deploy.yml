@@ -9,10 +9,13 @@ name: Deploy site
 # expose repo secrets to fork-PR workflows, so driving deploy off push means the
 # Cloudflare token is reachable only by code that already landed on a branch in
 # THIS repo, today and after the public flip. `main` publishes production
-# (lunma.app); any other branch publishes a `*.pages.dev` preview.
+# (lunma.app); any other HUMAN branch publishes a `*.pages.dev` preview.
+# Dependabot branches are excluded (`branches-ignore`): Dependabot-triggered runs
+# are denied repo secrets by GitHub, so a deploy on them can only fail — CI (which
+# needs no secrets) gates those instead.
 on:
   push:
-    branches: ['**']
+    branches-ignore: ['dependabot/**']
 
 # Least privilege: the deploy authenticates to Cloudflare with the API token
 # (secrets below), not GITHUB_TOKEN, so the workflow only needs to read the repo.
@@ -32,7 +35,7 @@ jobs:
       COREPACK_ENABLE_DOWNLOAD_PROMPT: 0
     steps:
       # --- Setup: identical to ci.yml's proven steps (no second toolchain) ---
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.0.3
       - uses: actions/setup-node@v6
         with:
           node-version: 24

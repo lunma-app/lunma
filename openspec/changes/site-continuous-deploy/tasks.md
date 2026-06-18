@@ -46,9 +46,10 @@
 ## 3. Deploy workflow (`.github/workflows/deploy.yml`)
 
 - [x] 3.1 New workflow file, **separate from `ci.yml`** (design D1). Triggers:
-  `on: push` with `branches: [main]` for production **plus** all other branches
-  for previews; **no `pull_request` trigger** (design D3 — keeps the token off
-  fork PRs). Top-level `permissions: { contents: read }` (the deploy auth is the
+  `on: push` with `branches-ignore: ['dependabot/**']` — `main` → production,
+  other human branches → previews, **Dependabot branches excluded** (their runs
+  get no secrets, so a deploy can only fail); **no `pull_request` trigger**
+  (design D3 — keeps the token off fork PRs). Top-level `permissions: { contents: read }` (the deploy auth is the
   Cloudflare token, not `GITHUB_TOKEN`).
 - [x] 3.2 `deploy` job (ubuntu-latest), reusing `ci.yml`'s proven setup steps
   verbatim: `actions/checkout@v6` → `actions/setup-node@v6` (`node-version: 24`)

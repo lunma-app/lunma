@@ -110,6 +110,12 @@ landed on a branch in *this* repo (i.e. by a maintainer), today and after the
 public flip. Branch vs. production is selected from `github.ref` and passed as
 `wrangler`'s `--branch`.
 
+**Apply-time refinement:** the trigger is `branches-ignore: ['dependabot/**']`
+(not `branches: ['**']`). Dependabot-authored pushes are denied repo secrets by
+GitHub, so a deploy on a `dependabot/**` branch can only fail (no Cloudflare
+token); CI — which needs no secrets — gates those instead. Human branches still
+get previews; `main` still publishes production.
+
 - *Alternative — deploy on `pull_request` for PR previews:* gives preview URLs on
   every PR including forks, but would either leak the token to forks or require
   `pull_request_target` gymnastics. The same-repo-branch preview covers the
