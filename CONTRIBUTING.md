@@ -2,20 +2,26 @@
 
 Thanks for your interest in Lunma. A few things to know before you send a change.
 
-## Licensing & the CLA
+## Licensing & sign-off (DCO)
 
 - Lunma is released under the **Apache License 2.0** (see [`LICENSE`](LICENSE)).
+  Contributions are accepted on the same terms — inbound equals outbound; the
+  project takes no copyright assignment and no relicensing rights (there is **no**
+  Contributor License Agreement).
 - The **Lunma name and logo** are not covered by that license — see
   [`TRADEMARK.md`](TRADEMARK.md). Fork the code freely; don't ship it as "Lunma."
-- Contributions are accepted under a **Contributor License Agreement**
-  ([`CLA.md`](CLA.md)). It lets Lunma stay open source **and** keep the option of a
-  future commercial edition, without taking your copyright away — you keep it; you
-  grant the project a broad, relicensable license to your contribution.
+- We use the **Developer Certificate of Origin** ([`DCO`](DCO)): by signing off a
+  commit you certify you wrote the change (or have the right to submit it) under
+  the project's license. Add the trailer with the `-s` flag:
 
-> **Maintainer note (pre-launch):** the CLA and trademark policy are DRAFTs pending
-> legal review, and the acceptance mechanism (a CLA-assistant bot vs. DCO sign-off)
-> is still to be wired up. Until that is in place and reviewed, hold external
-> contributions.
+  ```sh
+  git commit -s -m "feat: ..."
+  ```
+
+  This appends a `Signed-off-by: Your Name <your@email>` line whose name and
+  email must match the commit author. To sign off commits you already made, run
+  `git rebase --signoff <base>`. A required `dco` CI check fails any pull request
+  whose commits are missing or mismatch their sign-off.
 
 ## How the project is built
 

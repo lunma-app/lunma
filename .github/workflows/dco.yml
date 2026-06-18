@@ -1,0 +1,64 @@
+name: DCO
+
+# Enforces the Developer Certificate of Origin (see the repo-root `DCO`):
+# every commit in a pull request must carry a `Signed-off-by:` trailer whose
+# name+email match the commit author. The job name `dco` is a required status
+# check on the main branch — keep it in lockstep with the branch protection
+# (see open-source-public-launch tasks.md §4.1). An inline trailer scan keeps
+# this self-contained — no external GitHub App or third-party action.
+on:
+  pull_request:
+
+# Least privilege: the check only reads the PR commits.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dco:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Fetch the full range so every PR commit is inspectable, not just
+          # the merge tip.
+          fetch-depth: 0
+      - name: Check Signed-off-by on every PR commit
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          fail=0
+          # Iterate the commits unique to this PR (base..head).
+          for sha in $(git rev-list "$BASE_SHA".."$HEAD_SHA"); do
+            author="$(git show -s --format='%an <%ae>' "$sha")"
+            subject="$(git show -s --format='%s' "$sha")"
+            # Collect every Signed-off-by trailer on the commit.
+            signoffs="$(git show -s --format='%B' "$sha" \
+              | grep -i '^Signed-off-by:' \
+              | sed -E 's/^[Ss]igned-off-by:[[:space:]]*//')" || true
+            if [ -z "$signoffs" ]; then
+              echo "::error::Commit $sha ($subject) is missing a Signed-off-by trailer."
+              echo "  author: $author"
+              fail=1
+              continue
+            fi
+            # The author's identity must appear among the sign-offs.
+            if ! printf '%s\n' "$signoffs" | grep -qxF "$author"; then
+              echo "::error::Commit $sha ($subject) sign-off does not match its author."
+              echo "  author:   $author"
+              echo "  sign-off: $(printf '%s' "$signoffs" | paste -sd '; ' -)"
+              fail=1
+            fi
+          done
+          if [ "$fail" -ne 0 ]; then
+            echo ""
+            echo "Every commit must be signed off under the Developer Certificate of Origin."
+            echo "Add a sign-off with: git commit -s   (or: git rebase --signoff <base>)"
+            exit 1
+          fi
+          echo "All PR commits carry a matching Signed-off-by trailer."

@@ -15,3 +15,5 @@
 - [ ] Docs are in lockstep — the affected `docs/`, this change's OpenSpec
       artifacts, and any matching `openspec/specs/` capability spec agree with
       the code (per CLAUDE.md)
+- [ ] Every commit is signed off under the [DCO](../DCO) (`git commit -s`) — the
+      `Signed-off-by` trailer matches the author; the `dco` check enforces this
