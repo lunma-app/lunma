@@ -286,11 +286,11 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
       </SettingsCard>
     {/each}
 
-    <!-- Connectors (smart-folders, D10): per-instance access tokens, kept in
-         chrome.storage.local via shared/connectors.ts — never sync, never the
-         settings registry, never echoed back into the page. The `#connectors`
-         deep-link anchor moves intact with the extracted card. -->
-    <ConnectorsCard />
+    <!-- Recently archived (auto-archive): the management view the sidebar chip
+         deep-links to (`#recently-archived`). Placed directly under the Auto-archive
+         registry group (`#auto-archive`) — policy and the view it produces sit
+         together, matching the sidebar's first-run "Manage in settings" deep-link. -->
+    <RecentlyArchived />
 
     <!-- Result sources (least-privilege-permissions D5): the launcher's optional
          history/bookmarks providers, granted in-context. This is the canonical
@@ -298,19 +298,23 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
          deep-links here via the SW (#result-sources). -->
     <ResultSourcesCard />
 
-    <!-- Backup & restore (data-backup): export/import a portable JSON snapshot of
-         Spaces and settings. Self-contained: export reads storage directly; import
-         goes through the bus to the SW. -->
-    <BackupRestore />
+    <!-- Connectors (smart-folders, D10): per-instance access tokens, kept in
+         chrome.storage.local via shared/connectors.ts — never sync, never the
+         settings registry, never echoed back into the page. The `#connectors`
+         deep-link anchor moves intact with the extracted card. -->
+    <ConnectorsCard />
 
     <!-- Feed subscriptions (opml-import-export): import/export RSS feed lists as
          OPML. Self-contained: reads storage at action time; import goes through
-         the bus to the SW. Grouped with Backup & restore — both are data-management. -->
+         the bus to the SW. Grouped with Connectors — both configure smart-folder
+         data sources. -->
     <FeedSubscriptions />
 
-    <!-- Recently archived (auto-archive): the management view the sidebar chip
-         deep-links to. A self-contained card reading `archivedTabs` from storage. -->
-    <RecentlyArchived />
+    <!-- Backup & restore (data-backup): export/import a portable JSON snapshot of
+         Spaces and settings. Terminal data-management action — natural footer
+         before the privacy link. Self-contained: export reads storage directly;
+         import goes through the bus to the SW. -->
+    <BackupRestore />
 
     <!-- Privacy policy lives on the marketing site (never bundled in the
          extension), so this is a plain outbound link opening in a new tab — the
