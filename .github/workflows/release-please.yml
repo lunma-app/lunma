@@ -46,48 +46,48 @@ jobs:
 
       # Everything below runs ONLY when a release was just cut, so ordinary
       # pushes (which merely update the Release PR) do no build work.
-      - if: ${{ steps.release.outputs.release_created == 'true' }}
+      - if: ${{ steps.release.outputs['apps/extension--release_created'] == 'true' }}
         uses: actions/checkout@v6.0.3
-      - if: ${{ steps.release.outputs.release_created == 'true' }}
+      - if: ${{ steps.release.outputs['apps/extension--release_created'] == 'true' }}
         uses: actions/setup-node@v6
         with:
           node-version: 24
-      - if: ${{ steps.release.outputs.release_created == 'true' }}
+      - if: ${{ steps.release.outputs['apps/extension--release_created'] == 'true' }}
         run: corepack enable
-      - if: ${{ steps.release.outputs.release_created == 'true' }}
+      - if: ${{ steps.release.outputs['apps/extension--release_created'] == 'true' }}
         id: pnpm-store
         run: echo "dir=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-      - if: ${{ steps.release.outputs.release_created == 'true' }}
+      - if: ${{ steps.release.outputs['apps/extension--release_created'] == 'true' }}
         uses: actions/cache@v5
         with:
           path: ${{ steps.pnpm-store.outputs.dir }}
           key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: ${{ runner.os }}-pnpm-
-      - if: ${{ steps.release.outputs.release_created == 'true' }}
+      - if: ${{ steps.release.outputs['apps/extension--release_created'] == 'true' }}
         run: pnpm install --frozen-lockfile
       # Build the production extension and attach it as a versioned, downloadable
       # asset. Reuses the package's `pack` script (pnpm build → dist → zip);
       # `--clobber` makes a re-run idempotent.
-      - if: ${{ steps.release.outputs.release_created == 'true' }}
-        name: Build and attach lunma-${{ steps.release.outputs.version }}.zip
+      - if: ${{ steps.release.outputs['apps/extension--release_created'] == 'true' }}
+        name: Build and attach lunma-${{ steps.release.outputs['apps/extension--version'] }}.zip
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           pnpm --filter @lunma/extension run pack
-          asset="lunma-${{ steps.release.outputs.version }}.zip"
+          asset="lunma-${{ steps.release.outputs['apps/extension--version'] }}.zip"
           mv apps/extension/extension.zip "$asset"
-          gh release upload "${{ steps.release.outputs.tag_name }}" "$asset" --clobber
+          gh release upload "${{ steps.release.outputs['apps/extension--tag_name'] }}" "$asset" --clobber
       # Publish the same zip to the Chrome Web Store, when configured. The
       # no-subcommand default of chrome-webstore-upload is upload + publish
       # (auto-publish → Google's review queue). Run via pnpm dlx (pinned, no dep,
       # matching the wrangler deploy pattern). Skipped until CWS_EXTENSION_ID is
       # set, so releases still succeed before the store listing is bootstrapped.
       # See the openspec change `extension-store-publish` + docs/releasing.md.
-      - if: ${{ steps.release.outputs.release_created == 'true' && env.HAS_CWS == 'true' }}
-        name: Publish lunma-${{ steps.release.outputs.version }}.zip to the Chrome Web Store
+      - if: ${{ steps.release.outputs['apps/extension--release_created'] == 'true' && env.HAS_CWS == 'true' }}
+        name: Publish lunma-${{ steps.release.outputs['apps/extension--version'] }}.zip to the Chrome Web Store
         env:
           EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
           CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
           REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
-        run: pnpm dlx --package=chrome-webstore-upload-cli@4.0.1 chrome-webstore-upload --source "lunma-${{ steps.release.outputs.version }}.zip"
+        run: pnpm dlx --package=chrome-webstore-upload-cli@4.0.1 chrome-webstore-upload --source "lunma-${{ steps.release.outputs['apps/extension--version'] }}.zip"
