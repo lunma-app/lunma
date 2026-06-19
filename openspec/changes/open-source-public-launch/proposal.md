@@ -13,18 +13,21 @@ open" positioning depends on.
 
 This is the last of the four sequenced release-engineering changes named in
 `github-repo-and-ci` (`site-continuous-deploy`, `extension-release-pipeline`,
-then this). It is **gated**: the flip executes only **after the first Chrome Web
-Store publish** (the original launch-checklist ordering — a public source repo
-should accompany, not precede, a real listing). Authoring it now captures the
-procedure and governance while they are fresh; execution waits for the store
-milestone. Until then the repo stays private and `github-repo-and-ci`'s deferred
+then this). It is **gated on two conditions**: the flip executes only **after the
+first Chrome Web Store publish** (the original launch-checklist ordering — a public
+source repo should accompany, not precede, a real listing) **and** only once
+`semver-enforcement` is live (release automation merged, a first real version cut,
+the parity guard green on `main`) — a public repo must not ship an un-versioned
+`0.0.0` (see `design.md` D2). Authoring it now captures the procedure and
+governance while they are fresh; execution waits for both milestones. Until then the repo stays private and `github-repo-and-ci`'s deferred
 merge-gating (its tasks §5.4/§6.4) remains open — this change is what closes it.
 
 ## What Changes
 
 - **Visibility flip (gated).** `lunma-app/lunma` goes public via
-  `gh repo edit --visibility public`, executed only after the first Chrome Web
-  Store publish. Reversible-checked: a pre-flip audit (below) must pass first.
+  `gh repo edit --visibility public`, executed only after **both** the first Chrome
+  Web Store publish **and** `semver-enforcement` being live (design D2).
+  Reversible-checked: a pre-flip audit (below) must pass first.
 - **Merge protection, finally enforced.** With the repo public, classic branch
   protection is free, so `main` protection requiring the `verify` + `e2e` checks,
   a CODEOWNERS review, and linear history is applied — satisfying the
@@ -40,9 +43,10 @@ merge-gating (its tasks §5.4/§6.4) remains open — this change is what closes
   inbound-equals-outbound under Apache-2.0.
 - **Contributions open.** `CONTRIBUTING.md` loses its "hold external
   contributions until the CLA is wired" maintainer note and documents the DCO
-  sign-off flow. `CLA.md` is replaced by a short DCO reference (`DCO` +
-  pointer), the `dco.txt` standard text is vendored, and `TRADEMARK.md` stays
-  unchanged (trademark policy is independent and needs no lawyer).
+  sign-off flow. `CLA.md` is **deleted** (the drafted CLA model is dropped
+  entirely — design D1), the standard `DCO` text is vendored at the repo root,
+  and `TRADEMARK.md` stays unchanged (trademark policy is independent and needs
+  no lawyer).
 - **Pre-flip audit gate.** A documented, repeatable check that the public tree
   and its history carry no secrets, credentials, or personal data, that git
   authorship is uniform, and that the intake scaffolding (PR/issue templates,
@@ -85,10 +89,11 @@ archives, which this change unblocks. -->
   - `.github/workflows/dco.yml` — a DCO sign-off check on pull requests (added
     to the `e2e`/`verify` set; a new required context once protection is applied).
   - `DCO` — the verbatim Developer Certificate of Origin 1.1 text.
+- **Deleted files:**
+  - `CLA.md` — removed entirely (the drafted CLA model is dropped — design D1).
 - **Modified files:**
-  - `CONTRIBUTING.md` — drop the "hold contributions" note; document `git commit
-    -s` / DCO; point at `DCO`.
-  - `CLA.md` — replaced with a short DCO pointer (the CLA model is dropped).
+  - `CONTRIBUTING.md` — drop the "hold contributions" note and the `CLA.md` link;
+    document `git commit -s` / DCO; point at `DCO`.
   - `README.md` — the "License" section: contributions under Apache-2.0 + DCO
     (not a CLA).
 - **New OpenSpec spec:** `openspec/specs/open-source-governance/spec.md` (on archive).

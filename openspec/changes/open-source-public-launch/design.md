@@ -67,16 +67,25 @@ enforces it) and **drop the drafted CLA**.
   an external GitHub App with broad permissions; contradicts the no-lawyer,
   minimal-surface reality.
 
-### D2 — Gate the flip on the first Chrome Web Store publish
+### D2 — Gate the flip on the first Chrome Web Store publish *and* on versioning being live
 
-Author now; execute the `gh repo edit --visibility public` step only after the
-first store listing is live.
+Author now; execute the `gh repo edit --visibility public` step only after **both**
+pre-flip conditions hold:
 
-- **Why:** Keeps the documented launch ordering — a public source repo should
-  accompany a real product listing, not precede it by an indefinite pre-release
-  window. It also means the public debut coincides with something users can
-  install. The store publish is owned by `extension-release-pipeline`; this
+1. the first Chrome Web Store listing is live, **and**
+2. `semver-enforcement` is live — release automation merged to `main`, a first
+   real version cut (`v0.1.0`), and the version parity guard green on `main`.
+
+- **Why (store publish):** Keeps the documented launch ordering — a public source
+  repo should accompany a real product listing, not precede it by an indefinite
+  pre-release window. It also means the public debut coincides with something users
+  can install. The store publish is owned by `extension-release-pipeline`; this
   change's execution waits on that milestone.
+- **Why (versioning):** A repo that ships `0.0.0` forever is not a credible
+  open-source project; the maintainer's constraint is that Lunma must not go public
+  while it is un-versioned. The `semver-enforcement` change adds honest, automatic,
+  monotonic versioning; this flip is gated on it being live. The gate is recorded
+  in that change (its tasks §5) and here so the ordering is explicit, not tribal.
 - **Consequence:** `github-repo-and-ci` stays unarchived (its §5.4/§6.4 open)
   until this executes. Accepted — that change is already parked on this exact gate.
 
@@ -154,9 +163,9 @@ applies.
 Additive; nothing in `src/` changes, so there is nothing to roll back in product
 code. Execution order (gated on the store publish):
 
-1. Land the governance files on a branch: `DCO`, `.github/workflows/dco.yml`,
-   `CONTRIBUTING.md` + `CLA.md` + `README.md` edits. PR → green (`verify`, `e2e`,
-   `dco`) → merge to `main`.
+1. Land the governance files on a branch: add `DCO` + `.github/workflows/dco.yml`,
+   delete `CLA.md`, edit `CONTRIBUTING.md` + `README.md`. PR → green (`verify`,
+   `e2e`, `dco`) → merge to `main`.
 2. Re-run the pre-flip audit (D5); abort on any finding.
 3. After the first Chrome Web Store publish (D2): `gh repo edit lunma-app/lunma
    --visibility public --accept-visibility-change-consequences`.

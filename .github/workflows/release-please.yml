@@ -1,0 +1,34 @@
+name: Release
+
+# release-please derives the next semver from the Conventional-Commit history on
+# `main`, maintaining a rolling Release PR that bumps apps/extension/package.json
+# and public/manifest.json in lockstep (its `extra-files` updater) and regenerates
+# CHANGELOG.md; merging that PR creates the `vX.Y.Z` tag + GitHub release. It runs
+# ONLY on push to `main` — it is NOT a pull-request status check, so the
+# branch-protection required-check set (`verify` + `e2e` + `dco`) that
+# `open-source-public-launch` applies is unchanged. See `docs/releasing.md` and
+# the openspec change `semver-enforcement`.
+on:
+  push:
+    branches: [main]
+
+# Least privilege: open/update the Release PR and create the tag + GitHub release.
+permissions:
+  contents: write
+  pull-requests: write
+
+# Never cancel an in-flight release run — interrupting it mid-tag is unsafe.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      # Pinned to a major (consistent with the other workflows' action pinning);
+      # CI-only, least-privilege token, so the action has no runtime blast radius.
+      - uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

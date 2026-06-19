@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "include-component-in-tag": false,
+  "packages": {
+    "apps/extension": {
+      "release-type": "node",
+      "package-name": "lunma",
+      "changelog-path": "../../CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "public/manifest.json",
+          "jsonpath": "$.version"
+        }
+      ]
+    }
+  }
+}

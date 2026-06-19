@@ -128,6 +128,7 @@ Resolved at project start; `pnpm-lock.yaml` is the source of truth from here. Wh
 | `@sveltejs/kit` | 2.x | `apps/site` only, build-time |
 | `@sveltejs/adapter-static` | 3.x | `apps/site` only, prerender to static output for `lunma.app` |
 | `simple-icons` | 16.x | `apps/site` only, build-time brand glyphs (CC0-1.0); nothing ships in the extension |
+| `release-please` | `googleapis/release-please-action@v4` | Versioning/release automation (pinned GitHub Action, CI-only — no runtime dep). Derives the next semver from Conventional Commits; see `docs/releasing.md` |
 
 ## Continuous integration
 
@@ -141,6 +142,23 @@ CI (GitHub Actions, `.github/workflows/ci.yml`) runs the same gate as local, on 
 devbox is the local-dev story only; CI needs the pinned Node plus pnpm, not the local shell. CI runs `verify` and `e2e` on every PR and push to `main`.
 
 Planned: enforcing these checks as a branch-protection merge gate, deferred until the repo is public.
+
+## Versioning and releases
+
+The extension's version is **derived from commit history, not hand-edited**.
+[release-please](https://github.com/googleapis/release-please) runs as a pinned
+GitHub Action (`googleapis/release-please-action@v4`, `.github/workflows/release-please.yml`,
+push-to-`main` only) and reads the Conventional-Commit log to maintain a rolling
+**Release PR**: it bumps the canonical `apps/extension/package.json` `version`,
+bumps `apps/extension/public/manifest.json` in lockstep (its `extra-files`
+updater), and regenerates the root `CHANGELOG.md`. Merging that PR cuts the
+`vX.Y.Z` tag + GitHub release. Monotonic increase and tag↔version agreement hold
+by construction. A parity test (`apps/extension/src/version-parity.test.ts`) rides
+`pnpm verify` and fails if the two version fields ever diverge — so versioning
+adds **no** new required CI status context (it rides `verify`) and **no** runtime
+dependency (the Action is CI-only). The full bump policy (`fix`/`feat`/breaking →
+patch/minor/major), the squash-merge convention, and the `0.1.0` bootstrap live in
+[releasing](releasing.md).
 
 ## Continuous deployment (marketing site)
 
