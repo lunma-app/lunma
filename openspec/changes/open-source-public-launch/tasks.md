@@ -26,7 +26,9 @@
 - [x] 2.1 Clean git history — repo recreated with clean history; the old
   pre-rebrand `main` tip is unreachable on the new repo. _(Done ad hoc, prep session.)_
 - [x] 2.2 Secret/PII scan of tree + history — no secrets, no personal data,
-  uniform `Lunma <dev@lunma.app>` authorship. _(Done ad hoc; re-run at §2.5.)_
+  uniform authorship under the canonical maintainer identity `Emanuel Fonseca
+  <12010090+emdfonseca@users.noreply.github.com>` (the GitHub noreply; history was
+  rewritten to it, scrubbing the prior `dev@lunma.app`/gmail emails). _(Re-run at §2.5.)_
 - [x] 2.3 `@lunma-app/maintainers` team exists and has push; `.github/CODEOWNERS`
   resolves to it. _(Done ad hoc, prep session.)_
 - [x] 2.4 `openspec/changes/archive/**` confirmed intended-public and audited

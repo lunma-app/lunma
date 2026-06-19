@@ -37,7 +37,9 @@
   maintains the Release PR and, on its merge, creates the `vX.Y.Z` tag + GitHub
   release (spec: "Automated next-version derivation…" + "Releases are tagged and
   monotonic").
-- [x] 2.4 Add a seed `CHANGELOG.md` (repo root) that release-please will maintain.
+- [x] 2.4 Add a seed `apps/extension/CHANGELOG.md` that release-please will
+  maintain (it lives with the package — release-please forbids a changelog path
+  above the package dir, so it is not at the repo root).
 - [x] 2.5 Confirm the workflow does **not** add a PR-required status context and
   no runtime dependency was added to any `package.json` (spec: "…adds no
   PR-required CI context and no runtime dependency").

@@ -14,8 +14,11 @@ a fresh start:
 - The repo was **recreated with clean history** (the "squash" equivalent): the
   pre-rebrand/codename commits no longer exist server-side — verified that the
   old `main` tip is unreachable on the new repo.
-- A **content + history audit** ran (no secrets, uniform `Lunma <dev@lunma.app>`
-  authorship, OSS scaffolding present) and **passed**.
+- A **content + history audit** ran (no secrets, uniform authorship, OSS
+  scaffolding present) and **passed**. _(History was later rewritten to the
+  canonical maintainer identity `Emanuel Fonseca
+  <12010090+emdfonseca@users.noreply.github.com>` — the GitHub noreply that keeps
+  personal emails out of the tree; the §2.5 re-audit checks for that identity.)_
 - The **`@lunma-app/maintainers`** team was created and granted push, so
   `CODEOWNERS` resolves.
 - The repo was briefly flipped public, then **reverted to private** so the launch

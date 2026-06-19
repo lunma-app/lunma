@@ -1,10 +1,12 @@
 name: Identity
 
-# Every commit in a pull request must use an `@lunma.app` author AND committer
-# email (the Dependabot bot is allowed). Keeps personal emails (gmail, etc.) out
-# of the public history — signing alone doesn't check the committer email. Job
-# name `identity` is a required status check on `main` (see open-source-public-launch
-# §4). Inline scan — no third-party action.
+# Every commit in a pull request must use the canonical maintainer identity
+# (`12010090+emdfonseca@users.noreply.github.com`) as author AND committer email,
+# or the Dependabot bot. Keeps personal emails (gmail, etc.) out of the public
+# history — signing alone doesn't check the committer email; the GitHub noreply
+# address keeps the real email private while still attributing to the account.
+# Job name `identity` is a required status check on `main` (see
+# open-source-public-launch §4). Inline scan — no third-party action.
 on:
   pull_request:
 
@@ -30,10 +32,10 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          # Allowed identities: any @lunma.app address, plus the Dependabot bot.
+          # Allowed identities: the canonical maintainer noreply, plus Dependabot.
           allowed() {
             case "$1" in
-              *@lunma.app) return 0 ;;
+              12010090+emdfonseca@users.noreply.github.com) return 0 ;;
             esac
             [[ "$1" == *"dependabot[bot]@users.noreply.github.com" ]] && return 0
             return 1
@@ -44,18 +46,19 @@ jobs:
             ae="$(git show -s --format='%ae' "$sha")"
             ce="$(git show -s --format='%ce' "$sha")"
             if ! allowed "$ae"; then
-              echo "::error::Commit $sha ($subject) has a non-lunma.app author email: $ae"
+              echo "::error::Commit $sha ($subject) has a disallowed author email: $ae"
               fail=1
             fi
             if ! allowed "$ce"; then
-              echo "::error::Commit $sha ($subject) has a non-lunma.app committer email: $ce"
+              echo "::error::Commit $sha ($subject) has a disallowed committer email: $ce"
               fail=1
             fi
           done
           if [ "$fail" -ne 0 ]; then
             echo ""
-            echo "Every commit's author and committer email must be an @lunma.app address."
-            echo "Set your identity in this clone:  git config user.email you@lunma.app"
+            echo "Every commit's author and committer email must be the canonical"
+            echo "maintainer identity (the GitHub noreply address)."
+            echo "Set it in this clone:  git config user.email 12010090+emdfonseca@users.noreply.github.com"
             exit 1
           fi
           echo "All PR commits use an allowed identity."

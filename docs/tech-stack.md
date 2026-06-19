@@ -151,7 +151,7 @@ GitHub Action (`googleapis/release-please-action@v4`, `.github/workflows/release
 push-to-`main` only) and reads the Conventional-Commit log to maintain a rolling
 **Release PR**: it bumps the canonical `apps/extension/package.json` `version`,
 bumps `apps/extension/public/manifest.json` in lockstep (its `extra-files`
-updater), and regenerates the root `CHANGELOG.md`. Merging that PR cuts the
+updater), and regenerates `apps/extension/CHANGELOG.md`. Merging that PR cuts the
 `vX.Y.Z` tag + GitHub release. Monotonic increase and tag↔version agreement hold
 by construction. A parity test (`apps/extension/src/version-parity.test.ts`) rides
 `pnpm verify` and fails if the two version fields ever diverge — so versioning

@@ -48,7 +48,9 @@ self-correcting in the next release.
    (`.github/workflows/release-please.yml`) runs release-please. It opens — and
    keeps updating — a single **Release PR** that bumps the canonical version,
    bumps `public/manifest.json` to match (release-please's `extra-files` updater),
-   and regenerates `CHANGELOG.md` from the commits.
+   and regenerates `apps/extension/CHANGELOG.md` from the commits (release-please
+   forbids a changelog path above the package, so it lives with the package, not
+   at the repo root).
 2. Review that PR. The diff shows the proposed version, the changelog entries, and
    both version bumps in lockstep.
 3. **Merge the Release PR.** That creates the `vX.Y.Z` git tag and the matching

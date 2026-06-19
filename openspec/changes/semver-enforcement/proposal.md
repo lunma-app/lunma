@@ -83,7 +83,9 @@ openspec/specs/. No existing spec's requirements change. -->
     release-please config (`release-type: node`, since `package.json` is canonical
     — D4); the manifest seeds the current version and the config declares the
     `extra-files` updater that bumps `public/manifest.json` alongside `package.json`.
-  - `CHANGELOG.md` (repo root) — generated and maintained by release-please.
+  - `apps/extension/CHANGELOG.md` — generated and maintained by release-please
+    (it lives with the package; release-please forbids a changelog path above the
+    package dir, so a repo-root changelog is not possible).
   - `apps/extension/src/version-parity.test.ts` — the parity guard. It MUST live
     under `src/` (vitest discovers `src/**/*.test.ts`) and reads both
     `apps/extension/package.json` and `apps/extension/public/manifest.json` at
