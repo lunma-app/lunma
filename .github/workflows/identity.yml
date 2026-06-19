@@ -33,14 +33,16 @@ jobs:
         run: |
           set -euo pipefail
           # Allowed identities: the canonical maintainer noreply, GitHub's
-          # web-flow noreply (the committer on web-UI merges and Dependabot
-          # commits — never a personal email), plus the Dependabot bot author.
+          # web-flow noreply (the committer on web-UI merges — never a personal
+          # email), and any GitHub bot account (Dependabot, github-actions /
+          # release-please, a future release App). Bot `[bot]@users.noreply`
+          # addresses are never personal, so they keep history clean.
           allowed() {
             case "$1" in
               12010090+emdfonseca@users.noreply.github.com) return 0 ;;
               noreply@github.com) return 0 ;;
             esac
-            [[ "$1" == *"dependabot[bot]@users.noreply.github.com" ]] && return 0
+            [[ "$1" == *"[bot]@users.noreply.github.com" ]] && return 0
             return 1
           }
           fail=0
