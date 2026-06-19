@@ -125,31 +125,31 @@
 
 ## 7. First deploy + verification (against the spec scenarios)
 
-- [ ] 7.1 Land `deploy.yml` on a **branch** first and push it; confirm a
+- [x] 7.1 Land `deploy.yml` on a **branch** first and push it; confirm a
   **preview** deployment is published and its `*.pages.dev` URL serves the site
   (spec: "A non-main branch publishes a preview, not production"). No production
   risk yet.
-- [ ] 7.2 Confirm the deploy workflow did **not** run for the branch's PR event,
+- [x] 7.2 Confirm the deploy workflow did **not** run for the branch's PR event,
   only the push (spec: "A pull request does not run the deploy").
-- [ ] 7.3 Merge/fast-forward to `main`; confirm the production deploy publishes to
+- [x] 7.3 Merge/fast-forward to `main`; confirm the production deploy publishes to
   `lunma.app` from the CI-built artifact (spec: "Push to main publishes
   production" + "The CI build is the source of the deployed bytes").
-- [ ] 7.4 Confirm the post-deploy smoke passed — `https://lunma.app/` and
+- [x] 7.4 Confirm the post-deploy smoke passed — `https://lunma.app/` and
   `https://lunma.app/privacy` both `200` (spec: "The privacy URL must resolve").
   This is the URL `extension-release-pipeline` needs for the Chrome Web Store
   listing.
-- [ ] 7.5 Confirm the live site sends the hardened headers and a strict CSP:
+- [x] 7.5 Confirm the live site sends the hardened headers and a strict CSP:
   `curl -I https://lunma.app/` shows HSTS / nosniff / `Referrer-Policy` /
   `X-Frame-Options` / `Permissions-Policy`; the page carries the CSP and its
   `script-src` has no `'unsafe-inline'`; and a headless load of `/`, `/privacy`,
   `/og` reports **zero CSP violations** (spec: the "hardened response headers"
   requirement — all three scenarios).
-- [ ] 7.6 Confirm the deploy is a **separate** workflow and `ci.yml`'s jobs remain
+- [x] 7.6 Confirm the deploy is a **separate** workflow and `ci.yml`'s jobs remain
   `contents: read` (spec: "Deploy is isolated from the read-only gate").
-- [ ] 7.7 Confirm the Cloudflare token is Pages-scoped only and the secrets are not
+- [x] 7.7 Confirm the Cloudflare token is Pages-scoped only and the secrets are not
   in the tree (spec: "The deploy token is Pages-scoped").
-- [ ] 7.8 Confirm the site deployed in its honest pre-launch state (`LAUNCHED =
+- [x] 7.8 Confirm the site deployed in its honest pre-launch state (`LAUNCHED =
   false`, "coming soon" CTAs) — flipping it is `extension-release-pipeline`/launch
   work, out of scope here.
-- [ ] 7.9 Confirm docs (§6) and this change's artifacts agree with what shipped
+- [x] 7.9 Confirm docs (§6) and this change's artifacts agree with what shipped
   (doc-lockstep); reconcile either side if they drifted.
