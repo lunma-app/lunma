@@ -1,4 +1,13 @@
-## ADDED Requirements
+# opml-import-export Specification
+
+## Purpose
+
+Import and export RSS smart-folder subscriptions as OPML: parse uploaded OPML
+into `{ name, feedUrl }` entries, serialise existing RSS smart folders to
+OPML 1.0, bulk-create folders on import, and surface it in an options-page Feed
+subscriptions card — so users can move feed lists in and out of Lunma.
+
+## Requirements
 
 ### Requirement: OPML parse utility extracts RSS feed entries
 `parseOpml(xml: string)` in `shared/opml.ts` SHALL use `saxes` to walk all

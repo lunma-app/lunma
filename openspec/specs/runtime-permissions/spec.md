@@ -1,4 +1,13 @@
-## ADDED Requirements
+# runtime-permissions Specification
+
+## Purpose
+
+Request least-privilege permissions at install and grant the rest at runtime
+through one foundation module that gates `chrome.permissions` — so the extension
+asks for host/feature access only on a user gesture and only when a feature
+needs it, with a calm, reversible inline grant.
+
+## Requirements
 
 ### Requirement: The manifest grants least privilege at install, the rest at runtime
 

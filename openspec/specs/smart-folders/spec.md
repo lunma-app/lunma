@@ -617,7 +617,7 @@ folder unconditionally.
 
 ### Requirement: Smart-item bindings give results pinned-tab activation
 
-`smartItemBindings` is typed as `{ [folderId: FolderId]: { [itemId: string]: { [windowId: WindowId]: { tabId: TabId; allowGlob: string } } } }` in `AppState` and persisted at schema v7 (raised by this change from v6). Each slot stores the bound tab id **and** the `pageGlob(itemUrl)` computed at open time so the boundary can be re-armed without the ephemeral runtime slice being populated (design D1).
+`smartItemBindings` is typed as `{ [folderId: FolderId]: { [itemId: string]: { [windowId: WindowId]: { tabId: TabId; allowGlob: string } } } }` in `AppState` and persisted at schema v7 (raised by this change from v6). Each slot SHALL store the bound tab id **and** the `pageGlob(itemUrl)` computed at open time so the boundary can be re-armed without the ephemeral runtime slice being populated (design D1).
 
 On `openSmartItem`, after the tab is created and bound via `store.bindSmartItem(folderId, itemId, windowId, tabId, allowGlob)`, the SW SHALL arm the boundary content script on the new tab as a side effect: `ctx.boundary.configureSmartItemBoundary(tabId, allowGlob)`. The `allowGlob` SHALL be `pageGlob(item.url)` — `origin + pathname + '*'` — so every sub-path and query-string variation of the item URL stays in-tab, and any off-prefix click opens a new temp tab instead.
 
