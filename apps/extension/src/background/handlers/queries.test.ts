@@ -149,27 +149,27 @@ describe('spaceOwningTab', () => {
     state.spaceInstancesByWindow[100] = {
       home: { spaceId: 'home', groupId: 2, tempTabIds: [], tempTabTitles: {} },
     };
-    state.savedTabs['p1'] = {
+    state.savedTabs.p1 = {
       id: 'p1',
       spaceId: 'home',
       title: 'P1',
       originalURL: 'https://p1/',
       currentURL: null,
     };
-    state.tabBindings['p1'] = { 100: 77 };
+    state.tabBindings.p1 = { 100: 77 };
     expect(spaceOwningTab(state, 100, 77)).toBe('home');
   });
 
   test('returns null for a global favorite (bound with spaceId === null)', () => {
     const state = makeState();
-    state.savedTabs['f1'] = {
+    state.savedTabs.f1 = {
       id: 'f1',
       spaceId: null,
       title: 'F1',
       originalURL: 'https://f1/',
       currentURL: null,
     };
-    state.tabBindings['f1'] = { 100: 88 };
+    state.tabBindings.f1 = { 100: 88 };
     expect(spaceOwningTab(state, 100, 88)).toBeNull();
   });
 
@@ -185,14 +185,14 @@ describe('spaceOwningTab', () => {
   test('a coupled pin bound in another window does not own the tab in this window', () => {
     const state = makeState();
     state.spaces.push({ id: 'home', name: 'Home', color: 'red', icon: 'star' });
-    state.savedTabs['p1'] = {
+    state.savedTabs.p1 = {
       id: 'p1',
       spaceId: 'home',
       title: 'P1',
       originalURL: 'https://p1/',
       currentURL: null,
     };
-    state.tabBindings['p1'] = { 200: 77 };
+    state.tabBindings.p1 = { 200: 77 };
     // Tab 77 is bound in window 200, not 100 — querying window 100 yields null.
     expect(spaceOwningTab(state, 100, 77)).toBeNull();
   });

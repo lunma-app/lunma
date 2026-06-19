@@ -40,7 +40,7 @@ async function bundleOverlay(): Promise<{ code: string; moduleIds: string[] }> {
     throw new Error('overlay budget guard: Vite build produced no output');
   }
   const chunk = first.output.find((o) => o.type === 'chunk');
-  if (!chunk || chunk.type !== 'chunk') {
+  if (chunk?.type !== 'chunk') {
     throw new Error('overlay budget guard: no JS chunk produced by the bundle');
   }
   return { code: chunk.code, moduleIds: Object.keys(chunk.modules) };

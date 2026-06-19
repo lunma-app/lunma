@@ -243,7 +243,7 @@ let childRowElById = $state<Record<SavedTabId, HTMLElement>>({});
 /** Live child row elements for a folder, in current child order. */
 function childEls(folderId: FolderId): HTMLElement[] {
   const folder = rows.find((r) => r.kind === 'folder' && r.id === folderId);
-  if (!folder || folder.kind !== 'folder') return [];
+  if (folder?.kind !== 'folder') return [];
   return folder.children.map((c) => childRowElById[c.id]).filter(Boolean) as HTMLElement[];
 }
 
