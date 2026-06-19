@@ -54,16 +54,36 @@ self-correcting in the next release.
 2. Review that PR. The diff shows the proposed version, the changelog entries, and
    both version bumps in lockstep.
 3. **Merge the Release PR.** That creates the `vX.Y.Z` git tag and the matching
-   GitHub release, and the same run builds the extension and attaches a
-   downloadable **`lunma-<version>.zip`** asset to that release (load it into
-   Chrome via `chrome://extensions` → "Load unpacked"/drag-drop). (release-please
-   opens the PR with the default `GITHUB_TOKEN`, so once `main` branch protection
-   is in force the solo maintainer merges it via admin bypass —
-   `enforce_admins: false`, per `open-source-public-launch`.)
+   GitHub release; the same run then (a) builds the extension and attaches a
+   downloadable **`lunma-<version>.zip`** asset (load it into Chrome via
+   `chrome://extensions` → "Load unpacked"/drag-drop), and (b) **if the Chrome Web
+   Store is configured** (see below), uploads that zip to the store and submits it
+   for publish. (release-please opens the PR with the default `GITHUB_TOKEN`, so
+   once `main` branch protection is in force the solo maintainer merges it via
+   admin bypass — `enforce_admins: false`, per `open-source-public-launch`.)
 
-The **Chrome Web Store** publish is not yet automated — it is a later phase of
-the `extension-release-pipeline` capability and the gating milestone for the
-public launch. For now the release ships the downloadable zip only.
+### Chrome Web Store publish
+
+The release workflow auto-uploads each release to the Chrome Web Store via
+`chrome-webstore-upload-cli` (run with `pnpm dlx`, no dependency) and submits it
+for Google's review. The step **skips** until the store is armed, so releases work
+fine before then. Arming it is a one-time setup:
+
+1. Create a **Chrome Web Store developer account** (one-time US$5 fee).
+2. **Upload `lunma-<version>.zip` manually once** from the Developer Dashboard to
+   create the listing (description, screenshots, category, privacy practices) and
+   obtain the **item id** — the API can only target an item that already exists.
+   Submit this first version by hand; automation takes over from the next release.
+3. Create a **Google OAuth client + refresh token** for the Chrome Web Store API
+   (see the `chrome-webstore-upload-keys` guide).
+4. Set the four secrets: `gh secret set CWS_EXTENSION_ID` (the item id),
+   `CWS_CLIENT_ID`, `CWS_CLIENT_SECRET`, `CWS_REFRESH_TOKEN` (from 1Password).
+
+After that, each merged Release PR uploads + submits automatically. To submit by
+hand instead of auto-publishing, switch the workflow's CLI call to the `upload`
+subcommand (`chrome-webstore-upload upload --source …`). If the refresh token
+expires, the publish step fails (loudly) on that release while the tag + GitHub
+asset still succeed — re-mint the token, reset the secret, and re-run the job.
 
 The tag always equals the version in `package.json`/`manifest.json` at that commit,
 and each release after the first is strictly greater than the previous — both hold

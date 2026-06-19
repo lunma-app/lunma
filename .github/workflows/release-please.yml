@@ -31,6 +31,10 @@ jobs:
     env:
       # Let corepack fetch the packageManager-pinned pnpm non-interactively.
       COREPACK_ENABLE_DOWNLOAD_PROMPT: 0
+      # 'true' once the Chrome Web Store item id secret is configured. Gates the
+      # store-publish step so releases still succeed before the store is armed.
+      # (secrets can't be read directly in `if:`, so surface it as an env flag.)
+      HAS_CWS: ${{ secrets.CWS_EXTENSION_ID != '' }}
     steps:
       # Pinned to a major (consistent with the other workflows' action pinning);
       # CI-only, least-privilege token, so the action has no runtime blast radius.
@@ -73,3 +77,17 @@ jobs:
           asset="lunma-${{ steps.release.outputs.version }}.zip"
           mv apps/extension/extension.zip "$asset"
           gh release upload "${{ steps.release.outputs.tag_name }}" "$asset" --clobber
+      # Publish the same zip to the Chrome Web Store, when configured. The
+      # no-subcommand default of chrome-webstore-upload is upload + publish
+      # (auto-publish → Google's review queue). Run via pnpm dlx (pinned, no dep,
+      # matching the wrangler deploy pattern). Skipped until CWS_EXTENSION_ID is
+      # set, so releases still succeed before the store listing is bootstrapped.
+      # See the openspec change `extension-store-publish` + docs/releasing.md.
+      - if: ${{ steps.release.outputs.release_created == 'true' && env.HAS_CWS == 'true' }}
+        name: Publish lunma-${{ steps.release.outputs.version }}.zip to the Chrome Web Store
+        env:
+          EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+          CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+        run: pnpm dlx --package=chrome-webstore-upload-cli@4.0.1 chrome-webstore-upload --source "lunma-${{ steps.release.outputs.version }}.zip"

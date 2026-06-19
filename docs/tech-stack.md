@@ -153,9 +153,11 @@ push-to-`main` only) and reads the Conventional-Commit log to maintain a rolling
 bumps `apps/extension/public/manifest.json` in lockstep (its `extra-files`
 updater), and regenerates `apps/extension/CHANGELOG.md`. Merging that PR cuts the
 `vX.Y.Z` tag + GitHub release, and the same run builds the extension and attaches
-a downloadable `lunma-<version>.zip` asset to that release (the
-`extension-release-pipeline` capability; the Chrome Web Store upload is a deferred
-later phase). Monotonic increase and tag↔version agreement hold
+a downloadable `lunma-<version>.zip` asset to that release and — when the Chrome
+Web Store is configured — uploads it to the store and submits it for publish via
+`chrome-webstore-upload-cli` (run with `pnpm dlx`, no dependency; the
+`extension-release-pipeline` capability). Monotonic increase and tag↔version
+agreement hold
 by construction. A parity test (`apps/extension/src/version-parity.test.ts`) rides
 `pnpm verify` and fails if the two version fields ever diverge — so versioning
 adds **no** new required CI status context (it rides `verify`) and **no** runtime
