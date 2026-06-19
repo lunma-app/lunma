@@ -3,7 +3,7 @@
   "name": "Lunma",
   "short_name": "Lunma",
   "version": "0.1.0",
-  "description": "Spatial tab and bookmark management — Arc-style Spaces and vertical tabs.",
+  "description": "Vertical tabs and per-project Spaces for Chrome, with smart folders and a quick launcher.",
   "minimum_chrome_version": "123",
   "permissions": [
     "tabs",

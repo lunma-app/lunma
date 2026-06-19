@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "license": "Apache-2.0",
   "private": true,
-  "description": "Lunma — spatial tab and bookmark management for Chrome (MV3 extension)",
+  "description": "Lunma: spatial tab and bookmark management for Chrome (MV3 extension)",
   "type": "module",
   "scripts": {
     "dev": "pnpm gen:icons && vite",
