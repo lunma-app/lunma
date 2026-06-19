@@ -72,16 +72,16 @@
 
 ## 5. Land + verify against spec scenarios
 
-- [ ] 5.1 Land §1–§4 on a branch; PR green on `verify` + `e2e`; merge to `main`.
-- [ ] 5.2 Confirm release-please opens a Release PR after merge; review it bumps
+- [x] 5.1 Land §1–§4 on a branch; PR green on `verify` + `e2e`; merge to `main`.
+- [x] 5.2 Confirm release-please opens a Release PR after merge; review it bumps
   `package.json` + `manifest.json` together and updates `CHANGELOG.md` (spec:
   "Automated next-version derivation…").
-- [ ] 5.3 Merge the first Release PR; confirm it cuts the bootstrapped `v0.1.0`
+- [x] 5.3 Merge the first Release PR; confirm it cuts the bootstrapped `v0.1.0`
   tag + GitHub release matching the version (no `v0.0.0` published), and that a
   later release would be strictly greater (spec: "Releases are tagged and
   monotonic").
-- [ ] 5.4 Confirm the parity guard, run on `main` after the bump, is green (spec:
+- [x] 5.4 Confirm the parity guard, run on `main` after the bump, is green (spec:
   "Single source of truth…").
-- [ ] 5.5 Archive this change (`semver-enforcement`) once §1–§5 are green; the
+- [x] 5.5 Archive this change (`semver-enforcement`) once §1–§5 are green; the
   `release-versioning` spec then becomes live, and `open-source-public-launch`'s
   versioning gate is satisfiable.

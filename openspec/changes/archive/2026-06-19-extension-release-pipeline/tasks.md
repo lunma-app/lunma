@@ -38,13 +38,13 @@
 
 ## 3. Land + verify against spec scenarios
 
-- [ ] 3.1 Land §1–§2 on a branch; PR green on `verify` + `e2e`; merge to `main`
+- [x] 3.1 Land §1–§2 on a branch; PR green on `verify` + `e2e`; merge to `main`
   (clean noreply identity).
-- [ ] 3.2 On the next cut release, confirm a `lunma-<version>.zip` asset appears
+- [x] 3.2 On the next cut release, confirm a `lunma-<version>.zip` asset appears
   on the GitHub release and its `manifest.json` version equals the release version
   (spec: "The attached artifact matches the released version"). Optionally
   back-fill `v0.1.0` (design Open Questions).
-- [ ] 3.3 Archive this change once §1–§3 are green; the
+- [x] 3.3 Archive this change once §1–§3 are green; the
   `extension-release-pipeline` spec then becomes live. (The Chrome Web Store
   upload remains a future phase / change, and the gating milestone for
   `open-source-public-launch`'s flip.)
