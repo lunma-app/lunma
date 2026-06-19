@@ -136,10 +136,10 @@ CI (GitHub Actions, `.github/workflows/ci.yml`) runs the same gate as local, on 
 
 - Provisions Node 24 and activates pnpm through Corepack from the root `package.json` `packageManager` field, so CI never re-declares a pnpm version and cannot drift from local.
 - Installs with `pnpm install --frozen-lockfile`. A stale `pnpm-lock.yaml` fails the install.
-- Runs `pnpm -r verify`.
+- Runs the same checks as local `pnpm -r verify`, but **fanned across parallel jobs** so the slow steps overlap instead of running in series: the extension's `verify` is split into one runner each for `typecheck` (tsc), `lint` (Biome), `check` (svelte-check), `lint:styles` (Stylelint), and `test:run` (Vitest), plus a `site` job for the marketing site. A no-op `verify` job aggregates them (`needs:` all, fails if any did) so **`verify` stays the single required status check** — the branch-protection required set is unchanged.
 - A parallel `e2e` job runs the Playwright MV3 smoke under `xvfb-run`. The fixture loads the unpacked extension via `--load-extension`, which Chromium permits only headed, so CI needs a virtual display.
 
-devbox is the local-dev story only; CI needs the pinned Node plus pnpm, not the local shell. CI runs `verify` and `e2e` on every PR and push to `main`.
+devbox is the local-dev story only; CI needs the pinned Node plus pnpm, not the local shell. CI runs `verify` (the aggregate) and `e2e` on every PR and push to `main`.
 
 Planned: enforcing these checks as a branch-protection merge gate, deferred until the repo is public.
 

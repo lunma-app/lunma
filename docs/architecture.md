@@ -778,10 +778,12 @@ into the extension's `ui/` primitives, which are coupled to `shared`.
 ### Continuous integration
 
 These boundary rules are enforced on every pull request and push to `main`, not
-only locally. CI (`.github/workflows/ci.yml`) runs the same `pnpm -r verify`
-gate, whose `biome check` step fails on a layer-DAG, import-cycle, or cross-app
-violation, so `architecture-integrity` holds at the merge boundary. A parallel
-`e2e` job runs the Playwright MV3 smoke under `xvfb-run`.
+only locally. CI (`.github/workflows/ci.yml`) runs the same checks as
+`pnpm -r verify`, fanned across parallel jobs (typecheck / lint / svelte-check /
+styles / unit tests, plus a `site` job) behind a single aggregate `verify`
+status check; its `lint` step (Biome) fails on a layer-DAG, import-cycle, or
+cross-app violation, so `architecture-integrity` holds at the merge boundary. A
+parallel `e2e` job runs the Playwright MV3 smoke under `xvfb-run`.
 
 Planned: enforcing these as a merge gate via branch protection is deferred until
 the repo is public, since it needs a paid plan while the repo is private. See also the

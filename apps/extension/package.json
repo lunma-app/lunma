@@ -11,6 +11,8 @@
     "gen:icons": "node scripts/gen-icon-loaders.mjs",
     "gen:app-icons": "node scripts/gen-app-icons.mjs",
     "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-check --tsconfig ./tsconfig.json --watch",
     "test": "vitest",
@@ -18,7 +20,7 @@
     "test:e2e": "pnpm build && playwright test",
     "lint:styles": "stylelint 'src/**/*.{svelte,css}'",
     "pack": "pnpm build && cd dist && zip -r ../extension.zip .",
-    "verify": "tsc --noEmit && biome check src && pnpm check && pnpm lint:styles && vitest run"
+    "verify": "pnpm typecheck && pnpm lint && pnpm check && pnpm lint:styles && pnpm test:run"
   },
   "dependencies": {
     "@leeoniya/ufuzzy": "1.0.19",

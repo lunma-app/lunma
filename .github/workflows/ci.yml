@@ -1,9 +1,14 @@
 name: CI
 
-# Runs the same gate developers run locally (`pnpm -r verify`) plus the
-# Playwright MV3 smoke, on every pull request and every push to main. The two
-# job names — `verify` and `e2e` — are the required status checks the main
-# branch ruleset references; keep them in lockstep (see tasks.md §5.4).
+# Runs the same checks developers run locally (`pnpm -r verify`) plus the
+# Playwright MV3 smoke, on every pull request and every push to main. The
+# extension's verify is fanned across parallel jobs — typecheck / lint /
+# svelte-check / styles / unit tests, each on its own runner — instead of one
+# serial run, so the slow steps (tsc, svelte-check) overlap. The `verify` job is
+# a no-op aggregator that goes green only when every extension leg AND `site`
+# pass, so `verify` stays the single required status check. The required
+# contexts — `verify` and `e2e` — are unchanged; keep them in lockstep with the
+# main branch ruleset (see github-repo-and-ci tasks.md §2 + open-source-public-launch §4.1).
 on:
   pull_request:
   push:
@@ -20,8 +25,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
+  # Each extension verify step on its own runner so the slow ones (tsc,
+  # svelte-check) run concurrently instead of in series. Tasks map to the
+  # package's scripts; `verify` locally is the same five in sequence.
+  extension:
+    name: extension (${{ matrix.task }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        task: [typecheck, lint, check, "lint:styles", "test:run"]
     env:
       # Let corepack fetch the packageManager-pinned pnpm non-interactively.
       COREPACK_ENABLE_DOWNLOAD_PROMPT: 0
@@ -43,7 +56,43 @@ jobs:
           key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: ${{ runner.os }}-pnpm-
       - run: pnpm install --frozen-lockfile
-      - run: pnpm -r verify
+      - run: pnpm --filter @lunma/extension run ${{ matrix.task }}
+
+  site:
+    runs-on: ubuntu-latest
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: 0
+    steps:
+      - uses: actions/checkout@v6.0.3
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: corepack enable
+      - id: pnpm-store
+        run: echo "dir=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v5
+        with:
+          path: ${{ steps.pnpm-store.outputs.dir }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @lunma/site verify
+
+  # Aggregator: keeps `verify` as the one required status check while the work
+  # runs in parallel above. `if: always()` so it reports even when a leg fails;
+  # it then fails explicitly if any needed job did not succeed.
+  verify:
+    needs: [extension, site]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gate on all extension + site checks
+        run: |
+          if ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}; then
+            echo "::error::one or more extension/site checks did not pass"
+            exit 1
+          fi
+          echo "extension + site checks passed"
 
   e2e:
     runs-on: ubuntu-latest

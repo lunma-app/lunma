@@ -37,6 +37,11 @@
      `restore-keys: ${{ runner.os }}-pnpm-`.
   6. `run: pnpm install --frozen-lockfile`
   7. `run: pnpm -r verify`
+  > Note (later change): the single `verify` job was subsequently restructured to
+  > fan the extension's verify steps (typecheck / lint / svelte-check / styles /
+  > unit tests) plus a `site` job across parallel runners, behind a no-op `verify`
+  > aggregator job that gates on them all. The required-check name `verify` is
+  > unchanged. See `docs/tech-stack.md` § "Continuous integration".
 - [x] 2.3 `e2e` job (ubuntu-latest, parallel to `verify`): same setup steps 1–6 as
   2.2 (checkout → setup-node 24 → corepack → store cache → frozen install), then
   `pnpm --filter @lunma/extension exec playwright install --with-deps chromium`,
