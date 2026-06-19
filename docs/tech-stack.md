@@ -152,7 +152,10 @@ push-to-`main` only) and reads the Conventional-Commit log to maintain a rolling
 **Release PR**: it bumps the canonical `apps/extension/package.json` `version`,
 bumps `apps/extension/public/manifest.json` in lockstep (its `extra-files`
 updater), and regenerates `apps/extension/CHANGELOG.md`. Merging that PR cuts the
-`vX.Y.Z` tag + GitHub release. Monotonic increase and tag↔version agreement hold
+`vX.Y.Z` tag + GitHub release, and the same run builds the extension and attaches
+a downloadable `lunma-<version>.zip` asset to that release (the
+`extension-release-pipeline` capability; the Chrome Web Store upload is a deferred
+later phase). Monotonic increase and tag↔version agreement hold
 by construction. A parity test (`apps/extension/src/version-parity.test.ts`) rides
 `pnpm verify` and fails if the two version fields ever diverge — so versioning
 adds **no** new required CI status context (it rides `verify`) and **no** runtime

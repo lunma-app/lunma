@@ -54,9 +54,16 @@ self-correcting in the next release.
 2. Review that PR. The diff shows the proposed version, the changelog entries, and
    both version bumps in lockstep.
 3. **Merge the Release PR.** That creates the `vX.Y.Z` git tag and the matching
-   GitHub release. (release-please opens the PR with the default `GITHUB_TOKEN`,
-   so once `main` branch protection is in force the solo maintainer merges it via
-   admin bypass — `enforce_admins: false`, per `open-source-public-launch`.)
+   GitHub release, and the same run builds the extension and attaches a
+   downloadable **`lunma-<version>.zip`** asset to that release (load it into
+   Chrome via `chrome://extensions` → "Load unpacked"/drag-drop). (release-please
+   opens the PR with the default `GITHUB_TOKEN`, so once `main` branch protection
+   is in force the solo maintainer merges it via admin bypass —
+   `enforce_admins: false`, per `open-source-public-launch`.)
+
+The **Chrome Web Store** publish is not yet automated — it is a later phase of
+the `extension-release-pipeline` capability and the gating milestone for the
+public launch. For now the release ships the downloadable zip only.
 
 The tag always equals the version in `package.json`/`manifest.json` at that commit,
 and each release after the first is strictly greater than the previous — both hold

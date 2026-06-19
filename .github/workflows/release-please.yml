@@ -3,16 +3,19 @@ name: Release
 # release-please derives the next semver from the Conventional-Commit history on
 # `main`, maintaining a rolling Release PR that bumps apps/extension/package.json
 # and public/manifest.json in lockstep (its `extra-files` updater) and regenerates
-# CHANGELOG.md; merging that PR creates the `vX.Y.Z` tag + GitHub release. It runs
-# ONLY on push to `main` — it is NOT a pull-request status check, so the
-# branch-protection required-check set (`verify` + `e2e` + `dco`) that
-# `open-source-public-launch` applies is unchanged. See `docs/releasing.md` and
-# the openspec change `semver-enforcement`.
+# CHANGELOG.md; merging that PR creates the `vX.Y.Z` tag + GitHub release. When a
+# release is cut, the job then builds the extension and attaches a downloadable
+# `lunma-<version>.zip` to that release. It runs ONLY on push to `main` — it is
+# NOT a pull-request status check, so the branch-protection required-check set
+# (`verify` + `e2e` + `dco` + `identity`) is unchanged. The Chrome Web Store
+# upload is a deferred later phase. See `docs/releasing.md` and the openspec
+# changes `semver-enforcement` + `extension-release-pipeline`.
 on:
   push:
     branches: [main]
 
-# Least privilege: open/update the Release PR and create the tag + GitHub release.
+# Least privilege: open/update the Release PR, create the tag + GitHub release,
+# and upload the release asset (all `contents: write`).
 permissions:
   contents: write
   pull-requests: write
@@ -25,10 +28,48 @@ concurrency:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    env:
+      # Let corepack fetch the packageManager-pinned pnpm non-interactively.
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: 0
     steps:
       # Pinned to a major (consistent with the other workflows' action pinning);
       # CI-only, least-privilege token, so the action has no runtime blast radius.
-      - uses: googleapis/release-please-action@v4
+      - id: release
+        uses: googleapis/release-please-action@v4
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      # Everything below runs ONLY when a release was just cut, so ordinary
+      # pushes (which merely update the Release PR) do no build work.
+      - if: ${{ steps.release.outputs.release_created == 'true' }}
+        uses: actions/checkout@v6.0.3
+      - if: ${{ steps.release.outputs.release_created == 'true' }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - if: ${{ steps.release.outputs.release_created == 'true' }}
+        run: corepack enable
+      - if: ${{ steps.release.outputs.release_created == 'true' }}
+        id: pnpm-store
+        run: echo "dir=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - if: ${{ steps.release.outputs.release_created == 'true' }}
+        uses: actions/cache@v5
+        with:
+          path: ${{ steps.pnpm-store.outputs.dir }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+      - if: ${{ steps.release.outputs.release_created == 'true' }}
+        run: pnpm install --frozen-lockfile
+      # Build the production extension and attach it as a versioned, downloadable
+      # asset. Reuses the package's `pack` script (pnpm build → dist → zip);
+      # `--clobber` makes a re-run idempotent.
+      - if: ${{ steps.release.outputs.release_created == 'true' }}
+        name: Build and attach lunma-${{ steps.release.outputs.version }}.zip
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pnpm --filter @lunma/extension pack
+          asset="lunma-${{ steps.release.outputs.version }}.zip"
+          mv apps/extension/extension.zip "$asset"
+          gh release upload "${{ steps.release.outputs.tag_name }}" "$asset" --clobber
