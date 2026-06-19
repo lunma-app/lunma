@@ -39,7 +39,7 @@ jobs:
       # Pinned to a major (consistent with the other workflows' action pinning);
       # CI-only, least-privilege token, so the action has no runtime blast radius.
       - id: release
-        uses: googleapis/release-please-action@v4
+        uses: googleapis/release-please-action@v5
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
