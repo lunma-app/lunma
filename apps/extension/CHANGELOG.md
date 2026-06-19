@@ -2,10 +2,7 @@
 
 ## 0.1.0 (2026-06-19)
 
-
-### ⚠ BREAKING CHANGES
-
-* **workspace:** source tree relocates under apps/extension/src; tokens move to the @lunma/tokens package.
+First public release.
 
 ### Features
 
@@ -69,10 +66,3 @@
 ### Code Refactoring
 
 * **workspace:** split into pnpm workspace ([c0c0664](https://github.com/lunma-app/lunma/commit/c0c0664e034ec0da105f6dc9b2013904969acdf8))
-
-## Changelog
-
-All notable changes to the Lunma extension are recorded here. This file is
-maintained automatically by [release-please](https://github.com/googleapis/release-please)
-from the Conventional-Commit history on `main` — do not edit it by hand. See
-[docs/releasing.md](../../docs/releasing.md) for the bump policy and release flow.
