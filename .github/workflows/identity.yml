@@ -32,10 +32,13 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          # Allowed identities: the canonical maintainer noreply, plus Dependabot.
+          # Allowed identities: the canonical maintainer noreply, GitHub's
+          # web-flow noreply (the committer on web-UI merges and Dependabot
+          # commits — never a personal email), plus the Dependabot bot author.
           allowed() {
             case "$1" in
               12010090+emdfonseca@users.noreply.github.com) return 0 ;;
+              noreply@github.com) return 0 ;;
             esac
             [[ "$1" == *"dependabot[bot]@users.noreply.github.com" ]] && return 0
             return 1
