@@ -1,13 +1,5 @@
 <script lang="ts">
 import { onMount } from 'svelte';
-import { readConnectors, setConnectorToken } from '../shared/connectors';
-import {
-  hasApiPermission,
-  type OptionalApiPermission,
-  onPermissionsChange,
-  requestApiPermission,
-} from '../shared/permissions';
-import { getExtensionsShortcutsUrl, modifierLabel } from '../shared/platform';
 import { BUILT_IN_ENGINES } from '../shared/search-engines';
 import {
   DEFAULTS,
@@ -15,19 +7,22 @@ import {
   SETTINGS,
   type SettingDeclaration,
   type Settings,
+  TOGGLE_SEGMENTS,
   writeSetting,
 } from '../shared/settings';
 import { applyDensityToDocument } from '../shared/surface-boot';
 import Aurora from '../ui/Aurora.svelte';
-import Button from '../ui/Button.svelte';
 import SegmentedControl from '../ui/SegmentedControl.svelte';
 import Select from '../ui/Select.svelte';
-import Surface from '../ui/Surface.svelte';
-import TabRow from '../ui/TabRow.svelte';
+import SettingsCard from '../ui/SettingsCard.svelte';
+import SettingText from '../ui/SettingText.svelte';
 import TextInput from '../ui/TextInput.svelte';
 import BackupRestore from './BackupRestore.svelte';
+import ConnectorsCard from './ConnectorsCard.svelte';
 import FeedSubscriptions from './FeedSubscriptions.svelte';
 import RecentlyArchived from './RecentlyArchived.svelte';
+import ResultSourcesCard from './ResultSourcesCard.svelte';
+import ShortcutGuidanceCard from './ShortcutGuidanceCard.svelte';
 import '@lunma/tokens/tokens.css';
 import '@lunma/tokens/fonts.css';
 import '@lunma/tokens/recipes.css';
@@ -35,11 +30,6 @@ import '@lunma/tokens/recipes.css';
 // Local mirror of the saved settings. Seeded with DEFAULTS so controls have a
 // value before the async read resolves; replaced by the stored values on mount.
 let settings = $state<Settings>({ ...DEFAULTS });
-
-// Whether Chrome has bound the `toggle-launcher` (Alt+L) command shortcut.
-// `null` while the async `chrome.commands.getAll()` check is in flight — the
-// guidance card stays hidden until we actually know, so it never flashes.
-let launcherShortcutBound = $state<boolean | null>(null);
 
 const version = chrome.runtime.getManifest().version;
 
@@ -95,13 +85,6 @@ function isStacked(decl: SettingDeclaration): boolean {
   );
 }
 
-/** Two-segment Off|On options backing a `toggle` setting's SegmentedControl —
- * the boolean renders via the existing primitive, no new Toggle/Switch (D4). */
-const TOGGLE_OPTIONS = [
-  { value: 'off', label: 'Off' },
-  { value: 'on', label: 'On' },
-];
-
 // The custom-engine fields (the search-URL template + its Tab keyword) are only
 // meaningful when the default engine is set to Custom — they configure that slot.
 // Hide them while a built-in is selected so the Search group shows just the picker
@@ -135,124 +118,7 @@ onMount(async () => {
   settings = await readSettings();
   applyDensity(settings.density);
   applyTint(settings.tint);
-  void checkLauncherShortcut();
-  void refreshConnectorHosts();
-  void refreshResultSources();
 });
-
-// Keep the result-source indicators live (least-privilege-permissions D5): a
-// grant from the inline control here, or a revoke in Chrome's own UI, refreshes
-// the row state without a reload.
-onMount(() => onPermissionsChange(() => void refreshResultSources()));
-
-// ── Connectors (smart-folders, design D10) ────────────────────────────────────
-// Per-instance access tokens for smart folders — a custom, storage.local-backed
-// section OUTSIDE the sync settings registry (tokens must not ride a Google
-// account across machines; the shortcut-guidance card is the precedent for a
-// custom section). Reads/writes go only through `shared/connectors.ts`. The
-// stored token value is NEVER echoed back into the page — only the hosts are
-// listed, each with a token-set indicator and a "Token set — replace?"
-// affordance. Changes take effect on the connector's next poll, no reload.
-
-/** Hosts with a stored token. The VALUES never leave `readConnectors`' scope. */
-let connectorHosts = $state<string[]>([]);
-// The add-form draft (host + token) and the host whose token is being replaced
-// (its inline password field is open).
-let newConnectorHost = $state('');
-let newConnectorToken = $state('');
-let replacingHost = $state<string | null>(null);
-let replacementToken = $state('');
-
-async function refreshConnectorHosts(): Promise<void> {
-  const record = await readConnectors();
-  connectorHosts = Object.keys(record).sort();
-}
-
-/** Normalize a host entry: a bare host passes through; a pasted URL collapses
- * to its host (the engine's PAT lookup key is `new URL(baseUrl).host`). */
-function normalizeHost(raw: string): string {
-  const trimmed = raw.trim();
-  try {
-    return new URL(trimmed).host;
-  } catch {
-    return trimmed;
-  }
-}
-
-async function addConnector(): Promise<void> {
-  const host = normalizeHost(newConnectorHost);
-  const token = newConnectorToken.trim();
-  if (host === '' || token === '') return;
-  await setConnectorToken(host, token);
-  newConnectorHost = '';
-  newConnectorToken = '';
-  await refreshConnectorHosts();
-}
-
-async function replaceConnector(host: string): Promise<void> {
-  const token = replacementToken.trim();
-  if (token === '') return;
-  await setConnectorToken(host, token);
-  replacingHost = null;
-  replacementToken = '';
-  await refreshConnectorHosts();
-}
-
-async function clearConnector(host: string): Promise<void> {
-  await setConnectorToken(host, null);
-  if (replacingHost === host) replacingHost = null;
-  replacementToken = '';
-  await refreshConnectorHosts();
-}
-
-// ── Result sources (least-privilege-permissions D5) ───────────────────────────
-// The launcher's history/bookmarks providers are OPTIONAL permissions, granted
-// in-context. This is the canonical grant control: the new-tab launcher offers
-// an inline "Enable …" affordance, and the Alt+L overlay (which can't call
-// `chrome.permissions`) routes its "Enable …" here via the SW (`#result-sources`).
-// Reads/requests go through `shared/permissions.ts`; `onPermissionsChange` keeps
-// the indicators live when a grant is revoked in Chrome's own UI.
-
-const RESULT_SOURCES: Array<{
-  name: OptionalApiPermission;
-  label: string;
-  desc: string;
-  cta: string;
-}> = [
-  {
-    name: 'history',
-    label: 'Browsing history',
-    desc: 'Show matching pages from your browsing history in the launcher.',
-    cta: 'Enable history results',
-  },
-  {
-    name: 'bookmarks',
-    label: 'Bookmarks',
-    desc: 'Show matching bookmarks in the launcher.',
-    cta: 'Enable bookmark results',
-  },
-];
-
-let resultSourceGranted = $state<Record<OptionalApiPermission, boolean>>({
-  history: false,
-  bookmarks: false,
-});
-
-async function refreshResultSources(): Promise<void> {
-  const [history, bookmarks] = await Promise.all([
-    hasApiPermission('history'),
-    hasApiPermission('bookmarks'),
-  ]);
-  resultSourceGranted = { history, bookmarks };
-}
-
-/** Grant an optional result source from this user gesture (extension page).
- * `onPermissionsChange` also refreshes, but refresh here too so the indicator
- * updates immediately on this surface. */
-async function enableResultSource(name: OptionalApiPermission): Promise<void> {
-  await requestApiPermission(name);
-  await refreshResultSources();
-}
 
 // Deep-link by hash: scroll the matching element into view on load and on hash
 // change (a reused options tab). Drives both the sidebar archived chip
@@ -276,30 +142,6 @@ onMount(() => {
  * `#<slug>` (e.g. "Auto-archive" → `auto-archive`). */
 function groupSlug(group: string): string {
   return group.toLowerCase().replace(/\s+/g, '-');
-}
-
-/**
- * Detect whether Chrome has bound the launcher's `Alt+L` shortcut. Chrome
- * routinely leaves `suggested_key` unset, and an extension cannot bind it
- * programmatically — so when it's empty we surface guidance to bind it by hand.
- * An empty/absent `shortcut` on the `toggle-launcher` command means unbound.
- */
-async function checkLauncherShortcut(): Promise<void> {
-  try {
-    const commands = (await chrome.commands?.getAll?.()) ?? [];
-    const toggle = commands.find((c) => c.name === 'toggle-launcher');
-    launcherShortcutBound = (toggle?.shortcut ?? '') !== '';
-  } catch {
-    // API unavailable — we can't tell, so assume bound rather than nag falsely.
-    launcherShortcutBound = true;
-  }
-}
-
-/** Open the host browser's keyboard-shortcuts page so the user can bind `Alt+L`
- * — the only way to set a `chrome.commands` shortcut (extensions can't do it).
- * The URL resolves to the running browser's own scheme (Edge vs Chrome). */
-function openShortcutsPage(): void {
-  void chrome.tabs.create({ url: getExtensionsShortcutsUrl() });
 }
 
 function onSelect(decl: SettingDeclaration, value: string): void {
@@ -354,42 +196,15 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
   </header>
 
   <main class="column">
-    {#if launcherShortcutBound === false}
-      <aside class="shortcut-card">
-        <span class="shortcut-glyph" aria-hidden="true">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect width="20" height="16" x="2" y="4" rx="2" />
-            <path d="M6 8h.001M10 8h.001M14 8h.001M18 8h.001M8 12h.001M12 12h.001M16 12h.001M7 16h10" />
-          </svg>
-        </span>
-        <div class="shortcut-text">
-          <span class="shortcut-title">Set the launcher shortcut</span>
-          <span class="shortcut-desc">
-            {modifierLabel}L isn’t currently bound. Your browser has to set the keyboard shortcut —
-            open its shortcuts page to bind it.
-          </span>
-          <div class="shortcut-action">
-            <Button variant="primary" onclick={openShortcutsPage}>
-              Open keyboard shortcuts
-            </Button>
-          </div>
-        </div>
-      </aside>
-    {/if}
+    <!-- Unbound-shortcut guidance (renders only when Alt+L is unbound). -->
+    <ShortcutGuidanceCard />
 
     {#each groups as [group, decls] (group)}
-      <Surface variant="glass">
-        <section class="group" id={groupSlug(group)}>
-          <h2 class="group-label">{group}</h2>
-          {#each decls as decl (decl.key)}
-            {#if isVisible(decl)}
+      <SettingsCard heading={group} id={groupSlug(group)} headingTestid="group-heading">
+        {#each decls as decl (decl.key)}
+          {#if isVisible(decl)}
             <div class="setting" class:stacked={isStacked(decl)}>
-              <div class="setting-text">
-                <span class="setting-label">{decl.label}</span>
-                {#if decl.description}
-                  <span class="setting-desc">{decl.description}</span>
-                {/if}
-              </div>
+              <SettingText label={decl.label} description={decl.description} />
               {#if decl.type === 'enum' && decl.options.length > SEGMENTED_MAX}
                 <Select
                   options={decl.options}
@@ -402,6 +217,7 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
                   name={decl.key}
                   options={decl.options}
                   value={String(settings[decl.key])}
+                  ariaLabel={decl.label}
                   onchange={(value) => onSelect(decl, value)}
                 />
               {:else if decl.type === 'text'}
@@ -447,8 +263,9 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
               {:else if decl.type === 'toggle'}
                 <SegmentedControl
                   name={decl.key}
-                  options={TOGGLE_OPTIONS}
+                  options={TOGGLE_SEGMENTS}
                   value={settings[decl.key] ? 'on' : 'off'}
+                  ariaLabel={decl.label}
                   onchange={(value) => onToggle(decl, value === 'on')}
                 />
               {:else if decl.type === 'number'}
@@ -464,129 +281,22 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
                 </div>
               {/if}
             </div>
-            {/if}
-          {/each}
-        </section>
-      </Surface>
+          {/if}
+        {/each}
+      </SettingsCard>
     {/each}
 
     <!-- Connectors (smart-folders, D10): per-instance access tokens, kept in
          chrome.storage.local via shared/connectors.ts — never sync, never the
-         settings registry, never echoed back into the page. -->
-    <Surface variant="glass">
-      <section class="group" id="connectors" data-testid="connectors-section">
-        <h2 class="group-label">Connectors</h2>
-        <p class="connector-intro">
-          GitLab folders ride your browser's sign-in by default; GitHub folders always need a
-          token. Add a per-host access token (GitLab: <code>read_api</code> scope; GitHub: a
-          token that can read pull requests) — it stays on this machine and applies on the next
-          refresh.
-        </p>
-
-        {#each connectorHosts as host (host)}
-          <div class="connector-row" data-testid="connector-row">
-            <div class="connector-host-cell">
-              <span class="connector-host">{host}</span>
-              <span class="connector-indicator" data-testid="connector-token-set">Token set</span>
-            </div>
-            {#if replacingHost === host}
-              <div class="connector-replace">
-                <TextInput
-                  type="password"
-                  ariaLabel={`New token for ${host}`}
-                  placeholder="glpat-…"
-                  bind:value={replacementToken}
-                  testid="connector-replace-input"
-                  onenter={() => void replaceConnector(host)}
-                />
-                <Button variant="primary" onclick={() => void replaceConnector(host)}>Save</Button>
-                <Button
-                  onclick={() => {
-                    replacingHost = null;
-                    replacementToken = '';
-                  }}
-                >
-                  Cancel
-                </Button>
-              </div>
-            {:else}
-              <div class="connector-actions">
-                <Button
-                  onclick={() => {
-                    replacingHost = host;
-                    replacementToken = '';
-                  }}
-                >
-                  Token set — replace?
-                </Button>
-                <Button onclick={() => void clearConnector(host)}>Remove</Button>
-              </div>
-            {/if}
-          </div>
-        {/each}
-
-        <div class="connector-add">
-          <TextInput
-            label="Instance host"
-            placeholder="gitlab.example.com"
-            bind:value={newConnectorHost}
-            testid="connector-host-input"
-          />
-          <TextInput
-            label="Access token"
-            type="password"
-            placeholder="glpat-…"
-            bind:value={newConnectorToken}
-            testid="connector-token-input"
-            onenter={() => void addConnector()}
-          />
-          <div class="connector-add-action">
-            <Button
-              variant="primary"
-              disabled={newConnectorHost.trim() === '' || newConnectorToken.trim() === ''}
-              onclick={() => void addConnector()}
-            >
-              Add token
-            </Button>
-          </div>
-        </div>
-      </section>
-    </Surface>
+         settings registry, never echoed back into the page. The `#connectors`
+         deep-link anchor moves intact with the extracted card. -->
+    <ConnectorsCard />
 
     <!-- Result sources (least-privilege-permissions D5): the launcher's optional
          history/bookmarks providers, granted in-context. This is the canonical
          grant control — the Alt+L overlay (which can't call chrome.permissions)
          deep-links here via the SW (#result-sources). -->
-    <Surface variant="glass">
-      <section class="group" id="result-sources" data-testid="result-sources-section">
-        <h2 class="group-label">Result sources</h2>
-        <p class="connector-intro">
-          The launcher can also surface your browsing history and bookmarks. These are optional —
-          enable each when you want it, and revoke access anytime from your browser's extension settings.
-        </p>
-
-        {#each RESULT_SOURCES as source (source.name)}
-          <div class="result-source-row" data-testid={`result-source-${source.name}`}>
-            <div class="result-source-cell">
-              <span class="result-source-label">{source.label}</span>
-              <span class="result-source-desc">{source.desc}</span>
-            </div>
-            {#if resultSourceGranted[source.name]}
-              <span
-                class="result-source-indicator"
-                data-testid={`result-source-${source.name}-granted`}
-              >
-                Enabled
-              </span>
-            {:else}
-              <Button variant="primary" onclick={() => void enableResultSource(source.name)}>
-                {source.cta}
-              </Button>
-            {/if}
-          </div>
-        {/each}
-      </section>
-    </Surface>
+    <ResultSourcesCard />
 
     <!-- Backup & restore (data-backup): export/import a portable JSON snapshot of
          Spaces and settings. Self-contained: export reads storage directly; import
@@ -601,14 +311,6 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
     <!-- Recently archived (auto-archive): the management view the sidebar chip
          deep-links to. A self-contained card reading `archivedTabs` from storage. -->
     <RecentlyArchived />
-
-    <Surface variant="glass">
-      <section class="preview-panel" aria-label="Density preview">
-        <TabRow title="Figma — Lunma design" />
-        <TabRow title="Linear — Inbox" active />
-        <TabRow title="GitHub — pull requests" />
-      </section>
-    </Surface>
 
     <!-- Privacy policy lives on the marketing site (never bundled in the
          extension), so this is a plain outbound link opening in a new tab — the
@@ -759,6 +461,13 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
       border-color var(--motion-slow) var(--ease-emphasised),
       box-shadow var(--motion-slow) var(--ease-emphasised);
   }
+  /* Reduced motion: the tint change applies instantly (no cross-fade); the end
+   * state is identical, so reduced motion holds at every colour-intensity level. */
+  @media (prefers-reduced-motion: reduce) {
+    .column :global(.surface) {
+      transition: none;
+    }
+  }
 
   /* Each glass group card is its own stacking context (backdrop-filter), so a
    * dropdown popover anchored inside the Search card would otherwise paint
@@ -769,85 +478,9 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
     z-index: var(--z-dropdown);
   }
 
-  /* Unbound-shortcut guidance — calm, not alarming (guidance, not an error):
-   * accent-tinted glyph, no danger/warning hues. Only rendered when the
-   * shortcut is unbound, so the healthy page is unchanged. */
-  .shortcut-card {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-3);
-    padding: var(--space-4);
-    border: 1px solid var(--border);
-    border-radius: var(--r-lg);
-    background: var(--surface-2);
-    animation: shortcut-card-in var(--motion-base) var(--ease-emphasised);
-  }
-  @keyframes shortcut-card-in {
-    from {
-      opacity: 0;
-      transform: translateY(6px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-  .shortcut-glyph {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: none;
-    width: 32px;
-    height: 32px;
-    border-radius: var(--r-md);
-    background: var(--accent-soft);
-    color: var(--accent);
-  }
-  .shortcut-text {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .shortcut-title {
-    font: var(--weight-medium) var(--text-md) / 1.2 var(--font-sans);
-    color: var(--text);
-  }
-  .shortcut-desc {
-    font: var(--weight-regular) var(--text-sm) / 1.45 var(--font-sans);
-    color: var(--text-muted);
-  }
-  .shortcut-action {
-    margin-top: var(--space-1);
-  }
-
-  /* Each group rides a Surface card; the card owns the chrome, the section owns
-   * the internal padding + rhythm. */
-  .group {
-    padding: var(--space-4) var(--space-5);
-  }
-  /* Editorial hierarchy (sidebar-firstrun-options-polish D5): the group heading
-   * carries identity in the display serif at `--text-xl`, sentence case (the
-   * registry already stores names sentence-cased) — NOT the old uppercased
-   * micro-label. Serif = identity, sans = information (the pairing rule). The
-   * `--space-4` margin sets the heading→controls rhythm; inter-group rhythm is the
-   * column's `--space-6` gap. */
-  .group-label {
-    margin: 0 0 var(--space-4);
-    font-family: var(--font-display);
-    font-size: var(--text-xl);
-    font-weight: var(--weight-regular);
-    line-height: 1.1;
-    color: var(--text-2);
-  }
-  /* Identity-hue treatment under the immersive tints — the heading renders in the
-   * active Space's hue at the same `0.72` lightness floor the sidebar section
-   * headers use, so it stays ≥ WCAG AA over the glass card; `subtle`/off read
-   * neutral. `data-tint` is written on `:root` (`<html>`) by `applyTint`. */
-  :global(:root[data-tint='standard']) .group-label,
-  :global(:root[data-tint='vivid']) .group-label {
-    color: oklch(from var(--space-c) max(l, 0.72) c h);
-  }
-
+  /* The registry card now composes the shared `SettingsCard` / `CardHeading`
+   * primitives; the shortcut-guidance card and the Connectors / Result-sources
+   * sections are extracted sibling components that own their own chrome. */
   .setting {
     display: flex;
     align-items: flex-start;
@@ -863,23 +496,6 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
     flex-direction: column;
     align-items: stretch;
     gap: var(--space-3);
-  }
-  .setting-text {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .setting-label {
-    font-size: var(--text-base);
-    font-weight: var(--weight-medium);
-    line-height: 1.2;
-    color: var(--text);
-  }
-  .setting-desc {
-    font-size: var(--text-sm);
-    font-weight: var(--weight-regular);
-    line-height: 1.3;
-    color: var(--text-dim);
   }
 
   /* The text control stacks full-width beneath its label; the field fills the
@@ -917,107 +533,5 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
     }
   }
 
-  /* Connectors (smart-folders D10): host rows + the add form. Quiet, list-like —
-   * a host name with a token-set indicator pill and plain-button actions. */
-  .connector-intro {
-    margin: 0 0 var(--space-3);
-    font: var(--weight-regular) var(--text-sm) / 1.45 var(--font-sans);
-    color: var(--text-muted);
-  }
-  .connector-intro code {
-    font-family: var(--font-mono);
-  }
-  .connector-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-    padding: var(--space-2) 0;
-    border-bottom: 1px solid var(--divider);
-  }
-  .connector-host-cell {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-width: 0;
-  }
-  .connector-host {
-    font: var(--weight-medium) var(--text-base) / 1.2 var(--font-sans);
-    color: var(--text);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .connector-indicator {
-    flex-shrink: 0;
-    padding: var(--space-1) var(--space-2);
-    border-radius: var(--r-pill);
-    background: var(--surface-2);
-    color: var(--text-faint);
-    font: var(--weight-medium) var(--text-2xs) / 1 var(--font-sans);
-  }
-  .connector-actions,
-  .connector-replace {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .connector-replace {
-    flex: 1;
-    max-width: 320px;
-  }
-  .connector-add {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    padding-top: var(--space-3);
-  }
-  .connector-add-action {
-    display: flex;
-    justify-content: flex-end;
-  }
 
-  /* Result sources (least-privilege-permissions D5): one row per optional source
-   * — a label + description on the left, an Enabled pill or the primary Enable
-   * Button on the right. Mirrors the connector-row list rhythm. */
-  .result-source-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-    padding: var(--space-2) 0;
-    border-bottom: 1px solid var(--divider);
-  }
-  .result-source-cell {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    min-width: 0;
-  }
-  .result-source-label {
-    font: var(--weight-medium) var(--text-base) / 1.2 var(--font-sans);
-    color: var(--text);
-  }
-  .result-source-desc {
-    font: var(--weight-regular) var(--text-sm) / 1.35 var(--font-sans);
-    color: var(--text-muted);
-  }
-  .result-source-indicator {
-    flex-shrink: 0;
-    padding: var(--space-1) var(--space-2);
-    border-radius: var(--r-pill);
-    background: var(--surface-2);
-    color: var(--text-faint);
-    font: var(--weight-medium) var(--text-2xs) / 1 var(--font-sans);
-  }
-
-  /* The live preview — three TabRows whose list inset (`--list-pad`) and row gap
-   * (`--row-gap`) breathe with the Density control. The Surface owns the card
-   * chrome; the panel owns only the list layout. */
-  .preview-panel {
-    display: flex;
-    flex-direction: column;
-    gap: var(--row-gap);
-    padding: var(--list-pad);
-  }
 </style>

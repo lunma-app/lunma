@@ -166,3 +166,23 @@
 .lunma-glow--soft {
   box-shadow: var(--glow-space-soft);
 }
+
+/* ── Visually-hidden utility ──────────────────────────────────────────────────
+ * Removes an element from the visual layout while keeping it in the accessibility
+ * tree (the standard clip-rect pattern). Used for screen-reader-only status
+ * regions and the programmatically-clicked hidden file inputs (Backup & restore /
+ * Feed subscriptions), which were each re-rolling this rule. NOT `lunma-`-prefixed:
+ * it is a plain global utility consumers add as `class="sr-only"`.
+ */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

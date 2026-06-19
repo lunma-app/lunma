@@ -96,8 +96,41 @@ describe('BackupRestore (options card)', () => {
     expect(sendMock).not.toHaveBeenCalled();
   });
 
+  test('opening the import confirm moves focus to its primary action (Restore)', async () => {
+    const { container } = render(BackupRestore);
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await feedFile(fileInput, validBackupJson());
+
+    await waitFor(() => {
+      const restore = container.querySelector(
+        '[data-testid="import-confirm"] [data-variant="primary"]',
+      ) as HTMLButtonElement;
+      expect(restore).not.toBeNull();
+      expect(document.activeElement).toBe(restore);
+    });
+  });
+
+  test('cancelling the import confirm restores focus to the Import trigger', async () => {
+    const { container, getByText } = render(BackupRestore);
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await feedFile(fileInput, validBackupJson());
+    await waitFor(() =>
+      expect(container.querySelector('[data-testid="import-confirm"]')).not.toBeNull(),
+    );
+
+    await fireEvent.click(getByText('Cancel'));
+
+    await waitFor(() => {
+      const trigger = container.querySelector(
+        '[data-testid="import-trigger"]',
+      ) as HTMLButtonElement;
+      expect(trigger).not.toBeNull();
+      expect(document.activeElement).toBe(trigger);
+    });
+  });
+
   test('card heading meets WCAG-AA (4.5:1) at the identity-hue lightness floor', () => {
-    // The .group-label CSS enforces `max(l, 0.72)` under vivid/standard tint.
+    // The shared `CardHeading` CSS enforces `max(l, 0.72)` under vivid/standard tint.
     // Neutral grey at L=0.72 is the worst-case (lowest-chroma) heading colour;
     // the effective glass card background is ~oklch(0.2 0 0) (glass-bg at 50%
     // opacity composited over the dark page --bg oklch(0.155 0 0)).

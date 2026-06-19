@@ -1,15 +1,17 @@
 <script lang="ts">
+import { tick } from 'svelte';
 import { buildBackup } from '../shared/backup';
 import { bus } from '../shared/bus';
+import { STATE_STORAGE_KEY } from '../shared/chrome/storage';
 import { log } from '../shared/logger';
-import { readSettings } from '../shared/settings';
+import { readSettings, TOGGLE_SEGMENTS } from '../shared/settings';
 import type { AppState, BackupEnvelope } from '../shared/types';
 import Button from '../ui/Button.svelte';
+import InlineError from '../ui/InlineError.svelte';
 import SegmentedControl from '../ui/SegmentedControl.svelte';
-import Surface from '../ui/Surface.svelte';
+import SettingsCard from '../ui/SettingsCard.svelte';
+import SettingText from '../ui/SettingText.svelte';
 import Toast from '../ui/Toast.svelte';
-
-const STATE_KEY = 'lunma.state';
 
 let includeSettings = $state(false);
 let toast = $state<{ message: string } | null>(null);
@@ -17,17 +19,17 @@ let importError = $state<string | null>(null);
 let confirmingImport = $state(false);
 let pendingImportData = $state<unknown>(null);
 let fileInputEl = $state<HTMLInputElement>();
-
-const TOGGLE_OPTIONS = [
-  { value: 'off', label: 'Off' },
-  { value: 'on', label: 'On' },
-];
+// Inline-reveal focus (options inline-reveals guarantee): the action row wraps
+// both the trigger and the confirm row, so we can move focus to the confirm's
+// primary action on open and restore it to the Import trigger on cancel.
+let actionsEl = $state<HTMLElement>();
+let confirmRowEl = $state<HTMLElement>();
 
 async function handleExport(): Promise<void> {
   importError = null;
   try {
-    const got = await chrome.storage.local.get(STATE_KEY);
-    const env = got[STATE_KEY] as { state: AppState } | undefined;
+    const got = await chrome.storage.local.get(STATE_STORAGE_KEY);
+    const env = got[STATE_STORAGE_KEY] as { state: AppState } | undefined;
     if (!env?.state) throw new Error('No state found in storage');
 
     const settings = includeSettings ? await readSettings() : undefined;
@@ -64,6 +66,10 @@ async function onFileChange(e: Event): Promise<void> {
     pendingImportData = JSON.parse(text) as unknown;
     confirmingImport = true;
     importError = null;
+    // Move focus to the confirm's primary action (Restore) so a keyboard user
+    // isn't dropped to <body> when the trigger unmounts.
+    await tick();
+    confirmRowEl?.querySelector<HTMLButtonElement>('[data-variant="primary"]')?.focus();
   } catch {
     importError = 'Could not read the backup file.';
     confirmingImport = false;
@@ -87,91 +93,67 @@ async function confirmImport(): Promise<void> {
   }
 }
 
-function cancelImport(): void {
+async function cancelImport(): Promise<void> {
   confirmingImport = false;
   pendingImportData = null;
+  // Restore focus to the Import trigger that opened the confirm.
+  await tick();
+  actionsEl?.querySelector<HTMLButtonElement>('[data-testid="import-trigger"]')?.focus();
 }
 </script>
 
-<Surface variant="glass">
-  <section class="backup-restore" data-testid="backup-restore">
-    <h2 class="group-label">Backup &amp; restore</h2>
-    <p class="description">Move your Spaces to another machine, or keep a copy.</p>
-
-    <div class="setting">
-      <div class="setting-text">
-        <span class="setting-label">Include settings</span>
-        <span class="setting-desc">Carry your preferences to the new machine.</span>
-      </div>
-      <SegmentedControl
-        name="backup-include-settings"
-        options={TOGGLE_OPTIONS}
-        value={includeSettings ? 'on' : 'off'}
-        onchange={(v) => (includeSettings = v === 'on')}
-      />
-    </div>
-
-    <div class="actions">
-      <Button variant="primary" onclick={() => void handleExport()}>Export backup</Button>
-      {#if confirmingImport}
-        <div class="import-confirm" data-testid="import-confirm">
-          <span class="confirm-text">Replace your data? This cannot be undone.</span>
-          <Button variant="ghost" onclick={cancelImport}>Cancel</Button>
-          <Button variant="primary" onclick={() => void confirmImport()}>Restore</Button>
-        </div>
-      {:else}
-        <Button variant="ghost" onclick={handleImportClick}>Import backup</Button>
-      {/if}
-    </div>
-
-    {#if importError}
-      <p class="import-error" role="alert" data-testid="import-error">{importError}</p>
-    {/if}
-
-    <!-- Hidden file input — activated by Import backup button click. -->
-    <input
-      bind:this={fileInputEl}
-      type="file"
-      accept="application/json"
-      class="file-input"
-      onchange={(e) => void onFileChange(e)}
+<SettingsCard
+  heading="Backup & restore"
+  description="Move your Spaces to another machine, or keep a copy."
+>
+  <div class="setting">
+    <SettingText label="Include settings" description="Carry your preferences to the new machine." />
+    <SegmentedControl
+      name="backup-include-settings"
+      options={TOGGLE_SEGMENTS}
+      value={includeSettings ? 'on' : 'off'}
+      ariaLabel="Include settings"
+      onchange={(v) => (includeSettings = v === 'on')}
     />
-  </section>
-</Surface>
+  </div>
+
+  <div class="actions" bind:this={actionsEl}>
+    <Button variant="primary" onclick={() => void handleExport()}>Export backup</Button>
+    {#if confirmingImport}
+      <div class="import-confirm" data-testid="import-confirm" bind:this={confirmRowEl}>
+        <span class="confirm-text">Replace your data? This cannot be undone.</span>
+        <Button variant="ghost" onclick={() => void cancelImport()}>Cancel</Button>
+        <Button variant="primary" onclick={() => void confirmImport()}>Restore</Button>
+      </div>
+    {:else}
+      <Button variant="ghost" testid="import-trigger" onclick={handleImportClick}>
+        Import backup
+      </Button>
+    {/if}
+  </div>
+
+  {#if importError}
+    <InlineError message={importError} testid="import-error" />
+  {/if}
+
+  <!-- Hidden file input — activated by Import backup button click. -->
+  <input
+    bind:this={fileInputEl}
+    type="file"
+    accept="application/json"
+    class="sr-only"
+    onchange={(e) => void onFileChange(e)}
+  />
+</SettingsCard>
 
 {#if toast}
   <Toast message={toast.message} onDismiss={() => (toast = null)} />
 {/if}
 
 <style>
-  .backup-restore {
-    padding: var(--space-4) var(--space-5);
-  }
-
-  /* Editorial heading — same treatment as the Settings group headings in
-   * Options.svelte: Instrument Serif at --text-xl, sentence case. */
-  .group-label {
-    margin: 0 0 var(--space-4);
-    font-family: var(--font-display);
-    font-size: var(--text-xl);
-    font-weight: var(--weight-regular);
-    line-height: 1.1;
-    color: var(--text-2);
-  }
-  /* Identity-hue tint for vivid/standard — mirrors the Options.svelte group-label
-   * override so the heading renders consistently across all cards. The 0.72
-   * lightness floor keeps it ≥ WCAG-AA over the glass fill at every hue. */
-  :global(:root[data-tint='standard']) .group-label,
-  :global(:root[data-tint='vivid']) .group-label {
-    color: oklch(from var(--space-c) max(l, 0.72) c h);
-  }
-
-  .description {
-    margin: 0 0 var(--space-4);
-    font: var(--weight-regular) var(--text-sm) / 1.45 var(--font-sans);
-    color: var(--text-muted);
-  }
-
+  /* The card frame, serif heading, lead, label column, and error box are the
+   * shared `SettingsCard` / `CardHeading` / `SettingText` / `InlineError`
+   * primitives; this card owns only its row layout. */
   .setting {
     display: flex;
     align-items: flex-start;
@@ -179,23 +161,6 @@ function cancelImport(): void {
     gap: var(--space-4);
     padding: var(--space-3) 0;
     border-top: 1px solid var(--divider);
-  }
-  .setting-text {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .setting-label {
-    font-size: var(--text-base);
-    font-weight: var(--weight-medium);
-    line-height: 1.2;
-    color: var(--text);
-  }
-  .setting-desc {
-    font-size: var(--text-sm);
-    font-weight: var(--weight-regular);
-    line-height: 1.3;
-    color: var(--text-dim);
   }
 
   .actions {
@@ -215,25 +180,5 @@ function cancelImport(): void {
   .confirm-text {
     font: var(--weight-medium) var(--text-sm) / 1.3 var(--font-sans);
     color: var(--text-muted);
-  }
-
-  .import-error {
-    margin: var(--space-3) 0 0;
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--r-md);
-    background: color-mix(in oklch, var(--danger) 10%, transparent);
-    border: 1px solid color-mix(in oklch, var(--danger) 25%, transparent);
-    font: var(--weight-regular) var(--text-sm) / 1.45 var(--font-sans);
-    color: var(--danger);
-  }
-
-  /* Visually hidden — only activated programmatically. */
-  .file-input {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
   }
 </style>

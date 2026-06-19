@@ -36,4 +36,18 @@ describe('SegmentedControl', () => {
     await fireEvent.click(normal);
     expect(onchange).not.toHaveBeenCalled();
   });
+
+  test('exposes ariaLabel as the fieldset accessible name (settings: group name)', () => {
+    const { container } = render(SegmentedControlHarness, {
+      props: { ariaLabel: 'Colour intensity' },
+    });
+    const fieldset = container.querySelector('fieldset.segmented') as HTMLElement;
+    expect(fieldset.getAttribute('aria-label')).toBe('Colour intensity');
+  });
+
+  test('omits aria-label when none is passed', () => {
+    const { container } = render(SegmentedControlHarness, { props: {} });
+    const fieldset = container.querySelector('fieldset.segmented') as HTMLElement;
+    expect(fieldset.getAttribute('aria-label')).toBeNull();
+  });
 });

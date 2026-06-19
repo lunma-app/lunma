@@ -136,6 +136,31 @@ describe('FeedSubscriptions (options card)', () => {
     await waitFor(() => expect(getByText('3 feeds imported')).not.toBeNull());
   });
 
+  test('opening the import confirm focuses the primary action; cancel restores the trigger', async () => {
+    const { container, getByText } = render(FeedSubscriptions);
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await feedFile(fileInput, FLAT_OPML);
+
+    // Open → focus lands on the confirm's primary action (Import), not <body>.
+    await waitFor(() => {
+      const importBtn = container.querySelector(
+        '[data-testid="import-confirm"] [data-variant="primary"]',
+      ) as HTMLButtonElement;
+      expect(importBtn).not.toBeNull();
+      expect(document.activeElement).toBe(importBtn);
+    });
+
+    // Cancel → focus returns to the "Import from OPML" trigger.
+    await fireEvent.click(getByText('Cancel'));
+    await waitFor(() => {
+      const trigger = container.querySelector(
+        '[data-testid="feed-import-trigger"]',
+      ) as HTMLButtonElement;
+      expect(trigger).not.toBeNull();
+      expect(document.activeElement).toBe(trigger);
+    });
+  });
+
   test('import error: no feeds found in file shows error alert, no confirm step', async () => {
     const { container, queryByTestId } = render(FeedSubscriptions);
     const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;

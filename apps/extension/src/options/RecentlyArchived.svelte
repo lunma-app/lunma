@@ -1,6 +1,7 @@
 <script lang="ts">
-import { onMount } from 'svelte';
+import { onMount, tick } from 'svelte';
 import { bus } from '../shared/bus';
+import { STATE_STORAGE_KEY } from '../shared/chrome/storage';
 import { labelFor } from '../shared/label-for';
 import { log } from '../shared/logger';
 import { DEFAULTS, readSettings, watchSettings } from '../shared/settings';
@@ -8,7 +9,7 @@ import type { ArchivedTab } from '../shared/types';
 import Button from '../ui/Button.svelte';
 import { faviconFor, faviconUrl } from '../ui/favicon';
 import IconButton from '../ui/IconButton.svelte';
-import Surface from '../ui/Surface.svelte';
+import SettingsCard from '../ui/SettingsCard.svelte';
 import TabRow from '../ui/TabRow.svelte';
 
 /**
@@ -18,7 +19,6 @@ import TabRow from '../ui/TabRow.svelte';
  * stays live without a service-worker channel; restore + clear-all go through the
  * bus to the SW (the store owner). Restore re-opens into the last-focused window.
  */
-const STATE_KEY = 'lunma.state';
 
 let archived = $state<ArchivedTab[]>([]);
 // The retention window (days) drives the per-row "deletes in Nd" countdown. Read
@@ -39,8 +39,8 @@ function isArchivedTab(e: unknown): e is ArchivedTab {
 
 async function read(): Promise<void> {
   try {
-    const got = await chrome.storage.local.get(STATE_KEY);
-    const env = got[STATE_KEY] as { state?: { archivedTabs?: unknown } } | undefined;
+    const got = await chrome.storage.local.get(STATE_STORAGE_KEY);
+    const env = got[STATE_STORAGE_KEY] as { state?: { archivedTabs?: unknown } } | undefined;
     const list = env?.state?.archivedTabs;
     archived = Array.isArray(list) ? list.filter(isArchivedTab) : [];
   } catch (err) {
@@ -58,7 +58,7 @@ onMount(() => {
     retentionDays = s.autoArchiveRetentionDays;
   });
   const listener = (changes: Record<string, chrome.storage.StorageChange>, area: string): void => {
-    if (area === 'local' && changes[STATE_KEY]) void read();
+    if (area === 'local' && changes[STATE_STORAGE_KEY]) void read();
   };
   chrome.storage.onChanged.addListener(listener);
   return () => {
@@ -156,6 +156,23 @@ function deleteOne(archivedAt: number, tabId: number): void {
 // clear (it discards every record permanently — URLs survive only in browser
 // history). Cancel dismisses without touching anything.
 let confirmingClearAll = $state(false);
+// Wrapper around the heading-row action (Clear all ↔ confirm), so the options
+// inline-reveal focus guarantee can move focus to Delete on open and back to the
+// Clear-all trigger on cancel.
+let clearActionsEl = $state<HTMLElement>();
+
+async function openClearConfirm(): Promise<void> {
+  confirmingClearAll = true;
+  await tick();
+  clearActionsEl?.querySelector<HTMLButtonElement>('[data-variant="primary"]')?.focus();
+}
+
+async function cancelClearConfirm(): Promise<void> {
+  confirmingClearAll = false;
+  await tick();
+  clearActionsEl?.querySelector<HTMLButtonElement>('[data-testid="clear-all-trigger"]')?.focus();
+}
+
 function confirmClearAll(): void {
   confirmingClearAll = false;
   bus
@@ -164,90 +181,81 @@ function confirmClearAll(): void {
 }
 </script>
 
-<Surface variant="glass">
-  <section id="recently-archived" class="archived" data-testid="recently-archived">
-    <div class="head">
-      <h2 class="group-label">Recently archived</h2>
-      {#if items.length > 0}
+<SettingsCard heading="Recently archived" id="recently-archived" testid="recently-archived">
+  {#snippet actions()}
+    {#if items.length > 0}
+      <span class="clear-actions" bind:this={clearActionsEl}>
         {#if confirmingClearAll}
-          <div class="clear-confirm" data-testid="archived-clear-confirm">
-            <span class="clear-confirm-text">Delete all archived records? This cannot be undone.</span>
-            <Button variant="ghost" onclick={() => (confirmingClearAll = false)}>Cancel</Button>
+          <div class="import-confirm" data-testid="import-confirm">
+            <span class="confirm-text">Delete all archived records? This cannot be undone.</span>
+            <Button variant="ghost" onclick={() => void cancelClearConfirm()}>Cancel</Button>
             <Button variant="primary" onclick={confirmClearAll}>Delete</Button>
           </div>
         {:else}
-          <Button variant="ghost" onclick={() => (confirmingClearAll = true)}>Clear all</Button>
+          <Button variant="ghost" testid="clear-all-trigger" onclick={() => void openClearConfirm()}>
+            Clear all
+          </Button>
         {/if}
-      {/if}
-    </div>
-
-    {#if items.length === 0}
-      <p class="empty" data-testid="archived-empty">
-        Nothing archived yet — idle temporary tabs land here so you can bring them back.
-      </p>
-    {:else}
-      <div class="rows">
-        {#each items as item (item.key)}
-          <TabRow
-            title={item.title}
-            faviconSrc={item.faviconSrc}
-            faviconFallbackSrc={item.faviconFallbackSrc}
-            meta={item.meta}
-          >
-            {#snippet trailing()}
-              <span class="row-actions">
-                <IconButton
-                  icon="rotate-ccw"
-                  ariaLabel={`Restore ${item.title}`}
-                  title="Restore"
-                  onclick={() => restore(item.archivedAt, item.tabId)}
-                />
-                <IconButton
-                  icon="trash-2"
-                  ariaLabel={`Delete ${item.title}`}
-                  title="Delete"
-                  onclick={() => deleteOne(item.archivedAt, item.tabId)}
-                />
-              </span>
-            {/snippet}
-          </TabRow>
-        {/each}
-      </div>
+      </span>
     {/if}
-  </section>
-</Surface>
+  {/snippet}
+
+  {#if items.length === 0}
+    <p class="empty" data-testid="archived-empty">
+      Nothing archived yet — idle temporary tabs land here so you can bring them back.
+    </p>
+  {:else}
+    <div class="rows">
+      {#each items as item (item.key)}
+        <TabRow
+          title={item.title}
+          faviconSrc={item.faviconSrc}
+          faviconFallbackSrc={item.faviconFallbackSrc}
+          meta={item.meta}
+        >
+          {#snippet trailing()}
+            <span class="row-actions">
+              <IconButton
+                icon="rotate-ccw"
+                ariaLabel={`Restore ${item.title}`}
+                title="Restore"
+                onclick={() => restore(item.archivedAt, item.tabId)}
+              />
+              <IconButton
+                icon="trash-2"
+                ariaLabel={`Delete ${item.title}`}
+                title="Delete"
+                onclick={() => deleteOne(item.archivedAt, item.tabId)}
+              />
+            </span>
+          {/snippet}
+        </TabRow>
+      {/each}
+    </div>
+  {/if}
+</SettingsCard>
 
 <style>
-  .archived {
-    padding: var(--space-4) var(--space-5);
+  /* The card frame + serif heading are the shared `SettingsCard` / `CardHeading`
+   * primitives; the heading now reads in the editorial serif like every other
+   * options card (it was the one card still rendering the retired uppercase
+   * micro-label), with the "Clear all" action in `CardHeading`'s `actions` slot. */
+
+  /* A transparent focus-management wrapper around the heading action — it carries
+   * no box (so the heading row lays out exactly as before), only a queryable
+   * boundary for moving focus between the Clear-all trigger and the confirm. */
+  .clear-actions {
+    display: contents;
   }
 
-  .head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-    margin-bottom: var(--space-3);
-    padding-bottom: var(--space-2);
-    border-bottom: 1px solid var(--divider);
-  }
-  .group-label {
-    margin: 0;
-    font-size: var(--text-2xs);
-    font-weight: var(--weight-semibold);
-    line-height: 1;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-  }
-
-  /* Inline "Clear all" confirm row — destructive, so it asks before discarding. */
-  .clear-confirm {
+  /* Inline "Clear all" confirm row — destructive, so it asks before discarding.
+   * Shares the sibling cards' `.import-confirm` / `.confirm-text` vocabulary. */
+  .import-confirm {
     display: inline-flex;
     align-items: center;
     gap: var(--space-2);
   }
-  .clear-confirm-text {
+  .confirm-text {
     font: var(--weight-medium) var(--text-sm) / 1.3 var(--font-sans);
     color: var(--text-muted);
   }

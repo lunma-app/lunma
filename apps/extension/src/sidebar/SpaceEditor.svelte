@@ -417,6 +417,7 @@ function submit(): void {
                   name="auto-archive-mode"
                   options={AUTO_ARCHIVE_OPTIONS}
                   value={autoArchiveMode}
+                  ariaLabel="Auto-archive"
                   onchange={selectAutoArchiveMode}
                   block
                 />

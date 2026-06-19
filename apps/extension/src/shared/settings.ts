@@ -280,6 +280,15 @@ export const SETTINGS: readonly SettingDeclaration[] = [
   },
 ];
 
+/** The two-segment Off|On options backing a `toggle` setting's `SegmentedControl`
+ * (the boolean renders via the existing primitive — no separate Toggle/Switch).
+ * Exported so the options registry renderer and the Backup & restore card share
+ * ONE definition instead of each re-declaring it. */
+export const TOGGLE_SEGMENTS: { value: string; label: string }[] = [
+  { value: 'off', label: 'Off' },
+  { value: 'on', label: 'On' },
+];
+
 // --- derived defaults + schema ---------------------------------------------
 
 /** `DEFAULTS` is built from the declared `default` of each setting. */

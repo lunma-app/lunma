@@ -270,6 +270,7 @@ function confirm(): void {
         name={`smart-folder-query-${spaceId}-${node?.id ?? 'new'}`}
         options={queryOptions}
         value={query}
+        ariaLabel="Show"
         onchange={onQueryChange}
         block
       />

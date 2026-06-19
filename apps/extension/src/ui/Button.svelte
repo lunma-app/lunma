@@ -7,6 +7,8 @@ interface Props {
   type?: 'button' | 'submit' | undefined;
   onclick: () => void;
   title?: string | undefined;
+  /** `data-testid` passthrough for the button element. */
+  testid?: string | undefined;
   children: Snippet;
 }
 
@@ -16,6 +18,7 @@ const {
   type = 'button',
   onclick,
   title,
+  testid,
   children,
 }: Props = $props();
 
@@ -30,6 +33,7 @@ function handleClick(): void {
   {title}
   class="btn"
   data-variant={variant}
+  data-testid={testid}
   {disabled}
   onclick={handleClick}
 >

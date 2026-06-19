@@ -153,7 +153,7 @@ describe('RecentlyArchived (options view)', () => {
     await fireEvent.click(getByText('Clear all'));
 
     // The destructive clear is gated behind an explicit confirm — nothing dispatched.
-    expect(container.querySelector('[data-testid="archived-clear-confirm"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="import-confirm"]')).not.toBeNull();
     expect(sendMock).not.toHaveBeenCalled();
   });
 
@@ -173,8 +173,39 @@ describe('RecentlyArchived (options view)', () => {
     await fireEvent.click(getByText('Clear all'));
     await fireEvent.click(getByText('Cancel'));
 
-    expect(container.querySelector('[data-testid="archived-clear-confirm"]')).toBeNull();
+    expect(container.querySelector('[data-testid="import-confirm"]')).toBeNull();
     expect(getByText('Clear all')).not.toBeNull();
     expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  test('opening Clear all moves focus to the Delete primary action', async () => {
+    installChrome([archived({ archivedAt: 1, title: 'A' })]);
+    const { container, getByText } = render(RecentlyArchived, { props: {} });
+    await waitFor(() => getByText('Clear all'));
+    await fireEvent.click(getByText('Clear all'));
+
+    await waitFor(() => {
+      const del = container.querySelector(
+        '[data-testid="import-confirm"] [data-variant="primary"]',
+      ) as HTMLButtonElement;
+      expect(del).not.toBeNull();
+      expect(document.activeElement).toBe(del);
+    });
+  });
+
+  test('cancelling Clear all restores focus to the Clear all trigger', async () => {
+    installChrome([archived({ archivedAt: 1, title: 'A' })]);
+    const { container, getByText } = render(RecentlyArchived, { props: {} });
+    await waitFor(() => getByText('Clear all'));
+    await fireEvent.click(getByText('Clear all'));
+    await fireEvent.click(getByText('Cancel'));
+
+    await waitFor(() => {
+      const trigger = container.querySelector(
+        '[data-testid="clear-all-trigger"]',
+      ) as HTMLButtonElement;
+      expect(trigger).not.toBeNull();
+      expect(document.activeElement).toBe(trigger);
+    });
   });
 });

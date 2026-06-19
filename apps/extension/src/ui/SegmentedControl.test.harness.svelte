@@ -4,13 +4,14 @@ import SegmentedControl from './SegmentedControl.svelte';
 interface Props {
   value?: string;
   onchange?: (value: string) => void;
+  ariaLabel?: string;
 }
 
 function noop(): void {
   /* test default */
 }
 
-let { value = 'normal', onchange = noop }: Props = $props();
+let { value = 'normal', onchange = noop, ariaLabel }: Props = $props();
 
 const options = [
   { value: 'compact', label: 'Compact' },
@@ -25,4 +26,4 @@ function handle(next: string): void {
 }
 </script>
 
-<SegmentedControl name="density" {options} {value} onchange={handle} />
+<SegmentedControl name="density" {options} {value} {ariaLabel} onchange={handle} />

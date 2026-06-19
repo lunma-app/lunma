@@ -4,7 +4,11 @@ import { type AppStateV7, AppStateV7Schema, CURRENT_SCHEMA_VERSION } from '../sc
 import { createInitialState } from '../store.svelte';
 import type { AppState } from '../types';
 
-const STATE_KEY = 'lunma.state';
+/** The single `chrome.storage.local` key the persisted app-state envelope lives
+ * under. Exported so the options data cards (Backup & restore, Feed
+ * subscriptions, Recently archived) read the same key instead of each
+ * re-declaring the `'lunma.state'` literal. */
+export const STATE_STORAGE_KEY = 'lunma.state';
 const QUARANTINE_KEY_PREFIX = '__corrupt_backup_';
 const QUARANTINE_MAX_ENTRIES = 10;
 
@@ -58,7 +62,7 @@ export function toPersistable(state: AppState): Omit<AppState, 'liveTabsById' | 
 export async function persist(state: AppState): Promise<void> {
   try {
     await chrome.storage.local.set({
-      [STATE_KEY]: { schemaVersion: CURRENT_SCHEMA_VERSION, state: toPersistable(state) },
+      [STATE_STORAGE_KEY]: { schemaVersion: CURRENT_SCHEMA_VERSION, state: toPersistable(state) },
     });
   } catch (err) {
     log.error('persist failed', { err });
@@ -222,7 +226,7 @@ export function salvagePersistedState(migrated: unknown): AppStateV7 | null {
 async function writeBackEnvelope(state: AppStateV7): Promise<void> {
   try {
     await chrome.storage.local.set({
-      [STATE_KEY]: { schemaVersion: CURRENT_SCHEMA_VERSION, state },
+      [STATE_STORAGE_KEY]: { schemaVersion: CURRENT_SCHEMA_VERSION, state },
     });
   } catch (err) {
     log.error('write-back of loaded envelope failed', { err });
@@ -239,8 +243,8 @@ export async function readPersistedState(): Promise<PersistedRead> {
   // install and overwrite real data). No payload exists here, so never quarantine.
   for (let attempt = 0; attempt <= READ_RETRY_ATTEMPTS; attempt++) {
     try {
-      const got = await chrome.storage.local.get(STATE_KEY);
-      raw = got[STATE_KEY];
+      const got = await chrome.storage.local.get(STATE_STORAGE_KEY);
+      raw = got[STATE_STORAGE_KEY];
       succeeded = true;
       break;
     } catch (err) {

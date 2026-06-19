@@ -27,6 +27,7 @@ lunma/                              # pnpm workspace root (private)
 │  │  │  │  └─ chrome/              # thin typed wrappers over chrome.* APIs
 │  │  │  ├─ ui/                     # cross-surface primitives (build primitives, compose features)
 │  │  │  │  ├─ Button.svelte        # …+ Icon · Tooltip · Stack · Kbd · SegmentedControl · TabRow · RowMenu · ContextMenu
+│  │  │  │  ├─ SettingsCard.svelte  # …+ CardHeading · SettingText · InlineError (the shared options-card chrome)
 │  │  │  │  └─ favicon.ts · index.ts   # design tokens come from @lunma/tokens (see packages/)
 │  │  │  ├─ background/             # SW: index · coordinator (+ handlers/ slices · group-orchestrator · boundary-controller) · bus-adapter · *-handler · seed-* · (planned) auto-archive
 │  │  │  ├─ sidebar/                # flat — feature components compose ui/ primitives
@@ -37,7 +38,7 @@ lunma/                              # pnpm workspace root (private)
 │  │  │  │  ├─ newtab/              # full Svelte page — empty-Space "home" (idle) + inline launcher search
 │  │  │  │  └─ shared/              # SearchEngine, scoring, providers, result/query types
 │  │  │  ├─ content/               # second declarative content script (tab-boundary.ts)
-│  │  │  └─ options/               # Options.svelte · main.ts   (+ planned onboarding/)
+│  │  │  └─ options/               # Options.svelte (orchestrator) · BackupRestore · FeedSubscriptions · RecentlyArchived · ConnectorsCard · ResultSourcesCard · ShortcutGuidanceCard · main.ts
 │  │  ├─ public/manifest.json       # MV3 manifest — crxjs derives build entries from it
 │  │  ├─ e2e/                       # Playwright specs + fixtures (playwright.config.ts in apps/extension)
 │  │  │                             # unit tests are co-located: src/**/*.test.ts (no top-level tests/)
@@ -618,7 +619,12 @@ or broadcasts.
 ## Component library (`apps/extension/src/ui/`)
 
 Cross-surface UI primitives such as `SpaceIcon`, `Tooltip`, `Stack`, `RowMenu`,
-and `ContextMenu` live in `apps/extension/src/ui/`. The design tokens they
+and `ContextMenu` live in `apps/extension/src/ui/`. The options page's shared
+card chrome is primitives too — `SettingsCard` (the glass-`Surface` scaffold),
+`CardHeading` (the editorial serif heading + its `data-tint` identity-hue
+override), `SettingText` (the label/description column), and `InlineError` (the
+`role="alert"` danger box) — so every options card composes them instead of
+re-rolling its heading or error box. The design tokens they
 reference live in the shared `@lunma/tokens` package
 (`packages/tokens/tokens.css`), imported at each surface's CSS entry. Feature
 components compose primitives; they do not re-roll buttons or tooltips inline.

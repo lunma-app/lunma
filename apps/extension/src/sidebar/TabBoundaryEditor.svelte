@@ -127,6 +127,7 @@ function openOptions(): void {
     name={`boundary-mode-${savedTabId}`}
     options={OPTIONS}
     value={mode}
+    ariaLabel="Lock to its site"
     onchange={selectMode}
     block
   />

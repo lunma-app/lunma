@@ -13,12 +13,17 @@ interface Props {
   value: string;
   /** Fired with the newly-selected value. */
   onchange: (value: string) => void;
+  /** Accessible name for the radio group, applied to the `<fieldset>`. Pass it
+   * whenever the control's visible label sits OUTSIDE the control (e.g. a settings
+   * row's separate label, where the per-radio labels are only `Off`/`On`), so the
+   * group is not anonymous to assistive tech — mirrors `Select`/`TextInput`. */
+  ariaLabel?: string | undefined;
   /** Span the full width with equal-width segments, instead of the default
    * content-width inline control (useful in a narrow column like the sidebar). */
   block?: boolean;
 }
 
-const { name, options, value, onchange, block = false }: Props = $props();
+const { name, options, value, onchange, ariaLabel, block = false }: Props = $props();
 
 // The sliding pill is measured from the DOM (not computed from label widths)
 // so it stays flush with options of any length/locale.
@@ -55,7 +60,7 @@ function select(next: string): void {
 }
 </script>
 
-<fieldset class="segmented" class:block bind:this={trackEl}>
+<fieldset class="segmented" class:block aria-label={ariaLabel} bind:this={trackEl}>
   {#if pillReady}
     <span
       class="pill"
