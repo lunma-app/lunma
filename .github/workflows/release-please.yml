@@ -69,7 +69,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          pnpm --filter @lunma/extension pack
+          pnpm --filter @lunma/extension run pack
           asset="lunma-${{ steps.release.outputs.version }}.zip"
           mv apps/extension/extension.zip "$asset"
           gh release upload "${{ steps.release.outputs.tag_name }}" "$asset" --clobber

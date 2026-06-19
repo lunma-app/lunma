@@ -13,9 +13,9 @@
   `COREPACK_ENABLE_DOWNLOAD_PROMPT: 0`), the pnpm store-path + `actions/cache@v5`
   step, and `pnpm install --frozen-lockfile` — same pinned-toolchain pattern as
   `ci.yml` (design D1).
-- [x] 1.3 Add a build step (gated): `pnpm --filter @lunma/extension pack` →
-  produces `apps/extension/extension.zip` (reuses the existing `pack` script —
-  design D2).
+- [x] 1.3 Add a build step (gated): `pnpm --filter @lunma/extension run pack` →
+  produces `apps/extension/extension.zip` (reuses the existing `pack` script;
+  `run` is required so pnpm runs the script, not its built-in `pack` — design D2).
 - [x] 1.4 Add an upload step (gated): rename to `lunma-<version>.zip` using
   `steps.release.outputs.tag_name`/`version`, then
   `gh release upload "<tag>" "lunma-<version>.zip" --clobber` with

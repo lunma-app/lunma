@@ -52,8 +52,10 @@ step (given an `id`), each `if: ${{ steps.<id>.outputs.release_created == 'true'
 
 ### D2 — Reuse the `pack` script; rename to a versioned asset
 
-Run `pnpm --filter @lunma/extension pack` (the existing script) to produce
-`apps/extension/extension.zip`, then rename/upload it as `lunma-<version>.zip`
+Run `pnpm --filter @lunma/extension run pack` (the existing script — `run` is
+required so pnpm invokes the package script, not its built-in `pack`/tarball
+command) to produce `apps/extension/extension.zip`, then rename/upload it as
+`lunma-<version>.zip`
 using the release-please `tag_name`/`version` output, via
 `gh release upload "<tag>" "lunma-<version>.zip" --clobber`.
 
