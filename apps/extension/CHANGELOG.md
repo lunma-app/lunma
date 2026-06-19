@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/lunma-app/lunma/compare/v0.1.0...v0.1.1) (2026-06-19)
+
+
+### Bug Fixes
+
+* keyword-led store summary, drop em-dash tells from metadata ([82b9995](https://github.com/lunma-app/lunma/commit/82b999573d420ec659e5cbf56c2bc892be713fb2))
+
 ## 0.1.0 (2026-06-19)
 
 First public release.
