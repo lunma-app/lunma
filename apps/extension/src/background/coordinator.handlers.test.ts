@@ -1520,6 +1520,45 @@ describe('Coordinator handlers: openUrl', () => {
     });
     expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'sess:1', result: 'ok' });
   });
+
+  test('scheme guard: javascript: URL is dropped — no tabs.create, still acks ok', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, emitAck } = makeCoordinator();
+    coordinator.enqueue(
+      sidebar(
+        { kind: 'openUrl', payload: { url: 'javascript:alert(1)', windowId: 100 } },
+        'sess:1',
+      ),
+    );
+    await coordinator.idle();
+    expect(chromeStub.tabs.create).not.toHaveBeenCalled();
+    expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'sess:1', result: 'ok' });
+  });
+
+  test('scheme guard: ftp: URL is dropped — no tabs.create, still acks ok', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, emitAck } = makeCoordinator();
+    coordinator.enqueue(
+      sidebar(
+        { kind: 'openUrl', payload: { url: 'ftp://files.example.com/pub/', windowId: 100 } },
+        'sess:1',
+      ),
+    );
+    await coordinator.idle();
+    expect(chromeStub.tabs.create).not.toHaveBeenCalled();
+    expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'sess:1', result: 'ok' });
+  });
+
+  test('scheme guard: unparseable URL is dropped — no tabs.create, still acks ok', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, emitAck } = makeCoordinator();
+    coordinator.enqueue(
+      sidebar({ kind: 'openUrl', payload: { url: 'not a url at all', windowId: 100 } }, 'sess:1'),
+    );
+    await coordinator.idle();
+    expect(chromeStub.tabs.create).not.toHaveBeenCalled();
+    expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'sess:1', result: 'ok' });
+  });
 });
 
 // =====================================================================

@@ -4,8 +4,9 @@ import { buildBackup } from '../shared/backup';
 import { bus } from '../shared/bus';
 import { STATE_STORAGE_KEY } from '../shared/chrome/storage';
 import { log } from '../shared/logger';
+import { BackupEnvelopeSchema } from '../shared/schemas';
 import { readSettings, TOGGLE_SEGMENTS } from '../shared/settings';
-import type { AppState, BackupEnvelope } from '../shared/types';
+import type { AppState } from '../shared/types';
 import Button from '../ui/Button.svelte';
 import InlineError from '../ui/InlineError.svelte';
 import SegmentedControl from '../ui/SegmentedControl.svelte';
@@ -81,8 +82,13 @@ async function confirmImport(): Promise<void> {
   confirmingImport = false;
   pendingImportData = null;
   importError = null;
+  const parsed = BackupEnvelopeSchema.safeParse(data);
+  if (!parsed.success) {
+    importError = 'Invalid backup file — it may be corrupt or from an incompatible version.';
+    return;
+  }
   try {
-    await bus.send({ kind: 'importState', payload: { backup: data as BackupEnvelope } });
+    await bus.send({ kind: 'importState', payload: { backup: parsed.data } });
     toast = { message: 'Backup restored' };
   } catch (err) {
     log.error('BackupRestore: import failed', { err });
