@@ -1,7 +1,13 @@
 import { describe, expect, test } from 'vitest';
 import { createInitialState } from '../../shared/store.svelte';
 import type { AppState } from '../../shared/types';
-import { findTabInActiveSpace, spaceOwningTab } from './queries';
+import {
+  findSpaceIdByGroupId,
+  findTabInActiveSpace,
+  isTrackedTab,
+  savedTabIdForBoundTab,
+  spaceOwningTab,
+} from './queries';
 
 function makeState(): AppState {
   return createInitialState();
@@ -126,6 +132,111 @@ describe('findTabInActiveSpace', () => {
       status: 'complete',
     };
     expect(findTabInActiveSpace(state, 100, 'https://example.com')).toBeNull();
+  });
+});
+
+describe('isTrackedTab', () => {
+  test('returns false for an empty state', () => {
+    const state = makeState();
+    expect(isTrackedTab(state, 42)).toBe(false);
+  });
+
+  test('returns true when tabId is listed as a tempTabId in any space instance', () => {
+    const state = makeState();
+    state.spaceInstancesByWindow[100] = {
+      sp: { spaceId: 'sp', groupId: 1, tempTabIds: [42], tempTabTitles: {} },
+    };
+    expect(isTrackedTab(state, 42)).toBe(true);
+  });
+
+  test('returns true when tabId is bound via tabBindings', () => {
+    const state = makeState();
+    state.tabBindings['st-1'] = { 100: 77 };
+    expect(isTrackedTab(state, 77)).toBe(true);
+  });
+
+  test('returns false when tabId matches neither tempTabIds nor tabBindings', () => {
+    const state = makeState();
+    state.spaceInstancesByWindow[100] = {
+      sp: { spaceId: 'sp', groupId: 1, tempTabIds: [42], tempTabTitles: {} },
+    };
+    state.tabBindings['st-1'] = { 100: 77 };
+    expect(isTrackedTab(state, 999)).toBe(false);
+  });
+
+  test('skips null window maps without throwing', () => {
+    const state = makeState();
+    // Simulate a null entry in the window map
+    (state.spaceInstancesByWindow as Record<number, unknown>)[100] = null;
+    expect(isTrackedTab(state, 42)).toBe(false);
+  });
+});
+
+describe('savedTabIdForBoundTab', () => {
+  test('returns undefined for an empty state', () => {
+    const state = makeState();
+    expect(savedTabIdForBoundTab(state, 42)).toBeUndefined();
+  });
+
+  test('returns the savedTabId when tabId is bound in a window slot', () => {
+    const state = makeState();
+    state.tabBindings['st-1'] = { 100: 77 };
+    expect(savedTabIdForBoundTab(state, 77)).toBe('st-1');
+  });
+
+  test('returns undefined when tabId is not bound to any savedTab', () => {
+    const state = makeState();
+    state.tabBindings['st-1'] = { 100: 77 };
+    expect(savedTabIdForBoundTab(state, 999)).toBeUndefined();
+  });
+
+  test('matches across multiple windows for the same savedTabId', () => {
+    const state = makeState();
+    state.tabBindings['st-1'] = { 100: 77, 200: 88 };
+    expect(savedTabIdForBoundTab(state, 88)).toBe('st-1');
+  });
+});
+
+describe('findSpaceIdByGroupId', () => {
+  test('returns null for a negative groupId guard', () => {
+    const state = makeState();
+    state.spaceInstancesByWindow[100] = {
+      sp: { spaceId: 'sp', groupId: -1, tempTabIds: [], tempTabTitles: {} },
+    };
+    expect(findSpaceIdByGroupId(state, -1)).toBeNull();
+  });
+
+  test('returns null when no instance holds the groupId', () => {
+    const state = makeState();
+    state.spaceInstancesByWindow[100] = {
+      sp: { spaceId: 'sp', groupId: 1, tempTabIds: [], tempTabTitles: {} },
+    };
+    expect(findSpaceIdByGroupId(state, 99)).toBeNull();
+  });
+
+  test('returns the spaceId of the instance holding the groupId', () => {
+    const state = makeState();
+    state.spaceInstancesByWindow[100] = {
+      sp: { spaceId: 'sp', groupId: 5, tempTabIds: [], tempTabTitles: {} },
+    };
+    expect(findSpaceIdByGroupId(state, 5)).toBe('sp');
+  });
+
+  test('finds the matching instance across multiple windows', () => {
+    const state = makeState();
+    state.spaceInstancesByWindow[100] = {
+      'sp-a': { spaceId: 'sp-a', groupId: 1, tempTabIds: [], tempTabTitles: {} },
+    };
+    state.spaceInstancesByWindow[200] = {
+      'sp-b': { spaceId: 'sp-b', groupId: 7, tempTabIds: [], tempTabTitles: {} },
+    };
+    expect(findSpaceIdByGroupId(state, 7)).toBe('sp-b');
+  });
+
+  test('skips null window maps without throwing', () => {
+    const state = makeState();
+    (state.spaceInstancesByWindow as Record<number, unknown>)[100] = null;
+    expect(findSpaceIdByGroupId(state, 1)).toBeNull();
   });
 });
 
