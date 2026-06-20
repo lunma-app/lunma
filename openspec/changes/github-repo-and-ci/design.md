@@ -194,6 +194,24 @@ nothing committed — safe because a stale-box no-op changed no state.
   proposal nor prior design, so its addition is logged here per the deviation
   policy.
 
+### D8 — Fan-out `verify` into parallel extension jobs + no-op aggregator
+
+The `verify` CI job was implemented as a parallel matrix of five extension jobs
+(`typecheck`, `lint`, `check`, `lint:styles`, `test:run`) plus a separate `site`
+job, unified by a no-op `verify` aggregator that goes green only when every leg
+passes — rather than the single `pnpm -r verify` job described in D3.
+
+- **Why:** `tsc --noEmit` and `svelte-check` are the slowest steps and run
+  serially inside a single `pnpm -r verify` pass; fanning them out to separate
+  runners lets them overlap, cutting wall-clock time with no change to the
+  required check name or branch-protection config. The `verify` aggregator is the
+  single required status check in both structures.
+- **D3 (`pnpm -r verify` as one job) — superseded:** D3's rationale (simplicity
+  at current repo size) was outweighed by the easy parallelism win. The spec delta
+  in `specs/release-engineering/spec.md` is updated to describe this structure.
+- **Deviation (recorded per policy):** the tasks.md §2.2 note logged this at
+  implementation time; this decision entry is the design-artifact record.
+
 ## Risks / Trade-offs
 
 - **[`gh` cannot create orgs]** → The org is a guided manual web step

@@ -92,6 +92,9 @@ budget is tight, so it carries no framework runtime:
   from `@lunma/tokens/tokens.css`.
 - It speaks the wire protocols directly (`chrome.runtime.sendMessage`) rather
   than importing the `bus` / `messages` modules, which would pull in the logger.
+- It imports only `ui/favicon.ts` (the pure `faviconUrl` helper) — the one
+  sanctioned `launcher/ → ui/` edge, exempt from the layer-DAG rule because
+  `favicon.ts` is a pure function with no Svelte or DOM dependency.
 - The shipped content-script chunk is roughly 3KB gzipped, under the 15KB
   budget.
 

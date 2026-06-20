@@ -2,27 +2,34 @@
 
 ### Requirement: CI runs the workspace verify gate on every change
 
-The repository SHALL run the full `pnpm -r verify` workspace gate in continuous
-integration on every pull request and on every push to `main`. This is the same
-gate developers run locally, so a passing local `verify` and a passing CI run
-check identical work: the extension's `tsc --noEmit`, `biome check src` (which
-includes the layer-DAG and import-cycle rules of the `architecture-integrity`
+The repository SHALL run the full workspace verify gate in continuous integration
+on every pull request and on every push to `main`. The gate covers the same work
+as the local `pnpm -r verify`: the extension's `tsc --noEmit`, `biome check src`
+(which includes the layer-DAG and import-cycle rules of the `architecture-integrity`
 capability), `svelte-check`, `lint:styles`, and `vitest run`; and the site's
 `biome check src`, `svelte-check`, `vitest run`, and static `build`.
 
+In CI the extension steps run as parallel jobs in a matrix (one runner each for
+`typecheck`, `lint`, `check`, `lint:styles`, and `test:run`), with a separate `site`
+job, unified by a no-op `verify` aggregator job that reports success only when every
+leg and the site job pass. `verify` is the single required status check; its job
+name is stable regardless of how the work behind it is sharded.
+
 #### Scenario: Pull request triggers the gate
 - **WHEN** a pull request is opened or updated against any branch
-- **THEN** CI runs a `verify` job executing `pnpm -r verify`
-- **AND** the job's success or failure is reported as a required status check
+- **THEN** CI runs the extension matrix jobs and the site job in parallel, and
+  reports the unified result as the `verify` required status check
+- **AND** the `verify` aggregator goes green only when every leg passed
 
 #### Scenario: Push to main triggers the gate
 - **WHEN** a commit is pushed to `main`
-- **THEN** CI runs the `verify` job against that commit
+- **THEN** CI runs the same parallel matrix + site + aggregator against that commit
 
 #### Scenario: A failing gate is surfaced red
-- **WHEN** any package's `verify` step exits non-zero (a type error, lint
+- **WHEN** any extension or site verify step exits non-zero (a type error, lint
   violation, failed test, broken site build, or layer-DAG violation)
-- **THEN** the `verify` check fails and is reported as a failing status
+- **THEN** the failing leg is reported red and the `verify` aggregator fails,
+  surfacing the failure as a failing required status check
 
 ### Requirement: CI uses the repository-pinned toolchain
 

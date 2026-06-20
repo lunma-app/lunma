@@ -1,8 +1,9 @@
 ## Context
 
 `extension-release-pipeline` phase 1 (archived) builds `lunma-<version>.zip` and
-attaches it to the GitHub release, gated on release-please's `release_created`
-output inside `.github/workflows/release-please.yml`. The release exists and is
+attaches it to the GitHub release, gated on release-please's
+`steps.release.outputs['apps/extension--release_created']` output inside
+`.github/workflows/release-please.yml`. The release exists and is
 downloadable, but nothing puts it in front of users — the Chrome Web Store is the
 real install path, and it is empty.
 
@@ -61,7 +62,7 @@ is **upload + publish** (auto-publish); credentials come from the `EXTENSION_ID`
 
 Default to the CLI's no-subcommand command, which **uploads and publishes**
 (submit to the default/public audience, entering Google's review). The step is
-gated on **both** `release_created == 'true'` **and** the store credentials being
+gated on **both** `steps.release.outputs['apps/extension--release_created'] == 'true'` **and** the store credentials being
 present (surfaced as the `HAS_CWS` env flag from `secrets.CWS_EXTENSION_ID != ''`,
 since secrets can't be read in `if:` directly), so before the listing/secrets
 exist the step is skipped and the release (and its GitHub asset) still succeeds.

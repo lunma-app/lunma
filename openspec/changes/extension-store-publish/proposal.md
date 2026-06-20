@@ -18,7 +18,7 @@ downstream consumer: `open-source-public-launch`).
 
 - **CWS upload + publish on release.** `.github/workflows/release-please.yml`
   gains, after the existing build-and-attach step (and gated the same way on
-  `steps.release.outputs.release_created == 'true'`), a step that uploads the
+  `steps.release.outputs['apps/extension--release_created'] == 'true'`), a step that uploads the
   freshly built zip to the Chrome Web Store and submits it for publish, using
   `chrome-webstore-upload-cli` run via `pnpm dlx` at a pinned version (no
   `package.json` dependency — the same no-dep pattern as the site's `wrangler`

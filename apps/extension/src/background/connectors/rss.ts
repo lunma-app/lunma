@@ -84,7 +84,7 @@ type Capture = 'title' | 'id' | 'rss-link' | 'channel-link' | null;
  * website link when present (for `listingUrl`).
  */
 export function parseFeed(xml: string): { items: SmartFolderItem[]; channelLink?: string } {
-  const parser = new SaxesParser();
+  const parser = new SaxesParser({ xmlns: false });
   const items: SmartFolderItem[] = [];
   const stack: string[] = [];
   let channelLink: string | undefined;
@@ -99,7 +99,7 @@ export function parseFeed(xml: string): { items: SmartFolderItem[]; channelLink?
   parser.on('opentag', (tag) => {
     const name = localName(tag.name);
     const parent = stack[stack.length - 1];
-    const attrs = tag.attributes as Record<string, string>;
+    const attrs = tag.attributes;
 
     if (name === 'item' || name === 'entry') {
       // A fresh entry; any stray capture from malformed prior markup is dropped.

@@ -12,11 +12,11 @@ export type SmartFolderNode = Extract<PinNode, { kind: 'smart' }>;
  * Returns `[]` when no qualifying outlines exist.
  */
 export function parseOpml(xml: string): { name: string; feedUrl: string }[] {
-  const parser = new SaxesParser();
+  const parser = new SaxesParser({ xmlns: false });
   const results: { name: string; feedUrl: string }[] = [];
 
   parser.on('opentag', (tag) => {
-    const attrs = tag.attributes as Record<string, string>;
+    const attrs = tag.attributes;
     const tagName = tag.name.toLowerCase();
     if (tagName !== 'outline') return;
 

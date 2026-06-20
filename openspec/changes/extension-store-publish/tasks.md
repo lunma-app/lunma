@@ -5,7 +5,7 @@
 
 - [x] 1.1 In `.github/workflows/release-please.yml`, after the existing
   build-and-attach step, add a Chrome Web Store publish step gated on **both**
-  `steps.release.outputs.release_created == 'true'` **and** `env.HAS_CWS == 'true'`
+  `steps.release.outputs['apps/extension--release_created'] == 'true'` **and** `env.HAS_CWS == 'true'`
   (a job-level env flag `HAS_CWS: ${{ secrets.CWS_EXTENSION_ID != '' }}`, since
   secrets can't be read in `if:` — so it skips cleanly until configured, design D2).
 - [x] 1.2 The step runs `pnpm dlx --package=chrome-webstore-upload-cli@4.0.1
