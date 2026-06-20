@@ -4,6 +4,7 @@ import { bus } from '../shared/bus';
 import { STATE_STORAGE_KEY } from '../shared/chrome/storage';
 import { log } from '../shared/logger';
 import { buildOpml, parseOpml, type SmartFolderNode } from '../shared/opml';
+import { AppStateV7Schema } from '../shared/schemas';
 import type { AppState } from '../shared/types';
 import Button from '../ui/Button.svelte';
 import InlineError from '../ui/InlineError.svelte';
@@ -33,9 +34,10 @@ let confirmRowEl = $state<HTMLElement>();
 onMount(async () => {
   // D8: read at mount to determine export button visibility.
   const got = await chrome.storage.local.get(STATE_STORAGE_KEY);
-  const env = got[STATE_STORAGE_KEY] as { state: AppState } | undefined;
-  if (!env?.state) return;
-  rssNodes = collectRssNodes(env.state);
+  const raw = (got[STATE_STORAGE_KEY] as Record<string, unknown> | undefined)?.state;
+  const stateResult = AppStateV7Schema.safeParse(raw);
+  if (!stateResult.success) return;
+  rssNodes = collectRssNodes(stateResult.data as unknown as AppState);
 });
 
 function collectRssNodes(state: AppState): SmartFolderNode[] {
@@ -80,8 +82,9 @@ async function onFileChange(e: Event): Promise<void> {
 
   // D8: read state at file-select time to populate the Space picker.
   const got = await chrome.storage.local.get(STATE_STORAGE_KEY);
-  const env = got[STATE_STORAGE_KEY] as { state: AppState } | undefined;
-  const spaces = env?.state?.spaces ?? [];
+  const raw = (got[STATE_STORAGE_KEY] as Record<string, unknown> | undefined)?.state;
+  const stateResult = AppStateV7Schema.safeParse(raw);
+  const spaces = stateResult.success ? (stateResult.data as unknown as AppState).spaces : [];
 
   parsedFeeds = feeds;
   spaceOptions = spaces.map((s) => ({ value: s.id, label: s.name }));
@@ -106,8 +109,9 @@ async function confirmImport(): Promise<void> {
     });
     // Refresh export-button visibility after a successful import.
     const got = await chrome.storage.local.get(STATE_STORAGE_KEY);
-    const env = got[STATE_STORAGE_KEY] as { state: AppState } | undefined;
-    if (env?.state) rssNodes = collectRssNodes(env.state);
+    const raw = (got[STATE_STORAGE_KEY] as Record<string, unknown> | undefined)?.state;
+    const stateResult = AppStateV7Schema.safeParse(raw);
+    if (stateResult.success) rssNodes = collectRssNodes(stateResult.data as unknown as AppState);
     toast = { message: `${feeds.length} feeds imported` };
   } catch (err) {
     log.error('FeedSubscriptions: import failed', { err });

@@ -4,7 +4,7 @@ import { buildBackup } from '../shared/backup';
 import { bus } from '../shared/bus';
 import { STATE_STORAGE_KEY } from '../shared/chrome/storage';
 import { log } from '../shared/logger';
-import { BackupEnvelopeSchema } from '../shared/schemas';
+import { AppStateV7Schema, BackupEnvelopeSchema } from '../shared/schemas';
 import { readSettings, TOGGLE_SEGMENTS } from '../shared/settings';
 import type { AppState } from '../shared/types';
 import Button from '../ui/Button.svelte';
@@ -30,11 +30,12 @@ async function handleExport(): Promise<void> {
   importError = null;
   try {
     const got = await chrome.storage.local.get(STATE_STORAGE_KEY);
-    const env = got[STATE_STORAGE_KEY] as { state: AppState } | undefined;
-    if (!env?.state) throw new Error('No state found in storage');
+    const raw = (got[STATE_STORAGE_KEY] as Record<string, unknown> | undefined)?.state;
+    const stateResult = AppStateV7Schema.safeParse(raw);
+    if (!stateResult.success) throw new Error('No valid state found in storage');
 
     const settings = includeSettings ? await readSettings() : undefined;
-    const backup = buildBackup(env.state as AppState, settings);
+    const backup = buildBackup(stateResult.data as unknown as AppState, settings);
 
     const date = new Date().toISOString().slice(0, 10);
     const json = JSON.stringify(backup, null, 2);
