@@ -153,6 +153,44 @@ describe('activation orchestration (Space tab groups)', () => {
     expect(chrome.groups.get(2)?.title).toBe('Side');
     expect(chrome.groups.get(2)?.color).toBe('cyan'); // cyan → cyan (1:1, no fold)
   });
+
+  test('preserveFavoriteFocus: groups expand/collapse but focus is NOT moved when active tab is a global favorite', async () => {
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push(space('work'), space('side'));
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [17], tempTabTitles: {} },
+      side: { spaceId: 'side', groupId: 2, tempTabIds: [30], tempTabTitles: {} },
+    };
+    // f1 is a global favorite (spaceId: null) bound to tab 88.
+    store.state.savedTabs.f1 = {
+      id: 'f1',
+      spaceId: null,
+      title: 'Fav',
+      originalURL: 'https://fav/',
+      currentURL: null,
+    };
+    store.state.tabBindings.f1 = { 100: 88 };
+    for (const id of [17, 30, 88]) store.state.liveTabsById[id] = live(id, 100);
+    chrome.addGroup({ id: 1, windowId: 100, collapsed: false });
+    chrome.addGroup({ id: 2, windowId: 100, collapsed: true });
+    chrome.addTab({ id: 17, windowId: 100, groupId: 1 });
+    chrome.addTab({ id: 30, windowId: 100, groupId: 2 });
+    // Tab 88 is ungrouped (global favorite) and Chrome's currently active tab.
+    chrome.addTab({ id: 88, windowId: 100, groupId: -1, active: true });
+
+    coordinator.enqueue(
+      sidebar({ kind: 'activateSpace', payload: { windowId: 100, spaceId: 'side' } }, 'c1'),
+    );
+    await coordinator.idle();
+
+    expect(store.state.activeSpaceByWindow[100]).toBe('side');
+    // Step (d) still runs: incoming group expanded, outgoing group collapsed.
+    expect(chrome.groups.get(2)?.collapsed).toBe(false);
+    expect(chrome.groups.get(1)?.collapsed).toBe(true);
+    // Step (c) is skipped: focus is NOT yanked from the favorite into side's tab.
+    expect(chrome.calls).not.toContain('tabs.update:active:30');
+  });
 });
 
 describe('recolour / rename identity propagation (stale-group resilience)', () => {

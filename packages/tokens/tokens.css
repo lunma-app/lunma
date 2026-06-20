@@ -38,6 +38,10 @@
    * every surface. */
   --space-l: 0.62;
   --space-on: oklch(0.21 0.038 62);
+  /* Folder icon colour — separate from --space-l/--space-chroma so the palette
+   * can be tuned independently of the active Space identity tokens. */
+  --folder-l: 0.62;
+  --folder-chroma: 0.16;
 
   /* The nine canonical Space colours (promote-space-palette-to-tokens) — the
    * single cross-app source for the palette. Per colour: the OKLCH lightness

@@ -204,7 +204,7 @@ function onMenuOpenChange(open: boolean): void {
     class:editing
     class:menu-open={menuOpen}
     data-testid="folder-row"
-    style:--folder-c={`oklch(0.62 0.16 ${hue})`}
+    style:--folder-c={`oklch(var(--folder-l, 0.62) var(--folder-chroma, 0.16) ${hue})`}
   >
     {#if editing}
       <span class="chevron" class:expanded aria-hidden="true">
