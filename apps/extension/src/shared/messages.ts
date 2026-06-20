@@ -5,6 +5,7 @@ import type {
   SuggestionsResult,
 } from './launcher-contract';
 import { log } from './logger';
+import { AppStateV7Schema } from './schemas';
 import type { AppState, WindowId } from './types';
 
 export interface StateBroadcastMessage {
@@ -246,7 +247,15 @@ export function onStateBroadcast(handler: (msg: StateBroadcastMessage) => void):
     if (!raw || typeof raw !== 'object') return;
     const m = raw as Partial<LunmaMessage>;
     if (m.type !== 'lunma/state-broadcast') return;
-    handler(m as StateBroadcastMessage);
+    const candidate = m as Record<string, unknown>;
+    const stateResult = AppStateV7Schema.safeParse(candidate.state);
+    if (!stateResult.success) return;
+    // Cast is safe: AppStateV7Schema structurally matches AppState; the only
+    // divergences are optional ephemeral slices (liveTabsById, smartFolders) that
+    // exactOptionalPropertyTypes cannot bridge without a cast, and the Zod/TS
+    // inference gap on favIconUrl (string | undefined vs string?).
+    const state = stateResult.data as unknown as AppState;
+    handler({ type: 'lunma/state-broadcast', method: String(candidate.method ?? ''), state });
   };
   chrome.runtime.onMessage.addListener(listener);
   return () => chrome.runtime.onMessage.removeListener(listener);

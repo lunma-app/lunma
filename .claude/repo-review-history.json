@@ -1,0 +1,524 @@
+{
+  "items": [
+    {
+      "rank": 1,
+      "dimension": "security",
+      "title": "openSmartItem opens unvalidated feed-controlled URL with chrome.tabs.create (no scheme hardening)",
+      "severity": "medium",
+      "location": "apps/extension/src/background/handlers/smart-folders.ts:189-190",
+      "action": "Before chrome.tabs.create({ url: item.url }) in smart-folders.ts:189, parse new URL(item.url) and require protocol http:/https:, warn-dropping otherwise, mirroring openUrl/openSmartFolderListing.",
+      "rationale": "Only open-path that skips scheme validation while ingesting attacker-controlled RSS link hrefs, allowing file:/data:/chrome: schemes — highest real-world exploitability despite medium label.",
+      "status": "new"
+    },
+    {
+      "rank": 2,
+      "dimension": "security",
+      "title": "optional_host_permissions grants all-hosts (https://*/* and http://*/*)",
+      "severity": "medium",
+      "location": "apps/extension/public/manifest.json:21-28",
+      "action": "Replace standing https://*/* and http://*/* in manifest.json with gesture-bound per-origin grants derived from baseUrl via originPatternForBaseUrl, or document the threat model if a wildcard is unavoidable.",
+      "rationale": "A single user-approved all-hosts grant exposes ambient GitLab/Jira cookies to every site, a broad SSRF/exfiltration surface and CWS-review liability that undercuts the codebase's least-privilege posture.",
+      "status": "new"
+    },
+    {
+      "rank": 3,
+      "dimension": "typesafety",
+      "title": "Options pages read chrome.storage.local and cast directly to AppState without Zod parsing",
+      "severity": "high",
+      "location": "apps/extension/src/options/BackupRestore.svelte:32,36 | apps/extension/src/options/FeedSubscriptions.svelte:36,83,109",
+      "action": "Replace the bare `as { state: AppState }` casts in BackupRestore.svelte and FeedSubscriptions.svelte with readPersistedState() from shared/chrome/storage.ts, which migrates and validates.",
+      "rationale": "Trust-boundary violation on external chrome.storage input across a whole surface, where a corrupt or unmigrated envelope silently passes as valid AppState and crashes downstream consumers.",
+      "status": "new"
+    },
+    {
+      "rank": 4,
+      "dimension": "typesafety",
+      "title": "onStateBroadcast casts raw chrome.runtime message to StateBroadcastMessage without validating .state field",
+      "severity": "high",
+      "location": "apps/extension/src/shared/messages.ts:247-249",
+      "action": "After m.type === 'lunma/state-broadcast' in messages.ts:249, validate m.state via AppStateV7Schema.safeParse() (or at minimum assert an object with numeric schemaVersion) before widening to StateBroadcastMessage.",
+      "rationale": "Unvalidated cross-surface state seeds the sidebar store via Object.assign, so a stale/old-SW snapshot propagates undefined required keys into reactive state — a high-severity correctness boundary affecting every sidebar boot.",
+      "status": "new"
+    },
+    {
+      "rank": 5,
+      "dimension": "typesafety",
+      "title": "BackupRestore.svelte passes unvalidated JSON.parse output to bus.send as BackupEnvelope",
+      "severity": "high",
+      "location": "apps/extension/src/options/BackupRestore.svelte:85",
+      "action": "Parse pendingImportData through BackupEnvelopeSchema.safeParse() in confirmImport() before bus.send, storing the validated BackupEnvelope and showing validation errors inline.",
+      "rationale": "User-file content is cast from unknown to a typed bus payload with the only runtime guard being the downstream bus adapter — a high-severity local safety gap, though the adapter currently catches it.",
+      "status": "new"
+    },
+    {
+      "rank": 6,
+      "dimension": "performance",
+      "title": "All 4 connector modules eagerly imported in hot SW boot path",
+      "severity": "high",
+      "location": "/Users/emanuel.fonseca/Workspaces/lunma/apps/extension/src/background/smart-folders.ts:6-9, 39-44",
+      "action": "Convert the top-level connector imports in smart-folders.ts:6-9 to a lazy Map<source, () => Promise<SourceConnector>> registry loaded on first fetchSmartFolderRuntime() of that source.",
+      "rationale": "~52KB/~11KB-gzip parsed on every SW boot for users who may use no connectors — the only high-severity startup cost and the clearest perf win.",
+      "status": "new"
+    },
+    {
+      "rank": 7,
+      "dimension": "testing",
+      "title": "openUrl handler non-http(s) scheme blocking not unit-tested",
+      "severity": "high",
+      "location": "apps/extension/src/background/handlers/temp-tabs.ts (openUrl, lines 186–197) — no corresponding test in apps/extension/src/background/coordinator.handlers.test.ts",
+      "action": "Add tests in coordinator.handlers.test.ts asserting openUrl drops javascript:, ftp:, and unparseable URLs (no tabs.create, ok ack) using installSavedTabChromeStub()+makeCoordinator().",
+      "rationale": "The scheme guard is the authoritative defense for the boundary-divert and launcher open paths, yet a regression that re-enables bookmarklet injection would pass CI undetected — security-adjacent coverage gap.",
+      "status": "new"
+    },
+    {
+      "rank": 8,
+      "dimension": "typesafety",
+      "title": "requestLauncherSuggestions returns msg.results as LauncherResult[] with no element-level validation",
+      "severity": "medium",
+      "location": "apps/extension/src/shared/messages.ts:356-365",
+      "action": "Add a LauncherResultSchema to shared/launcher-contract.ts and validate msg.results (and openUrls/ungrantedSources) with .array().safeParse() in messages.ts, filtering non-conforming elements.",
+      "rationale": "Array.isArray-only guards let a divergent SW return malformed result objects, causing silent launcher render bugs at a runtime trust boundary.",
+      "status": "new"
+    },
+    {
+      "rank": 9,
+      "dimension": "typesafety",
+      "title": "store.state double-unknown cast to SidebarLocalState spreads across three files",
+      "severity": "medium",
+      "location": "apps/extension/src/shared/store.svelte.ts:1182,1195,1217 | apps/extension/src/sidebar/PinnedTabs.svelte:175,572 | apps/extension/src/sidebar/main.ts:127",
+      "action": "Introduce a SidebarLunmaStore subclass typing state as the existing SidebarState (AppState & SidebarLocalState) intersection so the double-unknown casts in store.svelte.ts, PinnedTabs.svelte, and main.ts disappear.",
+      "rationale": "Double-unknown fully suppresses type safety across three files, so renamed/retyped local fields fail silently — a recurring foot-gun affecting core sidebar state.",
+      "status": "new"
+    },
+    {
+      "rank": 10,
+      "dimension": "typesafety",
+      "title": "toPendingEvent casts Zod-inferred type to SidebarCommand then SidebarPendingEvent",
+      "severity": "medium",
+      "location": "apps/extension/src/background/bus-adapter.ts:17-23, 80",
+      "action": "Replace the `as SidebarPendingEvent` cast in bus-adapter.ts toPendingEvent with a per-kind discriminated dispatch (or a compile-time satisfies test), and comment the harmless line-80 optional-vs-exactOptional cast.",
+      "rationale": "Broad cast on the command bus could mask a wrong payload shape into a handler if variants grow, but current variants are trivially-shaped so risk is latent.",
+      "status": "new"
+    },
+    {
+      "rank": 11,
+      "dimension": "typesafety",
+      "title": "saxes tag.attributes cast to Record<string,string> unsafe if namespace mode enabled",
+      "severity": "medium",
+      "location": "apps/extension/src/shared/opml.ts:19 | apps/extension/src/background/connectors/rss.ts:102",
+      "action": "Pass { xmlns: false } to both new SaxesParser() calls in opml.ts and rss.ts so tag.attributes infers Record<string,string> and the cast can be removed.",
+      "rationale": "Cast is correct today but a future xmlns:true reconfiguration would silently yield wrong attribute types feeding feed/OPML parsing — cheap to make a compile error.",
+      "status": "new"
+    },
+    {
+      "rank": 12,
+      "dimension": "testing",
+      "title": "Space rename/recolour revert on chrome.tabGroups.update failure not tested end-to-end",
+      "severity": "medium",
+      "location": "apps/extension/src/background/handlers/spaces.ts (lines 40–59, 61–80) — apps/extension/src/background/coordinator.tab-groups.test.ts covers renameSpace but not the revert path",
+      "action": "In coordinator.tab-groups.test.ts, stub chrome.tabGroups.update to reject for renameSpace and recolourSpace and assert the store value reverts and the ack carries the error.",
+      "rationale": "Uncovered failure-recovery path means a broken revert would leave state diverged from Chrome silently — a meaningful correctness gap on a user-facing action.",
+      "status": "new"
+    },
+    {
+      "rank": 13,
+      "dimension": "testing",
+      "title": "AppStateV7Schema smartItemBindings slot shape not validated in schemas.test.ts",
+      "severity": "medium",
+      "location": "apps/extension/src/shared/schemas.test.ts — AppStateV7Schema not imported or exercised; apps/extension/src/shared/schemas.ts lines 183–241",
+      "action": "Add a schemas.test.ts describe block importing AppStateV7Schema directly: valid { tabId, allowGlob } parses, bare-number slot rejects, missing allowGlob rejects.",
+      "rationale": "The current schema version's slot shape has no direct test, so a malformed binding bypassing migration would go unvalidated — gap on the persistence trust boundary.",
+      "status": "new"
+    },
+    {
+      "rank": 14,
+      "dimension": "testing",
+      "title": "GroupOrchestrator.orchestrateActivation preserveFavoriteFocus branch not unit-tested",
+      "severity": "medium",
+      "location": "apps/extension/src/background/group-orchestrator.ts (lines 102–115, 169–229)",
+      "action": "Add direct GroupOrchestrator unit tests (mock store + chrome stub) for activeTabIsGlobalFavorite throw→false and preserveFavoriteFocus skip/proceed branches.",
+      "rationale": "Branch-level focus logic is only covered by integration tests, making the query-failure and skip paths hard to isolate on regression.",
+      "status": "new"
+    },
+    {
+      "rank": 15,
+      "dimension": "testing",
+      "title": "queries.ts isTrackedTab, savedTabIdForBoundTab, findSpaceIdByGroupId have no direct unit tests",
+      "severity": "medium",
+      "location": "apps/extension/src/background/handlers/queries.ts (lines 20–47, 79–84) — no direct tests in apps/extension/src/background/handlers/queries.test.ts",
+      "action": "Extend queries.test.ts with describe blocks for isTrackedTab, savedTabIdForBoundTab, and findSpaceIdByGroupId covering found/not-found/guard cases.",
+      "rationale": "Three pure predicates gating tab adoption, boundary re-arm, and group lifecycle are only tested indirectly, slowing regression isolation.",
+      "status": "new"
+    },
+    {
+      "rank": 16,
+      "dimension": "testing",
+      "title": "No e2e test for workspace creation flow",
+      "severity": "medium",
+      "location": "apps/extension/e2e/ — no spec exercises the full createSpace UI flow",
+      "action": "Add apps/extension/e2e/workspace-creation.spec.ts dispatching createSpace, asserting the Space chip renders with correct name/data-space-id and persists across reload, patterned on cross-space-switch.spec.ts.",
+      "rationale": "The core createSpace→broadcast→reconcile→chip render path is only a precondition in other specs, leaving a primary user flow without end-to-end coverage.",
+      "status": "new"
+    },
+    {
+      "rank": 17,
+      "dimension": "testing",
+      "title": "No e2e test for launcher search result navigation",
+      "severity": "medium",
+      "location": "apps/extension/e2e/launcher-overlay.spec.ts — no result-selection or search-navigation assertions",
+      "action": "Extend launcher-overlay.spec.ts (or add launcher-search.spec.ts) to dispatch a query, assert a non-empty result list, and verify selecting a result focuses the existing tab rather than duplicating it.",
+      "rationale": "Real-Chrome history/bookmarks integration and dedup-on-select are never exercised end-to-end, leaving the launcher's primary purpose untested in the real environment.",
+      "status": "new"
+    },
+    {
+      "rank": 18,
+      "dimension": "performance",
+      "title": "Sidebar mounts all UI components eagerly without code splitting",
+      "severity": "medium",
+      "location": "/Users/emanuel.fonseca/Workspaces/lunma/apps/extension/src/sidebar/App.svelte:15-42",
+      "action": "Lazy-load conditional feature components (SmartFolderEditor, SpaceEditor) in App.svelte via Svelte dynamic import, keeping primitives eager, and measure bundle impact.",
+      "rationale": "18 static imports inflate initial sidebar parse/eval even for panels never opened — the most impactful surface for code splitting, but needs measurement.",
+      "status": "new"
+    },
+    {
+      "rank": 19,
+      "dimension": "performance",
+      "title": "Synchronous settings read during sidebar boot blocks initial render",
+      "severity": "medium",
+      "location": "/Users/emanuel.fonseca/Workspaces/lunma/apps/extension/src/sidebar/main.ts:46-50",
+      "action": "Parallelize the await readSettings() in main.ts:46 with the state snapshot via Promise.all and apply tint/boundary post-mount, keeping only density pre-mount if layout-shift-critical.",
+      "rationale": "Serial storage.sync read gates first paint on cold boot; parallelizing is a clear latency win on the most-used surface.",
+      "status": "new"
+    },
+    {
+      "rank": 20,
+      "dimension": "performance",
+      "title": "No SW resource batching for frequent Chrome API operations",
+      "severity": "medium",
+      "location": "/Users/emanuel.fonseca/Workspaces/lunma/apps/extension/src/background/index.ts:98-116, src/background/seed-existing-windows.ts:17, src/shared/settings.ts:368-379",
+      "action": "Collapse the two boot-path tab queries into one chrome.tabs.query({}) and have writeSetting (settings.ts:368-379) merge an in-memory settings cache instead of re-reading all settings on each single-field write.",
+      "rationale": "Redundant IPC/scheduler overhead on boot and every settings write; batching cuts repeated round-trips with modest effort.",
+      "status": "new"
+    },
+    {
+      "rank": 21,
+      "dimension": "openspec",
+      "title": "extension-store-publish tasks.md §1.1: wrong release-please output key",
+      "severity": "medium",
+      "location": "openspec/changes/extension-store-publish/tasks.md §1.1 (line 9); .github/workflows/release-please.yml lines 49–93",
+      "action": "Update tasks.md §1.1, design.md D2, and proposal.md line 21 to use steps.release.outputs['apps/extension--release_created'] matching the manifest-mode workflow.",
+      "rationale": "A binding artifact name (per CLAUDE.md normative-names policy) disagrees with shipped code across three files — concrete spec/code drift on the release path.",
+      "status": "new"
+    },
+    {
+      "rank": 22,
+      "dimension": "openspec",
+      "title": "open-source-public-launch tasks.md §4.1: identity required check omitted",
+      "severity": "medium",
+      "location": "openspec/changes/open-source-public-launch/tasks.md §4.1 (line 55); .github/workflows/identity.yml; openspec/changes/extension-store-publish/proposal.md line 80",
+      "action": "Add identity to the §4.1 required-check list (verify + e2e + dco + identity) and update design.md D6 and the open-source-governance spec to list identity explicitly.",
+      "rationale": "Applying branch protection per the current §4.1 would leave the existing identity guard unenforced at the merge boundary — a real governance gap if executed as written.",
+      "status": "new"
+    },
+    {
+      "rank": 23,
+      "dimension": "openspec",
+      "title": "github-repo-and-ci spec delta describes single pnpm -r verify job but fan-out shipped",
+      "severity": "medium",
+      "location": "openspec/changes/github-repo-and-ci/specs/release-engineering/spec.md lines 5–25; .github/workflows/ci.yml; tasks.md §2.2 note",
+      "action": "Rewrite the spec delta's requirement and Pull-request scenario in specs/release-engineering/spec.md to describe the parallel matrix + site + no-op aggregator structure instead of pnpm -r verify.",
+      "rationale": "On archive this delta becomes the living spec, enshrining an implementation detail that never shipped — must be fixed before archiving.",
+      "status": "new"
+    },
+    {
+      "rank": 24,
+      "dimension": "openspec",
+      "title": "open-source-public-launch tasks.md §1.7: unchecked task is implemented on main",
+      "severity": "medium",
+      "location": "openspec/changes/open-source-public-launch/tasks.md §1.7 (line 22)",
+      "action": "Mark §1.7 [x] in tasks.md with a note referencing commit 3eddb29 (DCO governance landed).",
+      "rationale": "Checkbox drift on a completed task, smaller blast radius than the spec/required-check drifts above but still a docs/code lockstep violation.",
+      "status": "new"
+    },
+    {
+      "rank": 25,
+      "dimension": "visual",
+      "title": "Menu item height hard-coded to 34px instead of --row-h token",
+      "severity": "medium",
+      "location": "apps/extension/src/ui/RowMenu.svelte:457,561, apps/extension/src/ui/Menu.svelte:212, apps/extension/src/ui/ContextMenu.svelte:293,380",
+      "action": "Replace height: 34px with height: var(--row-h) in RowMenu.svelte, Menu.svelte, and ContextMenu.svelte so menu rows become density-aware.",
+      "rationale": "Highest-impact visual finding: menu rows are frozen at Normal density and ignore Compact/Comfort, a functional accessibility/density regression in shared ui primitives.",
+      "status": "new"
+    },
+    {
+      "rank": 26,
+      "dimension": "visual",
+      "title": "Hard-coded z-index values bypassing --z-* token scale",
+      "severity": "medium",
+      "location": "apps/extension/src/sidebar/DragClone.svelte:66, apps/extension/src/sidebar/SpaceEditor.svelte:471, apps/extension/src/sidebar/SpaceSwitcher.svelte:399, apps/extension/src/sidebar/TempTabs.svelte:479, apps/extension/src/sidebar/FaviconRow.svelte:671, apps/extension/src/sidebar/PinnedTabs.svelte:1072",
+      "action": "Replace z-index: 9999 with var(--z-overlay) in DragClone.svelte and all z-index: 2 drop-lines with var(--z-raised); resolve SpaceEditor's 60 against a token (or add --z-popover).",
+      "rationale": "Raw z-indices across six files risk stacking-context bugs and bypass the token scale that governs surface layering.",
+      "status": "new"
+    },
+    {
+      "rank": 27,
+      "dimension": "visual",
+      "title": "FolderRow hard-codes oklch lightness (0.62) and chroma (0.16) for --folder-c",
+      "severity": "medium",
+      "location": "apps/extension/src/ui/FolderRow.svelte:207",
+      "action": "Compose --folder-c in FolderRow.svelte:207 from colourToOklch(color)'s canonical {l,c,h} (or the --space-* tokens) instead of literal 0.62/0.16.",
+      "rationale": "Hard-coded l/c render folder tints at the wrong identity for red/yellow/gray, a visible colour-fidelity defect against the canonical palette.",
+      "status": "new"
+    },
+    {
+      "rank": 28,
+      "dimension": "visual",
+      "title": "Hard-coded 3px border-radius on favicon images (missing --r-xs token)",
+      "severity": "medium",
+      "location": "apps/extension/src/sidebar/DragClone.svelte:125, apps/extension/src/ui/Chip.svelte:84, apps/extension/src/launcher/overlay.css:174,243,321, apps/extension/src/launcher/newtab/newtab.css:326",
+      "action": "Add a --r-2xs: 3px token (or adopt --r-xs) and replace every border-radius: 3px favicon site with the token variable.",
+      "rationale": "Sub-token literal across six sites won't track radius-scale changes — broad but low-risk token-contract drift.",
+      "status": "new"
+    },
+    {
+      "rank": 29,
+      "dimension": "visual",
+      "title": "overlay.css re-declares base tokens with hard-coded oklch values instead of inheriting",
+      "severity": "medium",
+      "location": "apps/extension/src/launcher/overlay.css:23-31,40-47,58,63-65",
+      "action": "Add a parity test (like space-palette-parity.test.ts) failing on drift for tokens that must match tokens.css, and annotate intentionally-different values (scrim/glass opacity) in overlay.css.",
+      "rationale": "Shadow-root token copies can silently drift from tokens.css with no guard; a parity test bounds the divergence on a colour-critical surface.",
+      "status": "new"
+    },
+    {
+      "rank": 30,
+      "dimension": "visual",
+      "title": "overlay.css uses hard-coded font shorthand instead of type-scale tokens",
+      "severity": "medium",
+      "location": "apps/extension/src/launcher/overlay.css:138,149,167,217,225,349,383,395,407,415,429,437,463",
+      "action": "Redeclare the type-scale and weight tokens in overlay.css's shadow-root block and replace each `font:` shorthand with font-size: var(--text-*) + font-weight: var(--weight-*).",
+      "rationale": "Many raw px/weight literals across the overlay won't track the type scale, the largest single concentration of type-token drift.",
+      "status": "new"
+    },
+    {
+      "rank": 31,
+      "dimension": "performance",
+      "title": "New-tab launcher makes synchronous readSettings before mount",
+      "severity": "low",
+      "location": "/Users/emanuel.fonseca/Workspaces/lunma/apps/extension/src/launcher/newtab/main.ts:45-49",
+      "action": "Move the readSettings() await in newtab/main.ts:45 into a Promise.all with the state snapshot so reads run in parallel and mount can use defaults.",
+      "rationale": "Same boot-blocking pattern as the sidebar but on a transient surface, so lower impact.",
+      "status": "new"
+    },
+    {
+      "rank": 32,
+      "dimension": "performance",
+      "title": "chrome.storage.sync reads on boot may block SW if storage unavailable",
+      "severity": "low",
+      "location": "/Users/emanuel.fonseca/Workspaces/lunma/apps/extension/src/shared/settings.ts:341-350",
+      "action": "Add a ~500ms timeout to readSettings() (settings.ts:341-350) that falls back to DEFAULTS and retries asynchronously post-mount.",
+      "rationale": "Transient sync-storage stalls could delay paint 1-2s with no current guard, but the unavailable-storage case is rare.",
+      "status": "new"
+    },
+    {
+      "rank": 33,
+      "dimension": "performance",
+      "title": "No lazy loading for options surface components",
+      "severity": "low",
+      "location": "/Users/emanuel.fonseca/Workspaces/lunma/apps/extension/src/options/",
+      "action": "Defer non-critical options sections (Backup & restore, Feed subscriptions, Recently archived, Advanced) behind scroll/expand, keeping the primary Settings section eager.",
+      "rationale": "Options opens infrequently so parse-cost bloat is the least-visible perf concern.",
+      "status": "new"
+    },
+    {
+      "rank": 34,
+      "dimension": "performance",
+      "title": "UI primitives import full Lucide icon library bundle",
+      "severity": "low",
+      "location": "/Users/emanuel.fonseca/Workspaces/lunma/apps/extension/package.json:27",
+      "action": "Audit used Lucide icons and measure post-build tree-shaking; inline or pre-select only needed icons if tree-shaking proves ineffective.",
+      "rationale": "Likely already tree-shaken in production builds, so impact is speculative pending measurement.",
+      "status": "new"
+    },
+    {
+      "rank": 35,
+      "dimension": "performance",
+      "title": "seedExistingTabs builds full spaceByGroupByWindow map on every boot without memoization",
+      "severity": "low",
+      "location": "/Users/emanuel.fonseca/Workspaces/lunma/apps/extension/src/background/seed-existing-tabs.ts:47-55",
+      "action": "Optionally cache the spaceByGroupByWindow map in store.state to avoid rebuilding; lower priority than connector lazy-loading.",
+      "rationale": "O(n*m) work happens once per boot with bounded impact, the weakest perf item.",
+      "status": "new"
+    },
+    {
+      "rank": 36,
+      "dimension": "typesafety",
+      "title": "SettingsSchema and DEFAULTS use double-unknown casts masking Zod-type mismatch risk",
+      "severity": "low",
+      "location": "apps/extension/src/shared/settings.ts:295-297, 325",
+      "action": "Replace the DEFAULTS `as unknown as Settings` cast in settings.ts:296 with a `satisfies Record<keyof Settings, ...>` form and comment the buildSchema cast (already guarded by AssertEqual).",
+      "rationale": "Only the unguarded DEFAULTS cast carries real risk (a missing default widens silently); the schema cast is already protected.",
+      "status": "new"
+    },
+    {
+      "rank": 37,
+      "dimension": "typesafety",
+      "title": "$effect in SmartFolder.svelte mutates $state object keys without bounding growth",
+      "severity": "low",
+      "location": "apps/extension/src/sidebar/SmartFolder.svelte:140-143",
+      "action": "Add a trim step in the SmartFolder.svelte:140 effect removing lastSeenById keys no longer in folderBindings or the current items window.",
+      "rationale": "Mild unbounded memory growth over long sessions with rotating feed items, low severity and slow to manifest.",
+      "status": "new"
+    },
+    {
+      "rank": 38,
+      "dimension": "typesafety",
+      "title": "Biome noRestrictedImports background/ rule duplicates handlers/ exclusion pattern",
+      "severity": "low",
+      "location": "apps/extension biome.json:179-224",
+      "action": "Consolidate the two background/** override entries in biome.json into one using includes exclusions and remove the redundant !**/handlers patterns.",
+      "rationale": "Config-auditability cleanup with no current functional gap, lowest type-safety priority.",
+      "status": "new"
+    },
+    {
+      "rank": 39,
+      "dimension": "security",
+      "title": "Boundary-divert listener forwards page-controlled URL into openUrl (mitigated)",
+      "severity": "low",
+      "location": "apps/extension/src/background/index.ts:238-252",
+      "action": "No change today; keep openUrl's http(s) re-validation authoritative and add an explicit scheme check at the index.ts:238 enqueue site if openUrl is ever refactored to trust callers.",
+      "rationale": "Already defended by sender.id check and the openUrl sink guard; flagged only as a single bus-bypassing path to keep hardened.",
+      "status": "new"
+    },
+    {
+      "rank": 40,
+      "dimension": "security",
+      "title": "Connector PATs stored unencrypted in chrome.storage.local (expected for platform)",
+      "severity": "low",
+      "location": "apps/extension/src/shared/connectors.ts:18-69",
+      "action": "Add a test asserting tokens never appear in broadcastState payloads or logs and document local-plaintext storage in the options UI.",
+      "rationale": "Inherent MV3 constraint with a disciplined single-accessor module and no code defect; only hygiene-maintenance remains.",
+      "status": "new"
+    },
+    {
+      "rank": 41,
+      "dimension": "testing",
+      "title": "surface-boot.ts applyDensityToDocument not unit-tested",
+      "severity": "low",
+      "location": "apps/extension/src/shared/surface-boot.ts — no corresponding test file",
+      "action": "Add apps/extension/src/shared/surface-boot.test.ts covering applyDensityToDocument for normal (delete), compact, and comfort modes using jsdom.",
+      "rationale": "Small pure helper with implicit-only branch coverage, low risk.",
+      "status": "new"
+    },
+    {
+      "rank": 42,
+      "dimension": "testing",
+      "title": "platform.ts getModifierLabel Mac vs non-Mac branch not unit-tested",
+      "severity": "low",
+      "location": "apps/extension/src/shared/platform.ts — no dedicated test file; getModifierLabel only used via components",
+      "action": "Add apps/extension/src/shared/platform.test.ts mocking navigator.userAgent for Mac/Windows/Edge/Chrome to cover getModifierLabel and getBrowserScheme branches.",
+      "rationale": "UA-branch helper with cosmetic output, lowest-risk testing gap.",
+      "status": "new"
+    },
+    {
+      "rank": 43,
+      "dimension": "openspec",
+      "title": "extension-store-publish tasks.md: status header contradicts checked tasks",
+      "severity": "low",
+      "location": "openspec/changes/extension-store-publish/tasks.md (header block, lines 1–4)",
+      "action": "Replace the stale 'not yet implemented' header in tasks.md with current status: §1 and §2 implemented, §3 pending maintainer setup.",
+      "rationale": "Stale header is misleading but contradicted by visible checked tasks, low blast radius.",
+      "status": "new"
+    },
+    {
+      "rank": 44,
+      "dimension": "openspec",
+      "title": "github-repo-and-ci tasks §2.2: agreed fan-out deviation not in design.md",
+      "severity": "low",
+      "location": "openspec/changes/github-repo-and-ci/design.md (no mention of fan-out); tasks.md §2.2 note",
+      "action": "Add a design decision (e.g. D6) in github-repo-and-ci/design.md recording the fan-out restructure and noting D3's pnpm -r verify is no longer accurate.",
+      "rationale": "Policy requires agreed deviations reach design.md, but the tasks note already records it so the gap is documentation-completeness only.",
+      "status": "new"
+    },
+    {
+      "rank": 45,
+      "dimension": "visual",
+      "title": "ResultRow.svelte and overlay.css hard-code row-gap: 2px for Comfort-density layout",
+      "severity": "low",
+      "location": "apps/extension/src/ui/ResultRow.svelte:140, apps/extension/src/launcher/overlay.css:312",
+      "action": "Replace row-gap: 2px with row-gap: var(--row-gap) in ResultRow.svelte:140 and overlay.css:312 so the comfort two-line layout is density-aware.",
+      "rationale": "Comfort layout uses the wrong gap literal, a minor density-fidelity slip.",
+      "status": "new"
+    },
+    {
+      "rank": 46,
+      "dimension": "visual",
+      "title": "FaviconTile.svelte drift-in (150ms) and favoriting (320ms) animations bypass motion tokens",
+      "severity": "low",
+      "location": "apps/extension/src/ui/FaviconTile.svelte:220,274",
+      "action": "Replace 320ms with var(--motion-slow) in favicon-tile-favoriting and align 150ms drift-in to var(--motion-fast) (or add --motion-subtle).",
+      "rationale": "Motion literals where 320ms exactly matches an existing token, easy token alignment with minor visual stakes.",
+      "status": "new"
+    },
+    {
+      "rank": 47,
+      "dimension": "visual",
+      "title": "SpaceEditor.svelte re-derives accent from raw oklch instead of canonical token formula",
+      "severity": "low",
+      "location": "apps/extension/src/sidebar/SpaceEditor.svelte:500,520-523",
+      "action": "Define light-theme accent tokens in tokens.css under a [data-theme='light'] scope and reference them in SpaceEditor.svelte instead of re-authoring the oklch formula inline.",
+      "rationale": "Light-theme accent literals won't track tokens.css formula changes, a localized drift risk.",
+      "status": "new"
+    },
+    {
+      "rank": 48,
+      "dimension": "visual",
+      "title": "overlay.css .enable-source transition uses hard-coded 120ms ease instead of motion tokens",
+      "severity": "low",
+      "location": "apps/extension/src/launcher/overlay.css:465-467",
+      "action": "Add --motion-fast and --ease-standard to overlay.css's local token block and use them in the .enable-source transition instead of 120ms ease.",
+      "rationale": "Single transition off the motion-token system, very low impact.",
+      "status": "new"
+    },
+    {
+      "rank": 49,
+      "dimension": "visual",
+      "title": "SpaceEditor.svelte field-label uses hard-coded font: 500 11px instead of type-scale tokens",
+      "severity": "low",
+      "location": "apps/extension/src/sidebar/SpaceEditor.svelte:539",
+      "action": "Replace font: 500 11px/1.2 in SpaceEditor.svelte:539 with font-size: var(--text-xs) and font-weight: var(--weight-medium).",
+      "rationale": "One label rule duplicating type tokens, trivial drift.",
+      "status": "new"
+    },
+    {
+      "rank": 50,
+      "dimension": "visual",
+      "title": "newtab.css stagger delays are hard-coded ms values with no token",
+      "severity": "low",
+      "location": "apps/extension/src/launcher/newtab/newtab.css:164,260,280,294",
+      "action": "Add scoped --stagger-1..4 custom properties on .home in newtab.css with a comment documenting the rhythm and reference them in the animation-delay rules.",
+      "rationale": "Intentional stagger offsets that are merely undocumented/fragile, not wrong.",
+      "status": "new"
+    },
+    {
+      "rank": 51,
+      "dimension": "visual",
+      "title": "sidebar/app.css uses #000 in mask-image gradient (semantically correct)",
+      "severity": "low",
+      "location": "apps/extension/src/sidebar/app.css:162-163",
+      "action": "Add an inline comment (/* mask channel: fully opaque */) on app.css:162-163 documenting why #000 is exempt from the token rule.",
+      "rationale": "No functional issue, purely a future-linter/reviewer clarity note — lowest visual priority.",
+      "status": "new"
+    },
+    {
+      "rank": 52,
+      "dimension": "architecture",
+      "title": "No architecture integrity violations found",
+      "severity": "low",
+      "location": "apps/extension/src/ (all layers)",
+      "action": "No code change required; optionally add a doc note in docs/architecture.md mentioning overlay.ts's sanctioned ui/favicon.ts import for consistency.",
+      "rationale": "Clean audit with zero violations across 338 files; only an optional documentation-consistency note remains.",
+      "status": "new"
+    }
+  ]
+}
