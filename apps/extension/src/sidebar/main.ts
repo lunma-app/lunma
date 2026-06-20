@@ -124,11 +124,10 @@ async function boot(): Promise<void> {
   // re-deriving every panel's tab list synchronously mid-momentum freezes the thread, the
   // wheel stream reads the freeze as a gap, and the gap re-arm commits a SECOND Space.
   // Buffering the heavy fields until the gesture ends keeps that render out of the window.
-  const sink = store.state as unknown as Record<string, unknown>;
   const broadcastApply = createBroadcastApply({
     getField: (key) => store.state[key],
     setField: (key, value) => {
-      sink[key] = value;
+      Object.assign(store.state, { [key]: value });
     },
     isLive: isSwipeLive,
     scheduleFlush: (fn) => {

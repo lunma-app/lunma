@@ -172,7 +172,7 @@ function projectTab(id: SavedTabId): TabView | null {
 /** Per-window, ephemeral folder expand state (design D2) — augmented onto the
  * store by `setFolderExpanded`, never part of `AppState`. Read reactively. */
 function isExpanded(folderId: FolderId): boolean {
-  const augmented = store.state as unknown as SidebarLocalState;
+  const augmented = store.state as SidebarLocalState;
   return augmented.expandedFoldersByWindow?.[windowId]?.[folderId] ?? false;
 }
 
@@ -569,7 +569,7 @@ $effect(() => {
   // flag is gated on `active` so only the centre carousel slide reacts to and
   // consumes it (off-screen slides share the store but must never steal the
   // rename).
-  const augmented = store.state as unknown as SidebarLocalState;
+  const augmented = store.state as SidebarLocalState;
   const armedFromFold = active && (augmented.autoRenameNextFolderByWindow?.[windowId] ?? false);
   if (pendingCreate || armedFromFold) {
     const fresh = [...ids].find((id) => !knownFolderIds.has(id));

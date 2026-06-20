@@ -1175,11 +1175,13 @@ export class LunmaStore {
    * Sidebar-local mutator (see D5). The SW never calls this; the field
    * `pinnedExpandedByWindow` is augmented onto `state` by the sidebar's
    * `createSidebarStore` and is NOT part of `AppState`. We mutate through
-   * a structural cast so the LunmaStore class can carry the method without
-   * polluting `AppState` with sidebar-only fields.
+   * a structural cast (safe: all `SidebarLocalState` fields are optional, so
+   * TypeScript permits the cast without an `unknown` bridge) so the LunmaStore
+   * class can carry the method without polluting `AppState` with sidebar-only
+   * fields.
    */
   setPinnedExpanded(windowId: WindowId, expanded: boolean): void {
-    const augmented = this.state as unknown as SidebarLocalState;
+    const augmented = this.state as SidebarLocalState;
     if (!augmented.pinnedExpandedByWindow) augmented.pinnedExpandedByWindow = {};
     augmented.pinnedExpandedByWindow[windowId] = expanded;
   }
@@ -1192,7 +1194,7 @@ export class LunmaStore {
    * folder can be open in one window and collapsed in another.
    */
   setFolderExpanded(windowId: WindowId, folderId: FolderId, expanded: boolean): void {
-    const augmented = this.state as unknown as SidebarLocalState;
+    const augmented = this.state as SidebarLocalState;
     if (!augmented.expandedFoldersByWindow) augmented.expandedFoldersByWindow = {};
     if (!augmented.expandedFoldersByWindow[windowId]) {
       augmented.expandedFoldersByWindow[windowId] = {};
@@ -1214,7 +1216,7 @@ export class LunmaStore {
    * its own flag, and the broadcast carries only `AppState`).
    */
   setAutoRenameNextFolder(windowId: WindowId, armed: boolean): void {
-    const augmented = this.state as unknown as SidebarLocalState;
+    const augmented = this.state as SidebarLocalState;
     if (!augmented.autoRenameNextFolderByWindow) augmented.autoRenameNextFolderByWindow = {};
     augmented.autoRenameNextFolderByWindow[windowId] = armed;
   }
