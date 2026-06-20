@@ -81,7 +81,7 @@ const {
     flex: 0 0 auto;
     width: 14px;
     height: 14px;
-    border-radius: 3px;
+    border-radius: var(--r-2xs);
     object-fit: contain;
   }
 

@@ -1069,7 +1069,7 @@ function tabMenuItems(row: TabView): MenuItem[] {
     left: calc(var(--list-pad) + 2px);
     right: calc(var(--list-pad) + 2px);
     height: 0;
-    z-index: 2;
+    z-index: var(--z-raised);
     pointer-events: none;
   }
   .drop-line::before {

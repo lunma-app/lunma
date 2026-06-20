@@ -468,7 +468,7 @@ function submit(): void {
     /* Bottom edge pinned to the switcher's top edge (1px overlap), so the panel
      * grows UPWARD out of the switcher and the sidebar height never changes. */
     bottom: calc(100% - 1px);
-    z-index: 60;
+    z-index: var(--z-dropdown);
     pointer-events: none;
   }
   .morph.revealed {
@@ -536,7 +536,10 @@ function submit(): void {
     gap: var(--space-1);
   }
   .field-label {
-    font: 500 11px/1.2 var(--font-sans);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-medium);
+    line-height: 1.2;
+    font-family: var(--font-sans);
     color: var(--text-muted);
   }
 

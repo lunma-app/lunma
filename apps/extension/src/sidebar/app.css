@@ -159,6 +159,7 @@ body,
   inset: 0;
   z-index: var(--z-base);
   pointer-events: none;
+  /* #000 is the mask channel value (fully opaque) — correct here; exempt from the token rule. */
   -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 28%, transparent 72%);
   mask-image: linear-gradient(to bottom, #000 0%, #000 28%, transparent 72%);
 }

@@ -668,7 +668,7 @@ function onTileContextMenu(e: MouseEvent, fav: FavView): void {
   .drop-line-x {
     position: absolute;
     width: 0;
-    z-index: 2;
+    z-index: var(--z-raised);
     pointer-events: none;
   }
   .drop-line-x::before {

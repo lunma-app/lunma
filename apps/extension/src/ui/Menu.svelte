@@ -209,7 +209,7 @@ function onKeydown(event: KeyboardEvent): void {
     margin: 0;
     width: 100%;
     box-sizing: border-box;
-    height: 34px;
+    height: var(--row-h);
     padding: 0 var(--space-2);
     display: flex;
     align-items: center;

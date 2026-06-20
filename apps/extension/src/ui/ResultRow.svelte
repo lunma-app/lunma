@@ -137,7 +137,7 @@ const {
       'favicon url   url';
     height: auto;
     padding: var(--space-2) var(--space-3);
-    row-gap: 2px;
+    row-gap: var(--row-gap);
   }
 
   /* Leading accent marker for the roving selection — floats inside the pill. */

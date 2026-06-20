@@ -1,6 +1,5 @@
-> Status: **authored, not yet implemented.** All tasks pending `/opsx:apply`.
-> The workflow step (§1) + docs (§2) are implementable now; *arming* it (§3) waits
-> on the maintainer's one-time Chrome Web Store + OAuth setup (design D4).
+> Status: **§1 and §2 implemented.** §3 is pending maintainer-owned one-time
+> Chrome Web Store + OAuth setup (design D4); inert until secrets are set.
 
 ## 1. CWS upload + publish step
 

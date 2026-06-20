@@ -63,7 +63,7 @@ import { drag } from './drag.svelte';
 <style>
   .drag-clone {
     position: fixed;
-    z-index: 9999;
+    z-index: var(--z-overlay);
     pointer-events: none;
     box-shadow: var(--shadow-pop);
     opacity: 0.92;
@@ -122,7 +122,7 @@ import { drag } from './drag.svelte';
   .fav-img {
     width: var(--favicon-size);
     height: var(--favicon-size);
-    border-radius: 3px;
+    border-radius: var(--r-2xs);
     object-fit: contain;
   }
 

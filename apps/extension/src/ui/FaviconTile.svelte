@@ -217,7 +217,7 @@ const returnable = $derived(isDrift && !!homeHost);
     border-radius: var(--r-pill);
     background: var(--space-c);
     box-shadow: 0 0 0 1.5px var(--bg);
-    animation: favicon-tile-drift-in 150ms var(--ease-standard);
+    animation: favicon-tile-drift-in var(--motion-subtle) var(--ease-standard);
   }
 
   @keyframes favicon-tile-drift-in {
@@ -271,7 +271,7 @@ const returnable = $derived(isDrift && !!homeHost);
   /* Favoriting entrance — a one-shot pop when a tile just became a favorite: scales
    * up from 0.4 and settles. */
   .favicon-tile.favoriting {
-    animation: favicon-tile-favoriting 320ms var(--ease-emphasised);
+    animation: favicon-tile-favoriting var(--motion-slow) var(--ease-emphasised);
   }
 
   @keyframes favicon-tile-favoriting {

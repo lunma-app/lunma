@@ -396,7 +396,7 @@ function openOptions(): void {
     top: var(--space-2);
     bottom: var(--space-2);
     width: 0;
-    z-index: 2;
+    z-index: var(--z-raised);
     pointer-events: none;
   }
   .drop-line-x::before {

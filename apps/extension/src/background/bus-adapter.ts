@@ -14,12 +14,26 @@ import { type Coordinator, defaultEmitAck, type PendingEvent } from './coordinat
 
 type SidebarPendingEvent = Extract<PendingEvent, { source: 'sidebar' }>;
 
+// `toPendingEvent` maps a validated `SidebarCommand` to the coordinator's
+// `SidebarPendingEvent`. TypeScript cannot verify the `{ kind, payload }` pair is
+// a valid discriminated-union member from spreads alone (the correlation is lost
+// when `cmd.kind` and `cmd.payload` are accessed separately), so a cast is
+// unavoidable. The compile-time `satisfies` below narrows it to a deliberate,
+// field-by-field shape check rather than a broad blind cast: all four required
+// fields must be structurally present and correctly typed. The payload shape is
+// guaranteed correct because `parsed.data` (the call site) passed
+// `SidebarCommandSchema.safeParse` — the per-kind Zod schema — before reaching here.
 function toPendingEvent(cmd: SidebarCommand, correlationId: string): SidebarPendingEvent {
   return {
     source: 'sidebar',
     kind: cmd.kind,
     payload: cmd.payload,
     correlationId,
+  } satisfies {
+    source: 'sidebar';
+    kind: SidebarCommand['kind'];
+    payload: SidebarCommand['payload'];
+    correlationId: string;
   } as SidebarPendingEvent;
 }
 
@@ -74,9 +88,12 @@ export function installBusAdapter(
       return;
     }
 
-    // `parsed.data` is the validated command; its inferred type differs from
-    // `SidebarCommand` only in Zod's `| undefined` on optional fields, so cast to
-    // the canonical contract type for the coordinator event.
+    // `parsed.data` is the validated command. Its inferred type differs from
+    // `SidebarCommand` only because Zod's `.optional()` adds `| undefined` to
+    // optional fields while the hand-written union uses `exactOptionalPropertyTypes`
+    // semantics (the field is absent, not `undefined`). The cast is harmless: the
+    // field values themselves are identical at runtime, and `toPendingEvent` now
+    // forwards `cmd.payload` without a further cast.
     const event = toPendingEvent(parsed.data as SidebarCommand, id);
     void whenReady.then(() => coordinator.enqueue(event));
   };

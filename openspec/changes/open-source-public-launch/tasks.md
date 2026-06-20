@@ -19,7 +19,7 @@
 - [x] 1.5 `README.md` "License" section: state contributions are accepted under
   Apache-2.0 with a DCO `Signed-off-by` (not a CLA).
 - [x] 1.6 `.github/pull_request_template.md`: add a DCO sign-off reminder/checkbox.
-- [ ] 1.7 Land §1 on a branch; PR green on `verify` + `e2e` + `dco`; merge to `main`.
+- [x] 1.7 Land §1 on a branch; PR green on `verify` + `e2e` + `dco`; merge to `main`. _(Done: commit 3eddb29.)_
 
 ## 2. Pre-flip readiness audit (design D5)
 
@@ -52,7 +52,7 @@
 ## 4. Branch protection — closes `github-repo-and-ci` §5.4/§6.4 (design D3)
 
 - [ ] 4.1 Apply classic `main` protection via `gh api PUT …/branches/main/protection`:
-  required checks `verify` + `e2e` + `dco` (strict); `required_pull_request_reviews`
+  required checks `verify` + `e2e` + `dco` + `identity` (strict); `required_pull_request_reviews`
   with `require_code_owner_reviews` + 1 approval + `dismiss_stale_reviews`;
   `required_linear_history`; `allow_force_pushes`/`allow_deletions` false;
   `enforce_admins: false` (solo-maintainer bypass — design D3).

@@ -40,6 +40,11 @@ body,
     oklch(clamp(0, calc(var(--space-l) + 0.1), 1) var(--space-chroma) var(--space-h) / 0.35);
   --glow-space-soft: 0 8px 40px
     oklch(clamp(0, calc(var(--space-l) + 0.1), 1) var(--space-chroma) var(--space-h) / 0.22);
+  /* Stagger rhythm for the kindle entrance sequence (design D3). */
+  --stagger-1: 80ms;
+  --stagger-2: 160ms;
+  --stagger-3: 240ms;
+  --stagger-4: 440ms;
 
   box-sizing: border-box;
   position: relative;
@@ -161,7 +166,7 @@ body,
    * then search (+160ms) and favorites (+240ms) — the whole sequence within the
    * slow band. A 4px rise (transform/opacity only). */
   animation: rise var(--motion-slow) var(--ease-emphasised) both;
-  animation-delay: 80ms;
+  animation-delay: var(--stagger-1);
 }
 
 /* Full identity + chip share one grid cell so the crossfade never reflows. */
@@ -257,7 +262,7 @@ body,
   grid-row: 2;
   width: min(560px, 86vw);
   animation: rise var(--motion-base) var(--ease-emphasised) both;
-  animation-delay: 160ms;
+  animation-delay: var(--stagger-2);
 }
 
 /* Global favorites (newtab-hearth) — a centred wrapping row of plated FaviconTiles
@@ -277,7 +282,7 @@ body,
   max-height: calc(var(--favicon-tile) * 2 + var(--space-2));
   overflow: hidden;
   animation: rise var(--motion-base) var(--ease-emphasised) both;
-  animation-delay: 240ms;
+  animation-delay: var(--stagger-3);
 }
 
 /* Below the input (bottom 1fr row): the Tab-to-search hint stacked over the
@@ -291,7 +296,7 @@ body,
   flex-direction: column;
   gap: var(--space-2);
   animation: rise var(--motion-base) var(--ease-emphasised) both;
-  animation-delay: 440ms;
+  animation-delay: var(--stagger-4);
 }
 
 /* Results — a glass <Surface> over the aurora, filling the bottom band width. */
@@ -323,7 +328,7 @@ body,
 .engine-hint-icon {
   width: 14px;
   height: 14px;
-  border-radius: 3px;
+  border-radius: var(--r-2xs);
   object-fit: contain;
 }
 .engine-hint-sep {

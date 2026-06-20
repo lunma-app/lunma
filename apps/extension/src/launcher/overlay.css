@@ -52,6 +52,7 @@
   --focus-width: 2px;
   --focus-offset: 2px;
 
+  --r-2xs: 3px;
   --r-md: 8px;
   --r-pill: 999px;
   --r-xl: 16px;
@@ -61,7 +62,9 @@
    * overrides below. Comfort is auto-height (the two-line layout). overlay.ts
    * sets `data-density` on the host so these rules apply across the shadow. */
   --row-h: 34px;
+  --motion-fast: 120ms;
   --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.3, 0.7, 0.4, 1);
   --ease-emphasised: cubic-bezier(0.16, 1, 0.3, 1);
   /* Brand fonts are registered on the host document's FontFace set by
    * overlay.ts (a content script can't use these via @font-face in the shadow
@@ -171,7 +174,7 @@
   flex: 0 0 auto;
   width: 14px;
   height: 14px;
-  border-radius: 3px;
+  border-radius: var(--r-2xs);
   object-fit: contain;
 }
 .chip-label {
@@ -240,7 +243,7 @@
 .hint-icon {
   width: 14px;
   height: 14px;
-  border-radius: 3px;
+  border-radius: var(--r-2xs);
   object-fit: contain;
 }
 
@@ -318,7 +321,7 @@
   align-self: center;
   width: 16px;
   height: 16px;
-  border-radius: 3px;
+  border-radius: var(--r-2xs);
   object-fit: contain;
 }
 /* The title cell stacks the title over the optional "already open" line — mirror
@@ -463,8 +466,8 @@
   font: 500 12px/1.2 var(--font-sans);
   cursor: pointer;
   transition:
-    background 120ms ease,
-    color 120ms ease;
+    background var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
 }
 .enable-source:hover {
   background: var(--surface-2);

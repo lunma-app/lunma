@@ -134,6 +134,7 @@
   --info: oklch(0.700 0.140 240);
 
   /* Radii. */
+  --r-2xs: 3px;
   --r-xs: 4px;
   --r-sm: 6px;
   --r-md: 8px;
@@ -157,6 +158,7 @@
 
   /* Motion. */
   --motion-fast: 120ms;
+  --motion-subtle: 150ms;
   --motion-base: 200ms;
   --motion-slow: 320ms;
   /* Space-switch carousel settle — a distinct, larger motion than a generic
