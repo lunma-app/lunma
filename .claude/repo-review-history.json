@@ -208,7 +208,7 @@
       "location": "openspec/changes/extension-store-publish/tasks.md §1.1 (line 9); .github/workflows/release-please.yml lines 49–93",
       "action": "Update tasks.md §1.1, design.md D2, and proposal.md line 21 to use steps.release.outputs['apps/extension--release_created'] matching the manifest-mode workflow.",
       "rationale": "A binding artifact name (per CLAUDE.md normative-names policy) disagrees with shipped code across three files — concrete spec/code drift on the release path.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 22,
@@ -218,7 +218,7 @@
       "location": "openspec/changes/open-source-public-launch/tasks.md §4.1 (line 55); .github/workflows/identity.yml; openspec/changes/extension-store-publish/proposal.md line 80",
       "action": "Add identity to the §4.1 required-check list (verify + e2e + dco + identity) and update design.md D6 and the open-source-governance spec to list identity explicitly.",
       "rationale": "Applying branch protection per the current §4.1 would leave the existing identity guard unenforced at the merge boundary — a real governance gap if executed as written.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 23,
@@ -228,7 +228,7 @@
       "location": "openspec/changes/github-repo-and-ci/specs/release-engineering/spec.md lines 5–25; .github/workflows/ci.yml; tasks.md §2.2 note",
       "action": "Rewrite the spec delta's requirement and Pull-request scenario in specs/release-engineering/spec.md to describe the parallel matrix + site + no-op aggregator structure instead of pnpm -r verify.",
       "rationale": "On archive this delta becomes the living spec, enshrining an implementation detail that never shipped — must be fixed before archiving.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 24,
@@ -238,7 +238,7 @@
       "location": "openspec/changes/open-source-public-launch/tasks.md §1.7 (line 22)",
       "action": "Mark §1.7 [x] in tasks.md with a note referencing commit 3eddb29 (DCO governance landed).",
       "rationale": "Checkbox drift on a completed task, smaller blast radius than the spec/required-check drifts above but still a docs/code lockstep violation.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 25,
@@ -248,7 +248,7 @@
       "location": "apps/extension/src/ui/RowMenu.svelte:457,561, apps/extension/src/ui/Menu.svelte:212, apps/extension/src/ui/ContextMenu.svelte:293,380",
       "action": "Replace height: 34px with height: var(--row-h) in RowMenu.svelte, Menu.svelte, and ContextMenu.svelte so menu rows become density-aware.",
       "rationale": "Highest-impact visual finding: menu rows are frozen at Normal density and ignore Compact/Comfort, a functional accessibility/density regression in shared ui primitives.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 26,
@@ -258,7 +258,7 @@
       "location": "apps/extension/src/sidebar/DragClone.svelte:66, apps/extension/src/sidebar/SpaceEditor.svelte:471, apps/extension/src/sidebar/SpaceSwitcher.svelte:399, apps/extension/src/sidebar/TempTabs.svelte:479, apps/extension/src/sidebar/FaviconRow.svelte:671, apps/extension/src/sidebar/PinnedTabs.svelte:1072",
       "action": "Replace z-index: 9999 with var(--z-overlay) in DragClone.svelte and all z-index: 2 drop-lines with var(--z-raised); resolve SpaceEditor's 60 against a token (or add --z-popover).",
       "rationale": "Raw z-indices across six files risk stacking-context bugs and bypass the token scale that governs surface layering.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 27,
@@ -278,7 +278,7 @@
       "location": "apps/extension/src/sidebar/DragClone.svelte:125, apps/extension/src/ui/Chip.svelte:84, apps/extension/src/launcher/overlay.css:174,243,321, apps/extension/src/launcher/newtab/newtab.css:326",
       "action": "Add a --r-2xs: 3px token (or adopt --r-xs) and replace every border-radius: 3px favicon site with the token variable.",
       "rationale": "Sub-token literal across six sites won't track radius-scale changes — broad but low-risk token-contract drift.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 29,
@@ -378,7 +378,7 @@
       "location": "apps/extension biome.json:179-224",
       "action": "Consolidate the two background/** override entries in biome.json into one using includes exclusions and remove the redundant !**/handlers patterns.",
       "rationale": "Config-auditability cleanup with no current functional gap, lowest type-safety priority.",
-      "status": "new"
+      "status": "skipped"
     },
     {
       "rank": 39,
@@ -428,7 +428,7 @@
       "location": "openspec/changes/extension-store-publish/tasks.md (header block, lines 1–4)",
       "action": "Replace the stale 'not yet implemented' header in tasks.md with current status: §1 and §2 implemented, §3 pending maintainer setup.",
       "rationale": "Stale header is misleading but contradicted by visible checked tasks, low blast radius.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 44,
@@ -438,7 +438,7 @@
       "location": "openspec/changes/github-repo-and-ci/design.md (no mention of fan-out); tasks.md §2.2 note",
       "action": "Add a design decision (e.g. D6) in github-repo-and-ci/design.md recording the fan-out restructure and noting D3's pnpm -r verify is no longer accurate.",
       "rationale": "Policy requires agreed deviations reach design.md, but the tasks note already records it so the gap is documentation-completeness only.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 45,
@@ -448,7 +448,7 @@
       "location": "apps/extension/src/ui/ResultRow.svelte:140, apps/extension/src/launcher/overlay.css:312",
       "action": "Replace row-gap: 2px with row-gap: var(--row-gap) in ResultRow.svelte:140 and overlay.css:312 so the comfort two-line layout is density-aware.",
       "rationale": "Comfort layout uses the wrong gap literal, a minor density-fidelity slip.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 46,
@@ -458,7 +458,7 @@
       "location": "apps/extension/src/ui/FaviconTile.svelte:220,274",
       "action": "Replace 320ms with var(--motion-slow) in favicon-tile-favoriting and align 150ms drift-in to var(--motion-fast) (or add --motion-subtle).",
       "rationale": "Motion literals where 320ms exactly matches an existing token, easy token alignment with minor visual stakes.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 47,
@@ -478,7 +478,7 @@
       "location": "apps/extension/src/launcher/overlay.css:465-467",
       "action": "Add --motion-fast and --ease-standard to overlay.css's local token block and use them in the .enable-source transition instead of 120ms ease.",
       "rationale": "Single transition off the motion-token system, very low impact.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 49,
@@ -488,7 +488,7 @@
       "location": "apps/extension/src/sidebar/SpaceEditor.svelte:539",
       "action": "Replace font: 500 11px/1.2 in SpaceEditor.svelte:539 with font-size: var(--text-xs) and font-weight: var(--weight-medium).",
       "rationale": "One label rule duplicating type tokens, trivial drift.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 50,
@@ -498,7 +498,7 @@
       "location": "apps/extension/src/launcher/newtab/newtab.css:164,260,280,294",
       "action": "Add scoped --stagger-1..4 custom properties on .home in newtab.css with a comment documenting the rhythm and reference them in the animation-delay rules.",
       "rationale": "Intentional stagger offsets that are merely undocumented/fragile, not wrong.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 51,
@@ -508,7 +508,7 @@
       "location": "apps/extension/src/sidebar/app.css:162-163",
       "action": "Add an inline comment (/* mask channel: fully opaque */) on app.css:162-163 documenting why #000 is exempt from the token rule.",
       "rationale": "No functional issue, purely a future-linter/reviewer clarity note — lowest visual priority.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 52,
@@ -518,7 +518,7 @@
       "location": "apps/extension/src/ (all layers)",
       "action": "No code change required; optionally add a doc note in docs/architecture.md mentioning overlay.ts's sanctioned ui/favicon.ts import for consistency.",
       "rationale": "Clean audit with zero violations across 338 files; only an optional documentation-consistency note remains.",
-      "status": "new"
+      "status": "resolved"
     }
   ]
 }
