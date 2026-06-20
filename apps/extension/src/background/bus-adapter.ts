@@ -60,6 +60,9 @@ export function installBusAdapter(
   const listener = (raw: unknown, sender: chrome.runtime.MessageSender): void => {
     if (sender.id !== chrome.runtime.id) return;
     if (!raw || typeof raw !== 'object') return;
+    // Partial so every property is optional — safe narrowing from `unknown`
+    // before field-by-field validation; exactOptionalPropertyTypes makes the
+    // distinction meaningful (missing key ≠ key: undefined).
     const m = raw as Partial<CommandMessage>;
     if (m.type !== 'lunma/command') return;
 

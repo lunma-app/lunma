@@ -174,18 +174,33 @@ export function smartFolderHandlers(
         }
         return;
       }
-      // Open-if-dormant: resolve the item from the SW's own runtime slice —
-      // never a URL on the wire (the openUrl scheme-hardening questions don't
-      // arise; the attack surface is a lookup key).
+      // Open-if-dormant: resolve the item from the SW's own runtime slice.
+      // The itemId lookup key is safe, but item.url is RSS-feed-controlled data
+      // and could carry a non-http(s) scheme — validate it before tabs.create.
       const item = ctx.store.state.smartFolders[folderId]?.items.find((i) => i.id === itemId);
       if (!item) {
         throw new Error(
           `openSmartItem: item '${itemId}' is neither bound nor listed in folder '${folderId}'`,
         );
       }
+      // Scheme guard: mirrors openUrl / openSmartFolderListing.
+      let itemScheme: string;
+      try {
+        itemScheme = new URL(item.url).protocol;
+      } catch {
+        log.warn('openSmartItem: unparseable item URL, dropping', { itemId, folderId });
+        return;
+      }
+      if (itemScheme !== 'http:' && itemScheme !== 'https:') {
+        log.warn('openSmartItem: blocked non-http(s) item URL', {
+          itemId,
+          folderId,
+          scheme: itemScheme,
+        });
+        return;
+      }
       // Compute the allow-glob for boundary enforcement (smart-tab-boundary, D2):
       // origin + pathname + '*' so every sub-path of the item stays in-tab.
-      // Non-http(s) or unparseable URLs get '' which degrades to no-boundary.
       const allowGlob = pageGlob(item.url) ?? '';
       const tab = await chrome.tabs.create({ url: item.url, windowId });
       if (tab.id === undefined) {

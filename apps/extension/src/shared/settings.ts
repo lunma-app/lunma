@@ -294,7 +294,7 @@ export const TOGGLE_SEGMENTS: { value: string; label: string }[] = [
 /** `DEFAULTS` is built from the declared `default` of each setting. */
 export const DEFAULTS: Settings = Object.fromEntries(
   SETTINGS.map((decl) => [decl.key, decl.default]),
-) as unknown as Settings;
+) satisfies Partial<Settings> as unknown as Settings;
 
 /** The Zod schema is built from the declarations, dispatching on `type`:
  * `enum → z.enum(values).catch(default)`, `text → z.string().catch(default)`,
@@ -322,6 +322,7 @@ function buildSchema(): z.ZodType<Settings> {
       shape[decl.key] = z.string().catch(decl.default);
     }
   }
+  // Cast is safe: AssertEqual below verifies z.infer<SettingsSchema> === Settings at compile time.
   return z.object(shape) as unknown as z.ZodType<Settings>;
 }
 

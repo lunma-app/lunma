@@ -650,17 +650,8 @@ describe('openSmartItem handler', () => {
     );
   });
 
-  test('pageGlob returning null (non-http item URL) stores allowGlob="" and does not crash', async () => {
+  test('non-http(s) item URL is dropped — no tab opened, no binding created', async () => {
     const stub = installActivationChrome();
-    // Override the create stub to return a non-http URL tab.
-    stub.tabs.create.mockResolvedValueOnce({
-      id: 888,
-      windowId: 100,
-      active: true,
-      title: 'Chrome Settings',
-      url: 'chrome://settings/',
-      status: 'complete',
-    } as chrome.tabs.Tab);
     const { coordinator, store, emitAck } = makeWithSpace();
     seedWindowInstance(store);
     store.state.pinnedBySpace.work = [smartNode()];
@@ -681,11 +672,9 @@ describe('openSmartItem handler', () => {
     );
     await coordinator.idle();
 
-    // allowGlob is '' (pageGlob returns null for chrome:// URLs), so no boundary script.
-    expect(store.state.smartItemBindings).toEqual({
-      'sf-1': { '99': { 100: { tabId: 888, allowGlob: '' } } },
-    });
-    expect(stub.scripting.executeScript).not.toHaveBeenCalled();
+    // Scheme guard drops the item before tabs.create — no binding, no tab.
+    expect(stub.tabs.create).not.toHaveBeenCalled();
+    expect(store.state.smartItemBindings).toEqual({});
     expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'c1', result: 'ok' });
   });
 });
