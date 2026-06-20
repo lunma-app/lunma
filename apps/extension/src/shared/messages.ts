@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type {
   LauncherResult,
   OptionalResultSource,
@@ -334,6 +335,24 @@ export function sendBoundaryConfig(tabId: number, allow: string[] | null): void 
   }
 }
 
+const LauncherResultSchema = z.object({
+  id: z.string(),
+  source: z.enum(['tab', 'saved', 'smart', 'bookmark', 'history', 'websearch', 'navigate']),
+  title: z.string(),
+  url: z.string(),
+  score: z.number(),
+  tabId: z.number().optional(),
+  savedTabId: z.string().optional(),
+  windowId: z.number().optional(),
+  lastVisitTime: z.number().optional(),
+  folderName: z.string().optional(),
+  spaceId: z.string().optional(),
+  spaceName: z.string().optional(),
+  spaceColor: z.string().optional(),
+});
+
+const OptionalResultSourceSchema = z.enum(['history', 'bookmarks']);
+
 /**
  * Surface-side: ask the SW for launcher suggestions for `query` in `windowId`.
  * Allocates a fresh `requestId`, sends the request, and resolves with the
@@ -366,11 +385,25 @@ export async function requestLauncherSuggestions(
   if (msg.type !== 'lunma/launcher-suggestions-response' || !Array.isArray(msg.results)) {
     throw new Error('requestLauncherSuggestions: malformed response');
   }
+  const resultsParseResult = LauncherResultSchema.array().safeParse(msg.results);
+  const results: LauncherResult[] = resultsParseResult.success
+    ? (resultsParseResult.data as LauncherResult[])
+    : (msg.results as unknown[]).filter(
+        (item): item is LauncherResult => LauncherResultSchema.safeParse(item).success,
+      );
+  const openUrlsParseResult = Array.isArray(msg.openUrls)
+    ? z.string().array().safeParse(msg.openUrls)
+    : null;
+  const ungrantedSourcesParseResult = Array.isArray(msg.ungrantedSources)
+    ? OptionalResultSourceSchema.array().safeParse(msg.ungrantedSources)
+    : null;
   return {
     requestId: msg.requestId ?? requestId,
-    results: msg.results,
-    ...(Array.isArray(msg.openUrls) ? { openUrls: msg.openUrls } : {}),
-    ...(Array.isArray(msg.ungrantedSources) ? { ungrantedSources: msg.ungrantedSources } : {}),
+    results,
+    ...(openUrlsParseResult?.success ? { openUrls: openUrlsParseResult.data } : {}),
+    ...(ungrantedSourcesParseResult?.success
+      ? { ungrantedSources: ungrantedSourcesParseResult.data }
+      : {}),
   };
 }
 
