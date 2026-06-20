@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import { AppStateV6Schema, CURRENT_SCHEMA_VERSION, EnvelopeSchema } from './schemas';
+import {
+  AppStateV6Schema,
+  AppStateV7Schema,
+  CURRENT_SCHEMA_VERSION,
+  EnvelopeSchema,
+} from './schemas';
 import { createInitialState } from './store.svelte';
 
 // Validates the freshly-minted initial state against the persisted schema.
@@ -81,5 +86,32 @@ describe('saved-tab boundary', () => {
 
   test('rejects a locked boundary missing its allow list', () => {
     expect(EnvelopeSchema.safeParse(envelopeWithSavedTab({ mode: 'locked' })).success).toBe(false);
+  });
+});
+
+describe('AppStateV7Schema smartItemBindings slot shape', () => {
+  function stateWithBindings(bindings: unknown) {
+    const state = createInitialState() as unknown as Record<string, unknown>;
+    state.smartItemBindings = bindings;
+    return state;
+  }
+
+  test('valid { tabId, allowGlob } slot parses', () => {
+    const result = AppStateV7Schema.safeParse(
+      stateWithBindings({ folder1: { item1: { 1: { tabId: 42, allowGlob: 'example.com' } } } }),
+    );
+    expect(result.success).toBe(true);
+  });
+
+  test('bare-number slot rejects (v6 shape not accepted by v7)', () => {
+    const result = AppStateV7Schema.safeParse(stateWithBindings({ folder1: { item1: { 1: 42 } } }));
+    expect(result.success).toBe(false);
+  });
+
+  test('missing allowGlob rejects', () => {
+    const result = AppStateV7Schema.safeParse(
+      stateWithBindings({ folder1: { item1: { 1: { tabId: 42 } } } }),
+    );
+    expect(result.success).toBe(false);
   });
 });
