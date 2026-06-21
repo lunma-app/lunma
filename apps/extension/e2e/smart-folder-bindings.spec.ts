@@ -181,13 +181,14 @@ test('a smart-folder row activates like a pinned tab: open bound, re-click focus
   // --- first activation: a bound, NON-temporary tab opens ------------------
   await page.getByTestId('smart-result-row').first().click();
 
-  // The binding lands (ids only) under smartItemBindings[folderId]['42'][win].
+  // The binding key is namespaced: sourceKey:nativeId → gitlab:forge.e2e.test:42
+  const ITEM_KEY = 'gitlab:forge.e2e.test:42';
   await expect
     .poll(async () => Object.keys((await snapshot(page)).bindings[folderId] ?? {}))
-    .toEqual(['42']);
+    .toEqual([ITEM_KEY]);
   const opened = await snapshot(page);
   const win = await page.evaluate(async () => (await chrome.windows.getCurrent({})).id as number);
-  const boundTabId = opened.bindings[folderId]?.['42']?.[String(win)]?.tabId;
+  const boundTabId = opened.bindings[folderId]?.[ITEM_KEY]?.[String(win)]?.tabId;
   expect(boundTabId, 'item 42 is bound to a live tab in this window').toBeGreaterThan(0);
   // One new tab exists, and it is NOT in Temporary (the temp set is unchanged).
   expect(opened.tabCount).toBe(before.tabCount + 1);
@@ -205,7 +206,7 @@ test('a smart-folder row activates like a pinned tab: open bound, re-click focus
   await page.waitForTimeout(500);
   const reclicked = await snapshot(page);
   expect(reclicked.tabCount).toBe(opened.tabCount);
-  expect(reclicked.bindings[folderId]?.['42']?.[String(win)]?.tabId).toBe(boundTabId);
+  expect(reclicked.bindings[folderId]?.[ITEM_KEY]?.[String(win)]?.tabId).toBe(boundTabId);
 
   await page.bringToFront();
 
