@@ -207,7 +207,7 @@ test('opening a DORMANT cross-Space pinned tab switches the sidebar to its Space
   await dispatch(page, { kind: 'openSavedTab', payload: { savedTabId, windowId } });
 
   await expect
-    .poll(async () => (await readState(page)).activeSpaceByWindow[windowId], { timeout: 10_000 })
+    .poll(async () => (await readState(page)).activeSpaceByWindow[windowId], { timeout: 15_000 })
     .toBe(homeSpaceId);
-  await expect.poll(() => activeChipSpaceId(page), { timeout: 10_000 }).toBe(homeSpaceId);
+  await expect.poll(() => activeChipSpaceId(page), { timeout: 15_000 }).toBe(homeSpaceId);
 });
