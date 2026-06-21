@@ -251,11 +251,7 @@ export function onStateBroadcast(handler: (msg: StateBroadcastMessage) => void):
     const candidate = m as Record<string, unknown>;
     const stateResult = AppStateV7Schema.safeParse(candidate.state);
     if (!stateResult.success) return;
-    // Cast is safe: AppStateV7Schema structurally matches AppState; the only
-    // divergences are optional ephemeral slices (liveTabsById, smartFolders) that
-    // exactOptionalPropertyTypes cannot bridge without a cast, and the Zod/TS
-    // inference gap on favIconUrl (string | undefined vs string?).
-    const state = stateResult.data as unknown as AppState;
+    const state = stateResult.data;
     handler({ type: 'lunma/state-broadcast', method: String(candidate.method ?? ''), state });
   };
   chrome.runtime.onMessage.addListener(listener);
@@ -283,7 +279,14 @@ export async function requestStateSnapshot(): Promise<AppState> {
   if (msg.type !== 'lunma/state-snapshot' || !msg.state) {
     throw new Error('requestStateSnapshot: malformed response');
   }
-  return msg.state;
+  const parsed = AppStateV7Schema.safeParse(msg.state);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    throw new Error(
+      `requestStateSnapshot: invalid state payload: ${first?.message ?? parsed.error.message}`,
+    );
+  }
+  return parsed.data;
 }
 
 /**
@@ -504,6 +507,7 @@ export function respondWithCurrentWindow(
     sender: chrome.runtime.MessageSender,
     sendResponse: (response: CurrentWindowResultMessage) => void,
   ): boolean | undefined => {
+    if (sender.id !== chrome.runtime.id) return undefined;
     if (!raw || typeof raw !== 'object') return undefined;
     const m = raw as Partial<LunmaMessage>;
     if (m.type !== 'lunma/current-window') return undefined;

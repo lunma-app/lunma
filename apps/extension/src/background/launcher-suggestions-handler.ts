@@ -13,7 +13,7 @@ import { hasApiPermission } from '../shared/permissions';
 import { readSettings } from '../shared/settings';
 import { colourToOklch } from '../shared/space-hue';
 import type { LunmaStore } from '../shared/store.svelte';
-import type { Space, SpaceColor, SpaceId } from '../shared/types';
+import type { Space, SpaceId } from '../shared/types';
 
 /**
  * Tag each Space-placed result whose owning Space differs from the window's active
@@ -33,7 +33,7 @@ function markCrossSpace(
     if (r.spaceId === undefined || r.spaceId === activeSpaceId) continue;
     const space = spaces.find((s) => s.id === r.spaceId);
     if (!space) continue;
-    const { l, c, h } = colourToOklch(space.color as SpaceColor);
+    const { l, c, h } = colourToOklch(space.color);
     r.spaceName = space.name;
     r.spaceColor = `oklch(${l} ${c} ${h})`;
   }

@@ -3,7 +3,7 @@ import '../ui/drop-line.css';
 import { dispatch } from '../shared/bus';
 import { log } from '../shared/logger';
 import { colourToOklch, colourToOn } from '../shared/space-hue';
-import type { Space, SpaceColor, WindowId } from '../shared/types';
+import type { Space, WindowId } from '../shared/types';
 import Icon from '../ui/Icon.svelte';
 import IconButton from '../ui/IconButton.svelte';
 import Surface from '../ui/Surface.svelte';
@@ -109,7 +109,7 @@ function lineLeft(index: number): number {
 
 function onChipPointerDown(event: PointerEvent, space: Space): void {
   const el = event.currentTarget as HTMLElement;
-  const ok = colourToOklch(space.color as SpaceColor);
+  const ok = colourToOklch(space.color);
   drag.press(
     {
       id: space.id,
@@ -121,7 +121,7 @@ function onChipPointerDown(event: PointerEvent, space: Space): void {
         hue: ok.h,
         chroma: ok.c,
         l: ok.l,
-        on: colourToOn(space.color as SpaceColor),
+        on: colourToOn(space.color),
       },
     },
     event,
@@ -175,7 +175,7 @@ function openOptions(): void {
     <div class="drop-line-x" style:left={`${lineLeft(drag.state.targetIndex)}px`}></div>
   {/if}
   {#each spaces as space, i (space.id)}
-    {@const ok = colourToOklch(space.color as SpaceColor)}
+    {@const ok = colourToOklch(space.color)}
     {@const isActive = space.id === activeSpaceId}
     <Tooltip label={isActive ? `${space.name} · click to edit` : space.name}>
       {#snippet children(triggerProps)}
@@ -192,7 +192,7 @@ function openOptions(): void {
           style:--space-h={String(ok.h)}
           style:--space-chroma={String(ok.c)}
           style:--space-l={String(ok.l)}
-          style:--space-on={colourToOn(space.color as SpaceColor)}
+          style:--space-on={colourToOn(space.color)}
           bind:this={chipEls[i]}
           onpointerdown={(event) => onChipPointerDown(event, space)}
           onclick={(event) => onChipClick(event, space, isActive)}

@@ -226,7 +226,7 @@ export function salvagePersistedState(migrated: unknown): AppStateV7 | null {
 async function writeBackEnvelope(state: AppStateV7): Promise<void> {
   try {
     await chrome.storage.local.set({
-      [STATE_STORAGE_KEY]: { schemaVersion: CURRENT_SCHEMA_VERSION, state },
+      [STATE_STORAGE_KEY]: { schemaVersion: CURRENT_SCHEMA_VERSION, state: toPersistable(state) },
     });
   } catch (err) {
     log.error('write-back of loaded envelope failed', { err });

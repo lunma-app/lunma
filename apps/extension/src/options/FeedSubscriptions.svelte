@@ -37,7 +37,7 @@ onMount(async () => {
   const raw = (got[STATE_STORAGE_KEY] as Record<string, unknown> | undefined)?.state;
   const stateResult = AppStateV7Schema.safeParse(raw);
   if (!stateResult.success) return;
-  rssNodes = collectRssNodes(stateResult.data as unknown as AppState);
+  rssNodes = collectRssNodes(stateResult.data);
 });
 
 function collectRssNodes(state: AppState): SmartFolderNode[] {
@@ -84,7 +84,7 @@ async function onFileChange(e: Event): Promise<void> {
   const got = await chrome.storage.local.get(STATE_STORAGE_KEY);
   const raw = (got[STATE_STORAGE_KEY] as Record<string, unknown> | undefined)?.state;
   const stateResult = AppStateV7Schema.safeParse(raw);
-  const spaces = stateResult.success ? (stateResult.data as unknown as AppState).spaces : [];
+  const spaces = stateResult.success ? stateResult.data.spaces : [];
 
   parsedFeeds = feeds;
   spaceOptions = spaces.map((s) => ({ value: s.id, label: s.name }));
@@ -111,7 +111,7 @@ async function confirmImport(): Promise<void> {
     const got = await chrome.storage.local.get(STATE_STORAGE_KEY);
     const raw = (got[STATE_STORAGE_KEY] as Record<string, unknown> | undefined)?.state;
     const stateResult = AppStateV7Schema.safeParse(raw);
-    if (stateResult.success) rssNodes = collectRssNodes(stateResult.data as unknown as AppState);
+    if (stateResult.success) rssNodes = collectRssNodes(stateResult.data);
     toast = { message: `${feeds.length} feeds imported` };
   } catch (err) {
     log.error('FeedSubscriptions: import failed', { err });

@@ -7,6 +7,7 @@ import {
   persist,
   readPersistedState,
   salvagePersistedState,
+  toPersistable,
 } from './storage';
 
 /** A full, structurally-valid persisted state object — callers corrupt one slice
@@ -329,8 +330,9 @@ describe('readPersistedState', () => {
     chromeMock.set.mockClear();
     const result = await readPersistedState();
     expect(result.kind).toBe('ok');
+    // Written envelope strips ephemeral fields via toPersistable.
     expect(chromeMock.set).toHaveBeenCalledWith({
-      'lunma.state': { schemaVersion: CURRENT_SCHEMA_VERSION, state },
+      'lunma.state': { schemaVersion: CURRENT_SCHEMA_VERSION, state: toPersistable(state) },
     });
   });
 
@@ -373,8 +375,15 @@ describe('readPersistedState', () => {
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
     // Lossless: the pass-throughs change no content; the absent
-    // `smartItemBindings` / `smartReadState` parse to their `{}` defaults.
-    expect(result.state).toEqual({ ...persistable, smartItemBindings: {}, smartReadState: {} });
+    // `smartItemBindings` / `smartReadState` / `liveTabsById` / `smartFolders`
+    // parse to their `{}` defaults.
+    expect(result.state).toEqual({
+      ...persistable,
+      smartItemBindings: {},
+      smartReadState: {},
+      liveTabsById: {},
+      smartFolders: {},
+    });
     // The envelope is written back at the current (v7) version.
     expect(chromeMock.set).toHaveBeenCalledWith({
       'lunma.state': {
@@ -418,7 +427,14 @@ describe('readPersistedState', () => {
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
     // Lossless: the pass-throughs change no content — the smart node included.
-    expect(result.state).toEqual({ ...persistable, smartItemBindings: {} });
+    // `liveTabsById` / `smartFolders` are ephemeral: absent on disk, present as
+    // `{}` in the parsed in-memory state (Zod default).
+    expect(result.state).toEqual({
+      ...persistable,
+      smartItemBindings: {},
+      liveTabsById: {},
+      smartFolders: {},
+    });
     expect(chromeMock.set).toHaveBeenCalledWith({
       'lunma.state': { schemaVersion: 7, state: { ...persistable, smartItemBindings: {} } },
     });
@@ -455,7 +471,12 @@ describe('readPersistedState', () => {
 
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
-    expect(result.state).toEqual({ ...persistable, smartItemBindings: {} });
+    expect(result.state).toEqual({
+      ...persistable,
+      smartItemBindings: {},
+      liveTabsById: {},
+      smartFolders: {},
+    });
     expect(chromeMock.set).toHaveBeenCalledWith({
       'lunma.state': { schemaVersion: 7, state: { ...persistable, smartItemBindings: {} } },
     });
@@ -541,7 +562,9 @@ describe('readPersistedState', () => {
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
     // Lossless: the pass-through changes no content — the github node included.
-    expect(result.state).toEqual(persistable);
+    // `liveTabsById` / `smartFolders` are absent on disk but present as `{}`
+    // in the parsed in-memory state (Zod default).
+    expect(result.state).toEqual({ ...persistable, liveTabsById: {}, smartFolders: {} });
     expect(chromeMock.set).toHaveBeenCalledWith({
       'lunma.state': { schemaVersion: 7, state: persistable },
     });
@@ -1003,7 +1026,9 @@ describe('persist', () => {
     const result = await readPersistedState();
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
-    expect(result.state).not.toHaveProperty('liveTabsById');
+    // liveTabsById is ephemeral — absent from disk, present as `{}` in the
+    // parsed in-memory state thanks to the Zod `.default({})`.
+    expect(result.state.liveTabsById).toEqual({});
   });
 });
 

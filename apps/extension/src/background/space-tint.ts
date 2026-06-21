@@ -1,5 +1,5 @@
 import { colourToOklch } from '../shared/space-hue';
-import type { AppState, SpaceColor, WindowId } from '../shared/types';
+import type { AppState, WindowId } from '../shared/types';
 
 /**
  * The active Space's canonical OKLCH hue + chroma + lightness for a window — the
@@ -29,6 +29,6 @@ export function resolveSpaceTint(state: AppState, windowId: WindowId): SpaceTint
   if (!spaceId) return null;
   const space = state.spaces.find((s) => s.id === spaceId);
   if (!space || space.color === 'gray') return null;
-  const { l, c, h } = colourToOklch(space.color as SpaceColor);
+  const { l, c, h } = colourToOklch(space.color);
   return { hue: h, chroma: c, l };
 }

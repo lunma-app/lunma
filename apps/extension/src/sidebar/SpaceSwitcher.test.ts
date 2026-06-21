@@ -1,6 +1,7 @@
 import { fireEvent, render } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { LunmaStore } from '../shared/store.svelte';
+import type { SpaceColor } from '../shared/types';
 import SwitcherHarness from './SpaceSwitcher.test.harness.svelte';
 
 interface ChromeMock {
@@ -47,7 +48,7 @@ afterEach(() => {
 });
 
 function makeStore(opts: {
-  spaces: Array<{ id: string; name: string; color: string; icon: string }>;
+  spaces: Array<{ id: string; name: string; color: SpaceColor; icon: string }>;
   activeForWindow?: { [windowId: number]: string | null };
 }): LunmaStore {
   const store = new LunmaStore();

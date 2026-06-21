@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { SettingsSchema } from './settings';
-import type { AppState, BackupEnvelope } from './types';
+import type { AppState, BackupEnvelope, SpaceColor } from './types';
 
 // Pre-release clean baseline (rebrand-to-lunma): the placeholder-era v1→v11
 // schema history was collapsed to a single v1 shape. v2 (smart-folders) widens
@@ -38,10 +38,22 @@ const SpaceAutoArchiveSchema = z.discriminatedUnion('mode', [
   z.strictObject({ mode: z.literal('custom'), idleMinutes: z.number().int().positive() }),
 ]);
 
+export const SPACE_COLORS = [
+  'red',
+  'orange',
+  'yellow',
+  'green',
+  'cyan',
+  'blue',
+  'purple',
+  'pink',
+  'gray',
+] as const satisfies SpaceColor[];
+
 const SpaceSchema = z.strictObject({
   id: z.string(),
   name: z.string(),
-  color: z.string(),
+  color: z.enum(SPACE_COLORS),
   icon: z.string(),
   autoArchive: SpaceAutoArchiveSchema.optional(),
 });
@@ -49,7 +61,7 @@ const SpaceSchema = z.strictObject({
 const TrashedSpaceSchema = z.strictObject({
   id: z.string(),
   name: z.string(),
-  color: z.string(),
+  color: z.enum(SPACE_COLORS),
   icon: z.string(),
   deletedAt: z.string(),
   autoArchive: SpaceAutoArchiveSchema.optional(),
@@ -236,11 +248,11 @@ export const AppStateV7Schema = z.strictObject({
   archivedTabs: z.array(ArchivedTabSchema),
   trash: z.record(z.string(), TrashedSpaceSchema),
   pinnedBySpace: z.record(z.string(), z.array(PinNodeSchema)),
-  liveTabsById: z.record(z.coerce.number(), LiveTabSchema).optional(),
+  liveTabsById: z.record(z.coerce.number(), LiveTabSchema).default({}),
   faviconRow: z.array(z.string()),
   smartItemBindings: SmartItemBindingsV7Schema.default({}),
   smartReadState: SmartReadStateSchema.default({}),
-  smartFolders: z.record(z.string(), SmartFolderRuntimeSchema).optional(),
+  smartFolders: z.record(z.string(), SmartFolderRuntimeSchema).default({}),
 });
 
 export const EnvelopeSchema = z.strictObject({
@@ -255,12 +267,7 @@ export type Envelope = z.infer<typeof EnvelopeSchema>;
 type AssertEqual<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
-// `liveTabsById` and `smartFolders` are ephemeral: required on the runtime
-// `AppState`, optional on the persisted schema (stripped before write). Compare
-// the persisted shapes — every NON-ephemeral field must still match exactly
-// (the persisted `smartReadState` slice is included, like `smartItemBindings`).
-type Persisted<T> = Omit<T, 'liveTabsById' | 'smartFolders'>;
-const _schemaMatchesAppState: AssertEqual<Persisted<AppStateV7>, Persisted<AppState>> = true;
+const _schemaMatchesAppState: AssertEqual<AppStateV7, AppState> = true;
 void _schemaMatchesAppState;
 
 // ── Data-backup: BackupEnvelopeSchema ────────────────────────────────────────

@@ -27,7 +27,7 @@ export function nextUnusedColor(spaces: Space[]): SpaceColor {
   const counts = new Map<SpaceColor, number>();
   for (const color of PALETTE) counts.set(color, 0);
   for (const space of spaces) {
-    const color = space.color as SpaceColor;
+    const color = space.color;
     if (counts.has(color)) counts.set(color, (counts.get(color) ?? 0) + 1);
   }
 
@@ -38,7 +38,7 @@ export function nextUnusedColor(spaces: Space[]): SpaceColor {
 
   // All used — least-used, tie-broken by palette order (PALETTE is the
   // iteration order, so the first minimum wins).
-  let best: SpaceColor = PALETTE[0] as SpaceColor;
+  let best: SpaceColor = PALETTE[0] ?? 'red';
   let bestCount = Number.POSITIVE_INFINITY;
   for (const color of PALETTE) {
     const count = counts.get(color) ?? 0;

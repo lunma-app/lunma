@@ -6,7 +6,7 @@ import { onStateBroadcast, requestLauncherSuggestions } from '../../shared/messa
 import { modifierLabel } from '../../shared/platform';
 import type { SearchEngine } from '../../shared/search-engines';
 import type { Tint } from '../../shared/settings';
-import type { AppState, SavedTabId, Space, SpaceColor, WindowId } from '../../shared/types';
+import type { AppState, SavedTabId, Space, WindowId } from '../../shared/types';
 import '@lunma/tokens/tokens.css';
 import '@lunma/tokens/fonts.css';
 import '@lunma/tokens/recipes.css';
@@ -126,11 +126,11 @@ const activeSpace = $derived<Space | null>(
 // No spinner, no loading flash (design Visual language). When resolved, the
 // canonical OKLCH (`--space-l`/`--space-chroma`/`--space-h`) + on-colour ink
 // (`--space-on`) render the Space's TRUE colour across the home identity.
-const activeOklch = $derived(activeSpace ? colourToOklch(activeSpace.color as SpaceColor) : null);
+const activeOklch = $derived(activeSpace ? colourToOklch(activeSpace.color) : null);
 const spaceHue = $derived(activeOklch?.h ?? DEFAULT_HUE);
 const spaceChroma = $derived(activeOklch?.c ?? SPACE_CHROMA);
 const spaceL = $derived(activeOklch?.l ?? DEFAULT_L);
-const spaceOn = $derived(activeSpace ? colourToOn(activeSpace.color as SpaceColor) : DEFAULT_ON);
+const spaceOn = $derived(activeSpace ? colourToOn(activeSpace.color) : DEFAULT_ON);
 
 // Quiet meta line — this Space's open (temporary) tabs in THIS window and its
 // total pinned saved tabs, derived from the read-only state (folder children

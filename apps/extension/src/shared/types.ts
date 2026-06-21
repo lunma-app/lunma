@@ -44,7 +44,7 @@ export type SpaceAutoArchive = { mode: 'off' } | { mode: 'custom'; idleMinutes: 
 export interface Space {
   id: SpaceId;
   name: string;
-  color: string;
+  color: SpaceColor;
   icon: string;
   /**
    * Optional per-Space auto-archive override (auto-archive). ABSENT = *inherit*
@@ -275,7 +275,7 @@ export interface LiveTab {
    * returns a generic default until Chrome has cached one. Absent until a
    * `tabs.onUpdated` reports it.
    */
-  favIconUrl?: string;
+  favIconUrl?: string | undefined;
 }
 
 export interface AppState {

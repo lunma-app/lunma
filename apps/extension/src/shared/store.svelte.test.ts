@@ -180,7 +180,7 @@ describe('LunmaStore.replaceState (data-backup)', () => {
 
     const next = {
       ...store.state,
-      spaces: [{ id: 'sp-new', name: 'New', color: 'green', icon: 'star' }],
+      spaces: [{ id: 'sp-new', name: 'New', color: 'green' as const, icon: 'star' }],
       savedTabs: { 'st-new': savedTab({ id: 'st-new', spaceId: 'sp-new' }) },
       lastActivatedSpaceId: 'sp-new',
       faviconRow: ['st-new'],

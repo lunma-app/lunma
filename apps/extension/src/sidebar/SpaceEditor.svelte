@@ -153,7 +153,7 @@ function seed(): void {
     icon = DEFAULT_ICON;
   } else {
     name = mode.space.name;
-    color = mode.space.color as SpaceColor;
+    color = mode.space.color;
     // Stored space icons are plain strings; the picker model + dispatch contract
     // are `IconName`. Narrow at the seam — a non-catalogue stored icon (legacy or
     // imported) falls back to the default rather than a lying cast.

@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import type { LiveTab, Space } from '../shared/types';
+import type { LiveTab, Space, SpaceColor } from '../shared/types';
 import type { PendingEvent } from './coordinator';
 import { makeCoordinator, sidebar, tabActivated, tabCreated } from './coordinator.test-helpers';
 import { installTabGroupsChrome, type TabGroupsController } from './tab-groups.test-helpers';
 
-function space(id: string, name = id, color = 'blue'): Space {
+function space(id: string, name = id, color: SpaceColor = 'blue'): Space {
   return { id, name, color, icon: 'star' };
 }
 

@@ -35,7 +35,7 @@ async function handleExport(): Promise<void> {
     if (!stateResult.success) throw new Error('No valid state found in storage');
 
     const settings = includeSettings ? await readSettings() : undefined;
-    const backup = buildBackup(stateResult.data as unknown as AppState, settings);
+    const backup = buildBackup(stateResult.data, settings);
 
     const date = new Date().toISOString().slice(0, 10);
     const json = JSON.stringify(backup, null, 2);

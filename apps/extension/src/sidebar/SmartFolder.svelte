@@ -2,14 +2,7 @@
 import { dispatch } from '../shared/bus';
 import { requiredOriginsForNode } from '../shared/connector-origins';
 import { requestHostPermissions } from '../shared/permissions';
-import type {
-  PinNode,
-  SmartFolderItem,
-  SpaceColor,
-  SpaceId,
-  TabId,
-  WindowId,
-} from '../shared/types';
+import type { PinNode, SmartFolderItem, SpaceId, TabId, WindowId } from '../shared/types';
 import Button from '../ui/Button.svelte';
 import ContextMenu from '../ui/ContextMenu.svelte';
 import Favicon from '../ui/Favicon.svelte';
@@ -75,9 +68,7 @@ const store = useStore();
 
 // The glyph tints with the Space's colour — a smart node persists no colour of
 // its own in v1 (design D8).
-const spaceColor = $derived(
-  (store.state.spaces.find((s) => s.id === spaceId)?.color ?? 'gray') as SpaceColor,
-);
+const spaceColor = $derived(store.state.spaces.find((s) => s.id === spaceId)?.color ?? 'gray');
 
 // A FEED source (rss-connector) is the "reading nook": per-item read-state, an
 // unread-count badge, the hide-read / mark-all-read / open-all controls. Queue

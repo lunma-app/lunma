@@ -13,6 +13,7 @@ import type {
   SmartFolderRuntime,
   Space,
   SpaceAutoArchive,
+  SpaceColor,
   SpaceId,
   SpaceInstance,
   TabBoundary,
@@ -96,10 +97,14 @@ export class LunmaStore {
    * this method when persisting or broadcasting.
    */
   snapshot(): AppState {
+    // $state.snapshot returns Snapshot<AppState>. For a plain-data type like
+    // AppState (no functions, no class instances), Snapshot<T> is structurally
+    // identical to T — the cast is safe and necessary because TS cannot prove
+    // the mapped type equivalence automatically.
     return $state.snapshot(this.state) as AppState;
   }
 
-  createSpace(params: { name: string; color: string; icon: string }): void {
+  createSpace(params: { name: string; color: SpaceColor; icon: string }): void {
     // Space names are unique under normalization (trim + casefold) — see the
     // `spaces-and-tabs` "Space names are unique" requirement. Interactive
     // creation REJECTS a collision (the throw surfaces through the command ack);
@@ -136,7 +141,7 @@ export class LunmaStore {
     space.name = newName;
   }
 
-  recolourSpace(spaceId: SpaceId, color: string): void {
+  recolourSpace(spaceId: SpaceId, color: SpaceColor): void {
     const space = this.state.spaces.find((s) => s.id === spaceId);
     if (!space) {
       log.error('recolourSpace: unknown spaceId', { spaceId });
@@ -426,7 +431,7 @@ export class LunmaStore {
    */
   ensureSpaceInstance(windowId: WindowId): void {
     const spaceId = this.state.activeSpaceByWindow[windowId];
-    if (spaceId === null || spaceId === undefined) return;
+    if (spaceId == null) return;
     this.ensureInstance(windowId, spaceId);
   }
 
@@ -443,7 +448,7 @@ export class LunmaStore {
       return;
     }
     const spaceId = this.state.activeSpaceByWindow[windowId];
-    if (spaceId === null || spaceId === undefined) return;
+    if (spaceId == null) return;
     const instance = this.state.spaceInstancesByWindow[windowId]?.[spaceId];
     if (!instance) return;
     if (this.isBound(tabId)) return;
@@ -487,7 +492,7 @@ export class LunmaStore {
    */
   restoreTempTab(windowId: WindowId, tabId: TabId): void {
     const spaceId = this.state.activeSpaceByWindow[windowId];
-    if (spaceId === null || spaceId === undefined) return;
+    if (spaceId == null) return;
     const instance = this.state.spaceInstancesByWindow[windowId]?.[spaceId];
     if (!instance) return;
     if (this.isBound(tabId)) return;
@@ -500,7 +505,7 @@ export class LunmaStore {
     instance.tempTabIds.unshift(tabId);
   }
 
-  onTabRemoved(tabId: TabId, info: { windowId?: WindowId; isWindowClosing?: boolean }): void {
+  onTabRemoved(tabId: TabId, _info: { windowId?: WindowId; isWindowClosing?: boolean }): void {
     for (const instance of this.allInstances()) {
       const idx = instance.tempTabIds.indexOf(tabId);
       if (idx !== -1) {
@@ -533,7 +538,6 @@ export class LunmaStore {
     // item-bindings): the row returns to plain, a held row evaporates.
     this.unbindSmartItemsForTab(tabId);
     delete this.state.tabLastActivity[tabId];
-    void info;
   }
 
   onTabUpdated(tabId: TabId, changeInfo: { url?: string; status?: string }): void {
@@ -1097,12 +1101,10 @@ export class LunmaStore {
     return undefined;
   }
 
-  // ───────────────────────────────────────────────────────────────────────
   // Feed read-state (rss-connector, design D3). The persisted `smartReadState`
   // slice holds the read item ids per feed folder, ids only and pruned to the
   // live window. RSS-only — queue items self-resolve. These mutators ride the
   // existing single-writer drain (the coordinator's read-state handlers).
-  // ───────────────────────────────────────────────────────────────────────
 
   /** Mark one feed item read (opening it). Idempotent; seeds the folder's entry
    * on first write. */
@@ -1264,10 +1266,8 @@ export class LunmaStore {
     else space.autoArchive = autoArchive;
   }
 
-  // ───────────────────────────────────────────────────────────────────────
   // Archived temporary tabs (auto-archive). Plain-data, synchronous mutators;
   // the background sweep handler owns all chrome.* I/O and the `now` timestamp.
-  // ───────────────────────────────────────────────────────────────────────
 
   /**
    * Append an `ArchivedTab` record to `archivedTabs` (auto-archive sweep). The
@@ -1360,10 +1360,8 @@ export class LunmaStore {
     this.state.faviconRow.splice(0, this.state.faviconRow.length, ...next.faviconRow);
   }
 
-  // ───────────────────────────────────────────────────────────────────────
   // Ephemeral live-tab metadata (sidebar-temp-tabs). Maintained from Chrome
   // tab events; broadcast as part of AppState; stripped before persist.
-  // ───────────────────────────────────────────────────────────────────────
 
   /**
    * Insert or update a `LiveTab` from `onCreated` / `onUpdated`. Provided
@@ -1549,7 +1547,7 @@ export class LunmaStore {
    */
   private activeInstance(windowId: WindowId): SpaceInstance | undefined {
     const spaceId = this.state.activeSpaceByWindow[windowId];
-    if (spaceId === null || spaceId === undefined) return undefined;
+    if (spaceId == null) return undefined;
     return this.state.spaceInstancesByWindow[windowId]?.[spaceId];
   }
 
