@@ -129,4 +129,4 @@ jobs:
             -H "x-goog-api-version: 2" \
             -H "Content-Length: 0" \
             "https://www.googleapis.com/chromewebstore/v1.1/items/${EXTENSION_ID}/publish" \
-            | tee /dev/stderr | jq -e '[.status[]] | map(test("^OK")) | all'
+            | tee /dev/stderr | jq -e '[.status[]] | map(test("^OK|^ITEM_PENDING_REVIEW")) | all'
