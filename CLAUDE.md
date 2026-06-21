@@ -60,19 +60,10 @@ Run `pnpm test:e2e` (root, delegates to the extension) for the Playwright smoke.
 
 ## OpenSpec workflow
 
-- Non-trivial changes start with the `openspec-propose` skill
-  (`openspec-explore` first if requirements are unclear); implement only via
-  `openspec-apply-change` against an active change in `openspec/changes/`.
-- Re-read the change's `proposal.md`, `design.md`, `specs/`, and `tasks.md`
-  before applying tasks; keep `tasks.md` checkboxes current as you go.
-- Capability specs under `openspec/specs/` are NEVER hand-edited — they change
-  only by archiving a change (its `specs/` delta applies). Propose a new change
-  instead of patching a living spec.
-- Never modify `openspec/changes/archive/**` (a hook enforces this).
-- Spec-authoring policy (the full user-value, visual-quality, component-library,
-  and deviation text) lives in [openspec/config.yaml](openspec/config.yaml)
-  `context:` + per-artifact `rules:`, injected when creating artifacts — not
-  restated here.
+Non-trivial changes go through the `openspec-*` skills — they inject the full
+workflow. Hard constraints: never hand-edit `openspec/specs/` (only archiving a
+change may update them); never modify `openspec/changes/archive/**` (hook
+enforced).
 
 ## Binding policies (apply at all times, not just authoring)
 
