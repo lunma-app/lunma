@@ -158,10 +158,8 @@ test('a smart-folder row activates like a pinned tab: open bound, re-click focus
         kind: 'createSmartFolder',
         payload: {
           spaceId: sid,
-          source: 'gitlab',
+          sources: [{ source: 'gitlab', baseUrl: 'https://forge.e2e.test', query: 'authored' }],
           name: 'E2E review queue',
-          baseUrl: 'https://forge.e2e.test',
-          query: 'authored',
           maxItems: 20,
           refreshMinutes: 10,
         },
