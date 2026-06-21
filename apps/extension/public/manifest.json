@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Lunma",
   "short_name": "Lunma",
-  "version": "0.2.1",
+  "version": "0.1.0",
   "description": "Vertical tabs and per-project Spaces for Chrome, with smart folders and a quick launcher.",
   "minimum_chrome_version": "123",
   "permissions": [
