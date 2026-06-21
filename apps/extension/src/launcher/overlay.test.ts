@@ -17,6 +17,7 @@ const ENGINES: SearchEngine[] = buildEngineRegistry({
 interface ChromeStub {
   runtime: {
     sendMessage: ReturnType<typeof vi.fn>;
+    id: string;
     getURL: (p: string) => string;
     onMessage: {
       addListener: (l: MessageListener) => void;
@@ -31,7 +32,7 @@ interface ChromeStub {
     };
   };
 }
-type MessageListener = (msg: unknown) => void;
+type MessageListener = (msg: unknown, sender: { id: string }) => void;
 type StorageListener = (
   changes: Record<string, chrome.storage.StorageChange>,
   area: string,
@@ -141,6 +142,7 @@ function installEnv(): void {
         }
         return Promise.resolve();
       }),
+      id: 'test-extension-id',
       getURL: (p: string) => `chrome-extension://test/${p}`,
       onMessage: {
         addListener: (l: MessageListener) => {
@@ -191,10 +193,10 @@ function rows(): HTMLButtonElement[] {
   return Array.from(shadow().querySelectorAll('.row'));
 }
 function openOverlay(windowId = 100): void {
-  listener?.({ type: 'lunma/toggle-launcher', windowId });
+  listener?.({ type: 'lunma/toggle-launcher', windowId }, { id: 'test-extension-id' });
 }
 function openOverlayWithEngines(engines: SearchEngine[], windowId = 100): void {
-  listener?.({ type: 'lunma/toggle-launcher', windowId, engines });
+  listener?.({ type: 'lunma/toggle-launcher', windowId, engines }, { id: 'test-extension-id' });
 }
 function chip(): HTMLElement | null {
   return shadow().querySelector('.chip');
@@ -621,13 +623,16 @@ describe('Alt+L keydown fallback', () => {
 describe('Alt+L overlay — active-Space tint', () => {
   test('tints in the active Space canonical OKLCH the SW provides on the open message', async () => {
     await loadOverlay();
-    listener?.({
-      type: 'lunma/toggle-launcher',
-      windowId: 100,
-      spaceHue: 252,
-      spaceChroma: 0.16,
-      spaceL: 0.55,
-    });
+    listener?.(
+      {
+        type: 'lunma/toggle-launcher',
+        windowId: 100,
+        spaceHue: 252,
+        spaceChroma: 0.16,
+        spaceL: 0.55,
+      },
+      { id: 'test-extension-id' },
+    );
     // --space-h / --space-chroma / --space-l cross the shadow boundary; the
     // canonical-triple --accent / --accent-soft / card wash recolour from them so
     // the overlay reads the Space's TRUE colour, not a flat lightness.
@@ -645,11 +650,14 @@ describe('Alt+L overlay — active-Space tint', () => {
 
   test('clears a previous Space hue when reopened without one', async () => {
     await loadOverlay();
-    listener?.({ type: 'lunma/toggle-launcher', windowId: 100, spaceHue: 250, spaceChroma: 0.15 });
+    listener?.(
+      { type: 'lunma/toggle-launcher', windowId: 100, spaceHue: 250, spaceChroma: 0.15 },
+      { id: 'test-extension-id' },
+    );
     expect(host()?.style.getPropertyValue('--space-h')).toBe('250');
-    listener?.({ type: 'lunma/toggle-launcher', windowId: 100 }); // toggle closed
+    listener?.({ type: 'lunma/toggle-launcher', windowId: 100 }, { id: 'test-extension-id' }); // toggle closed
     expect(host()).toBeNull();
-    listener?.({ type: 'lunma/toggle-launcher', windowId: 100 }); // reopen, no hue
+    listener?.({ type: 'lunma/toggle-launcher', windowId: 100 }, { id: 'test-extension-id' }); // reopen, no hue
     expect(host()?.style.getPropertyValue('--space-h')).toBe('');
     expect(host()?.style.getPropertyValue('--space-chroma')).toBe('');
   });

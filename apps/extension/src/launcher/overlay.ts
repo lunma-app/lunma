@@ -711,13 +711,31 @@ export function shouldDismissOnFocusOut(
         windowId,
       });
       if (mine !== latest) return; // stale — superseded by a newer keystroke
-      const payload = res as
-        | { results?: unknown; openUrls?: unknown; ungrantedSources?: unknown }
-        | undefined;
-      results = Array.isArray(payload?.results) ? (payload.results as LauncherResult[]) : [];
-      openUrls = new Set(Array.isArray(payload?.openUrls) ? (payload.openUrls as string[]) : []);
+      const payload =
+        res && typeof res === 'object'
+          ? (res as { results?: unknown; openUrls?: unknown; ungrantedSources?: unknown })
+          : undefined;
+      results = Array.isArray(payload?.results)
+        ? (payload.results as unknown[]).filter(
+            (r): r is LauncherResult =>
+              r !== null &&
+              typeof r === 'object' &&
+              typeof (r as Record<string, unknown>).id === 'string' &&
+              typeof (r as Record<string, unknown>).url === 'string' &&
+              typeof (r as Record<string, unknown>).title === 'string' &&
+              typeof (r as Record<string, unknown>).source === 'string' &&
+              typeof (r as Record<string, unknown>).score === 'number',
+          )
+        : [];
+      openUrls = new Set(
+        Array.isArray(payload?.openUrls)
+          ? (payload.openUrls as unknown[]).filter((u): u is string => typeof u === 'string')
+          : [],
+      );
       ungrantedSources = Array.isArray(payload?.ungrantedSources)
-        ? (payload.ungrantedSources as OptionalResultSource[])
+        ? (payload.ungrantedSources as unknown[]).filter(
+            (s): s is OptionalResultSource => s === 'history' || s === 'bookmarks',
+          )
         : [];
       selected = 0;
       render();
@@ -981,7 +999,8 @@ export function shouldDismissOnFocusOut(
     close();
   }
 
-  chrome.runtime.onMessage.addListener((msg: unknown) => {
+  chrome.runtime.onMessage.addListener((msg: unknown, sender: chrome.runtime.MessageSender) => {
+    if (sender.id !== chrome.runtime.id) return;
     const m = msg as {
       type?: string;
       windowId?: number;
