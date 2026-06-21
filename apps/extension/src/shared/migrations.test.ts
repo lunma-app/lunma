@@ -146,6 +146,9 @@ describe('v7 migration — smart-tab-boundary slot widening', () => {
 });
 
 describe('v8 migration — multi-source-smart-folders node wrap', () => {
+  const v8Migration = realMigrations.at(-1);
+  if (!v8Migration) throw new Error('expected v8 migration');
+
   const mkSmartNode = (id: string, source: string, baseUrl: string, query?: string) => ({
     kind: 'smart',
     id,
@@ -160,7 +163,6 @@ describe('v8 migration — multi-source-smart-folders node wrap', () => {
   });
 
   test('wraps single-source node into sources[]', () => {
-    const v8Migration = realMigrations[realMigrations.length - 1]!;
     const state = {
       pinnedBySpace: { s1: [mkSmartNode('f1', 'gitlab', 'https://gitlab.com', 'authored')] },
       smartItemBindings: {},
@@ -176,7 +178,6 @@ describe('v8 migration — multi-source-smart-folders node wrap', () => {
   });
 
   test('re-keys smartItemBindings item id with sourceKey namespace', () => {
-    const v8Migration = realMigrations[realMigrations.length - 1]!;
     const state = {
       pinnedBySpace: { s1: [mkSmartNode('f1', 'github', 'https://api.github.com')] },
       smartItemBindings: { f1: { 'pr-42': { 1: { tabId: 99, allowGlob: '' } } } },
@@ -188,7 +189,6 @@ describe('v8 migration — multi-source-smart-folders node wrap', () => {
   });
 
   test('drops orphaned binding when folderId has no matching smart node', () => {
-    const v8Migration = realMigrations[realMigrations.length - 1]!;
     const state = {
       pinnedBySpace: { s1: [] },
       smartItemBindings: { orphan: { 'item-x': { 1: { tabId: 1, allowGlob: '' } } } },
@@ -198,7 +198,6 @@ describe('v8 migration — multi-source-smart-folders node wrap', () => {
   });
 
   test('empty smartItemBindings passes through unchanged', () => {
-    const v8Migration = realMigrations[realMigrations.length - 1]!;
     const state = {
       pinnedBySpace: { s1: [mkSmartNode('f1', 'jira', 'https://company.atlassian.net')] },
       smartItemBindings: {},
@@ -208,7 +207,6 @@ describe('v8 migration — multi-source-smart-folders node wrap', () => {
   });
 
   test('no smart nodes — non-smart pins pass through, no binding re-keying', () => {
-    const v8Migration = realMigrations[realMigrations.length - 1]!;
     const state = {
       pinnedBySpace: {
         s1: [{ kind: 'tab', id: 't1', url: 'https://example.com', name: 'Ex', icon: '' }],

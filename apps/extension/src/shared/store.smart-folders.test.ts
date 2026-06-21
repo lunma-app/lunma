@@ -554,9 +554,9 @@ describe('nextUnreadFeedItemAfterClose', () => {
 
   test('the closing item itself is never returned as the next', () => {
     // Only item a exists and is bound -- no next item available.
-    store.state.smartFolders['sf-feed']!.sections[SK]!.items = [
-      { id: 'a', title: 'a', url: 'https://news.example.com/a' },
-    ];
+    const feedSection = store.state.smartFolders['sf-feed']?.sections[SK];
+    if (!feedSection) throw new Error('sf-feed section not found');
+    feedSection.items = [{ id: 'a', title: 'a', url: 'https://news.example.com/a' }];
     store.bindSmartItem('sf-feed', `${SK}:a`, W, 10, '');
     expect(store.nextUnreadFeedItemAfterClose(10, W)).toBeUndefined();
   });
