@@ -188,7 +188,7 @@ test('a created Space survives a full browser restart', async () => {
 
   // First session: create a "Garden" space.
   let { ctx, id } = await launch();
-  await ctx.waitForEvent('page').catch(() => undefined);
+  await ctx.waitForEvent('page', { timeout: 2_000 }).catch(() => undefined);
   const page1 = await ctx.newPage();
   await page1.goto(`chrome-extension://${id}/src/sidebar/index.html`);
   await page1.waitForSelector('[data-testid="space-chip"]', { timeout: 20_000 });
@@ -225,7 +225,7 @@ test('a created Space survives a full browser restart', async () => {
 
   // Second session: verify "Garden" is still in storage.
   ({ ctx, id } = await launch());
-  await ctx.waitForEvent('page').catch(() => undefined);
+  await ctx.waitForEvent('page', { timeout: 2_000 }).catch(() => undefined);
   const page2 = await ctx.newPage();
   await page2.goto(`chrome-extension://${id}/src/sidebar/index.html`);
   await page2.waitForSelector('[data-testid="space-chip"]', { timeout: 20_000 });
