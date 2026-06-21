@@ -140,6 +140,12 @@ function closeBoundTab(itemId: string): void {
 let lastSeenById = $state<Record<string, SmartFolderItem>>({});
 $effect(() => {
   for (const item of items) lastSeenById[item.id] = item;
+  // Prune entries no longer referenced by current items or live bindings so the
+  // map doesn't grow unboundedly as items rotate through a smart folder.
+  const liveIds = new Set([...items.map((i) => i.id), ...Object.keys(folderBindings)]);
+  for (const id of Object.keys(lastSeenById)) {
+    if (!liveIds.has(id)) delete lastSeenById[id];
+  }
 });
 
 /** What the expanded list renders: live items, else the held set during an

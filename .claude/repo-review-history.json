@@ -8,7 +8,7 @@
       "location": "apps/extension/src/background/handlers/smart-folders.ts:189-190",
       "action": "Before chrome.tabs.create({ url: item.url }) in smart-folders.ts:189, parse new URL(item.url) and require protocol http:/https:, warn-dropping otherwise, mirroring openUrl/openSmartFolderListing.",
       "rationale": "Only open-path that skips scheme validation while ingesting attacker-controlled RSS link hrefs, allowing file:/data:/chrome: schemes — highest real-world exploitability despite medium label.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 2,
@@ -18,7 +18,7 @@
       "location": "apps/extension/public/manifest.json:21-28",
       "action": "Replace standing https://*/* and http://*/* in manifest.json with gesture-bound per-origin grants derived from baseUrl via originPatternForBaseUrl, or document the threat model if a wildcard is unavoidable.",
       "rationale": "A single user-approved all-hosts grant exposes ambient GitLab/Jira cookies to every site, a broad SSRF/exfiltration surface and CWS-review liability that undercuts the codebase's least-privilege posture.",
-      "status": "new"
+      "status": "skipped"
     },
     {
       "rank": 3,
@@ -28,7 +28,7 @@
       "location": "apps/extension/src/options/BackupRestore.svelte:32,36 | apps/extension/src/options/FeedSubscriptions.svelte:36,83,109",
       "action": "Replace the bare `as { state: AppState }` casts in BackupRestore.svelte and FeedSubscriptions.svelte with readPersistedState() from shared/chrome/storage.ts, which migrates and validates.",
       "rationale": "Trust-boundary violation on external chrome.storage input across a whole surface, where a corrupt or unmigrated envelope silently passes as valid AppState and crashes downstream consumers.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 4,
@@ -38,7 +38,7 @@
       "location": "apps/extension/src/shared/messages.ts:247-249",
       "action": "After m.type === 'lunma/state-broadcast' in messages.ts:249, validate m.state via AppStateV7Schema.safeParse() (or at minimum assert an object with numeric schemaVersion) before widening to StateBroadcastMessage.",
       "rationale": "Unvalidated cross-surface state seeds the sidebar store via Object.assign, so a stale/old-SW snapshot propagates undefined required keys into reactive state — a high-severity correctness boundary affecting every sidebar boot.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 5,
@@ -48,7 +48,7 @@
       "location": "apps/extension/src/options/BackupRestore.svelte:85",
       "action": "Parse pendingImportData through BackupEnvelopeSchema.safeParse() in confirmImport() before bus.send, storing the validated BackupEnvelope and showing validation errors inline.",
       "rationale": "User-file content is cast from unknown to a typed bus payload with the only runtime guard being the downstream bus adapter — a high-severity local safety gap, though the adapter currently catches it.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 6,
@@ -58,7 +58,7 @@
       "location": "/Users/emanuel.fonseca/Workspaces/lunma/apps/extension/src/background/smart-folders.ts:6-9, 39-44",
       "action": "Convert the top-level connector imports in smart-folders.ts:6-9 to a lazy Map<source, () => Promise<SourceConnector>> registry loaded on first fetchSmartFolderRuntime() of that source.",
       "rationale": "~52KB/~11KB-gzip parsed on every SW boot for users who may use no connectors — the only high-severity startup cost and the clearest perf win.",
-      "status": "new"
+      "status": "skipped"
     },
     {
       "rank": 7,
@@ -68,7 +68,7 @@
       "location": "apps/extension/src/background/handlers/temp-tabs.ts (openUrl, lines 186–197) — no corresponding test in apps/extension/src/background/coordinator.handlers.test.ts",
       "action": "Add tests in coordinator.handlers.test.ts asserting openUrl drops javascript:, ftp:, and unparseable URLs (no tabs.create, ok ack) using installSavedTabChromeStub()+makeCoordinator().",
       "rationale": "The scheme guard is the authoritative defense for the boundary-divert and launcher open paths, yet a regression that re-enables bookmarklet injection would pass CI undetected — security-adjacent coverage gap.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 8,
@@ -78,7 +78,7 @@
       "location": "apps/extension/src/shared/messages.ts:356-365",
       "action": "Add a LauncherResultSchema to shared/launcher-contract.ts and validate msg.results (and openUrls/ungrantedSources) with .array().safeParse() in messages.ts, filtering non-conforming elements.",
       "rationale": "Array.isArray-only guards let a divergent SW return malformed result objects, causing silent launcher render bugs at a runtime trust boundary.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 9,
@@ -88,7 +88,7 @@
       "location": "apps/extension/src/shared/store.svelte.ts:1182,1195,1217 | apps/extension/src/sidebar/PinnedTabs.svelte:175,572 | apps/extension/src/sidebar/main.ts:127",
       "action": "Introduce a SidebarLunmaStore subclass typing state as the existing SidebarState (AppState & SidebarLocalState) intersection so the double-unknown casts in store.svelte.ts, PinnedTabs.svelte, and main.ts disappear.",
       "rationale": "Double-unknown fully suppresses type safety across three files, so renamed/retyped local fields fail silently — a recurring foot-gun affecting core sidebar state.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 10,
@@ -98,7 +98,7 @@
       "location": "apps/extension/src/background/bus-adapter.ts:17-23, 80",
       "action": "Replace the `as SidebarPendingEvent` cast in bus-adapter.ts toPendingEvent with a per-kind discriminated dispatch (or a compile-time satisfies test), and comment the harmless line-80 optional-vs-exactOptional cast.",
       "rationale": "Broad cast on the command bus could mask a wrong payload shape into a handler if variants grow, but current variants are trivially-shaped so risk is latent.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 11,
@@ -108,7 +108,7 @@
       "location": "apps/extension/src/shared/opml.ts:19 | apps/extension/src/background/connectors/rss.ts:102",
       "action": "Pass { xmlns: false } to both new SaxesParser() calls in opml.ts and rss.ts so tag.attributes infers Record<string,string> and the cast can be removed.",
       "rationale": "Cast is correct today but a future xmlns:true reconfiguration would silently yield wrong attribute types feeding feed/OPML parsing — cheap to make a compile error.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 12,
@@ -118,7 +118,7 @@
       "location": "apps/extension/src/background/handlers/spaces.ts (lines 40–59, 61–80) — apps/extension/src/background/coordinator.tab-groups.test.ts covers renameSpace but not the revert path",
       "action": "In coordinator.tab-groups.test.ts, stub chrome.tabGroups.update to reject for renameSpace and recolourSpace and assert the store value reverts and the ack carries the error.",
       "rationale": "Uncovered failure-recovery path means a broken revert would leave state diverged from Chrome silently — a meaningful correctness gap on a user-facing action.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 13,
@@ -128,7 +128,7 @@
       "location": "apps/extension/src/shared/schemas.test.ts — AppStateV7Schema not imported or exercised; apps/extension/src/shared/schemas.ts lines 183–241",
       "action": "Add a schemas.test.ts describe block importing AppStateV7Schema directly: valid { tabId, allowGlob } parses, bare-number slot rejects, missing allowGlob rejects.",
       "rationale": "The current schema version's slot shape has no direct test, so a malformed binding bypassing migration would go unvalidated — gap on the persistence trust boundary.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 14,
@@ -138,7 +138,7 @@
       "location": "apps/extension/src/background/group-orchestrator.ts (lines 102–115, 169–229)",
       "action": "Add direct GroupOrchestrator unit tests (mock store + chrome stub) for activeTabIsGlobalFavorite throw→false and preserveFavoriteFocus skip/proceed branches.",
       "rationale": "Branch-level focus logic is only covered by integration tests, making the query-failure and skip paths hard to isolate on regression.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 15,
@@ -148,7 +148,7 @@
       "location": "apps/extension/src/background/handlers/queries.ts (lines 20–47, 79–84) — no direct tests in apps/extension/src/background/handlers/queries.test.ts",
       "action": "Extend queries.test.ts with describe blocks for isTrackedTab, savedTabIdForBoundTab, and findSpaceIdByGroupId covering found/not-found/guard cases.",
       "rationale": "Three pure predicates gating tab adoption, boundary re-arm, and group lifecycle are only tested indirectly, slowing regression isolation.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 16,
@@ -158,7 +158,7 @@
       "location": "apps/extension/e2e/ — no spec exercises the full createSpace UI flow",
       "action": "Add apps/extension/e2e/workspace-creation.spec.ts dispatching createSpace, asserting the Space chip renders with correct name/data-space-id and persists across reload, patterned on cross-space-switch.spec.ts.",
       "rationale": "The core createSpace→broadcast→reconcile→chip render path is only a precondition in other specs, leaving a primary user flow without end-to-end coverage.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 17,
@@ -168,7 +168,7 @@
       "location": "apps/extension/e2e/launcher-overlay.spec.ts — no result-selection or search-navigation assertions",
       "action": "Extend launcher-overlay.spec.ts (or add launcher-search.spec.ts) to dispatch a query, assert a non-empty result list, and verify selecting a result focuses the existing tab rather than duplicating it.",
       "rationale": "Real-Chrome history/bookmarks integration and dedup-on-select are never exercised end-to-end, leaving the launcher's primary purpose untested in the real environment.",
-      "status": "new"
+      "status": "skipped"
     },
     {
       "rank": 18,
@@ -178,7 +178,7 @@
       "location": "/Users/emanuel.fonseca/Workspaces/lunma/apps/extension/src/sidebar/App.svelte:15-42",
       "action": "Lazy-load conditional feature components (SmartFolderEditor, SpaceEditor) in App.svelte via Svelte dynamic import, keeping primitives eager, and measure bundle impact.",
       "rationale": "18 static imports inflate initial sidebar parse/eval even for panels never opened — the most impactful surface for code splitting, but needs measurement.",
-      "status": "new"
+      "status": "skipped"
     },
     {
       "rank": 19,
@@ -188,7 +188,7 @@
       "location": "/Users/emanuel.fonseca/Workspaces/lunma/apps/extension/src/sidebar/main.ts:46-50",
       "action": "Parallelize the await readSettings() in main.ts:46 with the state snapshot via Promise.all and apply tint/boundary post-mount, keeping only density pre-mount if layout-shift-critical.",
       "rationale": "Serial storage.sync read gates first paint on cold boot; parallelizing is a clear latency win on the most-used surface.",
-      "status": "new"
+      "status": "skipped"
     },
     {
       "rank": 20,
@@ -198,7 +198,7 @@
       "location": "/Users/emanuel.fonseca/Workspaces/lunma/apps/extension/src/background/index.ts:98-116, src/background/seed-existing-windows.ts:17, src/shared/settings.ts:368-379",
       "action": "Collapse the two boot-path tab queries into one chrome.tabs.query({}) and have writeSetting (settings.ts:368-379) merge an in-memory settings cache instead of re-reading all settings on each single-field write.",
       "rationale": "Redundant IPC/scheduler overhead on boot and every settings write; batching cuts repeated round-trips with modest effort.",
-      "status": "new"
+      "status": "skipped"
     },
     {
       "rank": 21,
@@ -268,7 +268,7 @@
       "location": "apps/extension/src/ui/FolderRow.svelte:207",
       "action": "Compose --folder-c in FolderRow.svelte:207 from colourToOklch(color)'s canonical {l,c,h} (or the --space-* tokens) instead of literal 0.62/0.16.",
       "rationale": "Hard-coded l/c render folder tints at the wrong identity for red/yellow/gray, a visible colour-fidelity defect against the canonical palette.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 28,
@@ -288,7 +288,7 @@
       "location": "apps/extension/src/launcher/overlay.css:23-31,40-47,58,63-65",
       "action": "Add a parity test (like space-palette-parity.test.ts) failing on drift for tokens that must match tokens.css, and annotate intentionally-different values (scrim/glass opacity) in overlay.css.",
       "rationale": "Shadow-root token copies can silently drift from tokens.css with no guard; a parity test bounds the divergence on a colour-critical surface.",
-      "status": "new"
+      "status": "skipped"
     },
     {
       "rank": 30,
@@ -298,7 +298,7 @@
       "location": "apps/extension/src/launcher/overlay.css:138,149,167,217,225,349,383,395,407,415,429,437,463",
       "action": "Redeclare the type-scale and weight tokens in overlay.css's shadow-root block and replace each `font:` shorthand with font-size: var(--text-*) + font-weight: var(--weight-*).",
       "rationale": "Many raw px/weight literals across the overlay won't track the type scale, the largest single concentration of type-token drift.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 31,
@@ -308,7 +308,7 @@
       "location": "/Users/emanuel.fonseca/Workspaces/lunma/apps/extension/src/launcher/newtab/main.ts:45-49",
       "action": "Move the readSettings() await in newtab/main.ts:45 into a Promise.all with the state snapshot so reads run in parallel and mount can use defaults.",
       "rationale": "Same boot-blocking pattern as the sidebar but on a transient surface, so lower impact.",
-      "status": "new"
+      "status": "skipped"
     },
     {
       "rank": 32,
@@ -318,7 +318,7 @@
       "location": "/Users/emanuel.fonseca/Workspaces/lunma/apps/extension/src/shared/settings.ts:341-350",
       "action": "Add a ~500ms timeout to readSettings() (settings.ts:341-350) that falls back to DEFAULTS and retries asynchronously post-mount.",
       "rationale": "Transient sync-storage stalls could delay paint 1-2s with no current guard, but the unavailable-storage case is rare.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 33,
@@ -328,7 +328,7 @@
       "location": "/Users/emanuel.fonseca/Workspaces/lunma/apps/extension/src/options/",
       "action": "Defer non-critical options sections (Backup & restore, Feed subscriptions, Recently archived, Advanced) behind scroll/expand, keeping the primary Settings section eager.",
       "rationale": "Options opens infrequently so parse-cost bloat is the least-visible perf concern.",
-      "status": "new"
+      "status": "skipped"
     },
     {
       "rank": 34,
@@ -338,7 +338,7 @@
       "location": "/Users/emanuel.fonseca/Workspaces/lunma/apps/extension/package.json:27",
       "action": "Audit used Lucide icons and measure post-build tree-shaking; inline or pre-select only needed icons if tree-shaking proves ineffective.",
       "rationale": "Likely already tree-shaken in production builds, so impact is speculative pending measurement.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 35,
@@ -348,7 +348,7 @@
       "location": "/Users/emanuel.fonseca/Workspaces/lunma/apps/extension/src/background/seed-existing-tabs.ts:47-55",
       "action": "Optionally cache the spaceByGroupByWindow map in store.state to avoid rebuilding; lower priority than connector lazy-loading.",
       "rationale": "O(n*m) work happens once per boot with bounded impact, the weakest perf item.",
-      "status": "new"
+      "status": "skipped"
     },
     {
       "rank": 36,
@@ -358,7 +358,7 @@
       "location": "apps/extension/src/shared/settings.ts:295-297, 325",
       "action": "Replace the DEFAULTS `as unknown as Settings` cast in settings.ts:296 with a `satisfies Record<keyof Settings, ...>` form and comment the buildSchema cast (already guarded by AssertEqual).",
       "rationale": "Only the unguarded DEFAULTS cast carries real risk (a missing default widens silently); the schema cast is already protected.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 37,
@@ -368,7 +368,7 @@
       "location": "apps/extension/src/sidebar/SmartFolder.svelte:140-143",
       "action": "Add a trim step in the SmartFolder.svelte:140 effect removing lastSeenById keys no longer in folderBindings or the current items window.",
       "rationale": "Mild unbounded memory growth over long sessions with rotating feed items, low severity and slow to manifest.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 38,
@@ -388,7 +388,7 @@
       "location": "apps/extension/src/background/index.ts:238-252",
       "action": "No change today; keep openUrl's http(s) re-validation authoritative and add an explicit scheme check at the index.ts:238 enqueue site if openUrl is ever refactored to trust callers.",
       "rationale": "Already defended by sender.id check and the openUrl sink guard; flagged only as a single bus-bypassing path to keep hardened.",
-      "status": "new"
+      "status": "skipped"
     },
     {
       "rank": 40,
@@ -398,7 +398,7 @@
       "location": "apps/extension/src/shared/connectors.ts:18-69",
       "action": "Add a test asserting tokens never appear in broadcastState payloads or logs and document local-plaintext storage in the options UI.",
       "rationale": "Inherent MV3 constraint with a disciplined single-accessor module and no code defect; only hygiene-maintenance remains.",
-      "status": "new"
+      "status": "skipped"
     },
     {
       "rank": 41,
@@ -408,7 +408,7 @@
       "location": "apps/extension/src/shared/surface-boot.ts — no corresponding test file",
       "action": "Add apps/extension/src/shared/surface-boot.test.ts covering applyDensityToDocument for normal (delete), compact, and comfort modes using jsdom.",
       "rationale": "Small pure helper with implicit-only branch coverage, low risk.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 42,
@@ -418,7 +418,7 @@
       "location": "apps/extension/src/shared/platform.ts — no dedicated test file; getModifierLabel only used via components",
       "action": "Add apps/extension/src/shared/platform.test.ts mocking navigator.userAgent for Mac/Windows/Edge/Chrome to cover getModifierLabel and getBrowserScheme branches.",
       "rationale": "UA-branch helper with cosmetic output, lowest-risk testing gap.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 43,
@@ -468,7 +468,7 @@
       "location": "apps/extension/src/sidebar/SpaceEditor.svelte:500,520-523",
       "action": "Define light-theme accent tokens in tokens.css under a [data-theme='light'] scope and reference them in SpaceEditor.svelte instead of re-authoring the oklch formula inline.",
       "rationale": "Light-theme accent literals won't track tokens.css formula changes, a localized drift risk.",
-      "status": "new"
+      "status": "resolved"
     },
     {
       "rank": 48,

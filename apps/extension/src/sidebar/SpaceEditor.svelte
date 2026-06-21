@@ -494,8 +494,8 @@ function submit(): void {
      * editor's descendants inherit a Space-tinted accent, so the input focus,
      * selected-icon fill, primary button and focus rings preview the colour
      * you're picking. (gray → hue 62 → the default accent, as intended.) */
-    --accent: oklch(calc(var(--space-l) + 0.065) var(--space-chroma) var(--space-h));
-    --accent-soft: oklch(calc(var(--space-l) + 0.065) var(--space-chroma) var(--space-h) / 0.18);
+    --accent: oklch(calc(var(--space-l, 0.62) + 0.065) var(--space-chroma, 0.15) var(--space-h));
+    --accent-soft: oklch(calc(var(--space-l, 0.62) + 0.065) var(--space-chroma, 0.15) var(--space-h) / 0.18);
     --accent-on: var(--space-on);
     --accent-text: oklch(0.965 0.01 var(--space-h));
     position: absolute;
