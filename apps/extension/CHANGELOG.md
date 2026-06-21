@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.2.0](https://github.com/lunma-app/lunma/compare/v0.1.1...v0.2.0) (2026-06-21)
+
+
+### Features
+
+* **appearance:** add showGlares toggle to suppress aurora and glow ([236f422](https://github.com/lunma-app/lunma/commit/236f42248325d7cf000fb506708cbce8771eb9c5))
+
+
+### Bug Fixes
+
+* **lint:** apply biome safe-unsafe fixes (useLiteralKeys, useOptionalChain) ([714384e](https://github.com/lunma-app/lunma/commit/714384eeffd4d1063e82d4e25a358acce3e938cb))
+* **low:** prune lastSeenById in SmartFolder ([#37](https://github.com/lunma-app/lunma/issues/37)), canonical accent formula in SpaceEditor ([#47](https://github.com/lunma-app/lunma/issues/47)) ([d35f5a7](https://github.com/lunma-app/lunma/commit/d35f5a73e10cb91297c8f037794da4fe30569f98))
+* **options:** validate chrome.storage.local reads with AppStateV7Schema ([#3](https://github.com/lunma-app/lunma/issues/3)) ([1afa935](https://github.com/lunma-app/lunma/commit/1afa935c5db8c3aa537d232faa1f4e0c9b84233d))
+* preserveFavoriteFocus test ([#14](https://github.com/lunma-app/lunma/issues/14)), folder token ([#27](https://github.com/lunma-app/lunma/issues/27)), overlay font tokens ([#30](https://github.com/lunma-app/lunma/issues/30)) ([8ffb44f](https://github.com/lunma-app/lunma/commit/8ffb44f3364e265ef33f8481c2e57db085eda602))
+* **security,quality:** sender guards, tab-boundary filter, token fixes ([a98f3a8](https://github.com/lunma-app/lunma/commit/a98f3a8f6a83ba4d89cf4e65461ecf2c5ea235de))
+* **security,typesafety:** scheme guard, satisfies cast, bus-adapter comment ([d9d8533](https://github.com/lunma-app/lunma/commit/d9d8533cda676f06705e61954cd73fd8e9b3e37f))
+* **security,ui:** add sender guards and declare missing tokens ([2dbe2fc](https://github.com/lunma-app/lunma/commit/2dbe2fc8eb88a2c94990923f789c2f8117257112))
+* **testing:** AppStateV7Schema smartItemBindings slot shape not validated ([7ce099b](https://github.com/lunma-app/lunma/commit/7ce099b23084d1df947f52cbc9b106d7e3545fb5))
+* **testing:** GroupOrchestrator.orchestrateActivation preserveFavoriteFocu ([ade17c1](https://github.com/lunma-app/lunma/commit/ade17c1bf4bf063dff9837a47ee34040302a1207))
+* **testing:** openUrl handler non-http(s) scheme blocking not unit-tested ([2fc78d2](https://github.com/lunma-app/lunma/commit/2fc78d2d1f29342c3b29e7e2cbd4c6ddc12ac97b))
+* **testing:** queries.ts isTrackedTab, savedTabIdForBoundTab, findSpaceIdB ([c31ad15](https://github.com/lunma-app/lunma/commit/c31ad15f3cd376c25df3fec5ffc1fc8732f516df))
+* **typesafety:** onStateBroadcast casts raw chrome.runtime message to StateBr ([ffe7821](https://github.com/lunma-app/lunma/commit/ffe7821566e9f842d48c8237b79afa7fbf9be357))
+* **typesafety:** requestLauncherSuggestions returns msg.results as LauncherRe ([dbecb6d](https://github.com/lunma-app/lunma/commit/dbecb6d63e7220d0c2d031c42e1535ae4b48557f))
+* **typesafety:** saxes tag.attributes cast to Record&lt;string,string&gt; unsafe if namespace mode enabled ([0e0ae0f](https://github.com/lunma-app/lunma/commit/0e0ae0fb73a460eb6300a860b83d46b8606d0fd6))
+* **typesafety:** store.state double-unknown cast to SidebarLocalState spreads ([7a283e1](https://github.com/lunma-app/lunma/commit/7a283e1eded3b776555e0864b650b0434d264f01))
+* **typesafety:** toPendingEvent casts Zod-inferred type to SidebarCommand the ([a77966d](https://github.com/lunma-app/lunma/commit/a77966d332ab0c50130bad37c9b06ab7faff9959))
+
 ## [0.1.1](https://github.com/lunma-app/lunma/compare/v0.1.0...v0.1.1) (2026-06-19)
 
 
