@@ -129,7 +129,7 @@ test('a created Space persists and its chip renders after a page reload', async 
   // Create a "Personal" space.
   await dispatch(page, {
     kind: 'createSpace',
-    payload: { name: 'Personal', color: 'green', icon: 'home', windowId },
+    payload: { name: 'Personal', color: 'green', icon: 'star', windowId },
   });
 
   await expect
@@ -174,7 +174,14 @@ test('a created Space survives a full browser restart', async () => {
       args: [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`],
     });
     let [sw] = ctx.serviceWorkers();
-    if (!sw) sw = await ctx.waitForEvent('serviceworker');
+    // On a profile restart the SW may already be registered before our event
+    // listener is wired — poll once after a short delay before falling back to
+    // the event so we don't wait forever if the event was already emitted.
+    if (!sw) {
+      await new Promise((r) => setTimeout(r, 1_000));
+      [sw] = ctx.serviceWorkers();
+    }
+    if (!sw) sw = await ctx.waitForEvent('serviceworker', { timeout: 20_000 });
     const id = new URL(sw.url()).host;
     return { ctx, id };
   }
