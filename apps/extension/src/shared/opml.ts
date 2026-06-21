@@ -49,8 +49,10 @@ function fixBareAmpersands(xml: string): string {
 }
 
 /**
- * Serialise RSS smart-folder nodes to an OPML 1.0 XML string. Non-RSS nodes
- * are excluded. `htmlUrl` is set to `baseUrl` (design D6).
+ * Serialise RSS smart-folder nodes to an OPML 1.0 XML string. Non-RSS sources
+ * are excluded; each rss entry in `sources[]` becomes one `<outline>`. For
+ * folders with >1 rss source the outline `text` is qualified with the host
+ * (`${node.name} — ${host}`) to disambiguate. `htmlUrl` is set to `baseUrl`.
  */
 export function buildOpml(folders: SmartFolderNode[]): string {
   const lines: string[] = [
@@ -61,10 +63,20 @@ export function buildOpml(folders: SmartFolderNode[]): string {
   ];
 
   for (const node of folders) {
-    if (node.source !== 'rss') continue;
-    const text = escapeXml(node.name);
-    const url = escapeXml(node.baseUrl);
-    lines.push(`    <outline type="rss" text="${text}" xmlUrl="${url}" htmlUrl="${url}"/>`);
+    const rssSources = node.sources.filter((s) => s.source === 'rss');
+    const isMulti = node.sources.length >= 2 || rssSources.length > 1;
+    for (const src of rssSources) {
+      let host: string;
+      try {
+        host = new URL(src.baseUrl).host;
+      } catch {
+        host = src.baseUrl;
+      }
+      const label = isMulti ? `${node.name} — ${host}` : node.name;
+      const text = escapeXml(label);
+      const url = escapeXml(src.baseUrl);
+      lines.push(`    <outline type="rss" text="${text}" xmlUrl="${url}" htmlUrl="${url}"/>`);
+    }
   }
 
   lines.push('  </body>', '</opml>');

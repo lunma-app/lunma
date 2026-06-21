@@ -1,17 +1,15 @@
-import type { PinNode, SmartFolderRuntime, SmartSource } from '../../shared/types';
+import type { SmartSectionRuntime, SmartSource, SmartSourceConfig } from '../../shared/types';
 
 /**
  * The connector contract (github-connector, design D1) — a fetch-contract, not
  * a framework. Extracted from two real implementations (GitLab, GitHub), so
  * every member is derived, not guessed: per-source query→request translation,
  * response normalization onto the agnostic `SmartFolderItem`/
- * `SmartFolderRuntime` shapes, a per-source auth strategy (GitLab:
+ * `SmartSectionRuntime` shapes, a per-source auth strategy (GitLab:
  * PAT-then-cookies; GitHub: token-only), and a per-source status→tone mapping.
  * The source-agnostic engine in `../smart-folders.ts` dispatches through the
  * closed `CONNECTORS` registry keyed by `source`.
  */
-
-export type SmartFolderNode = Extract<PinNode, { kind: 'smart' }>;
 
 /**
  * Per-request timeout. A hung connection (dropped VPN, sleeping proxy) must
@@ -46,22 +44,23 @@ export interface SourceConnector {
    * `'folder-kanban'` for Jira, `'rss'` for the feed source. */
   readonly mintedIcon: string;
   /**
-   * The host match patterns this connector ACTUALLY fetches for `node` — NOT
+   * The host match patterns this connector ACTUALLY fetches for `cfg` — NOT
    * necessarily the folder's `baseUrl` origin (least-privilege-permissions,
-   * design D8). The engine gates on `hasHostPermissions(requiredOrigins(node))`
+   * design D8). The engine gates on `hasHostPermissions(requiredOrigins(cfg))`
    * before dispatch and the editor requests this same set; keying on `baseUrl`
    * directly would be wrong for GitHub, which fetches `api.github.com`, never
    * `github.com`. A synchronous, pure derivation (mirrors `listingUrl`); a
    * malformed `baseUrl` yields an empty pattern (treated as ungranted) rather
    * than throwing.
    */
-  requiredOrigins(node: Pick<SmartFolderNode, 'baseUrl'>): string[];
+  requiredOrigins(cfg: SmartSourceConfig): string[];
   /** Bounded, never throws; resolves every failure to a runtime state. Slices
-   * its normalized results to the node's `maxItems` (rss-connector design D5). */
+   * its normalized results to `maxItems` (rss-connector design D5). */
   fetchRuntime(
-    node: Pick<SmartFolderNode, 'baseUrl' | 'query' | 'maxItems'>,
+    cfg: SmartSourceConfig,
+    maxItems: number,
     caches?: ConnectorCaches,
-  ): Promise<SmartFolderRuntime>;
+  ): Promise<SmartSectionRuntime>;
   /**
    * The URL that shows the source's full listing in a browser, consumed by
    * "open all in a tab" (rss-connector design D6) — the dashboard/search/JQL
@@ -69,7 +68,7 @@ export interface SourceConnector {
    * (falling back to the feed URL when the channel link is not yet known). NO
    * network I/O — a synchronous, pure resolution.
    */
-  listingUrl(node: Pick<SmartFolderNode, 'baseUrl' | 'query'>): string;
+  listingUrl(cfg: SmartSourceConfig): string;
 }
 
 /**

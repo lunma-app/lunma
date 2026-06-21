@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import type { SmartFolderNode } from './connector';
+import type { SmartSourceConfig } from '../../shared/types';
 import { aggregateCheckRuns, apiRootOf, githubConnector } from './github';
 
 // ── test plumbing ──────────────────────────────────────────────────────────────
@@ -36,18 +36,11 @@ function jsonResponse(body: unknown, status = 200): unknown {
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
-function node(overrides: Partial<SmartFolderNode> = {}): SmartFolderNode {
+function node(overrides: Partial<SmartSourceConfig> = {}): SmartSourceConfig {
   return {
-    kind: 'smart',
-    id: 'sf-gh',
-    name: 'My pull requests',
-    icon: 'folder-git-2',
     source: 'github',
     baseUrl: 'https://github.com',
     query: 'authored',
-    maxItems: 20,
-    hideRead: false,
-    refreshMinutes: 10,
     ...overrides,
   };
 }
@@ -128,7 +121,7 @@ describe('fetchRuntime — canned queries', () => {
   test('authored requests author:@me with cap, recency sort, and advanced_search', async () => {
     storageData = { ...TOKEN };
     fetchMock.mockResolvedValueOnce(searchResponse([]));
-    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       'https://api.github.com/search/issues?q=is:pr+is:open+author:@me&per_page=20&sort=updated&order=desc&advanced_search=true',
@@ -139,14 +132,14 @@ describe('fetchRuntime — canned queries', () => {
   test('assigned requests assignee:@me', async () => {
     storageData = { ...TOKEN };
     fetchMock.mockResolvedValueOnce(searchResponse([]));
-    await githubConnector.fetchRuntime(node({ query: 'assigned' }));
+    await githubConnector.fetchRuntime(node({ query: 'assigned' }), 20);
     expect(fetchMock.mock.calls[0]?.[0]).toContain('q=is:pr+is:open+assignee:@me');
   });
 
   test('review-requested requests review-requested:@me with NO me-resolution call', async () => {
     storageData = { ...TOKEN };
     fetchMock.mockResolvedValueOnce(searchResponse([]));
-    await githubConnector.fetchRuntime(node({ query: 'review-requested' }));
+    await githubConnector.fetchRuntime(node({ query: 'review-requested' }), 20);
     // Exactly one request — `@me` resolves server-side; there is no /user step.
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
@@ -159,6 +152,7 @@ describe('fetchRuntime — canned queries', () => {
     fetchMock.mockResolvedValueOnce(searchResponse([]));
     await githubConnector.fetchRuntime(
       node({ baseUrl: 'https://ghe.example.com', query: 'authored' }),
+      20,
     );
     const url = fetchMock.mock.calls[0]?.[0] as string;
     expect(url.startsWith('https://ghe.example.com/api/v3/search/issues?')).toBe(true);
@@ -168,7 +162,7 @@ describe('fetchRuntime — canned queries', () => {
   test('requests carry the GitHub Accept header, Bearer token, and omitted credentials', async () => {
     storageData = { ...TOKEN };
     fetchMock.mockResolvedValueOnce(searchResponse([]));
-    await githubConnector.fetchRuntime(node({ query: 'authored' }));
+    await githubConnector.fetchRuntime(node({ query: 'authored' }), 20);
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(init.headers).toEqual({
       Authorization: 'Bearer ghp-abc',
@@ -185,7 +179,7 @@ describe('fetchRuntime — canned queries', () => {
       [(u) => u.includes('/pulls/'), () => jsonResponse(prDetail(7))],
       [(u) => u.includes('/check-runs'), () => checkRunsResponse([])],
     ]);
-    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime.state).toBe('ok');
     expect(runtime.items).toEqual([
       { id: '7', title: 'PR 7', url: 'https://github.com/o/r/pull/7' },
@@ -202,7 +196,7 @@ describe('fetchRuntime — canned queries', () => {
       [(u) => u.includes('/pulls/'), (u) => jsonResponse(prDetail(Number(u.split('/').pop())))],
       [(u) => u.includes('/check-runs'), () => checkRunsResponse([])],
     ]);
-    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime.items).toHaveLength(20);
   });
 
@@ -213,7 +207,7 @@ describe('fetchRuntime — canned queries', () => {
       [(u) => u.includes('/pulls/'), () => jsonResponse(prDetail(1))],
       [(u) => u.includes('/check-runs'), () => checkRunsResponse([])],
     ]);
-    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime.state).toBe('ok');
     expect(runtime.items.map((i) => i.id)).toEqual(['1']);
   });
@@ -223,14 +217,14 @@ describe('fetchRuntime — canned queries', () => {
 
 describe('fetchRuntime — token-only auth', () => {
   test('no token short-circuits to signed-out with ZERO fetches', async () => {
-    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime).toMatchObject({ state: 'signed-out', items: [] });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   test('the token lookup is host-keyed: another host token does not authorize', async () => {
     storageData = { 'lunma.connectors': { 'ghe.example.com': 'ghp-other' } };
-    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime.state).toBe('signed-out');
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -238,35 +232,35 @@ describe('fetchRuntime — token-only auth', () => {
   test('a 401 (revoked token) resolves signed-out, never throwing', async () => {
     storageData = { ...TOKEN };
     fetchMock.mockResolvedValueOnce(jsonResponse({ message: 'Bad credentials' }, 401));
-    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime).toMatchObject({ state: 'signed-out', items: [] });
   });
 
   test('a 403 (rate limit / SAML / scope gap) resolves error', async () => {
     storageData = { ...TOKEN };
     fetchMock.mockResolvedValueOnce(jsonResponse({ message: 'API rate limit exceeded' }, 403));
-    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime.state).toBe('error');
   });
 
   test('a 5xx resolves error', async () => {
     storageData = { ...TOKEN };
     fetchMock.mockResolvedValueOnce(jsonResponse({ message: 'boom' }, 502));
-    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime.state).toBe('error');
   });
 
   test('a network failure resolves error', async () => {
     storageData = { ...TOKEN };
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
-    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime.state).toBe('error');
   });
 
   test('a timed-out request (AbortError) resolves error like any network failure', async () => {
     storageData = { ...TOKEN };
     fetchMock.mockRejectedValueOnce(new DOMException('signal timed out', 'TimeoutError'));
-    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime.state).toBe('error');
   });
 });
@@ -342,7 +336,7 @@ describe('fetchRuntime — check-run enrichment', () => {
         () => checkRunsResponse([{ status: 'completed', conclusion: 'success' }]),
       ],
     ]);
-    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(fetchMock).toHaveBeenCalledTimes(3); // search + detail + check-runs
     expect(fetchMock.mock.calls[1]?.[0]).toBe('https://api.github.com/repos/o/r/pulls/1');
     expect(fetchMock.mock.calls[2]?.[0]).toBe(
@@ -365,7 +359,7 @@ describe('fetchRuntime — check-run enrichment', () => {
           ]),
       ],
     ]);
-    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime.items[0]?.status).toEqual({ tone: 'fail', label: 'Checks failed' });
   });
 
@@ -376,7 +370,7 @@ describe('fetchRuntime — check-run enrichment', () => {
       [(u) => u.includes('/pulls/'), () => jsonResponse(prDetail(1))],
       [(u) => u.includes('/check-runs'), () => checkRunsResponse([])],
     ]);
-    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime.items[0]?.status).toBeUndefined();
   });
 
@@ -391,7 +385,7 @@ describe('fetchRuntime — check-run enrichment', () => {
         },
       ],
     ]);
-    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime.state).toBe('ok');
     expect(runtime.items[0]?.status).toBeUndefined();
   });
@@ -411,7 +405,7 @@ describe('fetchRuntime — check-run enrichment', () => {
       if (url.includes('/pulls/')) return jsonResponse(prDetail(Number(url.split('/').pop())));
       return checkRunsResponse([]);
     });
-    await githubConnector.fetchRuntime(node({ query: 'authored' }));
+    await githubConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(maxInFlight).toBeLessThanOrEqual(5);
   });
 
@@ -425,7 +419,7 @@ describe('fetchRuntime — check-run enrichment', () => {
       ],
       [(u) => u.includes('/check-runs'), () => checkRunsResponse([])],
     ]);
-    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await githubConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime.items.map((i) => i.title)).toEqual(['Draft: PR 1', 'PR 2']);
   });
 });
@@ -436,7 +430,7 @@ describe('maxItems + listingUrl', () => {
   test('the node maxItems drives the per_page cap', async () => {
     storageData = { ...TOKEN };
     fetchMock.mockResolvedValueOnce(searchResponse([]));
-    await githubConnector.fetchRuntime(node({ query: 'authored', maxItems: 30 }));
+    await githubConnector.fetchRuntime(node({ query: 'authored' }), 30);
     expect(fetchMock.mock.calls[0]?.[0]).toContain('per_page=30');
   });
 
@@ -448,11 +442,11 @@ describe('maxItems + listingUrl', () => {
     // The headline correctness case (least-privilege-permissions D8): a
     // github.com folder fetches api.github.com, so the gate must request that —
     // never github.com, which would never authorize the fetch.
-    expect(githubConnector.requiredOrigins({ baseUrl: 'https://github.com' })).toEqual([
-      'https://api.github.com/*',
-    ]);
-    expect(githubConnector.requiredOrigins({ baseUrl: 'https://ghe.example.com' })).toEqual([
-      'https://ghe.example.com/*',
-    ]);
+    expect(
+      githubConnector.requiredOrigins({ source: 'github', baseUrl: 'https://github.com' }),
+    ).toEqual(['https://api.github.com/*']);
+    expect(
+      githubConnector.requiredOrigins({ source: 'github', baseUrl: 'https://ghe.example.com' }),
+    ).toEqual(['https://ghe.example.com/*']);
   });
 });

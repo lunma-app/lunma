@@ -298,10 +298,10 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
     kind: 'createSmartFolder',
     payload: {
       spaceId: 'sp',
-      source: 'gitlab',
+      sources: [
+        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+      ],
       name: 'Review requests',
-      baseUrl: 'https://gitlab.example.com',
-      query: 'review-requested',
       maxItems: 20,
       refreshMinutes: 10,
     },
@@ -311,10 +311,8 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
     payload: {
       spaceId: 'sp',
       folderId: 'sf',
-      source: 'github',
+      sources: [{ source: 'github', baseUrl: 'https://github.com', query: 'assigned' }],
       name: 'Assigned to me',
-      baseUrl: 'https://github.com',
-      query: 'assigned',
       maxItems: 30,
       refreshMinutes: 30,
     },
@@ -510,10 +508,8 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
         kind: 'createSmartFolder',
         payload: {
           spaceId: 'sp',
-          source: 'gitlab',
+          sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', query: 'merged-by-me' }],
           name: 'X',
-          baseUrl: 'https://gitlab.com',
-          query: 'merged-by-me', // not in the canned enum
           maxItems: 20,
           refreshMinutes: 10,
         },
@@ -561,10 +557,8 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
         kind: 'createSmartFolder',
         payload: {
           spaceId: 'sp',
-          source,
+          sources: [{ source, baseUrl: 'https://forge.example.com', query: 'authored' as const }],
           name: 'X',
-          baseUrl: 'https://forge.example.com',
-          query: 'authored',
           maxItems: 20,
           refreshMinutes: 10,
         },
@@ -582,14 +576,32 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     }
   });
 
+  test('multi-source createSmartFolder round-trips (gitlab + rss)', () => {
+    const create = {
+      kind: 'createSmartFolder',
+      payload: {
+        spaceId: 'sp',
+        sources: [
+          { source: 'gitlab', baseUrl: 'https://gitlab.com', query: 'authored' as const },
+          { source: 'rss', baseUrl: 'https://hnrss.org/frontpage' },
+        ],
+        name: 'Work + News',
+        maxItems: 20,
+        refreshMinutes: 10,
+      },
+    };
+    const parsed = SidebarCommandSchema.safeParse(create);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data).toEqual(create);
+  });
+
   test('an rss createSmartFolder round-trips with no query (feed source, rss-connector D2)', () => {
     const create = {
       kind: 'createSmartFolder',
       payload: {
         spaceId: 'sp',
-        source: 'rss',
+        sources: [{ source: 'rss', baseUrl: 'https://news.ycombinator.com/rss' }],
         name: 'Hacker News',
-        baseUrl: 'https://news.ycombinator.com/rss',
         maxItems: 30,
         refreshMinutes: 30,
       },
@@ -599,7 +611,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     if (parsed.success) expect(parsed.data).toEqual(create);
   });
 
-  test('rejects an out-of-vocabulary smart-folder source', () => {
+  test('rejects an out-of-vocabulary smart-folder source in sources[]', () => {
     for (const kind of ['createSmartFolder', 'updateSmartFolder'] as const) {
       expect(
         SidebarCommandSchema.safeParse({
@@ -607,10 +619,10 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
           payload: {
             spaceId: 'sp',
             ...(kind === 'updateSmartFolder' ? { folderId: 'sf-1' } : {}),
-            source: 'bitbucket', // not a shipped connector
+            sources: [
+              { source: 'bitbucket', baseUrl: 'https://bitbucket.example.com', query: 'authored' },
+            ],
             name: 'X',
-            baseUrl: 'https://bitbucket.example.com',
-            query: 'authored',
             maxItems: 20,
             refreshMinutes: 10,
           },
@@ -620,15 +632,14 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     }
   });
 
-  test('rejects a createSmartFolder missing its source', () => {
+  test('rejects a createSmartFolder with empty sources array', () => {
     expect(
       SidebarCommandSchema.safeParse({
         kind: 'createSmartFolder',
         payload: {
           spaceId: 'sp',
+          sources: [],
           name: 'X',
-          baseUrl: 'https://gitlab.com',
-          query: 'authored',
           maxItems: 20,
           refreshMinutes: 10,
         },
@@ -644,10 +655,8 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
         payload: {
           spaceId: 'sp',
           folderId: 'sf-1',
-          source: 'gitlab',
+          sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', query: 'authored' }],
           name: 'X',
-          baseUrl: 'https://gitlab.com',
-          query: 'authored',
           maxItems: 20,
           refreshMinutes: 10,
         },
@@ -661,10 +670,8 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
         kind: 'updateSmartFolder',
         payload: {
           spaceId: 'sp',
-          source: 'gitlab',
+          sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', query: 'authored' }],
           name: 'X',
-          baseUrl: 'https://gitlab.com',
-          query: 'authored',
           maxItems: 20,
           refreshMinutes: 10,
         },
@@ -672,15 +679,15 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     ).toBe(false);
   });
 
-  test('a reorderPinned tree containing a smart node round-trips losslessly', () => {
+  test('a reorderPinned tree containing a single-source smart node round-trips losslessly', () => {
     const smartNode = {
       kind: 'smart',
       id: 'sf-1',
       name: 'Review requests',
       icon: 'folder-git-2',
-      source: 'gitlab',
-      baseUrl: 'https://gitlab.example.com',
-      query: 'review-requested',
+      sources: [
+        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+      ],
       maxItems: 20,
       hideRead: false,
       refreshMinutes: 5,
@@ -701,7 +708,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     if (parsed.success) expect(parsed.data).toEqual(cmd);
   });
 
-  test('a reorderPinned tree containing a github smart node round-trips losslessly', () => {
+  test('a reorderPinned tree containing a multi-source smart node round-trips losslessly', () => {
     const cmd = {
       kind: 'reorderPinned',
       payload: {
@@ -710,11 +717,12 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
           {
             kind: 'smart',
             id: 'sf-1',
-            name: 'My pull requests',
-            icon: 'folder-git-2',
-            source: 'github',
-            baseUrl: 'https://github.com',
-            query: 'authored',
+            name: 'Work + News',
+            icon: 'layers',
+            sources: [
+              { source: 'github', baseUrl: 'https://github.com', query: 'authored' },
+              { source: 'rss', baseUrl: 'https://hnrss.org/frontpage' },
+            ],
             maxItems: 20,
             hideRead: false,
             refreshMinutes: 10,
@@ -738,9 +746,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
             id: 'sf-jira',
             name: 'My reported issues',
             icon: 'folder-kanban',
-            source: 'jira',
-            baseUrl: 'https://acme.atlassian.net',
-            query: 'authored',
+            sources: [{ source: 'jira', baseUrl: 'https://acme.atlassian.net', query: 'authored' }],
             maxItems: 20,
             hideRead: false,
             refreshMinutes: 10,
@@ -764,8 +770,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
             id: 'feed-1',
             name: 'Hacker News',
             icon: 'rss',
-            source: 'rss',
-            baseUrl: 'https://news.ycombinator.com/rss',
+            sources: [{ source: 'rss', baseUrl: 'https://news.ycombinator.com/rss' }],
             maxItems: 30,
             hideRead: true,
             refreshMinutes: 30,
@@ -778,7 +783,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     if (parsed.success) expect(parsed.data).toEqual(cmd);
   });
 
-  test('rejects a smart PinNode with an out-of-vocabulary source', () => {
+  test('rejects a smart PinNode with an out-of-vocabulary source in sources[]', () => {
     expect(
       SidebarCommandSchema.safeParse({
         kind: 'reorderPinned',
@@ -790,9 +795,15 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
               id: 'sf-1',
               name: 'X',
               icon: 'folder-git-2',
-              source: 'bitbucket',
-              baseUrl: 'https://bitbucket.example.com',
-              query: 'authored',
+              sources: [
+                {
+                  source: 'bitbucket',
+                  baseUrl: 'https://bitbucket.example.com',
+                  query: 'authored',
+                },
+              ],
+              maxItems: 20,
+              hideRead: false,
               refreshMinutes: 10,
             },
           ],

@@ -10,7 +10,8 @@ import type {
   SavedTab,
   SavedTabId,
   SidebarLocalState,
-  SmartFolderRuntime,
+  SmartSectionRuntime,
+  SmartSourceConfig,
   Space,
   SpaceAutoArchive,
   SpaceColor,
@@ -907,18 +908,17 @@ export class LunmaStore {
 
   /**
    * Edit a smart folder's config in place (smart-folders, design D12). A
-   * `baseUrl`, `query`, or `source` change also invalidates the folder's
-   * runtime `fetchedAt` (the results belong to the OLD query/instance/source),
-   * making it immediately due — the coordinator triggers the refetch.
+   * `sources` or `maxItems` change invalidates all sections' runtime
+   * `fetchedAt` (results belong to the OLD sources/cap), making the folder
+   * immediately due — the coordinator triggers the refetch.
    */
   updateSmartFolder(
     spaceId: SpaceId,
     folderId: FolderId,
     config: {
-      source: Extract<PinNode, { kind: 'smart' }>['source'];
       name: string;
-      baseUrl: string;
-      query: Extract<PinNode, { kind: 'smart' }>['query'];
+      icon: string;
+      sources: SmartSourceConfig[];
       maxItems: number;
       refreshMinutes: number;
     },
@@ -928,24 +928,22 @@ export class LunmaStore {
       log.error('updateSmartFolder: unknown smart folder', { spaceId, folderId });
       return;
     }
-    // A baseUrl/query/source/maxItems change invalidates the results (the
-    // results belong to the OLD query/instance/source/cap) → immediate refetch
-    // (rss-connector design D5 adds `maxItems`). `hideRead` is owned by
-    // `setSmartFolderHideRead`, not the editor's update, so it is preserved.
+    // A sources/maxItems change invalidates all section results → immediate
+    // refetch. `hideRead` is owned by `setSmartFolderHideRead`, not the
+    // editor's update, so it is preserved.
     const resultsInvalidated =
-      node.baseUrl !== config.baseUrl ||
-      node.query !== config.query ||
-      node.source !== config.source ||
+      JSON.stringify(node.sources) !== JSON.stringify(config.sources) ||
       node.maxItems !== config.maxItems;
-    node.source = config.source;
     node.name = config.name;
-    node.baseUrl = config.baseUrl;
-    node.query = config.query;
+    node.icon = config.icon;
+    node.sources = config.sources;
     node.maxItems = config.maxItems;
     node.refreshMinutes = config.refreshMinutes;
     const runtime = this.state.smartFolders[folderId];
     if (resultsInvalidated && runtime) {
-      runtime.fetchedAt = null;
+      for (const section of Object.values(runtime.sections)) {
+        section.fetchedAt = null;
+      }
     }
   }
 
@@ -974,18 +972,29 @@ export class LunmaStore {
   }
 
   /**
-   * Write a smart folder's runtime slice entry (smart-folders, design D3) —
-   * called ONLY by the coordinator drain's `smartFolders.result` handler
-   * (single-writer discipline). A `pending` write preserves the last-known
-   * `items` and `fetchedAt` (the list never blinks and dueness isn't reset by
-   * the in-flight mark); an `error` write preserves last-known `items` while
-   * taking the attempt's `fetchedAt` (rate-limit kindness — the retry waits a
-   * cadence). `ok` and `signed-out` replace wholesale.
+   * Write one section's runtime slice (smart-folders, design D3) — called ONLY
+   * by the coordinator drain's `smartFolders.result` handler (single-writer
+   * discipline). A `pending` write preserves the section's last-known `items`
+   * and `fetchedAt` (the list never blinks and dueness isn't reset by the
+   * in-flight mark); an `error` write preserves last-known `items` while taking
+   * the attempt's `fetchedAt` (rate-limit kindness). `ok`, `signed-out`, and
+   * `needs-access` replace the section wholesale.
    */
-  setSmartFolderRuntime(folderId: FolderId, runtime: SmartFolderRuntime): void {
-    const prev = this.state.smartFolders[folderId];
+  setSmartSectionRuntime(
+    folderId: FolderId,
+    sectionKey: string,
+    runtime: SmartSectionRuntime,
+  ): void {
+    let folder = this.state.smartFolders[folderId];
+    if (!folder) {
+      this.state.smartFolders[folderId] = { sections: {} };
+      folder = this.state.smartFolders[folderId] as {
+        sections: { [k: string]: SmartSectionRuntime };
+      };
+    }
+    const prev = folder.sections[sectionKey];
     if (prev && runtime.state === 'pending') {
-      this.state.smartFolders[folderId] = {
+      folder.sections[sectionKey] = {
         state: 'pending',
         items: prev.items,
         fetchedAt: prev.fetchedAt,
@@ -993,14 +1002,14 @@ export class LunmaStore {
       return;
     }
     if (prev && runtime.state === 'error') {
-      this.state.smartFolders[folderId] = {
+      folder.sections[sectionKey] = {
         state: 'error',
         items: prev.items,
         fetchedAt: runtime.fetchedAt,
       };
       return;
     }
-    this.state.smartFolders[folderId] = runtime;
+    folder.sections[sectionKey] = runtime;
   }
 
   /**
@@ -1461,10 +1470,10 @@ export class LunmaStore {
     return this.markConsumedFeedItems();
   }
 
-  /** Whether `folderId` is a FEED (`rss`) smart folder — the draining-queue read
-   * trigger needs the source. */
+  /** Whether `folderId` has any `rss` source — the draining-queue read trigger
+   * checks if any section is a feed. */
   private isFeedFolder(folderId: FolderId): boolean {
-    return this.findSmartFolderAnySpace(folderId)?.source === 'rss';
+    return this.findSmartFolderAnySpace(folderId)?.sources.some((s) => s.source === 'rss') ?? false;
   }
 
   /**
@@ -1508,6 +1517,72 @@ export class LunmaStore {
         }
       }
     }
+  }
+
+  /**
+   * Find the next unread, unbound feed item to auto-open after `closedTabId`
+   * is removed from a feed folder. Must be called BEFORE `onTabRemoved` so the
+   * closing item's binding is still visible. Returns undefined when the window
+   * is closing, the tab wasn't a feed item, or no next item exists.
+   */
+  nextUnreadFeedItemAfterClose(
+    closedTabId: TabId,
+    windowId: WindowId,
+  ): { spaceId: SpaceId; folderId: FolderId; itemId: string; windowId: WindowId } | undefined {
+    // Find the folder + namespaced item id bound to the closing tab.
+    let targetFolderId: FolderId | undefined;
+    let closingNamespacedId: string | undefined;
+    outer: for (const [folderId, byItem] of Object.entries(this.state.smartItemBindings)) {
+      for (const [namespacedId, slots] of Object.entries(byItem)) {
+        if (Object.values(slots).some((s) => s.tabId === closedTabId)) {
+          targetFolderId = folderId as FolderId;
+          closingNamespacedId = namespacedId;
+          break outer;
+        }
+      }
+    }
+    if (!targetFolderId || !closingNamespacedId) return undefined;
+    if (!this.isFeedFolder(targetFolderId)) return undefined;
+
+    // Extract sourceKey: first two colon-delimited segments of the namespaced id.
+    const firstColon = closingNamespacedId.indexOf(':');
+    const secondColon = firstColon !== -1 ? closingNamespacedId.indexOf(':', firstColon + 1) : -1;
+    if (secondColon === -1) return undefined;
+    const sk = closingNamespacedId.slice(0, secondColon);
+
+    // Find the folder's space.
+    let spaceId: SpaceId | undefined;
+    for (const [sid, nodes] of Object.entries(this.state.pinnedBySpace)) {
+      if (nodes.some((n) => n.kind === 'smart' && n.id === targetFolderId)) {
+        spaceId = sid as SpaceId;
+        break;
+      }
+    }
+    if (!spaceId) return undefined;
+
+    // Items in section order from the runtime.
+    const items = this.state.smartFolders[targetFolderId]?.sections[sk]?.items ?? [];
+    if (items.length === 0) return undefined;
+
+    const readSet = new Set(this.state.smartReadState[targetFolderId] ?? []);
+    // Items already bound in this window (skip them — they're already open).
+    const boundInWindow = new Set<string>();
+    for (const [namespacedId, slots] of Object.entries(
+      this.state.smartItemBindings[targetFolderId] ?? {},
+    )) {
+      if (namespacedId !== closingNamespacedId && slots[windowId] !== undefined) {
+        boundInWindow.add(namespacedId);
+      }
+    }
+
+    for (const item of items) {
+      const namespacedId = `${sk}:${item.id}`;
+      if (namespacedId === closingNamespacedId) continue; // the one being closed
+      if (readSet.has(namespacedId)) continue;
+      if (boundInWindow.has(namespacedId)) continue;
+      return { spaceId, folderId: targetFolderId, itemId: namespacedId, windowId };
+    }
+    return undefined;
   }
 
   /** Seed the whole map from `chrome.tabs.query` results (boot rebuild). */

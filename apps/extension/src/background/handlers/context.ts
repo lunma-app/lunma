@@ -9,7 +9,7 @@
 
 import type { SidebarCommand } from '../../shared/bus';
 import type { LunmaStore } from '../../shared/store.svelte';
-import type { FolderId, SmartFolderRuntime } from '../../shared/types';
+import type { FolderId, SmartSectionRuntime } from '../../shared/types';
 import type { BoundaryController } from '../boundary-controller';
 import type { GroupOrchestrator } from '../group-orchestrator';
 
@@ -124,7 +124,7 @@ export type PendingEvent =
   | {
       source: 'connector';
       kind: 'smartFolders.result';
-      payload: { folderId: FolderId; runtime: SmartFolderRuntime };
+      payload: { folderId: FolderId; sourceKey: string; runtime: SmartSectionRuntime };
     };
 
 export type PendingEventKind = PendingEvent['kind'];

@@ -1,13 +1,13 @@
 import { z } from 'zod';
-import { requiredOriginsForNode } from '../../shared/connector-origins';
+import { requiredOriginsForConfig } from '../../shared/connector-origins';
 import { readConnectors } from '../../shared/connectors';
-import type { SmartFolderItem, SmartFolderRuntime, SmartQuery } from '../../shared/types';
-import {
-  boundedFetch,
-  type ConnectorCaches,
-  type SmartFolderNode,
-  type SourceConnector,
-} from './connector';
+import type {
+  SmartFolderItem,
+  SmartQuery,
+  SmartSectionRuntime,
+  SmartSourceConfig,
+} from '../../shared/types';
+import { boundedFetch, type ConnectorCaches, type SourceConnector } from './connector';
 
 /**
  * The GitLab connector (smart-folders v1, relocated by github-connector design
@@ -134,7 +134,7 @@ type MeResolution = { kind: 'ok'; id: number } | { kind: 'signed-out' | 'error' 
 /** Resolve `/api/v4/user` once per poll cycle: the `ConnectorCaches` map
  * (threaded by the engine) keys resolutions by baseUrl. The IN-FLIGHT promise
  * is cached synchronously, so concurrent same-host fetches in one cycle share
- * a single lookup instead of racing past an empty cache. */
+ * a single lookup instead of racing past an empty cache into duplicate lookups. */
 function resolveMe(
   baseUrl: string,
   auth: AuthMode,
@@ -192,16 +192,17 @@ function usablePipelineStatus(mr: Mr): string | undefined {
 }
 
 /**
- * Fetch one smart folder's results and normalize them into a
- * `SmartFolderRuntime`. Never throws — every failure shape resolves to a
+ * Fetch one smart folder section's results and normalize them into a
+ * `SmartSectionRuntime`. Never throws — every failure shape resolves to a
  * runtime state. The engine reaches this via `CONNECTORS.gitlab.fetchRuntime`.
  */
 async function fetchRuntime(
-  node: Pick<SmartFolderNode, 'baseUrl' | 'query' | 'maxItems'>,
+  cfg: SmartSourceConfig,
+  maxItems: number,
   caches: ConnectorCaches = new Map(),
-): Promise<SmartFolderRuntime> {
+): Promise<SmartSectionRuntime> {
   const fetchedAt = Date.now();
-  const fail = (state: 'signed-out' | 'error'): SmartFolderRuntime => ({
+  const fail = (state: 'signed-out' | 'error'): SmartSectionRuntime => ({
     state,
     items: [],
     fetchedAt,
@@ -209,7 +210,7 @@ async function fetchRuntime(
 
   let host: string;
   try {
-    host = hostOf(node.baseUrl);
+    host = hostOf(cfg.baseUrl);
   } catch {
     // A malformed persisted baseUrl (defensive — the SW validates on
     // create/update) degrades to the quiet error state, never a throw.
@@ -219,19 +220,19 @@ async function fetchRuntime(
 
   // A queue node always carries a query (it's source-optional only for feeds);
   // default defensively so the now-optional field stays a total switch.
-  const query: SmartQuery = node.query ?? 'assigned';
+  const query: SmartQuery = cfg.query ?? 'assigned';
 
   let meId: number | null = null;
   if (query === 'review-requested') {
-    const me = await resolveMe(node.baseUrl, auth, caches);
+    const me = await resolveMe(cfg.baseUrl, auth, caches);
     if (me.kind !== 'ok') return fail(me.kind);
     meId = me.id;
   }
 
-  // Per-folder cap (rss-connector design D5) — the badge renders `N+` at it, so
+  // Per-section cap (rss-connector design D5) — the badge renders `N+` at it, so
   // the cap is never silent.
-  const path = `/api/v4/merge_requests?state=opened&per_page=${node.maxItems}&${queryParams(query, meId)}`;
-  const outcome = await gitlabGet(node.baseUrl, path, auth);
+  const path = `/api/v4/merge_requests?state=opened&per_page=${maxItems}&${queryParams(query, meId)}`;
+  const outcome = await gitlabGet(cfg.baseUrl, path, auth);
   if (outcome.kind !== 'ok') return fail(outcome.kind);
   if (!Array.isArray(outcome.json)) return fail('error');
 
@@ -241,7 +242,7 @@ async function fetchRuntime(
       const parsed = MrSchema.safeParse(element);
       return parsed.success ? [parsed.data] : [];
     })
-    .slice(0, node.maxItems);
+    .slice(0, maxItems);
 
   // Bounded pipeline enrichment: only for listed items whose list row carries
   // no usable pipeline field; skipped entirely when it does. An enrichment
@@ -251,7 +252,7 @@ async function fetchRuntime(
     if (listed !== undefined) return listed;
     if (mr.project_id === undefined || mr.iid === undefined) return undefined;
     const detail = await gitlabGet(
-      node.baseUrl,
+      cfg.baseUrl,
       `/api/v4/projects/${mr.project_id}/merge_requests/${mr.iid}`,
       auth,
     );
@@ -276,16 +277,16 @@ async function fetchRuntime(
 /** The full listing on the instance (rss-connector design D6, "open all in a
  * tab"): GitLab's cross-project merge-requests dashboard — the canonical
  * "MRs that involve me" page, independent of the folder's canned query. */
-function listingUrl(node: Pick<SmartFolderNode, 'baseUrl' | 'query'>): string {
-  return `${node.baseUrl}/dashboard/merge_requests`;
+function listingUrl(cfg: SmartSourceConfig): string {
+  return `${cfg.baseUrl}/dashboard/merge_requests`;
 }
 
 /** The origin this connector fetches (least-privilege-permissions design D8):
  * GitLab fetches same-origin under `{baseUrl}/api/v4`. Delegates to the shared
- * {@link requiredOriginsForNode} so the SW gate and the surfaces share one
+ * {@link requiredOriginsForConfig} so the SW gate and the surfaces share one
  * derivation. */
-function requiredOrigins(node: Pick<SmartFolderNode, 'baseUrl'>): string[] {
-  return requiredOriginsForNode({ source: 'gitlab', baseUrl: node.baseUrl });
+function requiredOrigins(cfg: SmartSourceConfig): string[] {
+  return requiredOriginsForConfig(cfg);
 }
 
 /** The GitLab `SourceConnector` — the registry's `gitlab` entry. */

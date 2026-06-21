@@ -10,7 +10,10 @@ export type Migration = {
  * five entries are pure pass-throughs (see detailed reasons below); the sixth
  * (v7, smart-tab-boundary) is a REAL transformation — each `smartItemBindings`
  * slot that holds a bare `TabId` (number) is widened to `{ tabId, allowGlob:
- * '' }` so the boundary content script can be re-armed at boot.
+ * '' }` so the boundary content script can be re-armed at boot. The seventh
+ * (v8, multi-source-smart-folders) wraps each smart node's flat
+ * `source`/`baseUrl`/`query?` into `sources: [{ source, baseUrl, query }]` and
+ * re-keys `smartItemBindings` item ids as `${sourceKey}:${nativeId}`.
  *
  * Pass-through rationale: v1→v2 (v1 data cannot contain `smart` pinned nodes),
  * v2→v3 (v2 data cannot contain `source: 'github'` nodes), v3→v4 (new
@@ -46,6 +49,70 @@ export const migrations: Migration[] = [
           }
         }
       }
+      return raw;
+    },
+  },
+  {
+    toVersion: 8,
+    migrate: (raw: unknown): unknown => {
+      if (typeof raw !== 'object' || raw === null) return raw;
+      const state = raw as Record<string, unknown>;
+      const pinnedBySpace = state.pinnedBySpace;
+      if (typeof pinnedBySpace !== 'object' || pinnedBySpace === null) return raw;
+
+      // Build a lookup: folderId → { source, baseUrl } for sourceKey derivation
+      // in step 2. Must be populated BEFORE we mutate the nodes in step 1.
+      const smartNodeById = new Map<string, { source: string; baseUrl: string }>();
+
+      // Step 1: wrap each smart node's flat source/baseUrl/query? into sources[].
+      for (const nodes of Object.values(pinnedBySpace as Record<string, unknown>)) {
+        if (!Array.isArray(nodes)) continue;
+        for (const node of nodes) {
+          if (typeof node !== 'object' || node === null) continue;
+          const n = node as Record<string, unknown>;
+          if (n.kind !== 'smart') continue;
+          const { source, baseUrl, query, id } = n;
+          if (typeof source !== 'string' || typeof baseUrl !== 'string' || typeof id !== 'string')
+            continue;
+          // Record original values before mutating.
+          smartNodeById.set(id, { source, baseUrl });
+          const cfg: Record<string, unknown> = { source, baseUrl };
+          if (typeof query === 'string') cfg.query = query;
+          n.sources = [cfg];
+          delete n.source;
+          delete n.baseUrl;
+          delete n.query;
+        }
+      }
+
+      // Step 2: re-key smartItemBindings item ids with sourceKey namespace.
+      const bindings = state.smartItemBindings;
+      if (typeof bindings !== 'object' || bindings === null) return raw;
+      const bindingsMap = bindings as Record<string, unknown>;
+      for (const [folderId, byItem] of Object.entries(bindingsMap)) {
+        const smartInfo = smartNodeById.get(folderId);
+        if (!smartInfo) {
+          // Orphaned binding — no matching smart node, drop it.
+          delete bindingsMap[folderId];
+          continue;
+        }
+        let host: string;
+        try {
+          host = new URL(smartInfo.baseUrl).host;
+        } catch {
+          // Malformed baseUrl — drop the folderId entry defensively.
+          delete bindingsMap[folderId];
+          continue;
+        }
+        const sk = `${smartInfo.source}:${host}`;
+        if (typeof byItem !== 'object' || byItem === null) continue;
+        const newByItem: Record<string, unknown> = {};
+        for (const [itemId, slots] of Object.entries(byItem as Record<string, unknown>)) {
+          newByItem[`${sk}:${itemId}`] = slots;
+        }
+        bindingsMap[folderId] = newByItem;
+      }
+
       return raw;
     },
   },

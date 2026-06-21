@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import type { SmartFolderNode } from './connector';
+import type { SmartSourceConfig } from '../../shared/types';
 import { parseFeed, resetRssListingCache, rssConnector } from './rss';
 
 // ── test plumbing ──────────────────────────────────────────────────────────────
@@ -46,17 +46,10 @@ function latin1FeedResponse(xml: string): unknown {
   };
 }
 
-function node(overrides: Partial<SmartFolderNode> = {}): SmartFolderNode {
+function node(overrides: Partial<SmartSourceConfig> = {}): SmartSourceConfig {
   return {
-    kind: 'smart',
-    id: 'feed-1',
-    name: 'Example feed',
-    icon: 'rss',
     source: 'rss',
     baseUrl: 'https://news.example.com/rss',
-    maxItems: 20,
-    hideRead: false,
-    refreshMinutes: 30,
     ...overrides,
   };
 }
@@ -154,7 +147,7 @@ describe('parseFeed', () => {
 describe('fetchRuntime', () => {
   test('an RSS 2.0 feed normalizes to ok with its items', async () => {
     fetchMock.mockResolvedValueOnce(feedResponse(RSS_2_0));
-    const runtime = await rssConnector.fetchRuntime(node());
+    const runtime = await rssConnector.fetchRuntime(node(), 20);
     expect(runtime.state).toBe('ok');
     expect(runtime.items.map((i) => i.id)).toEqual(['guid-1', 'https://example.com/post-2']);
     // No credentials ride along for a public feed.
@@ -165,6 +158,7 @@ describe('fetchRuntime', () => {
     fetchMock.mockResolvedValueOnce(feedResponse(ATOM));
     const runtime = await rssConnector.fetchRuntime(
       node({ baseUrl: 'https://atom.example.com/feed' }),
+      20,
     );
     expect(runtime.state).toBe('ok');
     expect(runtime.items.map((i) => i.url)).toEqual([
@@ -182,20 +176,20 @@ describe('fetchRuntime', () => {
       <item><title>c</title><link>https://x/c</link></item>
     </channel></rss>`;
     fetchMock.mockResolvedValueOnce(feedResponse(threeItemFeed));
-    const runtime = await rssConnector.fetchRuntime(node({ maxItems: 2 }));
+    const runtime = await rssConnector.fetchRuntime(node(), 2);
     expect(runtime.state).toBe('ok');
     expect(runtime.items.map((i) => i.url)).toEqual(['https://x/a', 'https://x/b', 'https://x/c']);
   });
 
   test('a non-2xx response resolves to error, never signed-out', async () => {
     fetchMock.mockResolvedValueOnce(feedResponse('', { ok: false }));
-    const runtime = await rssConnector.fetchRuntime(node());
+    const runtime = await rssConnector.fetchRuntime(node(), 20);
     expect(runtime.state).toBe('error');
   });
 
   test('a network failure resolves to error', async () => {
     fetchMock.mockRejectedValueOnce(new Error('network down'));
-    const runtime = await rssConnector.fetchRuntime(node());
+    const runtime = await rssConnector.fetchRuntime(node(), 20);
     expect(runtime.state).toBe('error');
   });
 
@@ -207,7 +201,7 @@ describe('fetchRuntime', () => {
       headers: { get: () => String(10_000_000) },
       arrayBuffer: bufSpy,
     });
-    const runtime = await rssConnector.fetchRuntime(node());
+    const runtime = await rssConnector.fetchRuntime(node(), 20);
     expect(runtime.state).toBe('error');
     expect(bufSpy).not.toHaveBeenCalled();
   });
@@ -224,7 +218,7 @@ describe('fetchRuntime', () => {
   </item>
 </channel></rss>`;
     fetchMock.mockResolvedValueOnce(latin1FeedResponse(latin1Xml));
-    const runtime = await rssConnector.fetchRuntime(node());
+    const runtime = await rssConnector.fetchRuntime(node(), 20);
     expect(runtime.state).toBe('ok');
     expect(runtime.items[0]?.title).toBe('Suíça rejeita proposta');
   });
@@ -234,19 +228,19 @@ describe('fetchRuntime', () => {
     fetchMock.mockResolvedValueOnce(
       feedResponse(RSS_2_0, { contentType: 'application/rss+xml; charset=utf-8' }),
     );
-    const runtime = await rssConnector.fetchRuntime(node());
+    const runtime = await rssConnector.fetchRuntime(node(), 20);
     expect(runtime.state).toBe('ok');
     expect(runtime.items).toHaveLength(2);
   });
 
   test('an empty parse (non-feed body) resolves to error', async () => {
     fetchMock.mockResolvedValueOnce(feedResponse('<html>nope</html>'));
-    const runtime = await rssConnector.fetchRuntime(node());
+    const runtime = await rssConnector.fetchRuntime(node(), 20);
     expect(runtime.state).toBe('error');
   });
 
   test('a malformed baseUrl resolves to error without fetching', async () => {
-    const runtime = await rssConnector.fetchRuntime(node({ baseUrl: 'not a url' }));
+    const runtime = await rssConnector.fetchRuntime(node({ baseUrl: 'not a url' }), 20);
     expect(runtime.state).toBe('error');
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -262,15 +256,15 @@ describe('listingUrl', () => {
   test('returns the channel website link captured during a successful fetch', async () => {
     fetchMock.mockResolvedValueOnce(feedResponse(RSS_2_0));
     const n = node();
-    await rssConnector.fetchRuntime(n);
+    await rssConnector.fetchRuntime(n, 20);
     expect(rssConnector.listingUrl(n)).toBe('https://example.com');
   });
 });
 
 describe('requiredOrigins', () => {
   test('is the feed origin the connector fetches directly (D8/D9)', () => {
-    expect(rssConnector.requiredOrigins({ baseUrl: 'https://blog.example.com/feed.xml' })).toEqual([
-      'https://blog.example.com/*',
-    ]);
+    expect(
+      rssConnector.requiredOrigins({ source: 'rss', baseUrl: 'https://blog.example.com/feed.xml' }),
+    ).toEqual(['https://blog.example.com/*']);
   });
 });

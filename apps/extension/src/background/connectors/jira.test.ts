@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import type { SmartFolderNode } from './connector';
+import type { SmartSourceConfig } from '../../shared/types';
 import { jiraConnector, statusForCategory } from './jira';
 
 // ── test plumbing ──────────────────────────────────────────────────────────────
@@ -59,18 +59,11 @@ function issue(
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
-function node(overrides: Partial<SmartFolderNode> = {}): SmartFolderNode {
+function node(overrides: Partial<SmartSourceConfig> = {}): SmartSourceConfig {
   return {
-    kind: 'smart',
-    id: 'sf-jira',
-    name: 'My reported issues',
-    icon: 'folder-kanban',
     source: 'jira',
     baseUrl: 'https://acme.atlassian.net',
     query: 'assigned',
-    maxItems: 20,
-    hideRead: false,
-    refreshMinutes: 10,
     ...overrides,
   };
 }
@@ -104,7 +97,7 @@ describe('statusForCategory', () => {
 describe('fetchRuntime — canned queries', () => {
   test('assigned requests assignee = currentUser() over the GA /search/jql endpoint', async () => {
     fetchMock.mockResolvedValueOnce(searchResponse([]));
-    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }));
+    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       'https://acme.atlassian.net/rest/api/3/search/jql?jql=assignee%20%3D%20currentUser()%20AND%20statusCategory%20!%3D%20Done%20ORDER%20BY%20updated%20DESC&fields=summary,status&maxResults=20',
@@ -114,7 +107,7 @@ describe('fetchRuntime — canned queries', () => {
 
   test('authored requests reporter = currentUser()', async () => {
     fetchMock.mockResolvedValueOnce(searchResponse([]));
-    await jiraConnector.fetchRuntime(node({ query: 'authored' }));
+    await jiraConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(fetchMock.mock.calls[0]?.[0]).toContain(
       'jql=reporter%20%3D%20currentUser()%20AND%20statusCategory%20!%3D%20Done%20ORDER%20BY%20updated%20DESC',
     );
@@ -122,7 +115,7 @@ describe('fetchRuntime — canned queries', () => {
 
   test('review-requested re-skins to watcher = currentUser(), with NO me-resolution call', async () => {
     fetchMock.mockResolvedValueOnce(searchResponse([]));
-    await jiraConnector.fetchRuntime(node({ query: 'review-requested' }));
+    await jiraConnector.fetchRuntime(node({ query: 'review-requested' }), 20);
     // Exactly one request — currentUser() resolves server-side; no /myself step.
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toContain(
@@ -136,7 +129,7 @@ describe('fetchRuntime — canned queries', () => {
 describe('fetchRuntime — session-riding auth', () => {
   test('rides the session: Accept JSON, credentials include, NO Authorization, lunma.connectors never read', async () => {
     fetchMock.mockResolvedValueOnce(searchResponse([]));
-    await jiraConnector.fetchRuntime(node({ query: 'assigned' }));
+    await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(init.headers).toEqual({ Accept: 'application/json' });
     expect((init.headers as Record<string, string>).Authorization).toBeUndefined();
@@ -152,7 +145,7 @@ describe('fetchRuntime — session-riding auth', () => {
 describe('fetchRuntime — normalization', () => {
   test('an issue row leads with its key and links to /browse/{key}', async () => {
     fetchMock.mockResolvedValueOnce(searchResponse([issue('10001', 'PROJ-123', 'Fix the export')]));
-    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }));
+    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
     expect(runtime.state).toBe('ok');
     expect(runtime.items).toEqual([
       {
@@ -173,7 +166,7 @@ describe('fetchRuntime — normalization', () => {
         issue('5', 'P-5', 'No category'),
       ]),
     );
-    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }));
+    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
     // Inline: one request only — Jira issues zero enrichment fan-out.
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(runtime.items).toEqual([
@@ -197,7 +190,7 @@ describe('fetchRuntime — normalization', () => {
 
   test('a malformed issue is dropped, the rest survive (element-wise parse)', async () => {
     fetchMock.mockResolvedValueOnce(searchResponse([issue('1', 'P-1', 'Good'), { junk: true }]));
-    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }));
+    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
     expect(runtime.state).toBe('ok');
     expect(runtime.items.map((i) => i.id)).toEqual(['1']);
   });
@@ -207,7 +200,7 @@ describe('fetchRuntime — normalization', () => {
       issue(String(i + 1), `P-${i + 1}`, `Issue ${i + 1}`),
     );
     fetchMock.mockResolvedValueOnce(searchResponse(overfull));
-    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }));
+    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
     expect(runtime.items).toHaveLength(20);
   });
 });
@@ -217,61 +210,61 @@ describe('fetchRuntime — normalization', () => {
 describe('fetchRuntime — signed-out vs error', () => {
   test('a 401 resolves signed-out, never throwing', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ message: 'Unauthorized' }, 401));
-    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }));
+    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
     expect(runtime).toMatchObject({ state: 'signed-out', items: [] });
   });
 
   test('a redirect landing on an HTML login page resolves signed-out', async () => {
     fetchMock.mockResolvedValueOnce(htmlResponse(200, true));
-    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }));
+    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
     expect(runtime.state).toBe('signed-out');
   });
 
   test('any non-JSON body resolves signed-out', async () => {
     fetchMock.mockResolvedValueOnce(htmlResponse(200, false));
-    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }));
+    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
     expect(runtime.state).toBe('signed-out');
   });
 
   test('a 5xx resolves error', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ message: 'boom' }, 503));
-    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }));
+    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
     expect(runtime.state).toBe('error');
   });
 
   test('a 429 resolves error', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ message: 'slow down' }, 429));
-    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }));
+    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
     expect(runtime.state).toBe('error');
   });
 
   test('any other non-2xx (e.g. a 400 from malformed JQL) with a JSON body resolves error', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ errorMessages: ['bad jql'] }, 400));
-    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }));
+    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
     expect(runtime.state).toBe('error');
   });
 
   test('a network failure resolves error', async () => {
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
-    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }));
+    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
     expect(runtime.state).toBe('error');
   });
 
   test('a timed-out request (AbortError) resolves error', async () => {
     fetchMock.mockRejectedValueOnce(new DOMException('signal timed out', 'TimeoutError'));
-    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }));
+    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
     expect(runtime.state).toBe('error');
   });
 
   test('every request carries a bounded timeout signal (a hang resolves, never wedges)', async () => {
     fetchMock.mockResolvedValueOnce(searchResponse([]));
-    await jiraConnector.fetchRuntime(node({ query: 'assigned' }));
+    await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 
   test('a malformed persisted baseUrl degrades to the quiet error state, never a throw', async () => {
-    const runtime = await jiraConnector.fetchRuntime(node({ baseUrl: 'not a url' }));
+    const runtime = await jiraConnector.fetchRuntime(node({ baseUrl: 'not a url' }), 20);
     expect(runtime.state).toBe('error');
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -282,7 +275,7 @@ describe('fetchRuntime — signed-out vs error', () => {
 describe('maxItems + listingUrl', () => {
   test('the node maxItems drives the maxResults cap', async () => {
     fetchMock.mockResolvedValueOnce(searchResponse([]));
-    await jiraConnector.fetchRuntime(node({ maxItems: 50 }));
+    await jiraConnector.fetchRuntime(node(), 50);
     expect(fetchMock.mock.calls[0]?.[0]).toContain('maxResults=50');
   });
 
@@ -296,8 +289,8 @@ describe('maxItems + listingUrl', () => {
   });
 
   test('requiredOrigins is the same-origin baseUrl pattern (D8)', () => {
-    expect(jiraConnector.requiredOrigins({ baseUrl: 'https://acme.atlassian.net' })).toEqual([
-      'https://acme.atlassian.net/*',
-    ]);
+    expect(
+      jiraConnector.requiredOrigins({ source: 'jira', baseUrl: 'https://acme.atlassian.net' }),
+    ).toEqual(['https://acme.atlassian.net/*']);
   });
 });

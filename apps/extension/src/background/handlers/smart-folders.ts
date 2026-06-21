@@ -5,7 +5,7 @@
 // itself lives in `../smart-folders.ts` — fetches always run OFF the drain.
 
 import { log } from '../../shared/logger';
-import type { FolderId, SpaceId } from '../../shared/types';
+import type { FolderId, SmartSourceConfig, SpaceId } from '../../shared/types';
 import { pageGlob } from '../../shared/url-boundary';
 import {
   CONNECTORS,
@@ -64,26 +64,30 @@ export function smartFolderHandlers(
 > {
   return {
     createSmartFolder: (ctx, event) => {
-      const { spaceId, source, name, baseUrl, query, maxItems, refreshMinutes } = event.payload;
+      const { spaceId, sources, name, maxItems, refreshMinutes } = event.payload;
       if (!spaceExists(ctx.store.state, spaceId)) {
         throw new Error(`createSmartFolder: unknown spaceId '${spaceId}'`);
       }
-      // SW-minted identity (D12): the handler mints rather than the store
-      // because the immediate first fetch needs the new id, and mutators are
-      // void-returning. The icon comes from the source connector's
-      // `mintedIcon` (the bus boundary rejects out-of-vocabulary sources, so
-      // the registry lookup is total). An invalid baseUrl throws here —
-      // error ack, no node. A feed source carries no `query` (rss-connector
-      // design D2); `hideRead` starts TRUE — a feed's resting state is the
-      // drained unread queue (the draining-queue model; inert on queue sources).
+      // SW-minted identity (D12): handler mints the node. Validate + normalize
+      // each source's baseUrl (throws on invalid → error ack, no node). Icon
+      // comes from the first-source connector when all sources share a kind;
+      // 'layers' for a mixed multi-source folder. hideRead starts TRUE —
+      // a feed's resting state is the drained unread queue.
+      const normalizedSources: SmartSourceConfig[] = sources.map((cfg) => ({
+        ...cfg,
+        baseUrl: normalizeBaseUrl(cfg.baseUrl),
+      }));
+      const firstSource = normalizedSources[0]?.source;
+      const icon =
+        firstSource && normalizedSources.every((s) => s.source === firstSource)
+          ? CONNECTORS[firstSource].mintedIcon
+          : 'layers';
       const node: SmartFolderNode = {
         kind: 'smart',
         id: crypto.randomUUID(),
         name,
-        icon: CONNECTORS[source].mintedIcon,
-        source,
-        baseUrl: normalizeBaseUrl(baseUrl),
-        ...(query !== undefined ? { query } : {}),
+        icon,
+        sources: normalizedSources,
         maxItems,
         hideRead: true,
         refreshMinutes: clampRefreshMinutes(refreshMinutes),
@@ -100,23 +104,32 @@ export function smartFolderHandlers(
       ctx.runSideEffect(() => completion);
     },
     updateSmartFolder: (ctx, event) => {
-      const { spaceId, folderId, source, name, baseUrl, query, maxItems, refreshMinutes } =
-        event.payload;
+      const { spaceId, folderId, sources, name, maxItems, refreshMinutes } = event.payload;
       const node = requireSmartNode(ctx, 'updateSmartFolder', spaceId, folderId);
-      const normalized = normalizeBaseUrl(baseUrl);
-      // A baseUrl/query/source/maxItems change invalidates the results (the store
-      // mutator also nulls the runtime's fetchedAt) → immediate refetch
-      // (rss-connector design D5 adds `maxItems`).
-      const resultsInvalidated =
-        node.baseUrl !== normalized ||
-        node.query !== query ||
-        node.source !== source ||
-        node.maxItems !== maxItems;
+      const normalizedSources: SmartSourceConfig[] = sources.map((cfg) => ({
+        ...cfg,
+        baseUrl: normalizeBaseUrl(cfg.baseUrl),
+      }));
+      // A sources/maxItems change invalidates the results (the store mutator
+      // also nulls per-section fetchedAt) → immediate refetch for changed sections.
+      const sourcesChanged =
+        node.sources.length !== normalizedSources.length ||
+        node.sources.some(
+          (s, i) =>
+            s.source !== normalizedSources[i]?.source ||
+            s.baseUrl !== normalizedSources[i]?.baseUrl ||
+            s.query !== normalizedSources[i]?.query,
+        );
+      const resultsInvalidated = sourcesChanged || node.maxItems !== maxItems;
+      const firstSource = normalizedSources[0]?.source;
+      const newIcon =
+        firstSource && normalizedSources.every((s) => s.source === firstSource)
+          ? CONNECTORS[firstSource].mintedIcon
+          : 'layers';
       ctx.store.updateSmartFolder(spaceId, folderId, {
-        source,
+        sources: normalizedSources,
         name,
-        baseUrl: normalized,
-        query,
+        icon: newIcon,
         maxItems,
         refreshMinutes: clampRefreshMinutes(refreshMinutes),
       });
@@ -175,9 +188,16 @@ export function smartFolderHandlers(
         return;
       }
       // Open-if-dormant: resolve the item from the SW's own runtime slice.
+      // itemId is namespaced: "${sourceKey}:${nativeId}" — extract the sourceKey
+      // (first two colon-delimited segments) and look up the section + native id.
+      const firstColon = itemId.indexOf(':');
+      const secondColon = firstColon !== -1 ? itemId.indexOf(':', firstColon + 1) : -1;
+      const sk = secondColon !== -1 ? itemId.slice(0, secondColon) : '';
+      const nativeId = secondColon !== -1 ? itemId.slice(secondColon + 1) : itemId;
+      const section = ctx.store.state.smartFolders[folderId]?.sections[sk];
       // The itemId lookup key is safe, but item.url is RSS-feed-controlled data
       // and could carry a non-http(s) scheme — validate it before tabs.create.
-      const item = ctx.store.state.smartFolders[folderId]?.items.find((i) => i.id === itemId);
+      const item = section?.items.find((i) => i.id === nativeId);
       if (!item) {
         throw new Error(
           `openSmartItem: item '${itemId}' is neither bound nor listed in folder '${folderId}'`,
@@ -259,14 +279,25 @@ export function smartFolderHandlers(
     },
     markAllSmartItemsRead: (ctx, event) => {
       const { spaceId, folderId } = event.payload;
-      requireSmartNode(ctx, 'markAllSmartItemsRead', spaceId, folderId);
-      // Mark every CURRENTLY-listed item read — the runtime slice's items are the
-      // live window the pruning keeps the read-state aligned to.
-      const items = ctx.store.state.smartFolders[folderId]?.items ?? [];
-      ctx.store.markAllSmartItemsRead(
-        folderId,
-        items.map((i) => i.id),
-      );
+      const node = requireSmartNode(ctx, 'markAllSmartItemsRead', spaceId, folderId);
+      // Collect namespaced ids from all RSS sections only (task 4.5: hideRead /
+      // mark-all-read applies to feed sources exclusively).
+      const sections = ctx.store.state.smartFolders[folderId]?.sections ?? {};
+      const namespacedIds: string[] = [];
+      for (const cfg of node.sources) {
+        if (cfg.source !== 'rss') continue;
+        let host: string;
+        try {
+          host = new URL(cfg.baseUrl).host;
+        } catch {
+          continue;
+        }
+        const sk = `${cfg.source}:${host}`;
+        for (const item of sections[sk]?.items ?? []) {
+          namespacedIds.push(`${sk}:${item.id}`);
+        }
+      }
+      ctx.store.markAllSmartItemsRead(folderId, namespacedIds);
       ctx.markDirty();
     },
     setSmartFolderHideRead: (ctx, event) => {
@@ -282,7 +313,10 @@ export function smartFolderHandlers(
     openSmartFolderListing: async (ctx, event) => {
       const { spaceId, folderId, windowId } = event.payload;
       const node = requireSmartNode(ctx, 'openSmartFolderListing', spaceId, folderId);
-      const url = CONNECTORS[node.source].listingUrl(node);
+      // Multi-source: open the first source's listing URL.
+      const firstCfg = node.sources[0];
+      if (!firstCfg) return;
+      const url = CONNECTORS[firstCfg.source].listingUrl(firstCfg);
       let scheme: string;
       try {
         scheme = new URL(url).protocol;
@@ -296,62 +330,69 @@ export function smartFolderHandlers(
       }
       await chrome.tabs.create({ url, windowId });
     },
-    // OPML bulk-import (opml-import-export): iterate feeds, apply
-    // createSmartFolder logic per entry; catch per-entry validation errors
-    // (normalizeBaseUrl throws on an invalid URL), increment skipped.
+    // OPML bulk-import (multi-source-smart-folders): collect all valid feed
+    // entries as SmartSourceConfig[], then create ONE smart folder with N sources.
+    // Invalid URLs (normalizeBaseUrl throws) are skipped and counted.
     importOpml: (ctx, event) => {
       const { spaceId, feeds } = event.payload;
       if (!spaceExists(ctx.store.state, spaceId)) {
         throw new Error(`importOpml: unknown spaceId '${spaceId}'`);
       }
-      let imported = 0;
+      const validEntries: { name: string; cfg: SmartSourceConfig }[] = [];
       let skipped = 0;
       for (const { name, feedUrl } of feeds) {
         try {
-          const node: SmartFolderNode = {
-            kind: 'smart',
-            id: crypto.randomUUID(),
-            name,
-            icon: CONNECTORS.rss.mintedIcon,
-            source: 'rss',
-            baseUrl: normalizeBaseUrl(feedUrl),
-            maxItems: 10,
-            hideRead: true,
-            refreshMinutes: 30,
-          };
-          ctx.store.addSmartFolder(spaceId, node);
-          ctx.markDirty();
-          ctx.runSideEffect(() => syncSmartFoldersAlarm(ctx.store));
-          const { completion } = startSmartFolderRefresh(
-            { store: ctx.store, enqueue: deps.enqueue },
-            node,
-          );
-          ctx.runSideEffect(() => completion);
-          imported++;
+          const baseUrl = normalizeBaseUrl(feedUrl);
+          validEntries.push({ name, cfg: { source: 'rss', baseUrl } });
         } catch (err) {
           log.warn('importOpml: skipping invalid feed entry', { name, feedUrl, err });
           skipped++;
         }
       }
+      const imported = validEntries.length;
+      if (imported === 0) {
+        log.debug('importOpml: no valid sources', { skipped });
+        return;
+      }
+      const folderName = imported === 1 ? (validEntries[0]?.name ?? 'Feeds') : 'Feeds';
+      const node: SmartFolderNode = {
+        kind: 'smart',
+        id: crypto.randomUUID(),
+        name: folderName,
+        icon: CONNECTORS.rss.mintedIcon,
+        sources: validEntries.map((e) => e.cfg),
+        maxItems: 10,
+        hideRead: true,
+        refreshMinutes: 30,
+      };
+      ctx.store.addSmartFolder(spaceId, node);
+      ctx.markDirty();
+      ctx.runSideEffect(() => syncSmartFoldersAlarm(ctx.store));
+      const { completion } = startSmartFolderRefresh(
+        { store: ctx.store, enqueue: deps.enqueue },
+        node,
+      );
+      ctx.runSideEffect(() => completion);
       log.debug('importOpml: done', { imported, skipped });
     },
     'smartFolders.result': (ctx, event) => {
-      const { folderId, runtime } = event.payload;
+      const { folderId, sourceKey: sk, runtime } = event.payload;
       // A result landing after its folder was deleted is dropped — writing it
       // would resurrect an orphan runtime entry the delete already cleaned up.
       const stillExists = Object.values(ctx.store.state.pinnedBySpace).some((nodes) =>
         nodes.some((n) => n.kind === 'smart' && n.id === folderId),
       );
       if (!stillExists) return;
-      ctx.store.setSmartFolderRuntime(folderId, runtime);
-      // Prune feed read-state to the live window on a successful fetch
+      ctx.store.setSmartSectionRuntime(folderId, sk, runtime);
+      // Prune feed read-state to the live window on a successful section fetch
       // (rss-connector design D3): only `ok` carries the authoritative item set
       // — `pending`/`error` hold last-known items, so pruning against their
       // empty `items` would wrongly wipe the read set.
       if (runtime.state === 'ok') {
+        // Prune with namespaced ids so they match the keys used by markSmartItemRead.
         ctx.store.pruneSmartReadState(
           folderId,
-          runtime.items.map((i) => i.id),
+          runtime.items.map((i) => `${sk}:${i.id}`),
         );
       }
       ctx.markDirty();

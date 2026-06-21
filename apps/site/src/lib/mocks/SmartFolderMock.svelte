@@ -1,39 +1,29 @@
 <script lang="ts">
-// A smart folder of live GitLab merge requests — the shipped v1 connector. Mirrors
-// the extension's result-row contract: a folder header (a git source mark + name +
-// a quiet item-count badge) over rows of source mark + title + EXACTLY ONE
-// pipeline-status dot (the one-glyph restraint), each dot painted from the
-// @lunma/tokens semantic tone tokens (--success / --info / --warning). Decorative
-// (aria-hidden) like the other mocks — the beat copy carries the meaning. No motion
-// (a running pipeline is a static --info dot), so the page's reduced-motion contract
-// is untouched. The folder name rides the surrounding Space colour with the
-// SectionHeader's max(l, 0.72) lightness floor, so it stays WCAG-AA.
-interface Mr {
+// A multi-source smart folder — one folder aggregating GitLab MRs and GitHub PRs.
+// Mirrors the extension's sectioned result-row contract: a folder header (source
+// mark + name + combined badge) then two sections each preceded by a quiet
+// section-header divider (source icon + host label, 12px height, --text-dim /
+// --text-muted). Per-row: source mark + title + ONE pipeline-status dot from
+// @lunma/tokens semantic tone tokens. Decorative (aria-hidden) — the beat copy
+// carries the meaning. No motion; reduced-motion contract untouched.
+interface Item {
   title: string;
   tone: 'success' | 'info' | 'warning';
 }
 
-const items: Mr[] = [
+const gitlab: Item[] = [
   { title: 'Sidebar: fix the drift-dot ring', tone: 'success' },
   { title: 'Launcher: tab-completion across engines', tone: 'info' },
-  { title: 'Auto-archive: settle the idle clock', tone: 'warning' },
 ];
+
+const github: Item[] = [{ title: 'Auto-archive: settle the idle clock', tone: 'warning' }];
+
+const totalCount = gitlab.length + github.length;
 </script>
 
-<!-- The smart folder's own mark — lucide `folder-git-2`, the glyph the extension
-     mints for a smart folder. Distinct from the per-row merge mark below. -->
+<!-- lucide `folder-git-2` — the glyph minted for a smart folder. -->
 {#snippet folderMark()}
-  <svg
-    viewBox="0 0 24 24"
-    width="15"
-    height="15"
-    fill="none"
-    stroke="currentColor"
-    stroke-width="2"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-    aria-hidden="true"
-  >
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
     <path d="M18 19a5 5 0 0 1-5-5v8" />
     <path d="M9 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v5" />
     <circle cx="13" cy="12" r="2" />
@@ -41,19 +31,9 @@ const items: Mr[] = [
   </svg>
 {/snippet}
 
-<!-- A single merge request — lucide `git-merge`. -->
+<!-- lucide `git-merge` — per-row MR/PR mark. -->
 {#snippet mergeMark()}
-  <svg
-    viewBox="0 0 24 24"
-    width="15"
-    height="15"
-    fill="none"
-    stroke="currentColor"
-    stroke-width="2"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-    aria-hidden="true"
-  >
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
     <circle cx="18" cy="18" r="3" />
     <circle cx="6" cy="6" r="3" />
     <path d="M6 21V9a9 9 0 0 0 9 9" />
@@ -64,13 +44,32 @@ const items: Mr[] = [
   <div class="head">
     <span class="mark">{@render folderMark()}</span>
     <span class="name">Review queue</span>
-    <span class="count">{items.length}</span>
+    <span class="count">{totalCount}</span>
   </div>
-  {#each items as mr (mr.title)}
+
+  <!-- Section header: GitLab -->
+  <div class="section-head">
+    <span class="section-mark">{@render folderMark()}</span>
+    <span class="section-host">gitlab.com</span>
+  </div>
+  {#each gitlab as item (item.title)}
     <div class="row">
       <span class="mark">{@render mergeMark()}</span>
-      <span class="title">{mr.title}</span>
-      <span class="dot" data-tone={mr.tone}></span>
+      <span class="title">{item.title}</span>
+      <span class="dot" data-tone={item.tone}></span>
+    </div>
+  {/each}
+
+  <!-- Section header: GitHub -->
+  <div class="section-head">
+    <span class="section-mark">{@render folderMark()}</span>
+    <span class="section-host">github.com</span>
+  </div>
+  {#each github as item (item.title)}
+    <div class="row">
+      <span class="mark">{@render mergeMark()}</span>
+      <span class="title">{item.title}</span>
+      <span class="dot" data-tone={item.tone}></span>
     </div>
   {/each}
 </div>
@@ -127,6 +126,35 @@ const items: Mr[] = [
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+  }
+
+  /* Section divider — 12px height, quiet source icon + host label. */
+  .section-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: 12px;
+    padding: 4px var(--space-2) 0 var(--space-3);
+    margin-bottom: 2px;
+  }
+  .section-mark {
+    flex: none;
+    display: inline-flex;
+    width: var(--favicon-size);
+    height: var(--favicon-size);
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+  }
+  .section-host {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 11px;
+    line-height: 1;
+    color: var(--text-muted);
   }
 
   .mark {

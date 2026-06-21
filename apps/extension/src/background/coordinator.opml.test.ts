@@ -43,7 +43,7 @@ afterEach(() => {
 });
 
 describe('importOpml handler', () => {
-  test('all valid feeds: creates N smart folders, acks ok', async () => {
+  test('3 valid feeds → 1 folder with 3 sources named "Feeds"', async () => {
     const { coordinator, store, emitAck } = makeWithSpace();
 
     coordinator.enqueue(
@@ -66,17 +66,43 @@ describe('importOpml handler', () => {
 
     const nodes = store.state.pinnedBySpace.s1 ?? [];
     const smartNodes = nodes.filter((n) => n.kind === 'smart');
-    expect(smartNodes).toHaveLength(3);
-    // addSmartFolder inserts at the top, so the order is reversed.
-    expect(smartNodes.map((n) => (n.kind === 'smart' ? n.name : '')).sort()).toEqual([
-      'HN',
-      'Julia Evans',
-      'Lobsters',
-    ]);
+    // One folder aggregating all 3 feeds.
+    expect(smartNodes).toHaveLength(1);
+    const folder = smartNodes[0];
+    if (folder?.kind !== 'smart') throw new Error('not smart');
+    expect(folder.name).toBe('Feeds');
+    expect(folder.sources).toHaveLength(3);
+    expect(folder.sources.map((s) => s.source)).toEqual(['rss', 'rss', 'rss']);
     expect(emitAck).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1', result: 'ok' }));
   });
 
-  test('invalid feedUrl is skipped and counted', async () => {
+  test('1 valid feed → 1 folder named after the feed', async () => {
+    const { coordinator, store, emitAck } = makeWithSpace();
+
+    coordinator.enqueue(
+      sidebar(
+        {
+          kind: 'importOpml',
+          payload: {
+            spaceId: 's1',
+            feeds: [{ name: 'HN', feedUrl: 'https://hnrss.org/frontpage' }],
+          },
+        },
+        'c-single',
+      ),
+    );
+    await coordinator.idle();
+
+    const smartNodes = (store.state.pinnedBySpace.s1 ?? []).filter((n) => n.kind === 'smart');
+    expect(smartNodes).toHaveLength(1);
+    const folder = smartNodes[0];
+    if (folder?.kind !== 'smart') throw new Error('not smart');
+    expect(folder.name).toBe('HN');
+    expect(folder.sources).toHaveLength(1);
+    expect(emitAck).toHaveBeenCalledWith(expect.objectContaining({ id: 'c-single', result: 'ok' }));
+  });
+
+  test('2 valid + 1 invalid → 1 folder with 2 sources (invalid URL skipped)', async () => {
     const { coordinator, store, emitAck } = makeWithSpace();
 
     coordinator.enqueue(
@@ -97,9 +123,39 @@ describe('importOpml handler', () => {
     );
     await coordinator.idle();
 
-    const nodes = (store.state.pinnedBySpace.s1 ?? []).filter((n) => n.kind === 'smart');
-    expect(nodes).toHaveLength(2);
+    const smartNodes = (store.state.pinnedBySpace.s1 ?? []).filter((n) => n.kind === 'smart');
+    expect(smartNodes).toHaveLength(1);
+    const folder = smartNodes[0];
+    if (folder?.kind !== 'smart') throw new Error('not smart');
+    expect(folder.sources).toHaveLength(2);
     expect(emitAck).toHaveBeenCalledWith(expect.objectContaining({ id: 'c2', result: 'ok' }));
+  });
+
+  test('all invalid URLs → no folder, acks ok', async () => {
+    const { coordinator, store, emitAck } = makeWithSpace();
+
+    coordinator.enqueue(
+      sidebar(
+        {
+          kind: 'importOpml',
+          payload: {
+            spaceId: 's1',
+            feeds: [
+              { name: 'Bad1', feedUrl: 'not-a-url' },
+              { name: 'Bad2', feedUrl: 'also-bad' },
+            ],
+          },
+        },
+        'c-invalid',
+      ),
+    );
+    await coordinator.idle();
+
+    const nodes = store.state.pinnedBySpace.s1 ?? [];
+    expect(nodes).toHaveLength(0);
+    expect(emitAck).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c-invalid', result: 'ok' }),
+    );
   });
 
   test('unknown spaceId throws and acks error', async () => {

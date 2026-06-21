@@ -27,20 +27,26 @@ afterEach(() => {
   delete (globalThis as unknown as { chrome?: unknown }).chrome;
 });
 
-const urlInput = (c: HTMLElement): HTMLInputElement =>
-  c.querySelector('[data-testid="smart-folder-url"]') as HTMLInputElement;
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
 const nameInput = (c: HTMLElement): HTMLInputElement =>
   c.querySelector('[data-testid="smart-folder-name"]') as HTMLInputElement;
+
 const confirmBtn = (c: HTMLElement): HTMLButtonElement =>
   [...c.querySelectorAll('button')].find((b) =>
     /Add smart folder|Save/.test(b.textContent ?? ''),
   ) as HTMLButtonElement;
-/** The SegmentedControl label text for the query option whose radio carries `value`. */
+
+/** The SegmentedControl label text for the option whose radio carries `value`. */
 const optionLabel = (c: HTMLElement, value: string): string =>
   c.querySelector(`input[value="${value}"]`)?.closest('label')?.querySelector('.option-label')
     ?.textContent ?? '';
+
 const trigger = (c: HTMLElement, testid: string): HTMLButtonElement =>
   c.querySelector(`[data-testid="${testid}"]`) as HTMLButtonElement;
+
 /** The current value shown on a `Select` trigger. */
 const selectValue = (c: HTMLElement, testid: string): string | null =>
   trigger(c, testid).getAttribute('data-value');
@@ -54,9 +60,44 @@ async function pickSelect(c: HTMLElement, testid: string, value: string): Promis
   await fireEvent.click(option);
 }
 
-/** Switch the Source `Select` to `value`. */
-const pickSource = (c: HTMLElement, value: string): Promise<void> =>
-  pickSelect(c, 'smart-folder-source', value);
+// Add-source form helpers — testids live inside the inline add form.
+const addSourceOpenBtn = (c: HTMLElement): HTMLButtonElement =>
+  c.querySelector('[data-testid="smart-add-source-open"]') as HTMLButtonElement;
+
+const addSourceUrlInput = (c: HTMLElement): HTMLInputElement =>
+  c.querySelector('[data-testid="smart-add-source-url"]') as HTMLInputElement;
+
+const addSourceConfirmBtn = (c: HTMLElement): HTMLButtonElement =>
+  c.querySelector('[data-testid="smart-add-source-confirm"]') as HTMLButtonElement;
+
+const sourceEntries = (c: HTMLElement): Element[] => [
+  ...c.querySelectorAll('[data-testid="smart-source-entry"]'),
+];
+
+const removeSourceBtns = (c: HTMLElement): HTMLButtonElement[] =>
+  [...c.querySelectorAll('[aria-label="Remove source"]')] as HTMLButtonElement[];
+
+/** Open the "Add source" inline form (no-op in create mode, where it auto-opens). */
+const openAddForm = async (c: HTMLElement): Promise<void> => {
+  const btn = addSourceOpenBtn(c);
+  if (btn) await fireEvent.click(btn);
+};
+
+/** Open the add form, optionally override source/URL/query, then click Add. */
+async function fillAndAddSource(
+  c: HTMLElement,
+  opts: { source?: string; baseUrl?: string; query?: string } = {},
+): Promise<void> {
+  await openAddForm(c);
+  if (opts.source) await pickSelect(c, 'smart-add-source-type', opts.source);
+  if (opts.baseUrl !== undefined) {
+    await fireEvent.input(addSourceUrlInput(c), { target: { value: opts.baseUrl } });
+  }
+  if (opts.query) {
+    await fireEvent.click(c.querySelector(`input[value="${opts.query}"]`) as HTMLInputElement);
+  }
+  await fireEvent.click(addSourceConfirmBtn(c));
+}
 
 function existingNode(overrides: Partial<SmartNode> = {}): SmartNode {
   return {
@@ -64,9 +105,7 @@ function existingNode(overrides: Partial<SmartNode> = {}): SmartNode {
     id: 'sf-1',
     name: 'Assigned to me',
     icon: 'folder-git-2',
-    source: 'gitlab',
-    baseUrl: 'https://gitlab.example.com',
-    query: 'assigned',
+    sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'assigned' }],
     maxItems: 20,
     hideRead: false,
     refreshMinutes: 10,
@@ -74,20 +113,37 @@ function existingNode(overrides: Partial<SmartNode> = {}): SmartNode {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Create mode
+// ---------------------------------------------------------------------------
+
 describe('SmartFolderEditor — create mode', () => {
-  test('defaults: gitlab.com base URL, review-requested query, 10-min cadence, 10-item cap, suggested name', () => {
+  test('the add form defaults to gitlab, gitlab.com, and review-requested', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    expect(selectValue(container, 'smart-folder-source')).toBe('gitlab');
-    expect(urlInput(container).value).toBe('https://gitlab.com');
+    // confirm is disabled until at least one source is added
+    expect(confirmBtn(container).disabled).toBe(true);
+    await openAddForm(container);
+    expect(selectValue(container, 'smart-add-source-type')).toBe('gitlab');
+    expect(addSourceUrlInput(container).value).toBe('https://gitlab.com');
     expect(
       (container.querySelector('input[value="review-requested"]') as HTMLInputElement).checked,
     ).toBe(true);
-    expect(nameInput(container).value).toBe('Review requests');
+  });
+
+  test('global cadence defaults to 10 min and cap defaults to 10 items', () => {
+    const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
     expect(container.querySelector('[data-testid="smart-folder-cadence"]')?.textContent).toContain(
       'Every 10 minutes',
     );
-    // The "Show at most" cap defaults to 10 for a new folder (design D5).
     expect(selectValue(container, 'smart-folder-max-items')).toBe('10');
+  });
+
+  test('adding the first source auto-suggests the name from the query', async () => {
+    const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
+    await fillAndAddSource(container, { baseUrl: 'https://gitlab.com' }); // review-requested default
+    expect(nameInput(container).value).toBe('Review requests');
+    expect(sourceEntries(container)).toHaveLength(1);
+    expect(confirmBtn(container).disabled).toBe(false);
   });
 
   test('confirm dispatches createSmartFolder with the panel values (incl. maxItems) and calls onDone', async () => {
@@ -95,10 +151,10 @@ describe('SmartFolderEditor — create mode', () => {
     const { container } = render(SmartFolderEditorHarness, {
       props: { spaceId: 'work', onDone },
     });
-    await fireEvent.input(urlInput(container), {
-      target: { value: 'https://gitlab.example.com' },
+    await fillAndAddSource(container, {
+      baseUrl: 'https://gitlab.example.com',
+      query: 'authored',
     });
-    await fireEvent.click(container.querySelector('input[value="authored"]') as HTMLInputElement);
     await pickSelect(container, 'smart-folder-cadence', '30');
     await pickSelect(container, 'smart-folder-max-items', '50');
     await fireEvent.click(confirmBtn(container));
@@ -107,10 +163,8 @@ describe('SmartFolderEditor — create mode', () => {
       kind: 'createSmartFolder',
       payload: {
         spaceId: 'work',
-        source: 'gitlab',
-        name: 'My merge requests', // auto-suggested from the picked query
-        baseUrl: 'https://gitlab.example.com',
-        query: 'authored',
+        sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'authored' }],
+        name: 'My merge requests',
         maxItems: 50,
         refreshMinutes: 30,
       },
@@ -120,162 +174,177 @@ describe('SmartFolderEditor — create mode', () => {
 
   test('create dispatch carries the picked source (GitHub)', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await pickSource(container, 'github');
+    await fillAndAddSource(container, { source: 'github' }); // URL auto-swaps to github.com
     await fireEvent.click(confirmBtn(container));
 
     expect(sendMock).toHaveBeenCalledWith({
       kind: 'createSmartFolder',
       payload: {
         spaceId: 'work',
-        source: 'github',
-        name: 'Review requests', // the shared review-requested suggestion
-        baseUrl: 'https://github.com', // swapped by the canonical-default rule
-        query: 'review-requested',
+        sources: [{ source: 'github', baseUrl: 'https://github.com', query: 'review-requested' }],
+        name: 'Review requests',
         maxItems: 10,
         refreshMinutes: 10,
       },
     });
   });
 
-  test('the suggested name follows the query until the user types their own', async () => {
+  test('the suggested name follows the first added source+query; a manual name sticks afterwards', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await fireEvent.click(container.querySelector('input[value="assigned"]') as HTMLInputElement);
+    await fillAndAddSource(container, { query: 'assigned' });
     expect(nameInput(container).value).toBe('Assigned to me');
+    // Manual input pins the name.
     await fireEvent.input(nameInput(container), { target: { value: 'My queue' } });
-    await fireEvent.click(container.querySelector('input[value="authored"]') as HTMLInputElement);
+    // Remove source and re-add with a different query — manual name must not be overwritten.
+    await fireEvent.click(removeSourceBtns(container)[0] as HTMLButtonElement);
+    await fillAndAddSource(container, { query: 'authored' });
     expect(nameInput(container).value).toBe('My queue');
   });
 
-  test('an invalid base URL blocks confirm with a quiet inline message', async () => {
+  test('an invalid URL in the add form disables the Add button', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await fireEvent.input(urlInput(container), { target: { value: 'not a url' } });
-    expect(
-      container.querySelector('[data-testid="smart-folder-url-error"]')?.textContent,
-    ).toContain('Needs a full URL');
-    expect(urlInput(container).getAttribute('aria-invalid')).toBe('true');
-    expect(confirmBtn(container).disabled).toBe(true);
-    await fireEvent.click(confirmBtn(container));
-    expect(sendMock).not.toHaveBeenCalled();
+    await openAddForm(container);
+    await fireEvent.input(addSourceUrlInput(container), { target: { value: 'not a url' } });
+    expect(addSourceConfirmBtn(container).disabled).toBe(true);
   });
 
-  test('an untouched empty field does not scold and a non-http(s) scheme blocks', async () => {
+  test('an empty URL and a non-http(s) scheme both disable Add', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await fireEvent.input(urlInput(container), { target: { value: '' } });
-    expect(container.querySelector('[data-testid="smart-folder-url-error"]')).toBeNull();
-    await fireEvent.input(urlInput(container), { target: { value: 'ftp://gitlab.com' } });
-    expect(container.querySelector('[data-testid="smart-folder-url-error"]')).not.toBeNull();
+    await openAddForm(container);
+    await fireEvent.input(addSourceUrlInput(container), { target: { value: '' } });
+    expect(addSourceConfirmBtn(container).disabled).toBe(true);
+    await fireEvent.input(addSourceUrlInput(container), { target: { value: 'ftp://gitlab.com' } });
+    expect(addSourceConfirmBtn(container).disabled).toBe(true);
   });
 
-  test('the source picker is a Select above the URL field, holding all four sources, defaulting GitLab', async () => {
+  test('the source picker in the add form holds all four sources and defaults to GitLab', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    const sourceTrigger = trigger(container, 'smart-folder-source');
-    expect(selectValue(container, 'smart-folder-source')).toBe('gitlab');
-    // The source control sits above the URL field in document order.
+    await openAddForm(container);
+    const sourceTrigger = trigger(container, 'smart-add-source-type');
+    expect(selectValue(container, 'smart-add-source-type')).toBe('gitlab');
+    // The source picker sits above the URL input in document order.
     expect(
-      sourceTrigger.compareDocumentPosition(urlInput(container)) & Node.DOCUMENT_POSITION_FOLLOWING,
+      sourceTrigger.compareDocumentPosition(addSourceUrlInput(container)) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    // Open it and assert the four sources.
+    // Open it and assert the five sources (gitlab, github, jira, rss, opml).
     await fireEvent.click(sourceTrigger);
     const root = sourceTrigger.closest('.select') as HTMLElement;
     const values = [...root.querySelectorAll('[role="option"]')].map((o) =>
       o.getAttribute('data-value'),
     );
-    expect(values).toEqual(['gitlab', 'github', 'jira', 'rss']);
+    expect(values).toEqual(['gitlab', 'github', 'jira', 'rss', 'opml']);
   });
 
-  test('picking GitHub swaps an untouched default URL and the suggested name', async () => {
+  test('picking GitHub in the add form swaps the default URL to github.com', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await fireEvent.click(container.querySelector('input[value="authored"]') as HTMLInputElement);
-    expect(nameInput(container).value).toBe('My merge requests');
-    await pickSource(container, 'github');
-    expect(urlInput(container).value).toBe('https://github.com');
-    expect(nameInput(container).value).toBe('My pull requests');
-    await pickSource(container, 'gitlab');
-    expect(urlInput(container).value).toBe('https://gitlab.com');
-    expect(nameInput(container).value).toBe('My merge requests');
+    await openAddForm(container);
+    await pickSelect(container, 'smart-add-source-type', 'github');
+    expect(addSourceUrlInput(container).value).toBe('https://github.com');
   });
 
-  test('a custom URL is never clobbered by a source switch', async () => {
+  test('a custom URL is never clobbered by a source switch in the add form', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await fireEvent.input(urlInput(container), {
+    await openAddForm(container);
+    await fireEvent.input(addSourceUrlInput(container), {
       target: { value: 'https://gitlab.example.com' },
     });
-    await pickSource(container, 'github');
-    expect(urlInput(container).value).toBe('https://gitlab.example.com');
+    await pickSelect(container, 'smart-add-source-type', 'github');
+    expect(addSourceUrlInput(container).value).toBe('https://gitlab.example.com');
   });
 
-  test('the hint is per source: session-or-token for GitLab, token-required for GitHub', async () => {
+  test('the hint reflects committed sources: per-source for one, generic for many', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
     const hint = (): string =>
       container.querySelector('[data-testid="smart-folder-hint"]')?.textContent ?? '';
+    expect(hint()).toContain('Add at least one source');
+    await fillAndAddSource(container, {});
     expect(hint()).toContain("Signed in to GitLab in this browser? That's enough.");
     expect(hint()).toContain('Settings → Connectors');
-    await pickSource(container, 'github');
-    expect(hint()).toBe('GitHub needs an access token — add one in Settings → Connectors.');
+    await fillAndAddSource(container, { source: 'github' });
+    expect(hint()).toContain('Each source fetches independently');
   });
 
-  test('switching to Jira swaps URL/name/hint and the third-slot label to "Watching"', async () => {
+  test('switching to Jira in the add form swaps URL, the third-slot label to "Watching", and the hint after add', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    expect(optionLabel(container, 'review-requested')).toBe('Review');
-    await pickSource(container, 'jira');
-    expect(urlInput(container).value).toBe('https://your-site.atlassian.net');
-    expect(nameInput(container).value).toBe('Watching');
+    await openAddForm(container);
+    await pickSelect(container, 'smart-add-source-type', 'jira');
+    expect(addSourceUrlInput(container).value).toBe('https://your-site.atlassian.net');
     expect(optionLabel(container, 'review-requested')).toBe('Watching');
-    const hint = container.querySelector('[data-testid="smart-folder-hint"]')?.textContent ?? '';
-    expect(hint).toBe("Signed in to Jira in this browser? That's enough.");
     expect(
       (container.querySelector('input[value="review-requested"]') as HTMLInputElement).checked,
     ).toBe(true);
+    await fireEvent.click(addSourceConfirmBtn(container));
+    expect(container.querySelector('[data-testid="smart-folder-hint"]')?.textContent).toBe(
+      "Signed in to Jira in this browser? That's enough.",
+    );
   });
 
   test('create dispatch carries the picked source (Jira)', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await pickSource(container, 'jira');
+    await fillAndAddSource(container, { source: 'jira' });
     await fireEvent.click(confirmBtn(container));
     expect(sendMock).toHaveBeenCalledWith({
       kind: 'createSmartFolder',
       payload: {
         spaceId: 'work',
-        source: 'jira',
+        sources: [
+          {
+            source: 'jira',
+            baseUrl: 'https://your-site.atlassian.net',
+            query: 'review-requested',
+          },
+        ],
         name: 'Watching',
-        baseUrl: 'https://your-site.atlassian.net',
-        query: 'review-requested',
         maxItems: 10,
         refreshMinutes: 10,
       },
     });
   });
 
-  test('the swap rule covers all four canonical defaults and leaves a custom URL untouched', async () => {
+  test('the canonical-URL swap rule covers all four sources; a custom URL is left untouched', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await pickSource(container, 'jira');
-    expect(urlInput(container).value).toBe('https://your-site.atlassian.net');
-    await pickSource(container, 'github');
-    expect(urlInput(container).value).toBe('https://github.com');
-    await pickSource(container, 'rss');
-    expect(urlInput(container).value).toBe(''); // the feed source's empty seed
-    await pickSource(container, 'gitlab');
-    expect(urlInput(container).value).toBe('https://gitlab.com');
-    await fireEvent.input(urlInput(container), { target: { value: 'https://jira.acme.dev' } });
-    await pickSource(container, 'jira');
-    expect(urlInput(container).value).toBe('https://jira.acme.dev');
+    await openAddForm(container);
+    await pickSelect(container, 'smart-add-source-type', 'jira');
+    expect(addSourceUrlInput(container).value).toBe('https://your-site.atlassian.net');
+    await pickSelect(container, 'smart-add-source-type', 'github');
+    expect(addSourceUrlInput(container).value).toBe('https://github.com');
+    await pickSelect(container, 'smart-add-source-type', 'rss');
+    expect(addSourceUrlInput(container).value).toBe('');
+    await pickSelect(container, 'smart-add-source-type', 'gitlab');
+    expect(addSourceUrlInput(container).value).toBe('https://gitlab.com');
+    // Custom URL survives a source switch.
+    await fireEvent.input(addSourceUrlInput(container), {
+      target: { value: 'https://jira.acme.dev' },
+    });
+    await pickSelect(container, 'smart-add-source-type', 'jira');
+    expect(addSourceUrlInput(container).value).toBe('https://jira.acme.dev');
   });
 });
 
+// ---------------------------------------------------------------------------
+// RSS adaptation (rss-connector)
+// ---------------------------------------------------------------------------
+
 describe('SmartFolderEditor — RSS adaptation (rss-connector)', () => {
-  test('picking RSS relabels the URL field, hides the query, shows the cap, defaults refresh to 30, and updates the hint', async () => {
+  test('picking RSS in the add form relabels the URL field, hides the query, shows the cap, and flips cadence to 30 after add', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await pickSource(container, 'rss');
+    await openAddForm(container);
+    await pickSelect(container, 'smart-add-source-type', 'rss');
 
     // "Feed URL" label, not "Instance URL".
     expect(container.textContent).toContain('Feed URL');
     expect(container.textContent).not.toContain('Instance URL');
     // The canned-query control is hidden for a feed.
     expect(container.querySelector('input[value="authored"]')).toBeNull();
-    expect(container.querySelector('#smart-folder-query-label')).toBeNull();
-    // The "Show at most" cap is still shown.
+    // The "Show at most" cap is still rendered.
     expect(container.querySelector('[data-testid="smart-folder-max-items"]')).not.toBeNull();
-    // Refresh default flips to 30 minutes for a feed.
+
+    // Add a feed URL and commit — cadence should flip to 30.
+    await fireEvent.input(addSourceUrlInput(container), {
+      target: { value: 'https://news.ycombinator.com/rss' },
+    });
+    await fireEvent.click(addSourceConfirmBtn(container));
     expect(container.querySelector('[data-testid="smart-folder-cadence"]')?.textContent).toContain(
       'Every 30 minutes',
     );
@@ -288,10 +357,12 @@ describe('SmartFolderEditor — RSS adaptation (rss-connector)', () => {
   test('confirm dispatches createSmartFolder with source rss, the chosen maxItems, and NO query', async () => {
     const onDone = vi.fn();
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work', onDone } });
-    await pickSource(container, 'rss');
-    await fireEvent.input(urlInput(container), {
+    await openAddForm(container);
+    await pickSelect(container, 'smart-add-source-type', 'rss');
+    await fireEvent.input(addSourceUrlInput(container), {
       target: { value: 'https://news.ycombinator.com/rss' },
     });
+    await fireEvent.click(addSourceConfirmBtn(container));
     await fireEvent.input(nameInput(container), { target: { value: 'Hacker News' } });
     await pickSelect(container, 'smart-folder-max-items', '30');
     await fireEvent.click(confirmBtn(container));
@@ -300,9 +371,8 @@ describe('SmartFolderEditor — RSS adaptation (rss-connector)', () => {
       kind: 'createSmartFolder',
       payload: {
         spaceId: 'work',
-        source: 'rss',
+        sources: [{ source: 'rss', baseUrl: 'https://news.ycombinator.com/rss' }],
         name: 'Hacker News',
-        baseUrl: 'https://news.ycombinator.com/rss',
         maxItems: 30,
         refreshMinutes: 30,
       },
@@ -310,52 +380,32 @@ describe('SmartFolderEditor — RSS adaptation (rss-connector)', () => {
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 
-  test('an empty feed URL keeps confirm disabled (a feed has no canonical default)', async () => {
+  test('an empty feed URL keeps Add disabled (a feed has no canonical default)', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await pickSource(container, 'rss');
-    expect(urlInput(container).value).toBe('');
-    expect(confirmBtn(container).disabled).toBe(true);
+    await openAddForm(container);
+    await pickSelect(container, 'smart-add-source-type', 'rss');
+    expect(addSourceUrlInput(container).value).toBe('');
+    expect(addSourceConfirmBtn(container).disabled).toBe(true);
   });
 });
 
+// ---------------------------------------------------------------------------
+// Edit mode
+// ---------------------------------------------------------------------------
+
 describe('SmartFolderEditor — edit mode', () => {
-  test('pre-fills every field from the node, including the cap', () => {
+  test('pre-fills name, cap, and existing source in the list', () => {
     const { container } = render(SmartFolderEditorHarness, {
       props: { spaceId: 'work', node: existingNode() },
     });
-    expect(selectValue(container, 'smart-folder-source')).toBe('gitlab');
-    expect(urlInput(container).value).toBe('https://gitlab.example.com');
-    expect((container.querySelector('input[value="assigned"]') as HTMLInputElement).checked).toBe(
-      true,
+    const entries = sourceEntries(container);
+    expect(entries).toHaveLength(1);
+    expect((entries[0] as HTMLElement).querySelector('.source-chip')?.textContent).toBe('GitLab');
+    expect((entries[0] as HTMLElement).querySelector('.source-url')?.textContent).toBe(
+      'gitlab.example.com',
     );
     expect(nameInput(container).value).toBe('Assigned to me');
     expect(selectValue(container, 'smart-folder-max-items')).toBe('20');
-  });
-
-  test('a query change confirms as updateSmartFolder carrying the new query (the SW refetches)', async () => {
-    const onDone = vi.fn();
-    const { container } = render(SmartFolderEditorHarness, {
-      props: { spaceId: 'work', node: existingNode(), onDone },
-    });
-    await fireEvent.click(
-      container.querySelector('input[value="review-requested"]') as HTMLInputElement,
-    );
-    await fireEvent.click(confirmBtn(container));
-
-    expect(sendMock).toHaveBeenCalledWith({
-      kind: 'updateSmartFolder',
-      payload: {
-        spaceId: 'work',
-        folderId: 'sf-1',
-        source: 'gitlab',
-        name: 'Assigned to me',
-        baseUrl: 'https://gitlab.example.com',
-        query: 'review-requested',
-        maxItems: 20,
-        refreshMinutes: 10,
-      },
-    });
-    expect(onDone).toHaveBeenCalledTimes(1);
   });
 
   test('a maxItems change confirms as updateSmartFolder carrying the new cap (the SW refetches)', async () => {
@@ -370,22 +420,24 @@ describe('SmartFolderEditor — edit mode', () => {
       payload: {
         spaceId: 'work',
         folderId: 'sf-1',
-        source: 'gitlab',
+        sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'assigned' }],
         name: 'Assigned to me',
-        baseUrl: 'https://gitlab.example.com',
-        query: 'assigned',
         maxItems: 50,
         refreshMinutes: 10,
       },
     });
   });
 
-  test('a source change dispatches updateSmartFolder carrying the new source', async () => {
+  test('removing existing source and re-adding with a new query dispatches updateSmartFolder (the SW refetches)', async () => {
+    const onDone = vi.fn();
     const { container } = render(SmartFolderEditorHarness, {
-      props: { spaceId: 'work', node: existingNode() },
+      props: { spaceId: 'work', node: existingNode(), onDone },
     });
-    await pickSource(container, 'github');
-    expect(urlInput(container).value).toBe('https://gitlab.example.com');
+    await fireEvent.click(removeSourceBtns(container)[0] as HTMLButtonElement);
+    await fillAndAddSource(container, {
+      baseUrl: 'https://gitlab.example.com',
+      query: 'review-requested',
+    });
     await fireEvent.click(confirmBtn(container));
 
     expect(sendMock).toHaveBeenCalledWith({
@@ -393,39 +445,74 @@ describe('SmartFolderEditor — edit mode', () => {
       payload: {
         spaceId: 'work',
         folderId: 'sf-1',
-        source: 'github',
+        sources: [
+          { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+        ],
         name: 'Assigned to me',
-        baseUrl: 'https://gitlab.example.com',
-        query: 'assigned',
+        maxItems: 20,
+        refreshMinutes: 10,
+      },
+    });
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
+  test('removing existing source and re-adding with a different source dispatches updateSmartFolder', async () => {
+    const { container } = render(SmartFolderEditorHarness, {
+      props: { spaceId: 'work', node: existingNode() },
+    });
+    await fireEvent.click(removeSourceBtns(container)[0] as HTMLButtonElement);
+    await fillAndAddSource(container, {
+      source: 'github',
+      baseUrl: 'https://gitlab.example.com',
+    });
+    await fireEvent.click(confirmBtn(container));
+
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'updateSmartFolder',
+      payload: {
+        spaceId: 'work',
+        folderId: 'sf-1',
+        sources: [
+          { source: 'github', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+        ],
+        name: 'Assigned to me',
         maxItems: 20,
         refreshMinutes: 10,
       },
     });
   });
 
-  test('an edit-mode folder sitting on a canonical default swaps URLs on a source switch', async () => {
+  test('an edit-mode folder on a canonical default URL swaps to the new default on remove+re-add', async () => {
     const { container } = render(SmartFolderEditorHarness, {
-      props: { spaceId: 'work', node: existingNode({ baseUrl: 'https://gitlab.com' }) },
+      props: {
+        spaceId: 'work',
+        node: existingNode({
+          sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', query: 'assigned' }],
+        }),
+      },
     });
-    await pickSource(container, 'github');
-    expect(urlInput(container).value).toBe('https://github.com');
+    await fireEvent.click(removeSourceBtns(container)[0] as HTMLButtonElement);
+    await openAddForm(container);
+    await pickSelect(container, 'smart-add-source-type', 'github');
+    expect(addSourceUrlInput(container).value).toBe('https://github.com');
   });
 
-  test('editing an existing RSS folder pre-fills the feed URL and omits query on save', async () => {
+  test('editing an existing RSS folder pre-fills the source in the list and omits query on save', async () => {
     const feed = existingNode({
       id: 'feed-1',
-      source: 'rss',
-      query: undefined,
+      sources: [{ source: 'rss', baseUrl: 'https://news.ycombinator.com/rss' }],
       icon: 'rss',
       name: 'Hacker News',
-      baseUrl: 'https://news.ycombinator.com/rss',
       maxItems: 30,
       refreshMinutes: 30,
     });
     const { container } = render(SmartFolderEditorHarness, {
       props: { spaceId: 'work', node: feed },
     });
-    expect(container.textContent).toContain('Feed URL');
+    const entries = sourceEntries(container);
+    expect(entries).toHaveLength(1);
+    expect((entries[0] as HTMLElement).querySelector('.source-chip')?.textContent).toBe('RSS');
+    // No query picker visible outside the (closed) add form.
     expect(container.querySelector('input[value="authored"]')).toBeNull();
     await fireEvent.click(confirmBtn(container));
     expect(sendMock).toHaveBeenCalledWith({
@@ -433,9 +520,8 @@ describe('SmartFolderEditor — edit mode', () => {
       payload: {
         spaceId: 'work',
         folderId: 'feed-1',
-        source: 'rss',
+        sources: [{ source: 'rss', baseUrl: 'https://news.ycombinator.com/rss' }],
         name: 'Hacker News',
-        baseUrl: 'https://news.ycombinator.com/rss',
         maxItems: 30,
         refreshMinutes: 30,
       },
@@ -443,10 +529,14 @@ describe('SmartFolderEditor — edit mode', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Host-permission request on confirm (least-privilege-permissions D4)
+// ---------------------------------------------------------------------------
+
 describe('SmartFolderEditor — host-permission request on confirm (least-privilege-permissions D4)', () => {
   test('confirming a new GitHub folder requests the api.github.com origin from the gesture', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await pickSource(container, 'github'); // swaps the URL to https://github.com
+    await fillAndAddSource(container, { source: 'github' });
     await fireEvent.click(confirmBtn(container));
     expect(permissionsRequestMock).toHaveBeenCalledWith({ origins: ['https://api.github.com/*'] });
   });
@@ -455,13 +545,16 @@ describe('SmartFolderEditor — host-permission request on confirm (least-privil
     permissionsRequestMock.mockResolvedValue(false);
     const onDone = vi.fn();
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work', onDone } });
-    await fireEvent.input(urlInput(container), { target: { value: 'https://gitlab.example.com' } });
+    await fillAndAddSource(container, { baseUrl: 'https://gitlab.example.com' });
     await fireEvent.click(confirmBtn(container));
-    // The folder is created regardless of the (denied) grant; onDone still fires.
     expect(sendMock).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'createSmartFolder',
-        payload: expect.objectContaining({ baseUrl: 'https://gitlab.example.com' }),
+        payload: expect.objectContaining({
+          sources: [
+            { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+          ],
+        }),
       }),
     );
     expect(permissionsRequestMock).toHaveBeenCalledWith({
@@ -470,21 +563,22 @@ describe('SmartFolderEditor — host-permission request on confirm (least-privil
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 
-  test('a query-only edit (origins unchanged) requests no host permission', async () => {
+  test('a sources-unchanged edit (name only) requests no host permission', async () => {
     const { container } = render(SmartFolderEditorHarness, {
       props: { spaceId: 'work', node: existingNode() },
     });
-    await fireEvent.click(container.querySelector('input[value="authored"]') as HTMLInputElement);
+    await fireEvent.input(nameInput(container), { target: { value: 'My renamed folder' } });
     await fireEvent.click(confirmBtn(container));
     expect(sendMock).toHaveBeenCalledWith(expect.objectContaining({ kind: 'updateSmartFolder' }));
     expect(permissionsRequestMock).not.toHaveBeenCalled();
   });
 
-  test('an origin-changing edit requests the new origins', async () => {
+  test('a URL-changing edit (remove + re-add) requests the new origins', async () => {
     const { container } = render(SmartFolderEditorHarness, {
       props: { spaceId: 'work', node: existingNode() },
     });
-    await fireEvent.input(urlInput(container), { target: { value: 'https://gitlab.other.com' } });
+    await fireEvent.click(removeSourceBtns(container)[0] as HTMLButtonElement);
+    await fillAndAddSource(container, { baseUrl: 'https://gitlab.other.com' });
     await fireEvent.click(confirmBtn(container));
     expect(permissionsRequestMock).toHaveBeenCalledWith({
       origins: ['https://gitlab.other.com/*'],

@@ -345,7 +345,7 @@ describe('readPersistedState', () => {
     expect(chromeMock.set).not.toHaveBeenCalled();
   });
 
-  test('a v1 envelope chains through all six entries and writes back as v7', async () => {
+  test('a v1 envelope chains through all six entries and writes back as v8', async () => {
     // A faithful pre-smart-folders envelope: in-state schemaVersion 1, no
     // ephemeral slices on disk, no smartItemBindings / smartReadState (neither
     // existed yet), a Space with a pinned tab.
@@ -384,10 +384,10 @@ describe('readPersistedState', () => {
       liveTabsById: {},
       smartFolders: {},
     });
-    // The envelope is written back at the current (v7) version.
+    // The envelope is written back at the current (v8) version.
     expect(chromeMock.set).toHaveBeenCalledWith({
       'lunma.state': {
-        schemaVersion: 7,
+        schemaVersion: 8,
         state: { ...persistable, smartItemBindings: {}, smartReadState: {} },
       },
     });
@@ -395,10 +395,10 @@ describe('readPersistedState', () => {
     expect(backupKey).toBeUndefined();
   });
 
-  test('a v2 envelope (gitlab smart node) migrates losslessly and writes back as v7', async () => {
+  test('a v2 envelope (gitlab smart node) migrates losslessly and writes back as v8', async () => {
     // A pre-github-connector envelope: in-state schemaVersion 2, a gitlab smart
     // node among the pins (the only smart source v2 admits). The node carries
-    // the current v7 shape (the suite builds from `createInitialState`, then
+    // the current v8 shape (the suite builds from `createInitialState`, then
     // overrides the version) — the migrations are pure pass-throughs, so a
     // lossless round-trip is the contract under test.
     const state = createInitialState();
@@ -410,9 +410,9 @@ describe('readPersistedState', () => {
         id: 'sf-1',
         name: 'Review requests',
         icon: 'folder-git-2',
-        source: 'gitlab',
-        baseUrl: 'https://gitlab.example.com',
-        query: 'review-requested',
+        sources: [
+          { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+        ],
         maxItems: 20,
         hideRead: false,
         refreshMinutes: 10,
@@ -436,13 +436,13 @@ describe('readPersistedState', () => {
       smartFolders: {},
     });
     expect(chromeMock.set).toHaveBeenCalledWith({
-      'lunma.state': { schemaVersion: 7, state: { ...persistable, smartItemBindings: {} } },
+      'lunma.state': { schemaVersion: 8, state: { ...persistable, smartItemBindings: {} } },
     });
     const backupKey = Object.keys(chromeMock.data).find((k) => k.startsWith('__corrupt_backup_'));
     expect(backupKey).toBeUndefined();
   });
 
-  test('a v3 envelope (no smartItemBindings field) migrates losslessly and writes back as v7', async () => {
+  test('a v3 envelope (no smartItemBindings field) migrates losslessly and writes back as v8', async () => {
     // A pre-bindings envelope: in-state schemaVersion 3, a smart node among the
     // pins, and no `smartItemBindings` key anywhere — the slice parses to its
     // `{}` default through the v4 pass-through.
@@ -455,9 +455,9 @@ describe('readPersistedState', () => {
         id: 'sf-1',
         name: 'Review requests',
         icon: 'folder-git-2',
-        source: 'gitlab',
-        baseUrl: 'https://gitlab.example.com',
-        query: 'review-requested',
+        sources: [
+          { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+        ],
         maxItems: 20,
         hideRead: false,
         refreshMinutes: 10,
@@ -478,7 +478,7 @@ describe('readPersistedState', () => {
       smartFolders: {},
     });
     expect(chromeMock.set).toHaveBeenCalledWith({
-      'lunma.state': { schemaVersion: 7, state: { ...persistable, smartItemBindings: {} } },
+      'lunma.state': { schemaVersion: 8, state: { ...persistable, smartItemBindings: {} } },
     });
     const backupKey = Object.keys(chromeMock.data).find((k) => k.startsWith('__corrupt_backup_'));
     expect(backupKey).toBeUndefined();
@@ -493,9 +493,9 @@ describe('readPersistedState', () => {
         id: 'sf-1',
         name: 'Review requests',
         icon: 'folder-git-2',
-        source: 'gitlab',
-        baseUrl: 'https://gitlab.example.com',
-        query: 'review-requested',
+        sources: [
+          { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+        ],
         maxItems: 20,
         hideRead: false,
         refreshMinutes: 10,
@@ -520,9 +520,9 @@ describe('readPersistedState', () => {
       id: 'sf-1',
       name: 'Review requests',
       icon: 'folder-git-2',
-      source: 'gitlab',
-      baseUrl: 'https://gitlab.example.com',
-      query: 'review-requested',
+      sources: [
+        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+      ],
       maxItems: 20,
       hideRead: false,
       refreshMinutes: 10,
@@ -531,10 +531,10 @@ describe('readPersistedState', () => {
     expect(backupKey).toBeUndefined();
   });
 
-  test('a v4 envelope (github smart node) migrates losslessly and writes back as v7', async () => {
+  test('a v4 envelope (github smart node) migrates losslessly and writes back as v8', async () => {
     // A pre-jira-connector envelope: in-state schemaVersion 4, a github smart
     // node among the pins. The v5 + v6 pass-throughs change no content — the
-    // node carries the current v7 shape (the suite builds from
+    // node carries the current v8 shape (the suite builds from
     // `createInitialState`), so the round-trip is lossless.
     const state = createInitialState();
     state.schemaVersion = 4;
@@ -545,9 +545,7 @@ describe('readPersistedState', () => {
         id: 'sf-gh',
         name: 'My pull requests',
         icon: 'folder-git-2',
-        source: 'github',
-        baseUrl: 'https://github.com',
-        query: 'authored',
+        sources: [{ source: 'github', baseUrl: 'https://github.com', query: 'authored' }],
         maxItems: 20,
         hideRead: false,
         refreshMinutes: 10,
@@ -566,7 +564,7 @@ describe('readPersistedState', () => {
     // in the parsed in-memory state (Zod default).
     expect(result.state).toEqual({ ...persistable, liveTabsById: {}, smartFolders: {} });
     expect(chromeMock.set).toHaveBeenCalledWith({
-      'lunma.state': { schemaVersion: 7, state: persistable },
+      'lunma.state': { schemaVersion: 8, state: persistable },
     });
     const backupKey = Object.keys(chromeMock.data).find((k) => k.startsWith('__corrupt_backup_'));
     expect(backupKey).toBeUndefined();
@@ -581,9 +579,7 @@ describe('readPersistedState', () => {
         id: 'sf-jira',
         name: 'My reported issues',
         icon: 'folder-kanban',
-        source: 'jira',
-        baseUrl: 'https://acme.atlassian.net',
-        query: 'authored',
+        sources: [{ source: 'jira', baseUrl: 'https://acme.atlassian.net', query: 'authored' }],
         maxItems: 20,
         hideRead: false,
         refreshMinutes: 10,
@@ -600,9 +596,7 @@ describe('readPersistedState', () => {
       id: 'sf-jira',
       name: 'My reported issues',
       icon: 'folder-kanban',
-      source: 'jira',
-      baseUrl: 'https://acme.atlassian.net',
-      query: 'authored',
+      sources: [{ source: 'jira', baseUrl: 'https://acme.atlassian.net', query: 'authored' }],
       maxItems: 20,
       hideRead: false,
       refreshMinutes: 10,
@@ -623,9 +617,9 @@ describe('readPersistedState', () => {
         id: 'sf-1',
         name: 'Review requests',
         icon: 'folder-git-2',
-        source: 'gitlab',
-        baseUrl: 'https://gitlab.example.com',
-        query: 'review-requested',
+        sources: [
+          { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+        ],
         maxItems: 20,
         hideRead: false,
         refreshMinutes: 10,
@@ -659,8 +653,7 @@ describe('readPersistedState', () => {
         id: 'feed-1',
         name: 'Hacker News',
         icon: 'rss',
-        source: 'rss',
-        baseUrl: 'https://news.ycombinator.com/rss',
+        sources: [{ source: 'rss', baseUrl: 'https://news.ycombinator.com/rss' }],
         maxItems: 30,
         hideRead: false,
         refreshMinutes: 30,
@@ -669,9 +662,13 @@ describe('readPersistedState', () => {
     state.smartReadState['feed-1'] = ['item-a', 'item-b'];
     // A populated ephemeral runtime — this MUST NOT reach disk.
     state.smartFolders['feed-1'] = {
-      state: 'ok',
-      items: [{ id: 'item-a', title: 'A', url: 'https://example.com/a' }],
-      fetchedAt: 123,
+      sections: {
+        'rss:news.ycombinator.com': {
+          state: 'ok',
+          items: [{ id: 'item-a', title: 'A', url: 'https://example.com/a' }],
+          fetchedAt: 123,
+        },
+      },
     };
     await persist(state);
 
@@ -903,9 +900,7 @@ describe('salvagePersistedState', () => {
         id: 'sf-1',
         name: 'Assigned to me',
         icon: 'folder-git-2',
-        source,
-        baseUrl: 'https://forge.example.com',
-        query: 'assigned',
+        sources: [{ source, baseUrl: 'https://forge.example.com', query: 'assigned' }],
         maxItems: 20,
         hideRead: false,
         refreshMinutes: 5,
@@ -928,9 +923,7 @@ describe('salvagePersistedState', () => {
       id: 'sf-1',
       name: 'Assigned to me',
       icon: 'folder-git-2',
-      source: 'gitlab',
-      baseUrl: 'https://gitlab.example.com',
-      query: 'assigned',
+      sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'assigned' }],
       maxItems: 20,
       hideRead: false,
       refreshMinutes: 5,
@@ -1002,9 +995,13 @@ describe('persist', () => {
   test('strips a populated smartFolders before writing; the rest is unchanged', async () => {
     const state = createInitialState();
     state.smartFolders['sf-1'] = {
-      state: 'ok',
-      items: [{ id: 'mr-1', title: 'Fix the build', url: 'https://gitlab.com/g/p/-/mr/1' }],
-      fetchedAt: 1234,
+      sections: {
+        'gitlab:gitlab.com': {
+          state: 'ok',
+          items: [{ id: 'mr-1', title: 'Fix the build', url: 'https://gitlab.com/g/p/-/mr/1' }],
+          fetchedAt: 1234,
+        },
+      },
     };
     await persist(state);
     const envelope = chromeMock.data['lunma.state'] as { state: Record<string, unknown> };

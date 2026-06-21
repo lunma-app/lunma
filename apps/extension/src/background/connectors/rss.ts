@@ -1,12 +1,7 @@
 import { SaxesParser } from 'saxes';
-import { requiredOriginsForNode } from '../../shared/connector-origins';
-import type { SmartFolderItem, SmartFolderRuntime } from '../../shared/types';
-import {
-  boundedFetch,
-  type ConnectorCaches,
-  type SmartFolderNode,
-  type SourceConnector,
-} from './connector';
+import { requiredOriginsForConfig } from '../../shared/connector-origins';
+import type { SmartFolderItem, SmartSectionRuntime, SmartSourceConfig } from '../../shared/types';
+import { boundedFetch, type ConnectorCaches, type SourceConnector } from './connector';
 
 /**
  * The RSS connector (rss-connector) — the first FEED source: a public feed URL,
@@ -17,7 +12,7 @@ import {
  *     entities decoded, element-wise tolerant (one bad entry never costs the
  *     rest; a parser error keeps whatever parsed cleanly);
  *   - fetch: `boundedFetch` with NO credentials (a public feed), an oversized
- *     body rejected; results sliced to the node's `maxItems`;
+ *     body rejected; results buffered for the draining-queue model;
  *   - states: `pending | ok | error` ONLY — `signed-out` is impossible for a
  *     public feed (design D11); a network failure / non-2xx / oversized body /
  *     empty parse resolves to the quiet `error` state (last-known items hold);
@@ -40,11 +35,11 @@ const MAX_FEED_BYTES = 5_000_000;
 /**
  * Per-feed item buffer (rss-connector, the draining-queue model). The connector
  * keeps the whole feed file (newest-first) up to this bound — NOT sliced to the
- * node's `maxItems` — so the sidebar can surface the newest `maxItems` **unread**
- * items and backfill older unread as you read (the cap is an unread budget, not
- * a fetch cap). Bounds runtime memory + the persisted read-id set (pruned to
- * this window). A feed file is one snapshot of recent entries (no pagination),
- * so 200 comfortably holds any realistic feed.
+ * section's `maxItems` — so the sidebar can surface the newest `maxItems`
+ * **unread** items and backfill older unread as you read (the cap is an unread
+ * budget, not a fetch cap). Bounds runtime memory + the persisted read-id set
+ * (pruned to this window). A feed file is one snapshot of recent entries (no
+ * pagination), so 200 comfortably holds any realistic feed.
  */
 const FEED_BUFFER = 200;
 
@@ -227,22 +222,25 @@ function decodeXmlBuffer(buf: ArrayBuffer, contentType: string): string {
 }
 
 /**
- * Fetch one RSS folder's feed and normalize it. Never throws — every failure
- * shape resolves to a runtime state. No credentials (a public feed), so
+ * Fetch one RSS folder section's feed and normalize it. Never throws — every
+ * failure shape resolves to a runtime state. No credentials (a public feed), so
  * `signed-out` is unreachable and never returned (design D11). The `caches`
- * parameter is unused (no per-cycle resolution to share).
+ * parameter is unused (no per-cycle resolution to share). The `maxItems`
+ * parameter is intentionally NOT the connector's slice for a feed (the
+ * draining-queue model) — the buffer bounds memory + read-state.
  */
 async function fetchRuntime(
-  node: Pick<SmartFolderNode, 'baseUrl' | 'query' | 'maxItems'>,
+  cfg: SmartSourceConfig,
+  _maxItems: number,
   _caches?: ConnectorCaches,
-): Promise<SmartFolderRuntime> {
+): Promise<SmartSectionRuntime> {
   const fetchedAt = Date.now();
-  const fail = (): SmartFolderRuntime => ({ state: 'error', items: [], fetchedAt });
+  const fail = (): SmartSectionRuntime => ({ state: 'error', items: [], fetchedAt });
 
   try {
     // A malformed persisted baseUrl (defensive — the SW validates on
     // create/update) degrades to the quiet error state, never a throw.
-    new URL(node.baseUrl);
+    new URL(cfg.baseUrl);
   } catch {
     return fail();
   }
@@ -250,7 +248,7 @@ async function fetchRuntime(
   let response: Response;
   try {
     // Bounded: a timeout rejects (AbortError) into the catch below → error.
-    response = await boundedFetch(node.baseUrl, { credentials: 'omit' });
+    response = await boundedFetch(cfg.baseUrl, { credentials: 'omit' });
   } catch {
     return fail();
   }
@@ -276,27 +274,24 @@ async function fetchRuntime(
   // last-known items hold rather than blanking the folder (design D11).
   if (items.length === 0) return fail();
 
-  if (channelLink !== undefined) channelLinkByFeed.set(node.baseUrl, channelLink);
+  if (channelLink !== undefined) channelLinkByFeed.set(cfg.baseUrl, channelLink);
 
-  // Keep the whole feed (bounded) — the sidebar applies the per-folder unread
-  // budget. `node.maxItems` is intentionally NOT the connector's slice for a
-  // feed (the draining-queue model); the buffer bounds memory + read-state.
   return { state: 'ok', items: items.slice(0, FEED_BUFFER), fetchedAt };
 }
 
 /** The feed's listing URL: the channel website link captured during the last
  * successful parse, falling back to the feed URL (design D6). No network I/O. */
-function listingUrl(node: Pick<SmartFolderNode, 'baseUrl' | 'query'>): string {
-  return channelLinkByFeed.get(node.baseUrl) ?? node.baseUrl;
+function listingUrl(cfg: SmartSourceConfig): string {
+  return channelLinkByFeed.get(cfg.baseUrl) ?? cfg.baseUrl;
 }
 
 /** The origin this connector fetches (least-privilege-permissions design D8/D9):
  * RSS fetches the feed URL directly, so the gate keys on the feed's own origin
  * (an ungranted feed shows `needs-access`, not `error`). Delegates to the shared
- * {@link requiredOriginsForNode} so the SW gate and the surfaces share one
+ * {@link requiredOriginsForConfig} so the SW gate and the surfaces share one
  * derivation. */
-function requiredOrigins(node: Pick<SmartFolderNode, 'baseUrl'>): string[] {
-  return requiredOriginsForNode({ source: 'rss', baseUrl: node.baseUrl });
+function requiredOrigins(cfg: SmartSourceConfig): string[] {
+  return requiredOriginsForConfig(cfg);
 }
 
 /** The RSS `SourceConnector` — the registry's `rss` entry. `defaultBaseUrl` is

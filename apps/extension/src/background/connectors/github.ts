@@ -1,13 +1,13 @@
 import { z } from 'zod';
-import { requiredOriginsForNode } from '../../shared/connector-origins';
+import { requiredOriginsForConfig } from '../../shared/connector-origins';
 import { readConnectors } from '../../shared/connectors';
-import type { SmartFolderItem, SmartFolderRuntime, SmartQuery } from '../../shared/types';
-import {
-  boundedFetch,
-  type ConnectorCaches,
-  type SmartFolderNode,
-  type SourceConnector,
-} from './connector';
+import type {
+  SmartFolderItem,
+  SmartQuery,
+  SmartSectionRuntime,
+  SmartSourceConfig,
+} from '../../shared/types';
+import { boundedFetch, type ConnectorCaches, type SourceConnector } from './connector';
 
 /**
  * The GitHub connector (github-connector, design D3–D5): pull requests over
@@ -207,17 +207,19 @@ async function enrich(
 }
 
 /**
- * Fetch one GitHub smart folder's results. Never throws — every failure shape
- * resolves to a runtime state. No token for the folder's host short-circuits
- * to `signed-out` WITHOUT a request (the `@me` queries require auth, so the
- * request could only fail; not sending it is honest and rate-limit kind).
+ * Fetch one GitHub smart folder section's results. Never throws — every failure
+ * shape resolves to a runtime state. No token for the folder's host
+ * short-circuits to `signed-out` WITHOUT a request (the `@me` queries require
+ * auth, so the request could only fail; not sending it is honest and
+ * rate-limit kind).
  */
 async function fetchRuntime(
-  node: Pick<SmartFolderNode, 'baseUrl' | 'query' | 'maxItems'>,
+  cfg: SmartSourceConfig,
+  maxItems: number,
   _caches?: ConnectorCaches,
-): Promise<SmartFolderRuntime> {
+): Promise<SmartSectionRuntime> {
   const fetchedAt = Date.now();
-  const fail = (state: 'signed-out' | 'error'): SmartFolderRuntime => ({
+  const fail = (state: 'signed-out' | 'error'): SmartSectionRuntime => ({
     state,
     items: [],
     fetchedAt,
@@ -226,8 +228,8 @@ async function fetchRuntime(
   let host: string;
   let apiRoot: string;
   try {
-    host = hostOf(node.baseUrl);
-    apiRoot = apiRootOf(node.baseUrl);
+    host = hostOf(cfg.baseUrl);
+    apiRoot = apiRootOf(cfg.baseUrl);
   } catch {
     // A malformed persisted baseUrl (defensive — the SW validates on
     // create/update) degrades to the quiet error state, never a throw.
@@ -239,15 +241,15 @@ async function fetchRuntime(
 
   // A queue node always carries a query (source-optional only for feeds);
   // default defensively so the now-optional field stays a total switch.
-  const query: SmartQuery = node.query ?? 'assigned';
+  const query: SmartQuery = cfg.query ?? 'assigned';
 
   // `advanced_search=true` rides GitHub's issue-search migration — becoming
   // required on github.com, ignored by GHE versions that predate it. The
-  // per-folder cap (rss-connector design D5) bounds the page; the badge shows
+  // per-section cap (rss-connector design D5) bounds the page; the badge shows
   // `N+` at it, so the cap is never silent.
   const url =
     `${apiRoot}/search/issues?q=is:pr+is:open+${qualifierFor(query)}` +
-    `&per_page=${node.maxItems}&sort=updated&order=desc&advanced_search=true`;
+    `&per_page=${maxItems}&sort=updated&order=desc&advanced_search=true`;
   const outcome = await githubGet(url, token);
   if (outcome.kind !== 'ok') return fail(outcome.kind);
   const parsed = SearchResponseSchema.safeParse(outcome.json);
@@ -259,7 +261,7 @@ async function fetchRuntime(
       const item = SearchItemSchema.safeParse(element);
       return item.success ? [item.data] : [];
     })
-    .slice(0, node.maxItems);
+    .slice(0, maxItems);
 
   const enrichments = await mapWithConcurrency(prs, ENRICH_CONCURRENCY, (pr) =>
     enrich(pr.pull_request?.url, apiRoot, token),
@@ -284,18 +286,18 @@ async function fetchRuntime(
  * tab"): GitHub's pull-requests dashboard — the canonical "PRs that involve me"
  * page (github.com AND GHE both serve `/pulls`), independent of the canned
  * query. */
-function listingUrl(node: Pick<SmartFolderNode, 'baseUrl' | 'query'>): string {
-  return `${node.baseUrl}/pulls`;
+function listingUrl(cfg: SmartSourceConfig): string {
+  return `${cfg.baseUrl}/pulls`;
 }
 
 /**
  * The origin this connector fetches (least-privilege-permissions design D8):
  * github.com folders fetch `api.github.com` (a DIFFERENT origin), GHE is
- * same-origin. Delegates to the shared {@link requiredOriginsForNode} so the SW
- * gate and the surfaces' grant request share one derivation.
+ * same-origin. Delegates to the shared {@link requiredOriginsForConfig} so the
+ * SW gate and the surfaces' grant request share one derivation.
  */
-function requiredOrigins(node: Pick<SmartFolderNode, 'baseUrl'>): string[] {
-  return requiredOriginsForNode({ source: 'github', baseUrl: node.baseUrl });
+function requiredOrigins(cfg: SmartSourceConfig): string[] {
+  return requiredOriginsForConfig(cfg);
 }
 
 /** The GitHub `SourceConnector` — the registry's `github` entry. */

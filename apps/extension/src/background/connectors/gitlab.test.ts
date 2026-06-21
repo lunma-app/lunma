@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import type { ConnectorCaches, SmartFolderNode } from './connector';
+import type { SmartSourceConfig } from '../../shared/types';
+import type { ConnectorCaches } from './connector';
 import { gitlabConnector, pipelineStatus } from './gitlab';
 
 // The GitLab connector's fetch/normalize/auth suites, relocated from
@@ -52,18 +53,11 @@ function htmlResponse(status = 200): unknown {
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
-function node(overrides: Partial<SmartFolderNode> = {}): SmartFolderNode {
+function node(overrides: Partial<SmartSourceConfig> = {}): SmartSourceConfig {
   return {
-    kind: 'smart',
-    id: 'sf-1',
-    name: 'Review requests',
-    icon: 'folder-git-2',
     source: 'gitlab',
     baseUrl: 'https://gitlab.example.com',
     query: 'review-requested',
-    maxItems: 20,
-    hideRead: false,
-    refreshMinutes: 10,
     ...overrides,
   };
 }
@@ -119,7 +113,7 @@ describe('fetchRuntime — canned queries', () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse([mr(1, { head_pipeline: { status: 'success' } })]),
     );
-    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const url = fetchMock.mock.calls[0]?.[0] as string;
     expect(url).toBe(
@@ -138,7 +132,7 @@ describe('fetchRuntime — canned queries', () => {
 
   test('assigned requests scope=assigned_to_me', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse([]));
-    await gitlabConnector.fetchRuntime(node({ query: 'assigned' }));
+    await gitlabConnector.fetchRuntime(node({ query: 'assigned' }), 20);
     const url = fetchMock.mock.calls[0]?.[0] as string;
     expect(url).toContain('scope=assigned_to_me');
   });
@@ -147,7 +141,7 @@ describe('fetchRuntime — canned queries', () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ id: 7 })) // /api/v4/user
       .mockResolvedValueOnce(jsonResponse([mr(2, { head_pipeline: { status: 'success' } })]));
-    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'review-requested' }));
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'review-requested' }), 20);
     expect(fetchMock.mock.calls[0]?.[0]).toBe('https://gitlab.example.com/api/v4/user');
     const listUrl = fetchMock.mock.calls[1]?.[0] as string;
     // scope=all is REQUIRED: the endpoint defaults to created_by_me, under
@@ -163,8 +157,8 @@ describe('fetchRuntime — canned queries', () => {
       return jsonResponse([]);
     });
     const meCache: ConnectorCaches = new Map();
-    await gitlabConnector.fetchRuntime(node({ id: 'a', query: 'review-requested' }), meCache);
-    await gitlabConnector.fetchRuntime(node({ id: 'b', query: 'review-requested' }), meCache);
+    await gitlabConnector.fetchRuntime(node({ query: 'review-requested' }), 20, meCache);
+    await gitlabConnector.fetchRuntime(node({ query: 'review-requested' }), 20, meCache);
     const userCalls = fetchMock.mock.calls.filter((c) => (c[0] as string).endsWith('/api/v4/user'));
     expect(userCalls).toHaveLength(1);
   });
@@ -174,7 +168,7 @@ describe('fetchRuntime — canned queries', () => {
       mr(i + 1, { head_pipeline: { status: 'success' } }),
     );
     fetchMock.mockResolvedValueOnce(jsonResponse(overfull));
-    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime.items).toHaveLength(20);
   });
 
@@ -182,7 +176,7 @@ describe('fetchRuntime — canned queries', () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse([mr(1, { head_pipeline: { status: 'success' } }), { junk: true }]),
     );
-    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime.state).toBe('ok');
     expect(runtime.items.map((i) => i.id)).toEqual(['1']);
   });
@@ -193,6 +187,7 @@ describe('fetchRuntime — canned queries', () => {
       .mockResolvedValueOnce(jsonResponse([]));
     await gitlabConnector.fetchRuntime(
       node({ baseUrl: 'https://host.example.com/gitlab', query: 'review-requested' }),
+      20,
     );
     expect(fetchMock.mock.calls[0]?.[0]).toBe('https://host.example.com/gitlab/api/v4/user');
     expect(fetchMock.mock.calls[1]?.[0]).toContain(
@@ -209,7 +204,7 @@ describe('fetchRuntime — pipeline enrichment', () => {
         mr(2, { pipeline: { status: 'running' } }),
       ]),
     );
-    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(fetchMock).toHaveBeenCalledTimes(1); // list only — no detail fetches
     expect(runtime.items[0]?.status?.tone).toBe('fail');
     expect(runtime.items[1]?.status?.tone).toBe('pending');
@@ -229,7 +224,7 @@ describe('fetchRuntime — pipeline enrichment', () => {
       const iid = Number(url.split('/').pop());
       return jsonResponse(mr(iid, { head_pipeline: { status: 'success' } }));
     });
-    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
     const detailCalls = fetchMock.mock.calls.filter((c) => (c[0] as string).includes('/projects/'));
     expect(detailCalls).toHaveLength(8);
     expect(detailCalls[0]?.[0]).toBe(
@@ -244,7 +239,7 @@ describe('fetchRuntime — pipeline enrichment', () => {
       if (url.includes('/api/v4/merge_requests?')) return jsonResponse([mr(1)]);
       return jsonResponse(mr(1, { head_pipeline: null }));
     });
-    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime.items[0]?.status).toBeUndefined();
   });
 
@@ -253,7 +248,7 @@ describe('fetchRuntime — pipeline enrichment', () => {
       if (url.includes('/api/v4/merge_requests?')) return jsonResponse([mr(1)]);
       throw new Error('network down');
     });
-    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime.state).toBe('ok');
     expect(runtime.items[0]?.status).toBeUndefined();
   });
@@ -265,7 +260,7 @@ describe('fetchRuntime — auth ladder', () => {
   test('a configured PAT wins: Bearer header + credentials omit', async () => {
     storageData['lunma.connectors'] = { 'gitlab.example.com': 'glpat-abc' };
     fetchMock.mockResolvedValueOnce(jsonResponse([]));
-    await gitlabConnector.fetchRuntime(node({ query: 'authored' }));
+    await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(init.headers).toEqual({ Authorization: 'Bearer glpat-abc' });
     expect(init.credentials).toBe('omit');
@@ -276,6 +271,7 @@ describe('fetchRuntime — auth ladder', () => {
     fetchMock.mockResolvedValueOnce(jsonResponse([]));
     await gitlabConnector.fetchRuntime(
       node({ baseUrl: 'https://gitlab.example.com:8443', query: 'authored' }),
+      20,
     );
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(init.headers).toEqual({ Authorization: 'Bearer glpat-port' });
@@ -283,7 +279,7 @@ describe('fetchRuntime — auth ladder', () => {
 
   test('no PAT rides the browser session: credentials include, no Authorization', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse([]));
-    await gitlabConnector.fetchRuntime(node({ query: 'authored' }));
+    await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(init.headers).toEqual({});
     expect(init.credentials).toBe('include');
@@ -291,50 +287,50 @@ describe('fetchRuntime — auth ladder', () => {
 
   test('a 401 resolves signed-out, never throwing', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ message: '401 Unauthorized' }, 401));
-    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime).toMatchObject({ state: 'signed-out', items: [] });
   });
 
   test('a redirect landing on an HTML sign-in page resolves signed-out', async () => {
     fetchMock.mockResolvedValueOnce(htmlResponse());
-    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime.state).toBe('signed-out');
   });
 
   test('a 5xx resolves error', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ message: 'boom' }, 503));
-    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime.state).toBe('error');
   });
 
   test('a 429 resolves error', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ message: 'slow down' }, 429));
-    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime.state).toBe('error');
   });
 
   test('a network failure resolves error', async () => {
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
-    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime.state).toBe('error');
   });
 
   test('every request carries a bounded timeout signal (a hang resolves, never wedges)', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse([]));
-    await gitlabConnector.fetchRuntime(node({ query: 'authored' }));
+    await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 
   test('a timed-out request (AbortError) resolves error like any network failure', async () => {
     fetchMock.mockRejectedValueOnce(new DOMException('signal timed out', 'TimeoutError'));
-    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }));
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime.state).toBe('error');
   });
 
   test('a signed-out me-resolution degrades the review-requested folder to signed-out', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ message: '401' }, 401));
-    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'review-requested' }));
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'review-requested' }), 20);
     expect(runtime.state).toBe('signed-out');
     expect(fetchMock).toHaveBeenCalledTimes(1); // never reaches the list call
   });
@@ -345,7 +341,7 @@ describe('fetchRuntime — auth ladder', () => {
 describe('maxItems + listingUrl', () => {
   test('the node maxItems drives the per_page cap', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse([]));
-    await gitlabConnector.fetchRuntime(node({ query: 'authored', maxItems: 50 }));
+    await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 50);
     expect(fetchMock.mock.calls[0]?.[0]).toContain('per_page=50');
   });
 
@@ -356,11 +352,14 @@ describe('maxItems + listingUrl', () => {
   });
 
   test('requiredOrigins is the same-origin baseUrl pattern, port preserved (D8)', () => {
-    expect(gitlabConnector.requiredOrigins({ baseUrl: 'https://gitlab.example.com' })).toEqual([
-      'https://gitlab.example.com/*',
-    ]);
     expect(
-      gitlabConnector.requiredOrigins({ baseUrl: 'https://gitlab.example.com:8443/g' }),
+      gitlabConnector.requiredOrigins({ source: 'gitlab', baseUrl: 'https://gitlab.example.com' }),
+    ).toEqual(['https://gitlab.example.com/*']);
+    expect(
+      gitlabConnector.requiredOrigins({
+        source: 'gitlab',
+        baseUrl: 'https://gitlab.example.com:8443/g',
+      }),
     ).toEqual(['https://gitlab.example.com:8443/*']);
   });
 });

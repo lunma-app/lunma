@@ -1216,18 +1216,18 @@ describe('PinnedTabs keyboard reorder (Move up/down)', () => {
 });
 
 describe('PinnedTabs smart-folder node (smart-folders, design D13)', () => {
-  const SMART_NODE = {
+  const SMART_NODE: Extract<import('../shared/types').PinNode, { kind: 'smart' }> = {
     kind: 'smart',
     id: 'sf-1',
     name: 'Review requests',
     icon: 'folder-git-2',
-    source: 'gitlab',
-    baseUrl: 'https://gitlab.example.com',
-    query: 'review-requested',
+    sources: [
+      { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+    ],
     maxItems: 20,
     hideRead: false,
     refreshMinutes: 10,
-  } as const;
+  };
 
   /** A top-level tab st-1 plus the smart node, in the given order. */
   function withSmart(order: 'tab-first' | 'smart-first' = 'tab-first'): LunmaStore {

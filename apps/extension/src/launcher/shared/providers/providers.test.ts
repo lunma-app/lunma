@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import type { SavedTab, SmartFolderRuntime } from '../../../shared/types';
+import type { SavedTab, SmartFolderRuntime, SmartSectionRuntime } from '../../../shared/types';
 import { bookmarksProvider } from './bookmarks';
 import { historyProvider } from './history';
 import { openTabsProvider } from './open-tabs';
@@ -114,14 +114,22 @@ describe('savedTabsProvider', () => {
 });
 
 describe('smartFoldersProvider', () => {
+  const SK = 'github:github.com';
+
+  const section = (
+    state: SmartSectionRuntime['state'],
+    items: SmartSectionRuntime['items'],
+  ): SmartSectionRuntime => ({ state, items, fetchedAt: state === 'ok' ? 1 : null });
+
   const runtime = (
-    state: SmartFolderRuntime['state'],
-    items: SmartFolderRuntime['items'],
-  ): SmartFolderRuntime => ({ state, items, fetchedAt: state === 'ok' ? 1 : null });
+    state: SmartSectionRuntime['state'],
+    items: SmartSectionRuntime['items'],
+    sectionKey = SK,
+  ): SmartFolderRuntime => ({ sections: { [sectionKey]: section(state, items) } });
 
   const item = (id: string, title: string, url: string) => ({ id, title, url });
 
-  test('flattens every folder’s items to smart results with folderName + spaceId', () => {
+  test("flattens every folder's items to smart results with folderName + spaceId", () => {
     const results = smartFoldersProvider(
       {
         'sf-1': runtime('ok', [item('i1', 'Fix the parser', 'https://github.com/o/r/pull/12')]),
@@ -131,7 +139,7 @@ describe('smartFoldersProvider', () => {
     );
     expect(results).toEqual([
       {
-        id: 'smart:i1',
+        id: `smart:${SK}:i1`,
         source: 'smart',
         title: 'Fix the parser',
         url: 'https://github.com/o/r/pull/12',

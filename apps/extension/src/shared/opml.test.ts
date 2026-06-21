@@ -110,23 +110,25 @@ describe('parseOpml', () => {
 
 // ── buildOpml ─────────────────────────────────────────────────────────────────
 
-function node(overrides: Partial<SmartFolderNode> = {}): SmartFolderNode {
+function node(
+  overrides: Partial<SmartFolderNode> & { sources?: SmartFolderNode['sources'] } = {},
+): SmartFolderNode {
+  const { sources, ...rest } = overrides;
   return {
     kind: 'smart',
     id: 'sf-1',
     name: 'HN',
     icon: 'rss',
-    source: 'rss',
-    baseUrl: 'https://hnrss.org/frontpage',
+    sources: sources ?? [{ source: 'rss', baseUrl: 'https://hnrss.org/frontpage' }],
     maxItems: 10,
     hideRead: false,
     refreshMinutes: 30,
-    ...overrides,
+    ...rest,
   };
 }
 
 describe('buildOpml', () => {
-  test('single feed folder serialises correctly', () => {
+  test('single-source rss node → 1 outline (task 8.6)', () => {
     const output = buildOpml([node()]);
     expect(output).toContain('<outline type="rss"');
     expect(output).toContain('text="HN"');
@@ -134,25 +136,64 @@ describe('buildOpml', () => {
     expect(output).toContain('htmlUrl="https://hnrss.org/frontpage"');
     expect(output).toContain('<opml version="1.0">');
     expect(output).toContain('<title>Lunma feed subscriptions</title>');
+    expect(output.match(/<outline /g) ?? []).toHaveLength(1);
   });
 
-  test('non-RSS nodes are excluded', () => {
-    const githubNode = node({ source: 'github', baseUrl: 'https://github.com', name: 'GH' });
-    const output = buildOpml([node(), githubNode]);
+  test('multi-source (rss + gitlab) → 1 outline, gitlab excluded (task 8.6)', () => {
+    const mixed = node({
+      name: 'Work',
+      sources: [
+        { source: 'rss', baseUrl: 'https://hnrss.org/frontpage' },
+        { source: 'gitlab', baseUrl: 'https://gitlab.com', query: 'authored' },
+      ],
+    });
+    const output = buildOpml([mixed]);
     const outlines = output.match(/<outline /g) ?? [];
     expect(outlines).toHaveLength(1);
+    expect(output).not.toContain('gitlab');
+    expect(output).toContain('xmlUrl="https://hnrss.org/frontpage"');
+  });
+
+  test('multi-source (rss + rss) → 2 outlines with host-qualified text (task 8.6)', () => {
+    const dual = node({
+      name: 'Feeds',
+      sources: [
+        { source: 'rss', baseUrl: 'https://hnrss.org/frontpage' },
+        { source: 'rss', baseUrl: 'https://lobste.rs/rss' },
+      ],
+    });
+    const output = buildOpml([dual]);
+    const outlines = output.match(/<outline /g) ?? [];
+    expect(outlines).toHaveLength(2);
+    // Both outlines qualify the name with the host.
+    expect(output).toContain('text="Feeds — hnrss.org"');
+    expect(output).toContain('text="Feeds — lobste.rs"');
+  });
+
+  test('folder with only non-rss sources emits no outlines', () => {
+    const githubOnly = node({
+      name: 'GH',
+      sources: [{ source: 'github', baseUrl: 'https://api.github.com', query: 'assigned' }],
+    });
+    const output = buildOpml([githubOnly]);
+    expect(output).not.toContain('<outline');
     expect(output).not.toContain('GH');
   });
 
   test('htmlUrl equals baseUrl', () => {
-    const output = buildOpml([node({ baseUrl: 'https://example.com/feed' })]);
+    const output = buildOpml([
+      node({ sources: [{ source: 'rss', baseUrl: 'https://example.com/feed' }] }),
+    ]);
     expect(output).toContain('xmlUrl="https://example.com/feed"');
     expect(output).toContain('htmlUrl="https://example.com/feed"');
   });
 
   test('XML special characters in name and URL are escaped', () => {
     const output = buildOpml([
-      node({ name: 'A & B', baseUrl: 'https://example.com/feed?a=1&b=2' }),
+      node({
+        name: 'A & B',
+        sources: [{ source: 'rss', baseUrl: 'https://example.com/feed?a=1&b=2' }],
+      }),
     ]);
     expect(output).toContain('text="A &amp; B"');
     expect(output).toContain('xmlUrl="https://example.com/feed?a=1&amp;b=2"');

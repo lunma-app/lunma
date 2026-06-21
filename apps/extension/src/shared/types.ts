@@ -138,9 +138,27 @@ export type SmartQuery = 'authored' | 'assigned' | 'review-requested';
  * registry in `background/smart-folders.ts` holds exactly these four; widening
  * it is a schema-version bump (the v2→v3, v4→v5, then v5→v6 precedent). `rss`
  * is the first FEED source (a public address, no identity, no canned query),
- * which is why `query` is source-optional on the smart node below.
+ * which is why `query` is source-optional on each `SmartSourceConfig` entry.
  */
 export type SmartSource = 'gitlab' | 'github' | 'jira' | 'rss';
+
+/**
+ * One connector sub-source within a smart folder (multi-source-smart-folders).
+ * Each entry carries its own `source`, `baseUrl`, and optional `query`; the
+ * folder-level fields (`maxItems`, `hideRead`, `refreshMinutes`) apply across
+ * all entries. Queue sources (`gitlab`/`github`/`jira`) carry a `query`; feed
+ * sources (`rss`) omit it. Typed `| undefined` to match the persisted schema's
+ * `.optional()` inference under `exactOptionalPropertyTypes`.
+ */
+export type SmartSourceConfig = {
+  source: SmartSource;
+  /** Absolute http(s) instance URL, stored without a trailing slash. For a
+   * feed source (`rss`) this IS the feed URL. */
+  baseUrl: string;
+  /** The canned queue query. OPTIONAL: queue sources carry one; feed sources
+   * omit it. Typed `| undefined` for `exactOptionalPropertyTypes` parity. */
+  query?: SmartQuery | undefined;
+};
 
 /**
  * A pinned-tab placement node. The pinned list for a Space is an ordered tree
@@ -168,23 +186,14 @@ export type PinNode =
       id: FolderId;
       name: string;
       icon: string;
-      source: SmartSource;
-      /** Absolute http(s) instance URL, stored without a trailing slash. For a
-       * feed source (`rss`) this IS the feed URL. */
-      baseUrl: string;
-      /**
-       * The canned queue query (rss-connector design D2). OPTIONAL: queue
-       * sources (`gitlab` / `github` / `jira`) carry one; a feed source (`rss`)
-       * has no canned query and omits it. Typed `| undefined` to match the
-       * persisted schema's `.optional()` inference under
-       * `exactOptionalPropertyTypes` (the equality guard in `schemas.ts`).
-       */
-      query?: SmartQuery | undefined;
-      /** Per-folder result cap (rss-connector design D5; replaces the hardcoded
-       * `RESULTS_CAP`). Migrated nodes default to 20 (no behaviour change). */
+      /** The ordered list of connector sub-sources. At least one entry is
+       * required; the editor blocks confirming with an empty list. */
+      sources: SmartSourceConfig[];
+      /** Per-section result cap (multi-source-smart-folders design D3): each
+       * section shows up to `maxItems` rows. Migrated nodes default to 20. */
       maxItems: number;
       /** Per-folder "hide read" reading preference (rss-connector design D9;
-       * feed sources only). Persisted so it survives restart. */
+       * applies to `rss` sections only). Persisted so it survives restart. */
       hideRead: boolean;
       /** Poll cadence in minutes; default 10, floor 5 (SW-clamped). */
       refreshMinutes: number;
@@ -204,21 +213,26 @@ export interface SmartFolderItem {
 }
 
 /**
- * A smart folder's ephemeral fetch state (smart-folders, design D2). Lives only
- * in the broadcast `AppState.smartFolders` slice — stripped in `persist()` like
- * `liveTabsById`, rebuilt by connector polls after a SW restart. A refresh that
- * begins while items exist keeps `items` (the list never blinks) and flips
- * `state` to `'pending'`.
- *
- * `'needs-access'` (least-privilege-permissions, design D3/D8) means the
- * folder's connector-required host origins are not all granted; it is produced
- * by the engine's pre-dispatch gate WITHOUT any network request, and precedes
- * the connector's own `'signed-out'` auth short-circuit.
+ * One connector section's ephemeral fetch state (multi-source-smart-folders).
+ * A refresh that begins while items exist keeps `items` (the list never blinks)
+ * and flips `state` to `'pending'`. `'needs-access'` means the section's
+ * connector-required host origins are not granted; produced WITHOUT any network
+ * request and preceding the connector's own `'signed-out'` short-circuit.
  */
-export interface SmartFolderRuntime {
+export interface SmartSectionRuntime {
   state: 'pending' | 'ok' | 'signed-out' | 'error' | 'needs-access';
   items: SmartFolderItem[];
   fetchedAt: number | null;
+}
+
+/**
+ * A smart folder's ephemeral runtime (multi-source-smart-folders): a map of
+ * per-section runtimes keyed by `sourceKey` (`${source}:${host}`). Lives only
+ * in the broadcast `AppState.smartFolders` slice — stripped in `persist()` like
+ * `liveTabsById`, rebuilt by connector polls after a SW restart.
+ */
+export interface SmartFolderRuntime {
+  sections: { [sourceKey: string]: SmartSectionRuntime };
 }
 
 /**

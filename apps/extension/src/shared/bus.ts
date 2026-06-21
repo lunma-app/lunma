@@ -8,8 +8,7 @@ import type {
   IconName,
   PinNode,
   SavedTabId,
-  SmartQuery,
-  SmartSource,
+  SmartSourceConfig,
   SpaceAutoArchive,
   SpaceColor,
   SpaceId,
@@ -97,12 +96,8 @@ export type SidebarCommand =
       kind: 'createSmartFolder';
       payload: {
         spaceId: SpaceId;
-        source: SmartSource;
+        sources: SmartSourceConfig[];
         name: string;
-        baseUrl: string;
-        // Source-optional (rss-connector design D2): a feed omits it. `maxItems`
-        // is the per-folder result cap; `hideRead` defaults false on create.
-        query?: SmartQuery;
         maxItems: number;
         refreshMinutes: number;
       };
@@ -112,10 +107,8 @@ export type SidebarCommand =
       payload: {
         spaceId: SpaceId;
         folderId: FolderId;
-        source: SmartSource;
+        sources: SmartSourceConfig[];
         name: string;
-        baseUrl: string;
-        query?: SmartQuery;
         maxItems: number;
         refreshMinutes: number;
       };
@@ -368,6 +361,13 @@ const SmartQuerySchema = z.enum(['authored', 'assigned', 'review-requested']);
 // out-of-vocabulary source (e.g. 'bitbucket') rejects at the bus boundary.
 const SmartSourceSchema = z.enum(['gitlab', 'github', 'jira', 'rss']);
 
+// Per-source config entry — mirrors `SmartSourceConfig` in `types.ts`.
+const SmartSourceConfigSchema = z.strictObject({
+  source: SmartSourceSchema,
+  baseUrl: z.string(),
+  query: SmartQuerySchema.optional(),
+});
+
 // A pinned-tab placement node — mirrors `PinNode` in `types.ts` (all three
 // kinds, so `reorderPinned` round-trips smart nodes losslessly with their
 // config fields intact). Folder `icon`/`color` are plain strings on the record
@@ -388,11 +388,7 @@ const PinNodeSchema = z.discriminatedUnion('kind', [
     id: z.string(),
     name: z.string(),
     icon: z.string(),
-    source: SmartSourceSchema,
-    baseUrl: z.string(),
-    // Source-optional (rss-connector design D2): queue sources carry a query, a
-    // feed source omits it. `maxItems`/`hideRead` are the v6 node fields.
-    query: SmartQuerySchema.optional(),
+    sources: z.array(SmartSourceConfigSchema).min(1),
     maxItems: z.number(),
     hideRead: z.boolean(),
     refreshMinutes: z.number(),
@@ -545,11 +541,8 @@ const COMMAND_SCHEMAS = {
     kind: z.literal('createSmartFolder'),
     payload: z.strictObject({
       spaceId: z.string(),
-      source: SmartSourceSchema,
+      sources: z.array(SmartSourceConfigSchema).min(1),
       name: z.string(),
-      baseUrl: z.string(),
-      // Source-optional (rss-connector design D2): a feed omits it.
-      query: SmartQuerySchema.optional(),
       maxItems: z.number(),
       refreshMinutes: z.number(),
     }),
@@ -559,10 +552,8 @@ const COMMAND_SCHEMAS = {
     payload: z.strictObject({
       spaceId: z.string(),
       folderId: z.string(),
-      source: SmartSourceSchema,
+      sources: z.array(SmartSourceConfigSchema).min(1),
       name: z.string(),
-      baseUrl: z.string(),
-      query: SmartQuerySchema.optional(),
       maxItems: z.number(),
       refreshMinutes: z.number(),
     }),

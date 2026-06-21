@@ -1,7 +1,14 @@
 import { log } from '../shared/logger';
 import { hasHostPermissions, onPermissionsChange } from '../shared/permissions';
 import type { LunmaStore } from '../shared/store.svelte';
-import type { AppState, FolderId, PinNode, SmartFolderRuntime, SmartSource } from '../shared/types';
+import type {
+  AppState,
+  FolderId,
+  PinNode,
+  SmartSectionRuntime,
+  SmartSource,
+  SmartSourceConfig,
+} from '../shared/types';
 import type { ConnectorCaches, SourceConnector } from './connectors/connector';
 // All 4 connectors are eagerly imported on every SW boot (~52 KB / ~11 KB gzip
 // total, even for users who have enabled none). Converting to a lazy registry
@@ -23,7 +30,7 @@ import { rssConnector } from './connectors/rss';
  *     enqueue `{ source: 'connector', kind: 'smartFolders.result' }` events;
  *     only the drain's handler writes the runtime slice;
  *   - dispatch: fetches go through the closed `CONNECTORS` registry keyed by
- *     the node's `source` discriminant — exactly the four shipped connectors
+ *     the source discriminant — exactly the four shipped connectors
  *     (`background/connectors/`), no plug-in mechanism.
  */
 
@@ -35,6 +42,16 @@ export const REFRESH_MINUTES_FLOOR = 5;
 export const REFRESH_MINUTES_DEFAULT = 10;
 
 export type SmartFolderNode = Extract<PinNode, { kind: 'smart' }>;
+
+/**
+ * Stable section identity key for a source config: `${source}:${host}`.
+ * Derived from `baseUrl` so two configs with the same source + host always
+ * land in the same section regardless of query. Exported so the sidebar can
+ * derive the same key without importing from `background/`.
+ */
+export function sourceKey(cfg: SmartSourceConfig): string {
+  return `${cfg.source}:${new URL(cfg.baseUrl).host}`;
+}
 
 /**
  * The closed connector registry (github-connector design D1): exactly the
@@ -57,7 +74,7 @@ export const CONNECTORS: Record<SmartSource, SourceConnector> = {
 export interface SmartFoldersResultEvent {
   source: 'connector';
   kind: 'smartFolders.result';
-  payload: { folderId: FolderId; runtime: SmartFolderRuntime };
+  payload: { folderId: FolderId; sourceKey: string; runtime: SmartSectionRuntime };
 }
 
 /** The connector's two seams: read the store (never mutate — single-writer)
@@ -91,28 +108,24 @@ export function normalizeBaseUrl(raw: string): string {
 // ── registry dispatch ──────────────────────────────────────────────────────────
 
 /**
- * Fetch one smart folder's results through its source's connector. Never
- * throws — every failure shape resolves to a runtime state (the connectors'
- * contract). The node Pick includes `source` because dispatch needs the
- * discriminant and `maxItems` because each connector slices its results to it
- * (rss-connector design D5 — no fixed cap in the engine); `caches` is the
- * per-poll-cycle scratch map (absent on a manual/single refresh — the connector
- * defaults its own).
+ * Fetch one smart folder section's results through its source's connector.
+ * Never throws — every failure shape resolves to a runtime state (the
+ * connectors' contract). The host-permission gate (least-privilege-permissions
+ * design D8/D9) runs here per-source: a section whose connector-required
+ * origins are not ALL granted resolves to `needs-access` WITHOUT a network
+ * request. Partial grants are allowed — one section can be `needs-access` while
+ * another fetches normally.
  */
-export async function fetchSmartFolderRuntime(
-  node: Pick<SmartFolderNode, 'source' | 'baseUrl' | 'query' | 'maxItems'>,
+export async function fetchSmartSectionRuntime(
+  cfg: SmartSourceConfig,
+  maxItems: number,
   caches?: ConnectorCaches,
-): Promise<SmartFolderRuntime> {
-  const connector = CONNECTORS[node.source];
-  // Host-permission gate (least-privilege-permissions design D8/D9): a folder
-  // whose connector-required origins are not ALL granted resolves to
-  // `needs-access` WITHOUT a network request. This runs BEFORE the connector's
-  // own auth short-circuit, so host access precedes `signed-out`; it applies to
-  // every source, RSS included.
-  if (!(await hasHostPermissions(connector.requiredOrigins(node)))) {
+): Promise<SmartSectionRuntime> {
+  const connector = CONNECTORS[cfg.source];
+  if (!(await hasHostPermissions(connector.requiredOrigins(cfg)))) {
     return { state: 'needs-access', items: [], fetchedAt: Date.now() };
   }
-  return connector.fetchRuntime(node, caches);
+  return connector.fetchRuntime(cfg, maxItems, caches);
 }
 
 // ── scheduling ─────────────────────────────────────────────────────────────────
@@ -155,10 +168,11 @@ export function resetSmartFoldersInflight(): void {
 }
 
 /**
- * Begin one folder's refresh: enqueue the `pending` mark (the drain's
- * mutator preserves last-known items, so the list never blinks), then run the
- * fetch OFF the drain and enqueue the result event on completion. Returns the
- * fetch's completion promise so the coordinator handler can track it via
+ * Begin one folder's refresh: enqueue a `pending` mark per source section
+ * (the drain's mutator preserves last-known items, so the list never blinks),
+ * then fan out one `fetchSmartSectionRuntime` per source OFF the drain,
+ * enqueuing each section's result event on completion. Returns the fetch's
+ * completion promise so the coordinator handler can track it via
  * `ctx.runSideEffect` (test determinism) — callers never need to await it.
  * A folder already in flight is not re-fired. `caches` threads the poll
  * cycle's `ConnectorCaches` (see {@link refreshDueSmartFolders}).
@@ -172,34 +186,53 @@ export function startSmartFolderRefresh(
     return { started: false, completion: Promise.resolve() };
   }
   inflight.add(node.id);
-  deps.enqueue({
-    source: 'connector',
-    kind: 'smartFolders.result',
-    payload: {
-      folderId: node.id,
-      runtime: { state: 'pending', items: [], fetchedAt: null },
-    },
-  });
+
+  // Emit pending per section so the UI can transition immediately.
+  for (const cfg of node.sources) {
+    const sk = sourceKey(cfg);
+    deps.enqueue({
+      source: 'connector',
+      kind: 'smartFolders.result',
+      payload: {
+        folderId: node.id,
+        sourceKey: sk,
+        runtime: { state: 'pending', items: [], fetchedAt: null },
+      },
+    });
+  }
+
   const completion = (async () => {
     try {
-      const runtime = await fetchSmartFolderRuntime(node, caches);
-      deps.enqueue({
-        source: 'connector',
-        kind: 'smartFolders.result',
-        payload: { folderId: node.id, runtime },
-      });
-    } catch (err) {
-      // fetchSmartFolderRuntime never throws by contract; this is the backstop
-      // that keeps a defect from leaving the folder stuck pending.
-      log.error('smart-folders refresh failed unexpectedly', { err, folderId: node.id });
-      deps.enqueue({
-        source: 'connector',
-        kind: 'smartFolders.result',
-        payload: {
-          folderId: node.id,
-          runtime: { state: 'error', items: [], fetchedAt: Date.now() },
-        },
-      });
+      await Promise.all(
+        node.sources.map(async (cfg) => {
+          const sk = sourceKey(cfg);
+          try {
+            const runtime = await fetchSmartSectionRuntime(cfg, node.maxItems, caches);
+            deps.enqueue({
+              source: 'connector',
+              kind: 'smartFolders.result',
+              payload: { folderId: node.id, sourceKey: sk, runtime },
+            });
+          } catch (err) {
+            // fetchSmartSectionRuntime never throws by contract; this backstop
+            // keeps a defect from leaving a section stuck pending.
+            log.error('smart-folders section refresh failed unexpectedly', {
+              err,
+              folderId: node.id,
+              sourceKey: sk,
+            });
+            deps.enqueue({
+              source: 'connector',
+              kind: 'smartFolders.result',
+              payload: {
+                folderId: node.id,
+                sourceKey: sk,
+                runtime: { state: 'error', items: [], fetchedAt: Date.now() },
+              },
+            });
+          }
+        }),
+      );
     } finally {
       inflight.delete(node.id);
     }
@@ -207,16 +240,23 @@ export function startSmartFolderRefresh(
   return { started: true, completion };
 }
 
-/** Whether a folder's clock is due: a `null`/absent `fetchedAt` is always due;
- * otherwise `now - fetchedAt ≥ refreshMinutes`. */
+/** Whether a folder's clock is due: a `null` fetchedAt in ANY section is
+ * always due; otherwise `now - minFetchedAt ≥ refreshMinutes`. */
 export function isDue(
   node: Pick<SmartFolderNode, 'id' | 'refreshMinutes'>,
   smartFolders: AppState['smartFolders'],
   now: number,
 ): boolean {
-  const fetchedAt = smartFolders[node.id]?.fetchedAt ?? null;
-  if (fetchedAt === null) return true;
-  return now - fetchedAt >= node.refreshMinutes * 60_000;
+  const folder = smartFolders[node.id];
+  if (!folder) return true;
+  const sections = Object.values(folder.sections);
+  if (sections.length === 0) return true;
+  let minFetchedAt = Infinity;
+  for (const s of sections) {
+    if (s.fetchedAt === null) return true;
+    if (s.fetchedAt < minFetchedAt) minFetchedAt = s.fetchedAt;
+  }
+  return now - minFetchedAt >= node.refreshMinutes * 60_000;
 }
 
 /**
@@ -276,16 +316,24 @@ export function registerSmartFoldersRefreshKick(
 // ── host-permission sync (least-privilege-permissions design D5/D9) ──────────────
 
 /**
- * Re-evaluate every smart folder's host grant after a permission change and
- * enqueue the right result event (the drain applies + broadcasts each):
- *   - **granted** and the folder is in `needs-access` or due → refetch (the gate
- *     in {@link fetchSmartFolderRuntime} now passes, so `needs-access` → `pending`
- *     → `ok`). An already-`ok`, not-due folder is left alone (no needless poll).
- *   - **ungranted** and not already `needs-access` → drop to `needs-access`
- *     (a revoke returns the folder to its gated state).
- * Re-checks each folder via `hasHostPermissions` (the source of truth) rather
- * than matching the change's raw match patterns. One `ConnectorCaches` per pass,
- * like a poll cycle. Exported for tests.
+ * Re-evaluate every smart folder section's host grant after a permission
+ * change and enqueue the right result event (the drain applies + broadcasts
+ * each). Per-source checks allow partial grants: one section may be unblocked
+ * while another stays `needs-access`.
+ *
+ *   - **granted** and the section was `needs-access` → trigger a full folder
+ *     refresh (the gate in {@link fetchSmartSectionRuntime} now passes for that
+ *     source; other sections fetch normally or return `needs-access` as
+ *     appropriate).
+ *   - **ungranted** and the section is not already `needs-access` → drop that
+ *     section to `needs-access` (a revoke returns the section to its gated
+ *     state).
+ *   - due-clock check: if the folder is due regardless of grant changes, a
+ *     full refresh is also triggered.
+ *
+ * Re-checks each section via `hasHostPermissions` (the source of truth) rather
+ * than matching the change's raw match patterns. One `ConnectorCaches` per
+ * pass, like a poll cycle. Exported for tests.
  */
 export async function reconcileSmartFolderGrants(deps: SmartFolderDeps): Promise<void> {
   const now = Date.now();
@@ -293,23 +341,38 @@ export async function reconcileSmartFolderGrants(deps: SmartFolderDeps): Promise
   const caches: ConnectorCaches = new Map();
   await Promise.all(
     folders.map(async (node) => {
-      const granted = await hasHostPermissions(CONNECTORS[node.source].requiredOrigins(node));
-      const state = deps.store.state.smartFolders[node.id]?.state;
-      if (granted) {
-        if (state === 'needs-access' || isDue(node, deps.store.state.smartFolders, now)) {
-          await startSmartFolderRefresh(deps, node, caches).completion;
-        }
+      const sections = deps.store.state.smartFolders[node.id]?.sections ?? {};
+
+      // Resolve grant status for every source in parallel.
+      const grantResults = await Promise.all(
+        node.sources.map(async (cfg) => {
+          const sk = sourceKey(cfg);
+          const granted = await hasHostPermissions(CONNECTORS[cfg.source].requiredOrigins(cfg));
+          return { cfg, sk, granted, sectionState: sections[sk]?.state };
+        }),
+      );
+
+      // A newly-granted source that was stuck at needs-access should be
+      // unblocked immediately; if the folder is also due, do a full refresh.
+      const anyUnblocked = grantResults.some((r) => r.granted && r.sectionState === 'needs-access');
+      if (anyUnblocked || isDue(node, deps.store.state.smartFolders, now)) {
+        await startSmartFolderRefresh(deps, node, caches).completion;
         return;
       }
-      if (state !== 'needs-access') {
-        deps.enqueue({
-          source: 'connector',
-          kind: 'smartFolders.result',
-          payload: {
-            folderId: node.id,
-            runtime: { state: 'needs-access', items: [], fetchedAt: now },
-          },
-        });
+
+      // Revoke: drop ungranted sections that aren't already needs-access.
+      for (const { sk, granted, sectionState } of grantResults) {
+        if (!granted && sectionState !== 'needs-access') {
+          deps.enqueue({
+            source: 'connector',
+            kind: 'smartFolders.result',
+            payload: {
+              folderId: node.id,
+              sourceKey: sk,
+              runtime: { state: 'needs-access', items: [], fetchedAt: now },
+            },
+          });
+        }
       }
     }),
   );

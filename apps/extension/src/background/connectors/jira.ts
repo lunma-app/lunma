@@ -1,12 +1,12 @@
 import { z } from 'zod';
-import { requiredOriginsForNode } from '../../shared/connector-origins';
-import type { SmartFolderItem, SmartFolderRuntime, SmartQuery } from '../../shared/types';
-import {
-  boundedFetch,
-  type ConnectorCaches,
-  type SmartFolderNode,
-  type SourceConnector,
-} from './connector';
+import { requiredOriginsForConfig } from '../../shared/connector-origins';
+import type {
+  SmartFolderItem,
+  SmartQuery,
+  SmartSectionRuntime,
+  SmartSourceConfig,
+} from '../../shared/types';
+import { boundedFetch, type ConnectorCaches, type SourceConnector } from './connector';
 
 /**
  * The Jira connector (jira-connector, design D2–D4, D7–D8): Jira Cloud issues
@@ -123,17 +123,18 @@ const IssueSchema = z.object({
 const SearchResponseSchema = z.object({ issues: z.array(z.unknown()) });
 
 /**
- * Fetch one Jira smart folder's results. Never throws — every failure shape
- * resolves to a runtime state. No me-resolution call, no enrichment fan-out,
- * no `ConnectorCaches` (the `caches` parameter is ignored): one GET, status
- * read inline from the search response.
+ * Fetch one Jira smart folder section's results. Never throws — every failure
+ * shape resolves to a runtime state. No me-resolution call, no enrichment
+ * fan-out, no `ConnectorCaches` (the `caches` parameter is ignored): one GET,
+ * status read inline from the search response.
  */
 async function fetchRuntime(
-  node: Pick<SmartFolderNode, 'baseUrl' | 'query' | 'maxItems'>,
+  cfg: SmartSourceConfig,
+  maxItems: number,
   _caches?: ConnectorCaches,
-): Promise<SmartFolderRuntime> {
+): Promise<SmartSectionRuntime> {
   const fetchedAt = Date.now();
-  const fail = (state: 'signed-out' | 'error'): SmartFolderRuntime => ({
+  const fail = (state: 'signed-out' | 'error'): SmartSectionRuntime => ({
     state,
     items: [],
     fetchedAt,
@@ -143,20 +144,20 @@ async function fetchRuntime(
     // A malformed persisted baseUrl (defensive — the SW validates on
     // create/update; the unedited placeholder is also caught here) degrades to
     // the quiet error state, never a throw.
-    new URL(node.baseUrl);
+    new URL(cfg.baseUrl);
   } catch {
     return fail('error');
   }
 
   // A queue node always carries a query (source-optional only for feeds);
   // default defensively so the now-optional field stays a total switch.
-  const query: SmartQuery = node.query ?? 'assigned';
+  const query: SmartQuery = cfg.query ?? 'assigned';
 
-  // Per-folder cap (rss-connector design D5) — the badge renders `N+` at it, so
+  // Per-section cap (rss-connector design D5) — the badge renders `N+` at it, so
   // the cap is never silent (the forge precedent).
   const url =
-    `${node.baseUrl}/rest/api/3/search/jql?jql=${encodeURIComponent(jqlFor(query))}` +
-    `&fields=summary,status&maxResults=${node.maxItems}`;
+    `${cfg.baseUrl}/rest/api/3/search/jql?jql=${encodeURIComponent(jqlFor(query))}` +
+    `&fields=summary,status&maxResults=${maxItems}`;
   const outcome = await jiraGet(url);
   if (outcome.kind !== 'ok') return fail(outcome.kind);
   const parsed = SearchResponseSchema.safeParse(outcome.json);
@@ -168,7 +169,7 @@ async function fetchRuntime(
       const issue = IssueSchema.safeParse(element);
       return issue.success ? [issue.data] : [];
     })
-    .slice(0, node.maxItems)
+    .slice(0, maxItems)
     .map((issue) => {
       const status = statusForCategory(issue.fields.status?.statusCategory?.key ?? undefined);
       return {
@@ -177,7 +178,7 @@ async function fetchRuntime(
         // prefixes the summary, restoring the scan anchor (GitHub's `Draft: `
         // normalization precedent).
         title: `${issue.key} ${issue.fields.summary}`,
-        url: `${node.baseUrl}/browse/${issue.key}`,
+        url: `${cfg.baseUrl}/browse/${issue.key}`,
         ...(status !== undefined ? { status } : {}),
       };
     });
@@ -189,16 +190,16 @@ async function fetchRuntime(
  * tab"): the Jira issue navigator opened on the folder's own JQL — the "JQL
  * view" of exactly what the folder queues. The query is source-optional only
  * for feeds, so a queue node always supplies one (defaulted defensively). */
-function listingUrl(node: Pick<SmartFolderNode, 'baseUrl' | 'query'>): string {
-  return `${node.baseUrl}/issues/?jql=${encodeURIComponent(jqlFor(node.query ?? 'assigned'))}`;
+function listingUrl(cfg: SmartSourceConfig): string {
+  return `${cfg.baseUrl}/issues/?jql=${encodeURIComponent(jqlFor(cfg.query ?? 'assigned'))}`;
 }
 
 /** The origin this connector fetches (least-privilege-permissions design D8):
  * Jira fetches same-origin under `{baseUrl}/rest/api/3`. Delegates to the shared
- * {@link requiredOriginsForNode} so the SW gate and the surfaces share one
+ * {@link requiredOriginsForConfig} so the SW gate and the surfaces share one
  * derivation. */
-function requiredOrigins(node: Pick<SmartFolderNode, 'baseUrl'>): string[] {
-  return requiredOriginsForNode({ source: 'jira', baseUrl: node.baseUrl });
+function requiredOrigins(cfg: SmartSourceConfig): string[] {
+  return requiredOriginsForConfig(cfg);
 }
 
 /** The Jira `SourceConnector` — the registry's `jira` entry. */

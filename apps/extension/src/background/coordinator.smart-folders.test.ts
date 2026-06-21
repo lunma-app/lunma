@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import type { PinNode, SmartFolderRuntime } from '../shared/types';
+import type { PinNode, SmartSectionRuntime } from '../shared/types';
 import type { PendingEvent } from './coordinator';
 import { makeCoordinator, sidebar } from './coordinator.test-helpers';
 import { resetSmartFoldersInflight, SMART_FOLDERS_ALARM_NAME } from './smart-folders';
@@ -46,15 +46,16 @@ function jsonResponse(body: unknown, status = 200): unknown {
   return { status, ok: status >= 200 && status < 300, json: async () => body };
 }
 
+/** Default gitlab node; overrides merge at the top level of SmartNode. */
 function smartNode(overrides: Partial<SmartNode> = {}): SmartNode {
   return {
     kind: 'smart',
     id: 'sf-1',
     name: 'Review requests',
     icon: 'folder-git-2',
-    source: 'gitlab',
-    baseUrl: 'https://gitlab.example.com',
-    query: 'review-requested',
+    sources: [
+      { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+    ],
     maxItems: 20,
     hideRead: false,
     refreshMinutes: 10,
@@ -62,8 +63,21 @@ function smartNode(overrides: Partial<SmartNode> = {}): SmartNode {
   };
 }
 
-function resultEvent(folderId: string, runtime: SmartFolderRuntime): PendingEvent {
-  return { source: 'connector', kind: 'smartFolders.result', payload: { folderId, runtime } };
+/** sourceKey for the default gitlab node. */
+const GITLAB_SK = 'gitlab:gitlab.example.com';
+/** sourceKey for the default rss feed node. */
+const FEED_SK = 'rss:news.example.com';
+
+function resultEvent(
+  folderId: string,
+  sourceKey: string,
+  runtime: SmartSectionRuntime,
+): PendingEvent {
+  return {
+    source: 'connector',
+    kind: 'smartFolders.result',
+    payload: { folderId, sourceKey, runtime },
+  };
 }
 
 beforeEach(() => {
@@ -103,10 +117,14 @@ describe('createSmartFolder handler', () => {
           kind: 'createSmartFolder',
           payload: {
             spaceId: 'work',
-            source: 'gitlab',
+            sources: [
+              {
+                source: 'gitlab',
+                baseUrl: 'https://gitlab.example.com/',
+                query: 'review-requested',
+              },
+            ],
             name: 'Review requests',
-            baseUrl: 'https://gitlab.example.com/',
-            query: 'review-requested',
             maxItems: 20,
             refreshMinutes: 1,
           },
@@ -121,9 +139,9 @@ describe('createSmartFolder handler', () => {
       kind: 'smart',
       name: 'Review requests',
       icon: 'folder-git-2',
-      source: 'gitlab',
-      baseUrl: 'https://gitlab.example.com', // trailing slash stripped
-      query: 'review-requested',
+      sources: [
+        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+      ],
       refreshMinutes: 5, // clamped to the floor
     });
     expect(created.id).toBeTruthy(); // SW-minted (crypto.randomUUID)
@@ -146,10 +164,8 @@ describe('createSmartFolder handler', () => {
           kind: 'createSmartFolder',
           payload: {
             spaceId: 'work',
-            source: 'github',
+            sources: [{ source: 'github', baseUrl: 'https://github.com/', query: 'authored' }],
             name: 'My pull requests',
-            baseUrl: 'https://github.com/',
-            query: 'authored',
             maxItems: 20,
             refreshMinutes: 10,
           },
@@ -159,20 +175,20 @@ describe('createSmartFolder handler', () => {
     );
     await coordinator.idle();
 
-    expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({
+    const created = store.state.pinnedBySpace.work?.[0] as SmartNode;
+    expect(created).toMatchObject({
       kind: 'smart',
-      source: 'github',
+      sources: [{ source: 'github', baseUrl: 'https://github.com', query: 'authored' }],
       icon: 'folder-git-2', // CONNECTORS.github.mintedIcon
-      baseUrl: 'https://github.com',
-      query: 'authored',
     });
     expect(emitAck).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1', result: 'ok' }));
     // The immediate first fetch short-circuited to signed-out (no token in the
     // stub) WITHOUT a network request — token-only auth.
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(
-      store.state.smartFolders[(store.state.pinnedBySpace.work?.[0] as SmartNode).id],
-    ).toMatchObject({ state: 'signed-out' });
+    const folderId = created.id;
+    expect(Object.values(store.state.smartFolders[folderId]?.sections ?? {})[0]).toMatchObject({
+      state: 'signed-out',
+    });
   });
 
   test('an invalid baseUrl rejects with an error ack and adds no node', async () => {
@@ -183,10 +199,8 @@ describe('createSmartFolder handler', () => {
           kind: 'createSmartFolder',
           payload: {
             spaceId: 'work',
-            source: 'gitlab',
+            sources: [{ source: 'gitlab', baseUrl: 'not-a-url', query: 'authored' }],
             name: 'X',
-            baseUrl: 'not-a-url',
-            query: 'authored',
             maxItems: 20,
             refreshMinutes: 10,
           },
@@ -212,10 +226,8 @@ describe('createSmartFolder handler', () => {
           kind: 'createSmartFolder',
           payload: {
             spaceId: 'nope',
-            source: 'gitlab',
+            sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', query: 'authored' }],
             name: 'X',
-            baseUrl: 'https://gitlab.com',
-            query: 'authored',
             maxItems: 20,
             refreshMinutes: 10,
           },
@@ -236,7 +248,11 @@ describe('createSmartFolder handler', () => {
 describe('updateSmartFolder handler', () => {
   test('edits in place; a query change triggers an immediate refetch', async () => {
     const { coordinator, store } = makeWithSpace();
-    store.state.pinnedBySpace.work = [smartNode({ query: 'assigned' })];
+    store.state.pinnedBySpace.work = [
+      smartNode({
+        sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'assigned' }],
+      }),
+    ];
 
     coordinator.enqueue(
       sidebar(
@@ -245,10 +261,14 @@ describe('updateSmartFolder handler', () => {
           payload: {
             spaceId: 'work',
             folderId: 'sf-1',
-            source: 'gitlab',
+            sources: [
+              {
+                source: 'gitlab',
+                baseUrl: 'https://gitlab.example.com',
+                query: 'review-requested',
+              },
+            ],
             name: 'Review requests',
-            baseUrl: 'https://gitlab.example.com',
-            query: 'review-requested',
             maxItems: 20,
             refreshMinutes: 30,
           },
@@ -259,7 +279,7 @@ describe('updateSmartFolder handler', () => {
     await coordinator.idle();
 
     expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({
-      query: 'review-requested',
+      sources: [{ query: 'review-requested' }],
       refreshMinutes: 30,
     });
     expect(fetchMock).toHaveBeenCalled(); // the immediate refetch
@@ -269,7 +289,11 @@ describe('updateSmartFolder handler', () => {
     const { coordinator, store } = makeWithSpace();
     // A self-hosted URL (never the canonical default) so ONLY `source` changes;
     // a token for its host lets the github connector reach the network.
-    store.state.pinnedBySpace.work = [smartNode({ query: 'authored' })];
+    store.state.pinnedBySpace.work = [
+      smartNode({
+        sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'authored' }],
+      }),
+    ];
     chromeStub.storage.local.get.mockResolvedValue({
       'lunma.connectors': { 'gitlab.example.com': 'ghp-x' },
     });
@@ -281,10 +305,10 @@ describe('updateSmartFolder handler', () => {
           payload: {
             spaceId: 'work',
             folderId: 'sf-1',
-            source: 'github',
+            sources: [
+              { source: 'github', baseUrl: 'https://gitlab.example.com', query: 'authored' },
+            ],
             name: 'Review requests',
-            baseUrl: 'https://gitlab.example.com',
-            query: 'authored',
             maxItems: 20,
             refreshMinutes: 10,
           },
@@ -294,7 +318,7 @@ describe('updateSmartFolder handler', () => {
     );
     await coordinator.idle();
 
-    expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({ source: 'github' });
+    expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({ sources: [{ source: 'github' }] });
     // The refetch dispatched through the GitHub connector (the GHE API root).
     expect(fetchMock).toHaveBeenCalled();
     expect(fetchMock.mock.calls[0]?.[0]).toContain(
@@ -313,10 +337,14 @@ describe('updateSmartFolder handler', () => {
           payload: {
             spaceId: 'work',
             folderId: 'sf-1',
-            source: 'gitlab',
+            sources: [
+              {
+                source: 'gitlab',
+                baseUrl: 'https://gitlab.example.com',
+                query: 'review-requested',
+              },
+            ],
             name: 'Renamed',
-            baseUrl: 'https://gitlab.example.com',
-            query: 'review-requested',
             maxItems: 20,
             refreshMinutes: 10,
           },
@@ -339,10 +367,8 @@ describe('updateSmartFolder handler', () => {
           payload: {
             spaceId: 'work',
             folderId: 'nope',
-            source: 'gitlab',
+            sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', query: 'authored' }],
             name: 'X',
-            baseUrl: 'https://gitlab.com',
-            query: 'authored',
             maxItems: 20,
             refreshMinutes: 10,
           },
@@ -364,7 +390,9 @@ describe('deleteSmartFolder handler', () => {
   test('removes the node, drops its runtime, and clears the alarm when it was the last', async () => {
     const { coordinator, store } = makeWithSpace();
     store.state.pinnedBySpace.work = [smartNode()];
-    store.state.smartFolders['sf-1'] = { state: 'ok', items: [], fetchedAt: 1 };
+    store.state.smartFolders['sf-1'] = {
+      sections: { [GITLAB_SK]: { state: 'ok', items: [], fetchedAt: 1 } },
+    };
 
     coordinator.enqueue(
       sidebar({ kind: 'deleteSmartFolder', payload: { spaceId: 'work', folderId: 'sf-1' } }, 'c1'),
@@ -391,7 +419,11 @@ describe('deleteSmartFolder handler', () => {
 describe('refreshSmartFolder handler', () => {
   test('acks ok BEFORE the fetch resolves; the outcome lands via the runtime slice', async () => {
     const { coordinator, store, emitAck } = makeWithSpace();
-    store.state.pinnedBySpace.work = [smartNode({ query: 'authored' })];
+    store.state.pinnedBySpace.work = [
+      smartNode({
+        sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'authored' }],
+      }),
+    ];
     let resolveFetch: (value: unknown) => void = () => undefined;
     fetchMock.mockReturnValueOnce(
       new Promise((resolve) => {
@@ -407,17 +439,21 @@ describe('refreshSmartFolder handler', () => {
     await vi.waitFor(() => {
       expect(emitAck).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1', result: 'ok' }));
     });
-    expect(store.state.smartFolders['sf-1']?.state).toBe('pending');
+    expect(store.state.smartFolders['sf-1']?.sections[GITLAB_SK]?.state).toBe('pending');
 
     resolveFetch(jsonResponse([{ id: 9, title: 'MR 9', web_url: 'https://x/mr/9' }]));
     await coordinator.idle();
-    expect(store.state.smartFolders['sf-1']?.state).toBe('ok');
-    expect(store.state.smartFolders['sf-1']?.items).toHaveLength(1);
+    expect(store.state.smartFolders['sf-1']?.sections[GITLAB_SK]?.state).toBe('ok');
+    expect(store.state.smartFolders['sf-1']?.sections[GITLAB_SK]?.items).toHaveLength(1);
   });
 
   test('fetch failures never reject the ack — the runtime carries the outcome', async () => {
     const { coordinator, store, emitAck } = makeWithSpace();
-    store.state.pinnedBySpace.work = [smartNode({ query: 'authored' })];
+    store.state.pinnedBySpace.work = [
+      smartNode({
+        sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'authored' }],
+      }),
+    ];
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
 
     coordinator.enqueue(
@@ -426,7 +462,7 @@ describe('refreshSmartFolder handler', () => {
     await coordinator.idle();
 
     expect(emitAck).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1', result: 'ok' }));
-    expect(store.state.smartFolders['sf-1']?.state).toBe('error');
+    expect(store.state.smartFolders['sf-1']?.sections[GITLAB_SK]?.state).toBe('error');
   });
 
   test('an unknown folderId rejects', async () => {
@@ -510,16 +546,20 @@ describe('openSmartItem handler', () => {
     seedWindowInstance(store);
     store.state.pinnedBySpace.work = [smartNode()];
     store.state.smartFolders['sf-1'] = {
-      state: 'ok',
-      items: [{ id: '42', title: 'MR 42', url: 'https://gitlab.example.com/mr/42' }],
-      fetchedAt: 1,
+      sections: {
+        [GITLAB_SK]: {
+          state: 'ok',
+          items: [{ id: '42', title: 'MR 42', url: 'https://gitlab.example.com/mr/42' }],
+          fetchedAt: 1,
+        },
+      },
     };
 
     coordinator.enqueue(
       sidebar(
         {
           kind: 'openSmartItem',
-          payload: { spaceId: 'work', folderId: 'sf-1', itemId: '42', windowId: 100 },
+          payload: { spaceId: 'work', folderId: 'sf-1', itemId: `${GITLAB_SK}:42`, windowId: 100 },
         },
         'c1',
       ),
@@ -532,7 +572,11 @@ describe('openSmartItem handler', () => {
     });
     // Slot stores { tabId, allowGlob } with the item's page-glob (smart-tab-boundary).
     expect(store.state.smartItemBindings).toEqual({
-      'sf-1': { '42': { 100: { tabId: 999, allowGlob: 'https://gitlab.example.com/mr/42*' } } },
+      'sf-1': {
+        [`${GITLAB_SK}:42`]: {
+          100: { tabId: 999, allowGlob: 'https://gitlab.example.com/mr/42*' },
+        },
+      },
     });
     expect(store.state.liveTabsById[999]).toMatchObject({ tabId: 999, active: true });
     expect(stub.tabs.group).toHaveBeenCalled();
@@ -560,13 +604,15 @@ describe('openSmartItem handler', () => {
     store.state.pinnedBySpace.work = [smartNode()];
     // A held row's shape: the item is bound but no longer listed — the focus
     // path needs no URL at all.
-    store.state.smartItemBindings['sf-1'] = { '42': { 100: { tabId: 7, allowGlob: '' } } };
+    store.state.smartItemBindings['sf-1'] = {
+      [`${GITLAB_SK}:42`]: { 100: { tabId: 7, allowGlob: '' } },
+    };
 
     coordinator.enqueue(
       sidebar(
         {
           kind: 'openSmartItem',
-          payload: { spaceId: 'work', folderId: 'sf-1', itemId: '42', windowId: 100 },
+          payload: { spaceId: 'work', folderId: 'sf-1', itemId: `${GITLAB_SK}:42`, windowId: 100 },
         },
         'c1',
       ),
@@ -585,18 +631,24 @@ describe('openSmartItem handler', () => {
     seedWindowInstance(store);
     store.state.pinnedBySpace.work = [smartNode()];
     store.state.smartFolders['sf-1'] = {
-      state: 'ok',
-      items: [{ id: '42', title: 'MR 42', url: 'https://gitlab.example.com/mr/42' }],
-      fetchedAt: 1,
+      sections: {
+        [GITLAB_SK]: {
+          state: 'ok',
+          items: [{ id: '42', title: 'MR 42', url: 'https://gitlab.example.com/mr/42' }],
+          fetchedAt: 1,
+        },
+      },
     };
     // Bound in window 200, dormant in window 100 → window 100 takes the create path.
-    store.state.smartItemBindings['sf-1'] = { '42': { 200: { tabId: 7, allowGlob: '' } } };
+    store.state.smartItemBindings['sf-1'] = {
+      [`${GITLAB_SK}:42`]: { 200: { tabId: 7, allowGlob: '' } },
+    };
 
     coordinator.enqueue(
       sidebar(
         {
           kind: 'openSmartItem',
-          payload: { spaceId: 'work', folderId: 'sf-1', itemId: '42', windowId: 100 },
+          payload: { spaceId: 'work', folderId: 'sf-1', itemId: `${GITLAB_SK}:42`, windowId: 100 },
         },
         'c1',
       ),
@@ -604,7 +656,7 @@ describe('openSmartItem handler', () => {
     await coordinator.idle();
 
     expect(stub.tabs.create).toHaveBeenCalled();
-    expect(store.state.smartItemBindings['sf-1']?.['42']).toEqual({
+    expect(store.state.smartItemBindings['sf-1']?.[`${GITLAB_SK}:42`]).toEqual({
       200: { tabId: 7, allowGlob: '' },
       100: { tabId: 999, allowGlob: 'https://gitlab.example.com/mr/42*' },
     });
@@ -614,13 +666,20 @@ describe('openSmartItem handler', () => {
     installActivationChrome();
     const { coordinator, store, emitAck } = makeWithSpace();
     store.state.pinnedBySpace.work = [smartNode()];
-    store.state.smartFolders['sf-1'] = { state: 'ok', items: [], fetchedAt: 1 };
+    store.state.smartFolders['sf-1'] = {
+      sections: { [GITLAB_SK]: { state: 'ok', items: [], fetchedAt: 1 } },
+    };
 
     coordinator.enqueue(
       sidebar(
         {
           kind: 'openSmartItem',
-          payload: { spaceId: 'work', folderId: 'sf-1', itemId: 'ghost', windowId: 100 },
+          payload: {
+            spaceId: 'work',
+            folderId: 'sf-1',
+            itemId: `${GITLAB_SK}:ghost`,
+            windowId: 100,
+          },
         },
         'c1',
       ),
@@ -639,7 +698,7 @@ describe('openSmartItem handler', () => {
       sidebar(
         {
           kind: 'openSmartItem',
-          payload: { spaceId: 'work', folderId: 'nope', itemId: '42', windowId: 100 },
+          payload: { spaceId: 'work', folderId: 'nope', itemId: `${GITLAB_SK}:42`, windowId: 100 },
         },
         'c1',
       ),
@@ -656,16 +715,20 @@ describe('openSmartItem handler', () => {
     seedWindowInstance(store);
     store.state.pinnedBySpace.work = [smartNode()];
     store.state.smartFolders['sf-1'] = {
-      state: 'ok',
-      items: [{ id: '99', title: 'Settings', url: 'chrome://settings/' }],
-      fetchedAt: 1,
+      sections: {
+        [GITLAB_SK]: {
+          state: 'ok',
+          items: [{ id: '99', title: 'Settings', url: 'chrome://settings/' }],
+          fetchedAt: 1,
+        },
+      },
     };
 
     coordinator.enqueue(
       sidebar(
         {
           kind: 'openSmartItem',
-          payload: { spaceId: 'work', folderId: 'sf-1', itemId: '99', windowId: 100 },
+          payload: { spaceId: 'work', folderId: 'sf-1', itemId: `${GITLAB_SK}:99`, windowId: 100 },
         },
         'c1',
       ),
@@ -686,8 +749,8 @@ describe('deleteSmartFolder demotes bound tabs (smart-folder-item-bindings)', ()
     seedWindowInstance(store);
     store.state.pinnedBySpace.work = [smartNode()];
     store.state.smartItemBindings['sf-1'] = {
-      '42': { 100: { tabId: 7, allowGlob: '' } },
-      '43': { 100: { tabId: 9, allowGlob: '' } },
+      [`${GITLAB_SK}:42`]: { 100: { tabId: 7, allowGlob: '' } },
+      [`${GITLAB_SK}:43`]: { 100: { tabId: 9, allowGlob: '' } },
     };
     for (const tabId of [7, 9]) {
       store.state.liveTabsById[tabId] = {
@@ -717,7 +780,10 @@ describe('deleteSmartFolder demotes bound tabs (smart-folder-item-bindings)', ()
     const { coordinator, store } = makeWithSpace();
     seedWindowInstance(store);
     store.state.pinnedBySpace.work = [smartNode()];
-    store.state.smartItemBindings['sf-1'] = { '42': { 100: { tabId: 7, allowGlob: '' } } }; // no live record
+    // no live record for tabId 7
+    store.state.smartItemBindings['sf-1'] = {
+      [`${GITLAB_SK}:42`]: { 100: { tabId: 7, allowGlob: '' } },
+    };
 
     coordinator.enqueue(
       sidebar({ kind: 'deleteSmartFolder', payload: { spaceId: 'work', folderId: 'sf-1' } }, 'c1'),
@@ -735,7 +801,7 @@ describe('smartFolders.result handler (single-writer)', () => {
     store.state.pinnedBySpace.work = [smartNode()];
 
     coordinator.enqueue(
-      resultEvent('sf-1', {
+      resultEvent('sf-1', GITLAB_SK, {
         state: 'ok',
         items: [{ id: 'mr-1', title: 'MR', url: 'https://x/mr/1' }],
         fetchedAt: 123,
@@ -743,14 +809,19 @@ describe('smartFolders.result handler (single-writer)', () => {
     );
     await coordinator.idle();
 
-    expect(store.state.smartFolders['sf-1']).toMatchObject({ state: 'ok', fetchedAt: 123 });
+    expect(store.state.smartFolders['sf-1']?.sections[GITLAB_SK]).toMatchObject({
+      state: 'ok',
+      fetchedAt: 123,
+    });
     expect(broadcast).toHaveBeenCalledTimes(1);
   });
 
   test('a result landing after its folder was deleted is dropped', async () => {
     const { coordinator, store, broadcast } = makeWithSpace();
     // No smart node anywhere — the folder was deleted while the fetch flew.
-    coordinator.enqueue(resultEvent('sf-ghost', { state: 'ok', items: [], fetchedAt: 1 }));
+    coordinator.enqueue(
+      resultEvent('sf-ghost', GITLAB_SK, { state: 'ok', items: [], fetchedAt: 1 }),
+    );
     await coordinator.idle();
 
     expect(store.state.smartFolders['sf-ghost']).toBeUndefined();
@@ -761,7 +832,7 @@ describe('smartFolders.result handler (single-writer)', () => {
     const { coordinator, store, persist } = makeWithSpace();
     store.state.pinnedBySpace.work = [smartNode()];
 
-    coordinator.enqueue(resultEvent('sf-1', { state: 'ok', items: [], fetchedAt: 123 }));
+    coordinator.enqueue(resultEvent('sf-1', GITLAB_SK, { state: 'ok', items: [], fetchedAt: 123 }));
     await coordinator.idle();
 
     // First post-boot drain persists once (signature starts null); the WRITTEN
@@ -780,10 +851,8 @@ describe('feed read-state handlers', () => {
   function feedNode() {
     return smartNode({
       id: 'feed-1',
-      source: 'rss',
-      query: undefined,
+      sources: [{ source: 'rss', baseUrl: 'https://news.example.com/rss' }],
       icon: 'rss',
-      baseUrl: 'https://news.example.com/rss',
     });
   }
 
@@ -795,15 +864,24 @@ describe('feed read-state handlers', () => {
     seedWindowInstance(made.store);
     made.store.state.pinnedBySpace.work = [feedNode()];
     made.store.state.smartFolders['feed-1'] = {
-      state: 'ok',
-      items: [{ id: 'post-1', title: 'A post', url: 'https://news.example.com/p/1' }],
-      fetchedAt: 1,
+      sections: {
+        [FEED_SK]: {
+          state: 'ok',
+          items: [{ id: 'post-1', title: 'A post', url: 'https://news.example.com/p/1' }],
+          fetchedAt: 1,
+        },
+      },
     };
     made.coordinator.enqueue(
       sidebar(
         {
           kind: 'openSmartItem',
-          payload: { spaceId: 'work', folderId: 'feed-1', itemId: 'post-1', windowId: 100 },
+          payload: {
+            spaceId: 'work',
+            folderId: 'feed-1',
+            itemId: `${FEED_SK}:post-1`,
+            windowId: 100,
+          },
         },
         'c1',
       ),
@@ -817,7 +895,7 @@ describe('feed read-state handlers', () => {
     const { store } = await openFeedItem();
     // Bound + active + still unread — the draining queue keeps the entry you
     // just opened until you move on.
-    expect(store.state.smartItemBindings['feed-1']?.['post-1']?.[100]?.tabId).toBe(999);
+    expect(store.state.smartItemBindings['feed-1']?.[`${FEED_SK}:post-1`]?.[100]?.tabId).toBe(999);
     expect(store.state.smartReadState['feed-1']).toBeUndefined();
   });
 
@@ -830,12 +908,12 @@ describe('feed read-state handlers', () => {
       payload: { activeInfo: { tabId: 555, windowId: 100 } },
     });
     await coordinator.idle();
-    expect(store.state.smartReadState['feed-1']).toEqual(['post-1']);
+    expect(store.state.smartReadState['feed-1']).toEqual([`${FEED_SK}:post-1`]);
     // Consume = close: the entry's bound tab (999) is closed (no tab trail).
     expect(stub.tabs.remove).toHaveBeenCalledWith(999);
   });
 
-  test('closing the entry’s tab drains it (marks it read)', async () => {
+  test("closing the entry's tab drains it (marks it read)", async () => {
     const { coordinator, store } = await openFeedItem();
     coordinator.enqueue({
       source: 'chrome',
@@ -843,7 +921,7 @@ describe('feed read-state handlers', () => {
       payload: { tabId: 999, info: { windowId: 100, isWindowClosing: false } },
     });
     await coordinator.idle();
-    expect(store.state.smartReadState['feed-1']).toEqual(['post-1']);
+    expect(store.state.smartReadState['feed-1']).toEqual([`${FEED_SK}:post-1`]);
   });
 
   test('markAllSmartItemsRead marks every currently-listed item read', async () => {
@@ -851,12 +929,16 @@ describe('feed read-state handlers', () => {
     const { coordinator, store, emitAck } = makeWithSpace();
     store.state.pinnedBySpace.work = [feedNode()];
     store.state.smartFolders['feed-1'] = {
-      state: 'ok',
-      items: [
-        { id: 'a', title: 'A', url: 'https://x/a' },
-        { id: 'b', title: 'B', url: 'https://x/b' },
-      ],
-      fetchedAt: 1,
+      sections: {
+        [FEED_SK]: {
+          state: 'ok',
+          items: [
+            { id: 'a', title: 'A', url: 'https://x/a' },
+            { id: 'b', title: 'B', url: 'https://x/b' },
+          ],
+          fetchedAt: 1,
+        },
+      },
     };
 
     coordinator.enqueue(
@@ -867,7 +949,7 @@ describe('feed read-state handlers', () => {
     );
     await coordinator.idle();
 
-    expect(store.state.smartReadState['feed-1']?.sort()).toEqual(['a', 'b']);
+    expect(store.state.smartReadState['feed-1']?.sort()).toEqual([`${FEED_SK}:a`, `${FEED_SK}:b`]);
     expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'c1', result: 'ok' });
   });
 
@@ -875,7 +957,9 @@ describe('feed read-state handlers', () => {
     installActivationChrome();
     const { coordinator, store, emitAck } = makeWithSpace();
     store.state.pinnedBySpace.work = [feedNode()];
-    store.state.smartFolders['feed-1'] = { state: 'ok', items: [], fetchedAt: 1 };
+    store.state.smartFolders['feed-1'] = {
+      sections: { [FEED_SK]: { state: 'ok', items: [], fetchedAt: 1 } },
+    };
 
     coordinator.enqueue(
       sidebar(
@@ -890,7 +974,7 @@ describe('feed read-state handlers', () => {
 
     expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({ hideRead: true });
     // No refetch — hideRead is a display pref; the fetch window is unchanged.
-    expect(store.state.smartFolders['feed-1']?.fetchedAt).toBe(1);
+    expect(store.state.smartFolders['feed-1']?.sections[FEED_SK]?.fetchedAt).toBe(1);
     expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'c1', result: 'ok' });
   });
 

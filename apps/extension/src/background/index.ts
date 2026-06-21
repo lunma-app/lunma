@@ -9,7 +9,7 @@ import {
   respondWithCurrentWindow,
   type SidebarFocusMessage,
 } from '../shared/messages';
-import { isNewTabUrl, NEWTAB_PAGE_PATH } from '../shared/new-tab';
+import { NEWTAB_PAGE_PATH } from '../shared/new-tab';
 import { buildEngineRegistry } from '../shared/search-engines';
 import { readSettings, type Settings, watchSettings } from '../shared/settings';
 import type { TabId } from '../shared/types';

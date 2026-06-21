@@ -51,12 +51,25 @@ export function chromeTabHandlers(): Pick<
     },
     'tabs.onRemoved': (ctx, event) => {
       const { tabId, info } = event.payload;
+      // Query next feed item BEFORE onTabRemoved (binding still visible, item still unread).
+      const advance = info.isWindowClosing
+        ? undefined
+        : ctx.store.nextUnreadFeedItemAfterClose(tabId, info.windowId);
       ctx.store.onTabRemoved(tabId, {
         windowId: info.windowId,
         isWindowClosing: info.isWindowClosing,
       });
       ctx.store.removeLiveTab(tabId);
       ctx.markDirty();
+      // Auto-advance: open the next unread feed item in the same section.
+      if (advance) {
+        ctx.enqueue({
+          source: 'sidebar',
+          kind: 'openSmartItem',
+          payload: advance,
+          correlationId: `feed-auto-advance-${tabId}`,
+        });
+      }
     },
     'tabs.onUpdated': async (ctx, event) => {
       const { tabId, changeInfo } = event.payload;

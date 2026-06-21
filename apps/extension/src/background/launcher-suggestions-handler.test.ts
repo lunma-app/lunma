@@ -374,9 +374,7 @@ describe('registerLauncherSuggestionsHandler', () => {
         id: 'sf-work',
         name: 'Work PRs',
         icon: 'git-pull-request',
-        source: 'github',
-        baseUrl: 'https://github.com',
-        query: 'authored',
+        sources: [{ source: 'github', baseUrl: 'https://github.com', query: 'authored' }],
         maxItems: 20,
         hideRead: false,
         refreshMinutes: 10,
@@ -388,22 +386,29 @@ describe('registerLauncherSuggestionsHandler', () => {
         id: 'sf-home',
         name: 'Home Feed',
         icon: 'rss',
-        source: 'rss',
-        baseUrl: 'https://h.example/feed',
+        sources: [{ source: 'rss', baseUrl: 'https://h.example/feed' }],
         maxItems: 20,
         hideRead: false,
         refreshMinutes: 10,
       },
     ];
     store.state.smartFolders['sf-work'] = {
-      state: 'ok',
-      fetchedAt: 1,
-      items: [{ id: 'w1', title: 'parser fix', url: 'https://work/pr/1' }],
+      sections: {
+        'github:github.com': {
+          state: 'ok',
+          fetchedAt: 1,
+          items: [{ id: 'w1', title: 'parser fix', url: 'https://work/pr/1' }],
+        },
+      },
     };
     store.state.smartFolders['sf-home'] = {
-      state: 'ok',
-      fetchedAt: 1,
-      items: [{ id: 'h1', title: 'parser fix', url: 'https://home/post/1' }],
+      sections: {
+        'rss:h.example': {
+          state: 'ok',
+          fetchedAt: 1,
+          items: [{ id: 'h1', title: 'parser fix', url: 'https://home/post/1' }],
+        },
+      },
     };
     return store;
   }

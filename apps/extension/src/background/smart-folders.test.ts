@@ -3,7 +3,7 @@ import { LunmaStore } from '../shared/store.svelte';
 import {
   CONNECTORS,
   collectSmartFolders,
-  fetchSmartFolderRuntime,
+  fetchSmartSectionRuntime,
   isDue,
   normalizeBaseUrl,
   reconcileSmartFolderGrants,
@@ -14,6 +14,7 @@ import {
   SMART_FOLDERS_ALARM_NAME,
   type SmartFolderNode,
   type SmartFoldersResultEvent,
+  sourceKey,
   startSmartFolderRefresh,
   syncSmartFoldersAlarm,
 } from './smart-folders';
@@ -90,9 +91,9 @@ function node(overrides: Partial<SmartFolderNode> = {}): SmartFolderNode {
     id: 'sf-1',
     name: 'Review requests',
     icon: 'folder-git-2',
-    source: 'gitlab',
-    baseUrl: 'https://gitlab.example.com',
-    query: 'review-requested',
+    sources: [
+      { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+    ],
     maxItems: 20,
     hideRead: false,
     refreshMinutes: 10,
@@ -146,6 +147,34 @@ describe('normalizeBaseUrl', () => {
   });
 });
 
+// ── sourceKey (task 8.1) ───────────────────────────────────────────────────────
+
+describe('sourceKey', () => {
+  test('gitlab.com', () => {
+    expect(sourceKey({ source: 'gitlab', baseUrl: 'https://gitlab.com' })).toBe(
+      'gitlab:gitlab.com',
+    );
+  });
+
+  test('github.com uses the baseUrl host (not the fetch api origin)', () => {
+    expect(sourceKey({ source: 'github', baseUrl: 'https://github.com' })).toBe(
+      'github:github.com',
+    );
+  });
+
+  test('GitHub Enterprise uses the custom host', () => {
+    expect(sourceKey({ source: 'github', baseUrl: 'https://ghe.corp.example.com' })).toBe(
+      'github:ghe.corp.example.com',
+    );
+  });
+
+  test('rss with a path URL', () => {
+    expect(sourceKey({ source: 'rss', baseUrl: 'https://feeds.example.com/blog.xml' })).toBe(
+      'rss:feeds.example.com',
+    );
+  });
+});
+
 // ── registry dispatch ──────────────────────────────────────────────────────────
 
 describe('the CONNECTORS registry', () => {
@@ -169,21 +198,27 @@ describe('the CONNECTORS registry', () => {
     // GitHub on github.com fetches api.github.com (a DIFFERENT origin) — the
     // headline correctness case: gating on github.com would never authorize the
     // fetch. GitHub Enterprise is same-origin under the baseUrl.
-    expect(CONNECTORS.github.requiredOrigins({ baseUrl: 'https://github.com' })).toEqual([
-      'https://api.github.com/*',
-    ]);
-    expect(CONNECTORS.github.requiredOrigins({ baseUrl: 'https://ghe.acme.com' })).toEqual([
-      'https://ghe.acme.com/*',
-    ]);
+    expect(
+      CONNECTORS.github.requiredOrigins({ source: 'github', baseUrl: 'https://github.com' }),
+    ).toEqual(['https://api.github.com/*']);
+    expect(
+      CONNECTORS.github.requiredOrigins({ source: 'github', baseUrl: 'https://ghe.acme.com' }),
+    ).toEqual(['https://ghe.acme.com/*']);
     // GitLab, Jira, and RSS each fetch their own baseUrl origin (port preserved).
     expect(
-      CONNECTORS.gitlab.requiredOrigins({ baseUrl: 'https://gitlab.example.com:8443/g' }),
+      CONNECTORS.gitlab.requiredOrigins({
+        source: 'gitlab',
+        baseUrl: 'https://gitlab.example.com:8443/g',
+      }),
     ).toEqual(['https://gitlab.example.com:8443/*']);
-    expect(CONNECTORS.jira.requiredOrigins({ baseUrl: 'https://acme.atlassian.net' })).toEqual([
-      'https://acme.atlassian.net/*',
-    ]);
     expect(
-      CONNECTORS.rss.requiredOrigins({ baseUrl: 'https://blog.example.com/feed.xml' }),
+      CONNECTORS.jira.requiredOrigins({ source: 'jira', baseUrl: 'https://acme.atlassian.net' }),
+    ).toEqual(['https://acme.atlassian.net/*']);
+    expect(
+      CONNECTORS.rss.requiredOrigins({
+        source: 'rss',
+        baseUrl: 'https://blog.example.com/feed.xml',
+      }),
     ).toEqual(['https://blog.example.com/*']);
   });
 
@@ -192,7 +227,8 @@ describe('the CONNECTORS registry', () => {
     const githubFetch = vi.spyOn(CONNECTORS.github, 'fetchRuntime').mockResolvedValue(runtime);
     const store = makeStoreWithSmartFolders([]);
     const events: SmartFoldersResultEvent[] = [];
-    const ghNode = node({ id: 'sf-gh', source: 'github', baseUrl: 'https://github.com' });
+    const ghCfg = { source: 'github' as const, baseUrl: 'https://github.com' };
+    const ghNode = node({ id: 'sf-gh', sources: [ghCfg] });
 
     const { completion } = startSmartFolderRefresh(
       { store, enqueue: (e) => events.push(e) },
@@ -200,11 +236,11 @@ describe('the CONNECTORS registry', () => {
     );
     await completion;
 
-    expect(githubFetch).toHaveBeenCalledWith(ghNode, undefined);
+    expect(githubFetch).toHaveBeenCalledWith(ghCfg, ghNode.maxItems, undefined);
     // The pending mark, then the github connector's result — exactly as a
     // GitLab result rides the drain.
     expect(events).toHaveLength(2);
-    expect(events[1]?.payload).toEqual({ folderId: 'sf-gh', runtime });
+    expect(events[1]?.payload).toEqual({ folderId: 'sf-gh', sourceKey: sourceKey(ghCfg), runtime });
   });
 
   test('a jira folder dispatches through CONNECTORS.jira and its result reaches the drain', async () => {
@@ -212,11 +248,8 @@ describe('the CONNECTORS registry', () => {
     const jiraFetch = vi.spyOn(CONNECTORS.jira, 'fetchRuntime').mockResolvedValue(runtime);
     const store = makeStoreWithSmartFolders([]);
     const events: SmartFoldersResultEvent[] = [];
-    const jiraNode = node({
-      id: 'sf-jira',
-      source: 'jira',
-      baseUrl: 'https://acme.atlassian.net',
-    });
+    const jiraCfg = { source: 'jira' as const, baseUrl: 'https://acme.atlassian.net' };
+    const jiraNode = node({ id: 'sf-jira', sources: [jiraCfg] });
 
     const { completion } = startSmartFolderRefresh(
       { store, enqueue: (e) => events.push(e) },
@@ -224,11 +257,15 @@ describe('the CONNECTORS registry', () => {
     );
     await completion;
 
-    expect(jiraFetch).toHaveBeenCalledWith(jiraNode, undefined);
+    expect(jiraFetch).toHaveBeenCalledWith(jiraCfg, jiraNode.maxItems, undefined);
     // The pending mark, then the jira connector's result — exactly as a GitLab
     // or GitHub result rides the drain.
     expect(events).toHaveLength(2);
-    expect(events[1]?.payload).toEqual({ folderId: 'sf-jira', runtime });
+    expect(events[1]?.payload).toEqual({
+      folderId: 'sf-jira',
+      sourceKey: sourceKey(jiraCfg),
+      runtime,
+    });
   });
 });
 
@@ -248,8 +285,9 @@ describe('the host-permission gate', () => {
     const glFetch = vi.spyOn(CONNECTORS.gitlab, 'fetchRuntime');
     chromeStub.permissions.contains.mockResolvedValue(false);
 
-    const runtime = await fetchSmartFolderRuntime(
-      node({ source: 'gitlab', baseUrl: 'https://gitlab.example.com' }),
+    const runtime = await fetchSmartSectionRuntime(
+      { source: 'gitlab', baseUrl: 'https://gitlab.example.com' },
+      20,
     );
 
     expect(runtime).toEqual({ state: 'needs-access', items: [], fetchedAt: expect.any(Number) });
@@ -261,8 +299,9 @@ describe('the host-permission gate', () => {
     const ghFetch = vi.spyOn(CONNECTORS.github, 'fetchRuntime');
     chromeStub.permissions.contains.mockResolvedValue(false);
 
-    const runtime = await fetchSmartFolderRuntime(
-      node({ source: 'github', baseUrl: 'https://github.com' }),
+    const runtime = await fetchSmartSectionRuntime(
+      { source: 'github', baseUrl: 'https://github.com' },
+      20,
     );
 
     expect(runtime.state).toBe('needs-access');
@@ -277,8 +316,9 @@ describe('the host-permission gate', () => {
     const rssFetch = vi.spyOn(CONNECTORS.rss, 'fetchRuntime');
     chromeStub.permissions.contains.mockResolvedValue(false);
 
-    const runtime = await fetchSmartFolderRuntime(
-      node({ source: 'rss', baseUrl: 'https://blog.example.com/feed.xml' }),
+    const runtime = await fetchSmartSectionRuntime(
+      { source: 'rss', baseUrl: 'https://blog.example.com/feed.xml' },
+      20,
     );
 
     expect(runtime.state).toBe('needs-access');
@@ -292,8 +332,9 @@ describe('the host-permission gate', () => {
     const ghFetch = vi.spyOn(CONNECTORS.github, 'fetchRuntime');
     chromeStub.permissions.contains.mockResolvedValue(false);
 
-    const runtime = await fetchSmartFolderRuntime(
-      node({ source: 'github', baseUrl: 'https://github.com' }),
+    const runtime = await fetchSmartSectionRuntime(
+      { source: 'github', baseUrl: 'https://github.com' },
+      20,
     );
 
     expect(runtime.state).toBe('needs-access');
@@ -304,12 +345,12 @@ describe('the host-permission gate', () => {
     const result = { state: 'ok' as const, items: [], fetchedAt: 1 };
     const glFetch = vi.spyOn(CONNECTORS.gitlab, 'fetchRuntime').mockResolvedValue(result);
     chromeStub.permissions.contains.mockResolvedValue(true);
-    const glNode = node({ source: 'gitlab', baseUrl: 'https://gitlab.example.com' });
+    const glCfg = { source: 'gitlab' as const, baseUrl: 'https://gitlab.example.com' };
 
-    const runtime = await fetchSmartFolderRuntime(glNode);
+    const runtime = await fetchSmartSectionRuntime(glCfg, 20);
 
     expect(runtime).toBe(result);
-    expect(glFetch).toHaveBeenCalledWith(glNode, undefined);
+    expect(glFetch).toHaveBeenCalledWith(glCfg, 20, undefined);
   });
 });
 
@@ -324,8 +365,12 @@ describe('reconcileSmartFolderGrants', () => {
     };
     vi.spyOn(CONNECTORS.gitlab, 'fetchRuntime').mockResolvedValue(okRuntime);
     chromeStub.permissions.contains.mockResolvedValue(true);
-    const store = makeStoreWithSmartFolders([node({ id: 'sf-1', source: 'gitlab' })]);
-    store.state.smartFolders['sf-1'] = { state: 'needs-access', items: [], fetchedAt: Date.now() };
+    const store = makeStoreWithSmartFolders([node({ id: 'sf-1' })]);
+    store.state.smartFolders['sf-1'] = {
+      sections: {
+        'gitlab:gitlab.example.com': { state: 'needs-access', items: [], fetchedAt: Date.now() },
+      },
+    };
     const events: SmartFoldersResultEvent[] = [];
 
     await reconcileSmartFolderGrants({ store, enqueue: (e) => events.push(e) });
@@ -336,11 +381,15 @@ describe('reconcileSmartFolderGrants', () => {
 
   test('on revoke: an ok folder whose origins are no longer granted drops to needs-access', async () => {
     chromeStub.permissions.contains.mockResolvedValue(false);
-    const store = makeStoreWithSmartFolders([node({ id: 'sf-1', source: 'gitlab' })]);
+    const store = makeStoreWithSmartFolders([node({ id: 'sf-1' })]);
     store.state.smartFolders['sf-1'] = {
-      state: 'ok',
-      items: [{ id: 'x', title: 't', url: 'https://u' }],
-      fetchedAt: Date.now(),
+      sections: {
+        'gitlab:gitlab.example.com': {
+          state: 'ok',
+          items: [{ id: 'x', title: 't', url: 'https://u' }],
+          fetchedAt: Date.now(),
+        },
+      },
     };
     const events: SmartFoldersResultEvent[] = [];
 
@@ -349,16 +398,17 @@ describe('reconcileSmartFolderGrants', () => {
     expect(events).toHaveLength(1);
     expect(events[0]?.payload).toEqual({
       folderId: 'sf-1',
+      sourceKey: 'gitlab:gitlab.example.com',
       runtime: { state: 'needs-access', items: [], fetchedAt: expect.any(Number) },
     });
   });
 
   test('on grant: an already-ok, not-due folder is left alone (no needless poll)', async () => {
     chromeStub.permissions.contains.mockResolvedValue(true);
-    const store = makeStoreWithSmartFolders([
-      node({ id: 'sf-1', source: 'gitlab', refreshMinutes: 30 }),
-    ]);
-    store.state.smartFolders['sf-1'] = { state: 'ok', items: [], fetchedAt: Date.now() };
+    const store = makeStoreWithSmartFolders([node({ id: 'sf-1', refreshMinutes: 30 })]);
+    store.state.smartFolders['sf-1'] = {
+      sections: { 'gitlab:gitlab.example.com': { state: 'ok', items: [], fetchedAt: Date.now() } },
+    };
     const events: SmartFoldersResultEvent[] = [];
 
     await reconcileSmartFolderGrants({ store, enqueue: (e) => events.push(e) });
@@ -368,8 +418,12 @@ describe('reconcileSmartFolderGrants', () => {
 
   test('a folder already in needs-access is not re-enqueued on a still-ungranted change', async () => {
     chromeStub.permissions.contains.mockResolvedValue(false);
-    const store = makeStoreWithSmartFolders([node({ id: 'sf-1', source: 'gitlab' })]);
-    store.state.smartFolders['sf-1'] = { state: 'needs-access', items: [], fetchedAt: Date.now() };
+    const store = makeStoreWithSmartFolders([node({ id: 'sf-1' })]);
+    store.state.smartFolders['sf-1'] = {
+      sections: {
+        'gitlab:gitlab.example.com': { state: 'needs-access', items: [], fetchedAt: Date.now() },
+      },
+    };
     const events: SmartFoldersResultEvent[] = [];
 
     await reconcileSmartFolderGrants({ store, enqueue: (e) => events.push(e) });
@@ -379,8 +433,10 @@ describe('reconcileSmartFolderGrants', () => {
 
   test('registerSmartFoldersPermissionSync reconciles on a change and unsubscribes', async () => {
     chromeStub.permissions.contains.mockResolvedValue(false);
-    const store = makeStoreWithSmartFolders([node({ id: 'sf-1', source: 'gitlab' })]);
-    store.state.smartFolders['sf-1'] = { state: 'ok', items: [], fetchedAt: Date.now() };
+    const store = makeStoreWithSmartFolders([node({ id: 'sf-1' })]);
+    store.state.smartFolders['sf-1'] = {
+      sections: { 'gitlab:gitlab.example.com': { state: 'ok', items: [], fetchedAt: Date.now() } },
+    };
     const events: SmartFoldersResultEvent[] = [];
 
     const unsubscribe = registerSmartFoldersPermissionSync({
@@ -408,20 +464,56 @@ describe('scheduling', () => {
     const now = 1_000_000_000;
     expect(isDue(folder, {}, now)).toBe(true);
     expect(
-      isDue(folder, { 'sf-1': { state: 'ok', items: [], fetchedAt: now - 4 * 60_000 } }, now),
+      isDue(
+        folder,
+        {
+          'sf-1': {
+            sections: {
+              'gitlab:gitlab.example.com': { state: 'ok', items: [], fetchedAt: now - 4 * 60_000 },
+            },
+          },
+        },
+        now,
+      ),
     ).toBe(false);
     expect(
-      isDue(folder, { 'sf-1': { state: 'ok', items: [], fetchedAt: now - 6 * 60_000 } }, now),
+      isDue(
+        folder,
+        {
+          'sf-1': {
+            sections: {
+              'gitlab:gitlab.example.com': { state: 'ok', items: [], fetchedAt: now - 6 * 60_000 },
+            },
+          },
+        },
+        now,
+      ),
     ).toBe(true);
   });
 
   test('refreshDueSmartFolders refreshes only due folders', async () => {
     const now = Date.now();
-    const a = node({ id: 'sf-a', refreshMinutes: 5, query: 'authored' });
-    const b = node({ id: 'sf-b', refreshMinutes: 30, query: 'authored' });
+    const a = node({
+      id: 'sf-a',
+      refreshMinutes: 5,
+      sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'authored' }],
+    });
+    const b = node({
+      id: 'sf-b',
+      refreshMinutes: 30,
+      sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'authored' }],
+    });
     const store = makeStoreWithSmartFolders([a, b]);
-    store.state.smartFolders['sf-a'] = { state: 'ok', items: [], fetchedAt: now - 6 * 60_000 };
-    store.state.smartFolders['sf-b'] = { state: 'ok', items: [], fetchedAt: now - 10 * 60_000 };
+    store.state.smartFolders['sf-a'] = {
+      sections: {
+        'gitlab:gitlab.example.com': { state: 'ok', items: [], fetchedAt: now - 6 * 60_000 },
+      },
+    };
+    store.state.smartFolders['sf-b'] = {
+      sections: {
+        'gitlab:gitlab.example.com': { state: 'ok', items: [], fetchedAt: now - 10 * 60_000 },
+      },
+    };
     fetchMock.mockResolvedValue(jsonResponse([]));
     const events: SmartFoldersResultEvent[] = [];
 
@@ -440,8 +532,18 @@ describe('scheduling', () => {
       return jsonResponse([]);
     });
     const store = makeStoreWithSmartFolders([
-      node({ id: 'sf-a', query: 'review-requested' }),
-      node({ id: 'sf-b', query: 'review-requested' }),
+      node({
+        id: 'sf-a',
+        sources: [
+          { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+        ],
+      }),
+      node({
+        id: 'sf-b',
+        sources: [
+          { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+        ],
+      }),
     ]);
     const events: SmartFoldersResultEvent[] = [];
 
@@ -455,12 +557,15 @@ describe('scheduling', () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse([mr(1, { head_pipeline: { status: 'success' } })]),
     );
-    const store = makeStoreWithSmartFolders([node({ query: 'authored' })]);
+    const glAuthoredNode = node({
+      sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'authored' }],
+    });
+    const store = makeStoreWithSmartFolders([glAuthoredNode]);
     const events: SmartFoldersResultEvent[] = [];
 
     const { started, completion } = startSmartFolderRefresh(
       { store, enqueue: (e) => events.push(e) },
-      node({ query: 'authored' }),
+      glAuthoredNode,
     );
     expect(started).toBe(true);
     expect(events).toHaveLength(1);
@@ -471,6 +576,70 @@ describe('scheduling', () => {
     expect(events[1]?.payload.runtime.items).toHaveLength(1);
   });
 
+  test('two-source folder produces two result events, each with the correct sourceKey (task 8.3)', async () => {
+    fetchMock.mockResolvedValue(jsonResponse([]));
+    const glCfg = {
+      source: 'gitlab' as const,
+      baseUrl: 'https://gitlab.example.com',
+      query: 'authored' as const,
+    };
+    const ghCfg = {
+      source: 'github' as const,
+      baseUrl: 'https://github.com',
+      query: 'authored' as const,
+    };
+    const multiNode = node({ id: 'sf-multi', sources: [glCfg, ghCfg] });
+    const store = makeStoreWithSmartFolders([multiNode]);
+    const events: SmartFoldersResultEvent[] = [];
+
+    const { completion } = startSmartFolderRefresh(
+      { store, enqueue: (e) => events.push(e) },
+      multiNode,
+    );
+    await completion;
+
+    const resultEvents = events.filter((e) => e.payload.runtime.state !== 'pending');
+    const sourceKeys = resultEvents.map((e) => e.payload.sourceKey);
+    expect(sourceKeys).toContain('gitlab:gitlab.example.com');
+    expect(sourceKeys).toContain('github:github.com');
+    expect(resultEvents.every((e) => e.payload.folderId === 'sf-multi')).toBe(true);
+  });
+
+  test('partial needs-access: one ungranted section needs-access; granted section fetches (task 8.4)', async () => {
+    const glCfg = {
+      source: 'gitlab' as const,
+      baseUrl: 'https://gitlab.example.com',
+      query: 'authored' as const,
+    };
+    const ghCfg = {
+      source: 'github' as const,
+      baseUrl: 'https://github.com',
+      query: 'authored' as const,
+    };
+    const multiNode = node({ id: 'sf-mixed', sources: [glCfg, ghCfg] });
+    const store = makeStoreWithSmartFolders([multiNode]);
+    fetchMock.mockResolvedValue(jsonResponse([]));
+    // gitlab origin granted; github (fetches api.github.com) is NOT granted
+    chromeStub.permissions.contains.mockImplementation(
+      async ({ origins }: { origins: string[] }) =>
+        origins[0]?.includes('gitlab.example.com') ?? false,
+    );
+    const events: SmartFoldersResultEvent[] = [];
+
+    const { completion } = startSmartFolderRefresh(
+      { store, enqueue: (e) => events.push(e) },
+      multiNode,
+    );
+    await completion;
+
+    const results = events.filter((e) => e.payload.runtime.state !== 'pending');
+    const byKey = Object.fromEntries(
+      results.map((e) => [e.payload.sourceKey, e.payload.runtime.state]),
+    );
+    expect(byKey['gitlab:gitlab.example.com']).toBe('ok');
+    expect(byKey['github:github.com']).toBe('needs-access');
+  });
+
   test('a folder already in flight is not re-fired', async () => {
     let resolveFetch: (value: unknown) => void = () => undefined;
     fetchMock.mockReturnValueOnce(
@@ -478,12 +647,15 @@ describe('scheduling', () => {
         resolveFetch = resolve;
       }),
     );
-    const store = makeStoreWithSmartFolders([node({ query: 'authored' })]);
+    const glAuthoredNode = node({
+      sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'authored' }],
+    });
+    const store = makeStoreWithSmartFolders([glAuthoredNode]);
     const events: SmartFoldersResultEvent[] = [];
     const deps = { store, enqueue: (e: SmartFoldersResultEvent) => events.push(e) };
 
-    const first = startSmartFolderRefresh(deps, node({ query: 'authored' }));
-    const second = startSmartFolderRefresh(deps, node({ query: 'authored' }));
+    const first = startSmartFolderRefresh(deps, glAuthoredNode);
+    const second = startSmartFolderRefresh(deps, glAuthoredNode);
     expect(first.started).toBe(true);
     expect(second.started).toBe(false);
     resolveFetch(jsonResponse([]));
@@ -522,7 +694,11 @@ describe('scheduling', () => {
 
 describe('registerSmartFoldersRefreshKick', () => {
   test('kicks the due-check on state-request without claiming the response channel', async () => {
-    const store = makeStoreWithSmartFolders([node({ query: 'authored' })]); // null fetchedAt → due
+    const store = makeStoreWithSmartFolders([
+      node({
+        sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'authored' }],
+      }),
+    ]); // null fetchedAt → due
     fetchMock.mockResolvedValue(jsonResponse([]));
     const events: SmartFoldersResultEvent[] = [];
     registerSmartFoldersRefreshKick({ store, enqueue: (e) => events.push(e) });
@@ -544,7 +720,11 @@ describe('registerSmartFoldersRefreshKick', () => {
   });
 
   test('ignores unrelated message types', async () => {
-    const store = makeStoreWithSmartFolders([node({ query: 'authored' })]);
+    const store = makeStoreWithSmartFolders([
+      node({
+        sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'authored' }],
+      }),
+    ]);
     const events: SmartFoldersResultEvent[] = [];
     registerSmartFoldersRefreshKick({ store, enqueue: (e) => events.push(e) });
     const listener = chromeStub.runtime.onMessage.addListener.mock.calls[0]?.[0] as (
@@ -561,7 +741,11 @@ describe('registerSmartFoldersRefreshKick', () => {
   });
 
   test('defers the due-check until whenReady resolves (never reads a half-loaded store)', async () => {
-    const store = makeStoreWithSmartFolders([node({ query: 'authored' })]);
+    const store = makeStoreWithSmartFolders([
+      node({
+        sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'authored' }],
+      }),
+    ]);
     fetchMock.mockResolvedValue(jsonResponse([]));
     const events: SmartFoldersResultEvent[] = [];
     let releaseBoot: () => void = () => undefined;
