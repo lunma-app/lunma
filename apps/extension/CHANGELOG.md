@@ -1,5 +1,102 @@
 # Changelog
 
+## [0.1.0](https://github.com/lunma-app/lunma/compare/v0.3.0...v0.1.0) (2026-06-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **workspace:** source tree relocates under apps/extension/src; tokens move to the @lunma/tokens package.
+
+### Features
+
+* **appearance:** add showGlares toggle to suppress aurora and glow ([1653735](https://github.com/lunma-app/lunma/commit/1653735f6433ae36e109ffbc3999f80dab124d4d))
+* **background:** switch window Space to a focused tab's owning Space ([1a0154a](https://github.com/lunma-app/lunma/commit/1a0154aad50d8ed66dbf0a9f071caf647e964f02))
+* **boundary:** lock pinned tabs to url, path, or page ([484d5ed](https://github.com/lunma-app/lunma/commit/484d5ed9a292792e7630c5295a10b1192e58dc0e))
+* **brand:** adopt crescent mark for icons and favicon ([514fe22](https://github.com/lunma-app/lunma/commit/514fe2267637a470ae8d4e18fd4c5b7efb396570))
+* **bus:** validate command payloads, add dispatch ([a8daa69](https://github.com/lunma-app/lunma/commit/a8daa69e51bab2f5a166c1d4c99d97b3be2ab7fc))
+* confirm destroy, a11y reorder, site landmarks ([21335c1](https://github.com/lunma-app/lunma/commit/21335c1188f82d871b4a7d3b73e82b1fd09c4a20))
+* **extension:** export/import portable JSON backup ([d65297b](https://github.com/lunma-app/lunma/commit/d65297b551312fc9614675b44594c534f6084b5d))
+* **extension:** land smart-folder connector epic ([02e1816](https://github.com/lunma-app/lunma/commit/02e18160c07f7511d66aff202a273f7d07f9e086))
+* **launcher:** add combobox a11y for new-tab results ([48d38d6](https://github.com/lunma-app/lunma/commit/48d38d63b02b19560213dd86c526b5ee1f6e3f4d))
+* **launcher:** dedup open results, add duplicate tab ([a860637](https://github.com/lunma-app/lunma/commit/a8606375817e4e38a495a183e31dd9e00cac99b4))
+* **launcher:** fuzzy match, smart-folder items, space scope ([d9737a9](https://github.com/lunma-app/lunma/commit/d9737a9600ccb8747759d5290ec2bf02af42c463))
+* **launcher:** make selected-row selection wash-only ([674f15b](https://github.com/lunma-app/lunma/commit/674f15bd0e4a3ce851188277da3bb5538a6570a3))
+* **newtab:** hearth bloom, kindle entrance, favorites ([d96939b](https://github.com/lunma-app/lunma/commit/d96939b724f2a22b537b197c4996fbdaf7dbb4f4))
+* request history, bookmarks, hosts at runtime ([31b2f44](https://github.com/lunma-app/lunma/commit/31b2f448434b6d692c532ca29e01da2d7edb857f))
+* **sidebar:** consolidate first-run welcome ([70634d8](https://github.com/lunma-app/lunma/commit/70634d84de68ba01f85d65cac29124a88b295e46))
+* **sidebar:** disclose auto-archive on first run ([dea4983](https://github.com/lunma-app/lunma/commit/dea4983a7efc9fe901e124a943b355fe59de61da))
+* **sidebar:** make in-progress drags cancellable ([3b4b84b](https://github.com/lunma-app/lunma/commit/3b4b84b04d8222146d5b2264f6174a1a39788ddb))
+* **sidebar:** move auto-archive notice below grid ([bbe8a18](https://github.com/lunma-app/lunma/commit/bbe8a183ce6b366495c2bab0d7ebb2243b4fe349))
+* **sidebar:** move tab-row actions to right-click ([bd979c5](https://github.com/lunma-app/lunma/commit/bd979c55aac182bdb6a88876dc250ec3f1b9b3da))
+* **sidebar:** smart folders for gitlab + github queues ([996e759](https://github.com/lunma-app/lunma/commit/996e7599f7d7817d7b8eabec50c65a56eb3d053f))
+* **sidebar:** two-step confirm for smart-folder delete ([766c173](https://github.com/lunma-app/lunma/commit/766c1735e282c02cd22ed12b6eaca6e040d4d4d8))
+* **smart-folders:** multi-source smart folders ([fe287ae](https://github.com/lunma-app/lunma/commit/fe287ae0a828b2c588fe1752f35bb10f18155277))
+* **tokens:** move resting hue from ember to moonlit blue ([f95668d](https://github.com/lunma-app/lunma/commit/f95668d0712fd5627166b6a196fe492e6e2617ed))
+* **ui:** cross-fade folder count to kebab on hover ([6e45fac](https://github.com/lunma-app/lunma/commit/6e45fac0bf4cb1e49bcd2885a51302cf81b2cc69))
+
+
+### Bug Fixes
+
+* **ci:** correct release-please changelog path, align identity guard, exempt dependabot from DCO ([52a9e9f](https://github.com/lunma-app/lunma/commit/52a9e9ff485a5f5e26c3371c7bf1db622566545b))
+* close recurring type-safety and security gaps ([76023a4](https://github.com/lunma-app/lunma/commit/76023a4c61d070204a69276aad97bc318cf554d3))
+* **cws:** narrow content script matches and update issue templates ([7e95a98](https://github.com/lunma-app/lunma/commit/7e95a984798fba02d2952a90c7e0fab8f6ca1388))
+* **e2e:** add data-name to chip; fix invalid color in test ([1825a7e](https://github.com/lunma-app/lunma/commit/1825a7e4dd77d607ad9e9ee1336e39c054047d76))
+* **e2e:** bound ctx.waitForEvent('page') with 2 s timeout ([1edb2c4](https://github.com/lunma-app/lunma/commit/1edb2c44e6423cad7c01ce2a42b5f16e42ef7c28))
+* **e2e:** fix invalid icon and cap SW wait in workspace-creation ([4cb1c0e](https://github.com/lunma-app/lunma/commit/4cb1c0ebfa50d4cab348952fb1d8cd1ddf11918d))
+* **extension:** close consumed feed tabs on drain ([fd09702](https://github.com/lunma-app/lunma/commit/fd0970230c71fbe4b0ff32d4368bc4bda6f72658))
+* **extension:** decode rss feeds by declared charset ([4ffccc6](https://github.com/lunma-app/lunma/commit/4ffccc6486c6721bfcca8a597102627e26903d15))
+* **extension:** make new-tab + shortcuts Chromium-fork-safe ([8f38fe2](https://github.com/lunma-app/lunma/commit/8f38fe2b8092ba47c6e44d257c47fd543ca8ba88))
+* **extension:** reconcile live state after backup restore ([dc48077](https://github.com/lunma-app/lunma/commit/dc48077ef0d76ff637944bd8dd801768cc6ce021))
+* **extension:** render icons outside curated catalogue ([7b54d2d](https://github.com/lunma-app/lunma/commit/7b54d2d028b871d2513c36c9ddeb264f165b202e))
+* **extension:** tolerate already-closed tabs on consume ([a09747b](https://github.com/lunma-app/lunma/commit/a09747b5aff6b7b38bcde1fce172b0ff3f7c2b1e))
+* keyword-led store summary, drop em-dash tells from metadata ([5298e2c](https://github.com/lunma-app/lunma/commit/5298e2ceeac6a5f932c94c37a3953d77bcf2e6d4))
+* **launcher:** guard overlay message listener against foreign-origin senders and validate SW suggestion payload ([7a6f565](https://github.com/lunma-app/lunma/commit/7a6f565d1207dfc3a2089df198727ca1fd3647fa))
+* **lint:** apply biome safe-unsafe fixes (useLiteralKeys, useOptionalChain) ([66e44bf](https://github.com/lunma-app/lunma/commit/66e44bf6e9e32da06580a30f540014aa8ec62589))
+* **low:** prune lastSeenById in SmartFolder ([#37](https://github.com/lunma-app/lunma/issues/37)), canonical accent formula in SpaceEditor ([#47](https://github.com/lunma-app/lunma/issues/47)) ([29da93b](https://github.com/lunma-app/lunma/commit/29da93b3a7d4cd299bbc6085f941f714b5a60348))
+* **manifest:** drop default_locale with no _locales bundle ([d5ab386](https://github.com/lunma-app/lunma/commit/d5ab38684c82153c9c6f946bbfabe84453b91b5c))
+* **options:** validate chrome.storage.local reads with AppStateV7Schema ([#3](https://github.com/lunma-app/lunma/issues/3)) ([3e4b6ce](https://github.com/lunma-app/lunma/commit/3e4b6ceebf008cb8c184673761ae4a7c8eda2658))
+* preserveFavoriteFocus test ([#14](https://github.com/lunma-app/lunma/issues/14)), folder token ([#27](https://github.com/lunma-app/lunma/issues/27)), overlay font tokens ([#30](https://github.com/lunma-app/lunma/issues/30)) ([5ef43af](https://github.com/lunma-app/lunma/commit/5ef43af320d12f3eca35e0d65136b494cc145e2c))
+* remove redundant SpaceColor casts, guard async onMount, narrow spy types ([9f03793](https://github.com/lunma-app/lunma/commit/9f03793fa7a935240be0ecca184ebf3619b451c6))
+* **security,quality:** sender guards, tab-boundary filter, token fixes ([4bce3b1](https://github.com/lunma-app/lunma/commit/4bce3b11dd3d8c375a673ad9929abc2d0f2adf8b))
+* **security,typesafety:** scheme guard, satisfies cast, bus-adapter comment ([8b0ea28](https://github.com/lunma-app/lunma/commit/8b0ea28b0b1ad6d463dfc67a69c98f7f25ea6ba8))
+* **security,ui:** add sender guards and declare missing tokens ([a3f692c](https://github.com/lunma-app/lunma/commit/a3f692cbb5ec65a18242d3ebb047bfbb3e2ae1b5))
+* **sidebar:** hide scrollbar to keep header plumb ([3432c23](https://github.com/lunma-app/lunma/commit/3432c23b4c48a3550a9e89a24989fc0c0c8b917d))
+* **sidebar:** pin space header while list scrolls ([6d4051a](https://github.com/lunma-app/lunma/commit/6d4051a796546235aa76e5a328f1f1aa0065e825))
+* **testing:** AppStateV7Schema smartItemBindings slot shape not validated ([d68def7](https://github.com/lunma-app/lunma/commit/d68def79cba68ca5b576e01929036b92549be83f))
+* **testing:** GroupOrchestrator.orchestrateActivation preserveFavoriteFocu ([902f67a](https://github.com/lunma-app/lunma/commit/902f67a5065e48f37adf69e49022ee2852fc4df1))
+* **testing:** openUrl handler non-http(s) scheme blocking not unit-tested ([cf89b39](https://github.com/lunma-app/lunma/commit/cf89b39704f3dbf1c7c270e25307bf25e36b517f))
+* **testing:** queries.ts isTrackedTab, savedTabIdForBoundTab, findSpaceIdB ([10bf06e](https://github.com/lunma-app/lunma/commit/10bf06e9fcbb304ec8b8c5a64844b9e7691646e3))
+* **typesafety:** onStateBroadcast casts raw chrome.runtime message to StateBr ([664ba06](https://github.com/lunma-app/lunma/commit/664ba06394ebb60b65f01d96c0abaf370b6bf98e))
+* **typesafety:** requestLauncherSuggestions returns msg.results as LauncherRe ([0d2ceff](https://github.com/lunma-app/lunma/commit/0d2ceffa9a4410f672950d786df3dcda3b5a767e))
+* **typesafety:** saxes tag.attributes cast to Record&lt;string,string&gt; unsafe if namespace mode enabled ([805be48](https://github.com/lunma-app/lunma/commit/805be48915245a27f6bcfa9c5471d9ee1bb6444f))
+* **typesafety:** store.state double-unknown cast to SidebarLocalState spreads ([63ac9be](https://github.com/lunma-app/lunma/commit/63ac9be00a28608da9505bc0df9eff173b3b2f89))
+* **typesafety:** toPendingEvent casts Zod-inferred type to SidebarCommand the ([151e8ee](https://github.com/lunma-app/lunma/commit/151e8eecdae3903d62c824057be480fb0f34d0a5))
+* **ui:** equalize TabRow close-button inset ([a8ef024](https://github.com/lunma-app/lunma/commit/a8ef024312f9c4f3fc62a2cd3705522c4e93b838))
+* **ui:** let kebab clicks fall through hidden count ([13c41d2](https://github.com/lunma-app/lunma/commit/13c41d202508c0c2042371ba568616b6fae468a2))
+* **ui:** portal ContextMenu to the viewport ([b3c1b81](https://github.com/lunma-app/lunma/commit/b3c1b81981b33401cad912f5c4d6487fb53a4ef7))
+* **ui:** silence derived_inert warning in ContextMenu ([113128a](https://github.com/lunma-app/lunma/commit/113128a317c5350627ae2e9d3be65686edbbf2fe))
+* **ui:** unmount tooltip layer with its trigger ([678d80b](https://github.com/lunma-app/lunma/commit/678d80bea83bf4f7ebe703f6919c4e2d55ed529d))
+
+
+### Performance Improvements
+
+* **icons:** load lucide from generated allowlist ([f206aec](https://github.com/lunma-app/lunma/commit/f206aece474cd63a5e4304717b3aa1cdfaf9ef9b))
+
+
+### Reverts
+
+* **sidebar:** drop first-run welcome hero ([ad3c6f2](https://github.com/lunma-app/lunma/commit/ad3c6f230fb876e67c89e9c8391540aa617c8018))
+
+
+### Miscellaneous Chores
+
+* bootstrap first release at 0.1.0 ([f6224c7](https://github.com/lunma-app/lunma/commit/f6224c7907855a7b1b3783fceba887994299272b))
+
+
+### Code Refactoring
+
+* **workspace:** split into pnpm workspace ([6ddb992](https://github.com/lunma-app/lunma/commit/6ddb992edd73ed37d3f3434ecda2ab998dd93bf3))
+
 ## [0.3.0](https://github.com/lunma-app/lunma/compare/v0.2.1...v0.3.0) (2026-06-21)
 
 
