@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0](https://github.com/lunma-app/lunma/compare/v0.2.1...v0.3.0) (2026-06-21)
+
+
+### Features
+
+* **brand:** adopt crescent mark for icons and favicon ([8b7f974](https://github.com/lunma-app/lunma/commit/8b7f9744ed22d7b99dbb82b76c5c41b374bcced1))
+* **smart-folders:** multi-source smart folders ([778103d](https://github.com/lunma-app/lunma/commit/778103d))
+
 ## [0.2.1](https://github.com/lunma-app/lunma/compare/v0.2.0...v0.2.1) (2026-06-21)
 
 
