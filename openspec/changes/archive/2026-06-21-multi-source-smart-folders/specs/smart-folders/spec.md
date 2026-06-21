@@ -26,7 +26,7 @@ runtime state). The node orders among pins exactly like a `folder` node and roun
 `mintedIcon` when all sources share the same connector kind, otherwise from a new compound
 icon: `'layers'` (a lucide glyph in the curated `ICON_NAMES` list). `refreshMinutes` and
 `hideRead` are unchanged folder-level fields. `maxItems` applies per section (see
-Requirement: Smart folders honour a per-section maximum item count).
+Requirement: Smart folders honour a per-folder maximum item count).
 
 #### Scenario: A smart folder survives restart as config only
 
@@ -67,7 +67,7 @@ Requirement: Smart folders honour a per-section maximum item count).
 - **WHEN** the user drags a smart folder above a pinned tab and the sidebar dispatches `reorderPinned` with the full post-drop tree
 - **THEN** the smart node persists at its new position with all config fields unchanged
 
-### Requirement: Smart-folder results are ephemeral sectioned runtime state
+### Requirement: Smart-folder results are ephemeral runtime state
 
 Query results SHALL live in a broadcast-only `AppState` slice
 `smartFolders: { [folderId]: SmartFolderRuntime }` where `SmartFolderRuntime` is
@@ -101,7 +101,7 @@ After a SW restart the slice is empty, so each section renders pending until its
 - **WHEN** the SW restarts and the sidebar renders a multi-source smart folder before its first fetches complete
 - **THEN** each section renders the pending state (no stale items from disk)
 
-### Requirement: Each connector declares the origins it fetches for a SmartSourceConfig
+### Requirement: Each connector declares the origins it fetches
 
 The `SourceConnector` contract (`background/connectors/connector.ts`) SHALL include
 `requiredOrigins(cfg: SmartSourceConfig): string[]`, accepting a `SmartSourceConfig` (not
@@ -117,7 +117,7 @@ and the sidebar/editor (which cannot import `background/connectors` under the la
 For a multi-source folder, the engine computes the **union** of `requiredOriginsForConfig`
 across all `sources[]` entries as the folder-level origin set, used only for the initial
 `requestHostPermissions` call on create/edit. The per-section gate uses the per-config
-result (see Requirement: Connector fetches are gated per-section on host-permission grants).
+result (see Requirement: Connector fetches are gated on a runtime host-permission grant).
 
 #### Scenario: GitHub declares the api origin it fetches
 
@@ -134,7 +134,7 @@ result (see Requirement: Connector fetches are gated per-section on host-permiss
 - **WHEN** the SW gate and the sidebar editor both resolve required origins for the same SmartSourceConfig
 - **THEN** they SHALL use `requiredOriginsForConfig` from `shared/connector-origins.ts` and produce identical results
 
-### Requirement: Connector fetches are gated per-section on host-permission grants
+### Requirement: Connector fetches are gated on a runtime host-permission grant
 
 The smart-folder engine SHALL check `hasHostPermissions(requiredOriginsForConfig(cfg))`
 **per section** (per `SmartSourceConfig` entry) before dispatching a connector fetch. When
@@ -160,7 +160,7 @@ are not shows mixed states in the sectioned render.
 - **WHEN** the user grants `https://api.github.com/*`
 - **THEN** only the `github:github.com` section refetches (the gitlab section is unaffected)
 
-### Requirement: Creating or enabling a smart folder requests the union of its sections' origins
+### Requirement: Creating or enabling a smart folder requests its host origin
 
 The `SmartFolderEditor` SHALL call
 `requestHostPermissions(unionOfRequiredOrigins(node.sources))` (a helper that unions
@@ -181,7 +181,7 @@ grant affordance.
 - **WHEN** the host-permission dialog is denied or dismissed
 - **THEN** the folder SHALL still be created and SHALL render all sections in `needs-access`
 
-### Requirement: The needs-access state renders a calm per-section grant prompt
+### Requirement: The needs-access state renders a calm grant prompt
 
 A section in `needs-access` SHALL render a single muted "Lunma needs access to ⟨host⟩"
 row with a "Grant access" control (composed from `Button`/`Icon` primitives) **inside
@@ -221,7 +221,7 @@ point dispatches to `CONNECTORS[cfg.source].fetchRuntime(cfg, maxItems, caches)`
 - **WHEN** the `CONNECTORS` registry is inspected
 - **THEN** its keys are exactly `gitlab`, `github`, `jira`, and `rss`
 
-### Requirement: Polling and refresh scheduling (multi-source)
+### Requirement: Polling and refresh scheduling
 
 The single repeating alarm (`lunma/smart-folders-poll`) and cadence logic are unchanged.
 On each tick, the engine fans out per `SmartSourceConfig` entry across all due folders,
@@ -237,7 +237,7 @@ unconditionally refresh ALL sections of that folder.
 - **WHEN** the poll alarm fires
 - **THEN** both of folder A's sections refresh and folder B's sections do not
 
-### Requirement: Smart-item bindings give results namespaced pinned-tab activation
+### Requirement: Smart-item bindings give results pinned-tab activation
 
 `smartItemBindings` is typed as `{ [folderId: FolderId]: { [namespacedItemId: string]: { [windowId: WindowId]: { tabId: TabId; allowGlob: string } } } }` in `AppState`, persisted at schema v8 (raised from v7 by this change). Each `namespacedItemId` SHALL be of the form `${sourceKey}:${nativeId}` where `sourceKey` is derived from the section's `SmartSourceConfig` and `nativeId` is the connector's native item id. This prevents collisions when two sources produce items with the same native id.
 
@@ -255,7 +255,7 @@ All open/close/bind/unbind behavior, the `dropSmartFolderBindings` demote-on-del
 - **WHEN** both items are bound
 - **THEN** `smartItemBindings[folderId]` SHALL hold separate keys `'gitlab:gitlab.com:42'` and `'jira:acme.atlassian.net:42'`
 
-### Requirement: Smart-folder rendering with sectioned layout
+### Requirement: Smart-folder rendering and the one-glyph restraint
 
 The sidebar SHALL render a smart folder with a sectioned layout when it has ≥ 2 sources.
 A single-source folder renders identically to today (no section headers, no visual change).
@@ -300,7 +300,7 @@ the "open work holds its row" behavior apply per section. A section in `pending`
 - **WHEN** the folder is expanded
 - **THEN** the gitlab section renders its 5 items; the github section renders one "Lunma needs access to api.github.com" row
 
-### Requirement: Creation and configuration via the pinned-header menu (multi-source editor)
+### Requirement: Creation and configuration via the pinned-header menu
 
 The `SmartFolderEditor.svelte` SHALL render a sub-source list: each entry shows a source
 chip (small coloured pill: source icon + label, `--space-c-soft` background), a host/URL
@@ -334,7 +334,7 @@ carries the full new `sources[]`; the engine diffs to find changed entries).
 - **GIVEN** a folder with 3 sources; the user removes the second and confirms
 - **THEN** `updateSmartFolder` carries `sources: [first, third]` and the folder's runtime drops the removed section
 
-### Requirement: Smart folders honour a per-section maximum item count
+### Requirement: Smart folders honour a per-folder maximum item count
 
 `maxItems` is a folder-level field applied per section: each section shows up to `maxItems`
 rows (queue cap) or up to `maxItems` unread rows (feed budget). The total visible rows

@@ -6,9 +6,7 @@ Import and export RSS smart-folder subscriptions as OPML: parse uploaded OPML
 into `{ name, feedUrl }` entries, serialise existing RSS smart folders to
 OPML 1.0, bulk-create folders on import, and surface it in an options-page Feed
 subscriptions card — so users can move feed lists in and out of Lunma.
-
 ## Requirements
-
 ### Requirement: OPML parse utility extracts RSS feed entries
 `parseOpml(xml: string)` in `shared/opml.ts` SHALL use `saxes` to walk all
 `<outline>` elements at any nesting depth, collect those with `type="rss"` and
@@ -45,101 +43,122 @@ An input with no qualifying outlines SHALL return an empty array.
 - **THEN** it returns an empty array
 
 ### Requirement: OPML build utility serialises RSS feed folders to OPML 1.0
-`buildOpml(folders: SmartFolderNode[])` in `shared/opml.ts` SHALL accept an
-array of `SmartFolderNode` values and return a valid OPML 1.0 XML string. Each
-node where `source === 'rss'` SHALL produce one `<outline>` element with
-attributes `type="rss"`, `text` (the node's `name`), `xmlUrl` (the node's
-`baseUrl`), and `htmlUrl` (also the node's `baseUrl` — see design D6). The
-output SHALL include a `<?xml?>` declaration, an `<opml version="1.0">` root,
-a `<head>` with a `<title>` of `"Lunma feed subscriptions"`, and a `<body>`
-containing the outlines. Nodes where `source !== 'rss'` SHALL be excluded.
 
-#### Scenario: Single feed folder serialises correctly
-- **WHEN** `buildOpml` is called with one RSS node (`name: "HN"`, `baseUrl: "https://hn.rss"`)
+`buildOpml(nodes: SmartFolderNode[])` in `shared/opml.ts` SHALL accept the updated
+node shape (with `sources: SmartSourceConfig[]`) and for each node produce one `<outline>`
+element per `SmartSourceConfig` entry whose `source === 'rss'`. The folder's `name` is
+used as the `text` attribute for each outline when the folder is single-source; for
+multi-source folders each outline's `text` is derived as
+`${node.name} — ${new URL(cfg.baseUrl).host}` to distinguish entries from the same folder.
+The `xmlUrl` and `htmlUrl` attributes continue to be set to `cfg.baseUrl` (unchanged).
+Nodes where no `sources` entry has `source === 'rss'` produce no `<outline>`.
+
+#### Scenario: A single-source RSS folder serialises one outline
+
+- **WHEN** `buildOpml` is called with one RSS node (`name: "HN"`, single source `baseUrl: "https://hn.rss"`)
 - **THEN** the output contains exactly one `<outline>` with `type="rss"`, `text="HN"`, `xmlUrl="https://hn.rss"`, and `htmlUrl="https://hn.rss"`
 
-#### Scenario: Non-RSS nodes are excluded
-- **WHEN** `buildOpml` is called with a mixed array containing both RSS and GitHub nodes
-- **THEN** only the RSS node appears in the output
+#### Scenario: A multi-source RSS folder serialises one outline per RSS source
 
-#### Scenario: htmlUrl equals baseUrl
-- **WHEN** `buildOpml` is called with an RSS node
-- **THEN** the `htmlUrl` attribute equals the node's `baseUrl`
+- **WHEN** `buildOpml` is called with a folder named `"Feeds"` with two rss sources (`https://a.com/rss` and `https://b.com/rss`)
+- **THEN** the output contains two `<outline>` elements: one for each source, with `text` `"Feeds — a.com"` and `"Feeds — b.com"` respectively
+
+#### Scenario: Non-RSS sources in a mixed folder are excluded per-entry
+
+- **WHEN** `buildOpml` is called with a folder containing sources `[{ source: 'gitlab', ... }, { source: 'rss', baseUrl: 'https://feed.example.com/rss' }]`
+- **THEN** only the rss source appears as an `<outline>` in the output
 
 ### Requirement: importOpml bus command bulk-creates RSS smart folders
-The `importOpml` `SidebarCommand` in the typed message bus SHALL be accepted by
-the background coordinator. Its payload is
-`{ spaceId: string; feeds: { name: string; feedUrl: string }[] }`. The handler
-SHALL iterate `feeds` and apply the `createSmartFolder` logic for each entry
-with `source: 'rss'`, `baseUrl: feedUrl`, `name`, `maxItems: 10`,
-`refreshMinutes: 30`. Each entry is processed independently: a validation
-failure on one entry (e.g. an invalid URL rejected by `normalizeBaseUrl`) SHALL
-NOT prevent the remaining entries from being processed. The command SHALL
-complete with a summary `{ imported: number; skipped: number }` returned as the
-ack payload.
 
-#### Scenario: All valid feeds are created
+The `importOpml` `SidebarCommand` SHALL be accepted by the background coordinator with
+the same payload shape: `{ spaceId: string; feeds: { name: string; feedUrl: string }[] }`.
+The handler SHALL now create **one** RSS smart folder per import operation (not one folder
+per feed entry). The single folder SHALL carry `sources: SmartSourceConfig[]` with one
+entry per valid feed: `{ source: 'rss', baseUrl: feedUrl }` (no `query`, as RSS sources
+are feed-kind). Invalid entries (unparseable or non-http(s) `feedUrl`) are silently
+skipped and counted. The folder's name SHALL be the single feed's `name` when
+`feeds.length === 1`; otherwise `"Feeds"`. Default `maxItems: 10`, `refreshMinutes: 30`,
+`hideRead: true` (unchanged per-feed defaults, now applied folder-level). The command
+SHALL complete with a summary `{ imported: number; skipped: number }` as the ack payload,
+where `imported` is the count of valid sources added to the folder and `skipped` is the
+count of invalid entries. When `imported === 0` (all entries invalid or `feeds` is empty)
+no folder is created and the ack carries `{ imported: 0, skipped: N }`.
+
+#### Scenario: All valid feeds create one multi-source folder
+
 - **WHEN** `importOpml` is dispatched with three valid feed entries
-- **THEN** three new RSS smart folders are created in the target space and `imported` equals 3
+- **THEN** exactly one RSS smart folder is created in the target space with `sources` containing three entries
+- **AND** the ack carries `{ imported: 3, skipped: 0 }`
 
-#### Scenario: Invalid feed URLs are skipped and counted
+#### Scenario: Invalid feed URLs are skipped and counted; valid ones still create one folder
+
 - **WHEN** `importOpml` is dispatched with two valid entries and one entry with a relative `feedUrl`
-- **THEN** two folders are created, `imported` equals 2, and `skipped` equals 1
+- **THEN** one folder is created with `sources` containing two entries
+- **AND** the ack carries `{ imported: 2, skipped: 1 }`
+
+#### Scenario: A single-feed import names the folder after the feed
+
+- **WHEN** `importOpml` is dispatched with `feeds: [{ name: 'Hacker News', feedUrl: 'https://news.ycombinator.com/rss' }]`
+- **THEN** the created folder's name SHALL be `'Hacker News'`
+
+#### Scenario: A multi-feed import names the folder "Feeds"
+
+- **WHEN** `importOpml` is dispatched with three feed entries
+- **THEN** the created folder's name SHALL be `'Feeds'`
 
 #### Scenario: Unknown spaceId throws
+
 - **WHEN** `importOpml` is dispatched with a `spaceId` that does not exist in the store
-- **THEN** the command acks with an error and no folders are created
+- **THEN** the command acks with an error and no folder is created
 
 #### Scenario: Empty feeds array is a no-op
+
 - **WHEN** `importOpml` is dispatched with `feeds: []`
-- **THEN** no folders are created and `imported` equals 0
+- **THEN** no folder is created and the ack carries `{ imported: 0, skipped: 0 }`
+
+#### Scenario: All invalid entries is a no-op
+
+- **WHEN** `importOpml` is dispatched with feeds all having invalid (relative) `feedUrl` values
+- **THEN** no folder is created and the ack carries `{ imported: 0, skipped: N }`
 
 ### Requirement: Options-page Feed subscriptions card
-A `FeedSubscriptions.svelte` component SHALL be mounted in `options/Options.svelte`
-as a `Surface variant="glass"` card in the Options layout. It SHALL provide:
 
-**Import flow:**
-- An "Import from OPML" primary `Button` that opens a hidden
-  `<input type="file" accept=".opml,.xml">`.
-- After file selection, `parseOpml` is called client-side. If the result is
-  empty, an error message SHALL be shown ("No RSS feeds found in this file")
-  and the confirm step SHALL NOT appear.
-- If feeds are found, a confirm step SHALL replace the button row, showing the
-  feed count, a `Select` of available Space names (populated from
-  `AppState.pinnedTree` Space nodes, defaulting to the first Space), a Cancel
-  ghost `Button`, and an Import primary `Button`.
-- Confirming SHALL dispatch `importOpml` with the selected `spaceId` and the
-  parsed feeds. On success, a `Toast` SHALL show `"N feeds imported"` (or
-  `"N feeds imported, M skipped"` when M > 0). On error, an error message SHALL
-  be shown.
+The import flow in `FeedSubscriptions.svelte` SHALL be updated to reflect the new
+one-folder-per-import behaviour. The confirm step SHALL read:
+"Found N feeds — import as one folder into:" (previously "Found N feeds — add to:").
+The Space `Select` picker and Cancel / Import buttons are unchanged. On successful import,
+the `Toast` SHALL show `"Folder imported with N feeds"` when `imported > 0` and
+`skipped === 0`, or `"Folder imported with N feeds (M skipped)"` when `skipped > 0`.
+When `imported === 0` (all entries invalid) the Toast SHALL show an error message
+"No valid feed URLs found" instead of a success toast.
 
-**Export flow:**
-- An "Export as OPML" ghost `Button` SHALL be rendered only when at least one
-  `source: 'rss'` folder exists in any Space in the current state.
-- Clicking it SHALL call `buildOpml` with all RSS nodes from `AppState.pinnedTree`,
-  generate a download of `lunma-feeds-{date}.opml`, and show a `Toast`
-  (`"Feeds exported"`).
+#### Scenario: Import confirm step shows updated copy
 
-#### Scenario: Import shows confirm step with feed count and space picker
 - **WHEN** the user selects an OPML file with 5 feed outlines
-- **THEN** the confirm step appears showing "Found 5 feeds — add to:" followed by a Space Select
+- **THEN** the confirm step SHALL show "Found 5 feeds — import as one folder into:" followed by a Space Select
 
-#### Scenario: Import error for no feeds found
-- **WHEN** the user selects a file that parses to zero RSS entries
-- **THEN** an error alert is shown and the confirm step does not appear
+#### Scenario: Toast on successful multi-feed import
 
-#### Scenario: Export button absent when no RSS folders exist
-- **WHEN** the state has no `source: 'rss'` pinned nodes
+- **WHEN** `importOpml` acks with `{ imported: 5, skipped: 0 }`
+- **THEN** a Toast shows `"Folder imported with 5 feeds"`
+
+#### Scenario: Toast with skip count
+
+- **WHEN** `importOpml` acks with `{ imported: 3, skipped: 2 }`
+- **THEN** a Toast shows `"Folder imported with 3 feeds (2 skipped)"`
+
+#### Scenario: Toast on all-invalid import shows error
+
+- **WHEN** `importOpml` acks with `{ imported: 0, skipped: 3 }`
+- **THEN** a Toast or inline error message shows `"No valid feed URLs found"` and no success toast is shown
+
+#### Scenario: Export button absent when no RSS sources exist
+
+- **WHEN** the state has no smart node with any `source: 'rss'` entry in its `sources`
 - **THEN** the Export button is not rendered
 
-#### Scenario: Export button present when RSS folders exist
-- **WHEN** the state has at least one `source: 'rss'` pinned node
+#### Scenario: Export button present when any RSS source exists
+
+- **WHEN** the state has at least one smart node with a `source: 'rss'` entry
 - **THEN** the Export button is rendered and clicking it triggers a file download
 
-#### Scenario: Toast on successful import
-- **WHEN** `importOpml` acks with `{ imported: 3, skipped: 0 }`
-- **THEN** a Toast shows "3 feeds imported"
-
-#### Scenario: Toast with skip count when some entries are skipped
-- **WHEN** `importOpml` acks with `{ imported: 2, skipped: 1 }`
-- **THEN** a Toast shows "2 feeds imported, 1 skipped"

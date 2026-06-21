@@ -22,243 +22,199 @@ section.
 ### Requirement: Smart-folder configuration persists as a pinned-tree node
 
 A smart folder SHALL persist as a third `PinNode` kind in `pinnedBySpace`:
-`{ kind: 'smart'; id: FolderId; name: string; icon: string; source: SmartSource; baseUrl: string; query?: SmartQuery; maxItems: number; hideRead: boolean; refreshMinutes: number }`,
-where `SmartQuery` is `'authored' | 'assigned' | 'review-requested'` and
-`SmartSource` is `'gitlab' | 'github' | 'jira' | 'rss'` (widened from the v1
-`'gitlab'` literal by `github-connector`, to three values by `jira-connector`,
-and to four by this change — the cause of the v2→v3, v4→v5, and v5→v6 schema
-bumps). `query` SHALL be **optional**: queue sources (`gitlab` / `github` /
-`jira`) carry one; a **feed source (`rss`) has no canned query and SHALL omit
-it**. The node persists **configuration only** — it SHALL NOT carry a `children`
-field; results are ephemeral runtime state (see Requirement: Smart-folder results
-are ephemeral runtime state). `baseUrl` defaults per source (`https://gitlab.com`
-/ `https://github.com` / `https://your-site.atlassian.net` — the Jira default is a
-template placeholder the user edits — and an **empty default for `rss`**, since a
-feed has no canonical host; the user pastes the feed URL) and SHALL be an absolute
-http(s) URL: the SW SHALL strip any trailing slash on create/update and SHALL
-throw (error ack) when the payload's `baseUrl` does not parse as an absolute
-http(s) URL; for `rss` the `baseUrl` IS the feed URL. The per-host token lookup
-key (where a source uses one) is `new URL(baseUrl).host`; instances served under a
-subpath are supported because every endpoint string-appends to `baseUrl`.
-`refreshMinutes` defaults to `10` with a floor of `5` (the SW SHALL clamp lower
-values on create/update); `maxItems` is the per-folder cap — the total result cap
-for queue sources, the **unread budget** for the feed source (default `10` in the
-editor; migrated nodes default `20`; see Requirement: Smart folders honour a
-per-folder maximum item count); `hideRead` is the feed's per-folder read-hiding
-state (default `true` — a feed's resting state is the drained unread queue; see
-Requirement: Reading folders are a draining unread queue). `icon` is minted by the SW on create from the source connector's
-`mintedIcon` — `'folder-git-2'` for both git forges, `'folder-kanban'` for Jira,
-and `'rss'` for the feed source (each a lucide glyph in the curated `ICON_NAMES`
-list in `shared/icon-names.ts`, with `ui/icon-loaders.generated.ts` generated to
-match; the instance favicon on every result row carries source identity) —
-persisted so a later change can expose it; the editor does not. The smart node
-orders among pins exactly like a `folder` node — it reorders by drag as one unit
-and round-trips `reorderPinned` losslessly; its full drag/drop semantics are
-specified in the `spaces-and-tabs` drag requirement — and its expand/collapse
-state rides the existing per-window ephemeral folder-expansion mechanism, keyed by
-node id.
+`{ kind: 'smart'; id: FolderId; name: string; icon: string; sources: SmartSourceConfig[]; maxItems: number; hideRead: boolean; refreshMinutes: number }`,
+where `SmartSourceConfig` is `{ source: SmartSource; baseUrl: string; query?: SmartQuery }`.
+The `sources` array SHALL contain at least one entry; the editor SHALL prevent confirming
+with an empty list. The flat `source`, `baseUrl`, and `query?` fields on the smart node
+are **removed** and replaced by `sources`.
+
+`SmartSource` (`'gitlab' | 'github' | 'jira' | 'rss'`) and `SmartQuery`
+(`'authored' | 'assigned' | 'review-requested'`) are unchanged. The same per-source
+rules for `baseUrl` (normalized, trailing slash stripped, absolute http(s) only), `query`
+(optional for feed sources, required for queue sources), and defaults per source apply to
+each `SmartSourceConfig` entry, enforced by the SW's create/update handlers. The SW SHALL
+throw when any entry's `baseUrl` does not parse as an absolute http(s) URL, or when a
+`query` entry is omitted for a queue source.
+
+The node persists **configuration only** — it SHALL NOT carry a `children` field; results
+are ephemeral runtime state (see Requirement: Smart-folder results are ephemeral sectioned
+runtime state). The node orders among pins exactly like a `folder` node and round-trips
+`reorderPinned` losslessly; drag/drop and expand/collapse semantics are unchanged.
+
+`icon` is minted by the SW on create from the **first** source entry's connector
+`mintedIcon` when all sources share the same connector kind, otherwise from a new compound
+icon: `'layers'` (a lucide glyph in the curated `ICON_NAMES` list). `refreshMinutes` and
+`hideRead` are unchanged folder-level fields. `maxItems` applies per section (see
+Requirement: Smart folders honour a per-folder maximum item count).
 
 #### Scenario: A smart folder survives restart as config only
 
 - **WHEN** the SW boots with a persisted smart node in `pinnedBySpace`
-- **THEN** the node is restored with its `source`, `baseUrl`, `query` (when present), `maxItems`, `hideRead`, and `refreshMinutes` intact
+- **THEN** the node is restored with its `sources`, `maxItems`, `hideRead`, and `refreshMinutes` intact
 - **AND** no result items are read from storage
 
-#### Scenario: The cadence floor clamps on create
+#### Scenario: A multi-source folder persists with two sources
 
-- **WHEN** `createSmartFolder` is dispatched with `refreshMinutes: 1`
-- **THEN** the stored node's `refreshMinutes` SHALL be `5`
+- **WHEN** `createSmartFolder` is dispatched with `sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', query: 'authored' }, { source: 'github', baseUrl: 'https://github.com', query: 'authored' }]` and the SW restarts
+- **THEN** the node is restored with both sources intact and validates under the current-version schema
 
-#### Scenario: baseUrl is normalized and validated
+#### Scenario: baseUrl is normalized and validated per entry
 
-- **WHEN** `createSmartFolder` is dispatched with `baseUrl: 'https://gitlab.example.com/'`
-- **THEN** the stored node's `baseUrl` SHALL be `https://gitlab.example.com` (trailing slash stripped)
-- **AND** a dispatch whose `baseUrl` does not parse as an absolute http(s) URL SHALL throw, with the ack carrying the error
+- **WHEN** `createSmartFolder` is dispatched with a sources entry whose `baseUrl` is `'https://gitlab.example.com/'`
+- **THEN** the stored entry's `baseUrl` SHALL be `https://gitlab.example.com` (trailing slash stripped)
+- **AND** a dispatch with any entry's `baseUrl` not parsing as an absolute http(s) URL SHALL throw, with the ack carrying the error
+
+#### Scenario: A queue source entry without query is rejected
+
+- **WHEN** `createSmartFolder` is dispatched with a `gitlab` sources entry that omits `query`
+- **THEN** the SW SHALL throw and the ack SHALL carry the error
+- **AND** no node SHALL be persisted
+
+#### Scenario: A feed source entry omits query
+
+- **WHEN** `createSmartFolder` is dispatched with an `rss` sources entry that omits `query`
+- **THEN** the stored entry SHALL have no `query` field
+- **AND** the node is restored with `source: 'rss'` intact after a SW restart
+
+#### Scenario: An empty sources array is rejected
+
+- **WHEN** `createSmartFolder` is dispatched with `sources: []`
+- **THEN** the SW SHALL throw and the ack SHALL carry the error
 
 #### Scenario: A smart folder reorders among pins like a folder
 
 - **WHEN** the user drags a smart folder above a pinned tab and the sidebar dispatches `reorderPinned` with the full post-drop tree
 - **THEN** the smart node persists at its new position with all config fields unchanged
 
-#### Scenario: A github node persists and round-trips
-
-- **WHEN** `createSmartFolder` is dispatched with `source: 'github'` and the SW restarts after the node persists
-- **THEN** the node is restored with `source: 'github'` intact and validates under the current-version schema
-
-#### Scenario: A jira node persists and mints the kanban icon
-
-- **WHEN** `createSmartFolder` is dispatched with `source: 'jira'` and the SW restarts after the node persists
-- **THEN** the node is restored with `source: 'jira'` intact, its `icon` minted `'folder-kanban'`, and validates under the current-version schema
-
-#### Scenario: An rss node persists with no query and mints the rss icon
-
-- **WHEN** `createSmartFolder` is dispatched with `source: 'rss'`, a feed `baseUrl`, a chosen `maxItems`, and no `query`, and the SW restarts after the node persists
-- **THEN** the node is restored with `source: 'rss'` intact, **no `query` field**, its `maxItems` and `hideRead: true` (the drained default) set, its `icon` minted `'rss'`, and validates under the current-version schema
-
 ### Requirement: Smart-folder results are ephemeral runtime state
 
 Query results SHALL live in a broadcast-only `AppState` slice
 `smartFolders: { [folderId]: SmartFolderRuntime }` where `SmartFolderRuntime` is
-`{ state: 'pending' | 'ok' | 'signed-out' | 'error' | 'needs-access'; items: SmartFolderItem[]; fetchedAt: number | null }`
-and `SmartFolderItem` is
-`{ id: string; title: string; url: string; status?: { tone: 'ok' | 'pending' | 'warn' | 'fail'; label: string } }`.
-The slice SHALL never be persisted (the persistence exclusion is specified in the
-`storage-and-migrations` capability) and SHALL be written only by the
-coordinator drain: the connector performs network I/O outside the drain and
-enqueues the internal event
-`{ source: 'connector'; kind: 'smartFolders.result'; payload: { folderId, runtime } }`
-— `'connector'` is a new `PendingEvent` source member added per the
-`chrome-event-coordination` extension rule, with matching handlers-map and
-`EventPolicy` entries (no coalescing) in the same change — whose handler calls
-the store mutator `setSmartFolderRuntime(folderId, runtime)`, producing one
-broadcast per drain. A refresh that begins while items exist SHALL mark the runtime `pending`
-**without clearing `items`** (the list never blinks). After a SW restart the
-slice is empty, so a smart folder renders its pending state until the first
-fetch lands. The `'needs-access'` state means the folder's host origin is not
-granted; it is produced without any network request (see "Connector fetches are
-gated on a runtime host-permission grant").
+`{ sections: { [sourceKey: string]: SmartSectionRuntime } }` and `SmartSectionRuntime` is
+`{ state: 'pending' | 'ok' | 'signed-out' | 'error' | 'needs-access'; items: SmartFolderItem[]; fetchedAt: number | null }`.
+`sourceKey` is derived as `${source}:${new URL(baseUrl).host}` from a `SmartSourceConfig`
+entry and is the stable identity key for that section within the folder.
 
-#### Scenario: Results arrive through the single-writer drain
+The slice SHALL never be persisted and SHALL be written only by the coordinator drain: a
+connector fetch completes and enqueues the internal event
+`{ source: 'connector'; kind: 'smartFolders.result'; payload: { folderId, sourceKey, runtime: SmartSectionRuntime } }`
+whose handler calls `store.setSmartSectionRuntime(folderId, sourceKey, runtime)`, producing
+one broadcast per drain (unchanged broadcast contract). A refresh that begins while items
+exist SHALL mark each section's runtime `pending` **without clearing `items`** (no blink).
+After a SW restart the slice is empty, so each section renders pending until its first fetch.
 
-- **WHEN** a connector fetch completes for folder `f1`
-- **THEN** the connector enqueues a `smartFolders.result` event and the coordinator handler writes the runtime via `setSmartFolderRuntime`
-- **AND** exactly one `state-broadcast` carries the updated slice
+#### Scenario: Results arrive through the single-writer drain per section
 
-#### Scenario: A refresh keeps last-known items visible
+- **WHEN** a connector fetch completes for folder `f1`, source key `gitlab:gitlab.com`
+- **THEN** the connector enqueues a `smartFolders.result` event carrying `{ folderId: 'f1', sourceKey: 'gitlab:gitlab.com', runtime }` and the coordinator handler writes it via `setSmartSectionRuntime`
+- **AND** exactly one `state-broadcast` carries the updated section
 
-- **GIVEN** folder `f1`'s runtime is `ok` with 5 items
-- **WHEN** a refresh begins
-- **THEN** the runtime state becomes `pending` while `items` still holds the 5 items
+#### Scenario: A refresh keeps last-known items visible per section
 
-#### Scenario: A SW restart costs one pending beat
+- **GIVEN** folder `f1`'s section `gitlab:gitlab.com` runtime is `ok` with 5 items
+- **WHEN** a refresh begins for that folder
+- **THEN** the section state becomes `pending` while `items` still holds the 5 items
 
-- **WHEN** the SW restarts and the sidebar renders a smart folder before its first fetch completes
-- **THEN** the folder renders the pending state (no stale items from disk)
+#### Scenario: A SW restart costs one pending beat per section
+
+- **WHEN** the SW restarts and the sidebar renders a multi-source smart folder before its first fetches complete
+- **THEN** each section renders the pending state (no stale items from disk)
 
 ### Requirement: Each connector declares the origins it fetches
 
-The `SourceConnector` contract (`background/connectors/connector.ts`) SHALL
-include `requiredOrigins(node): string[]`, returning the host match patterns the
-connector actually fetches for that node — NOT necessarily the folder's
-`baseUrl` origin. A `github` connector on `github.com` SHALL return
-`['https://api.github.com/*']` (it fetches `api.github.com`); on GitHub
-Enterprise it SHALL return the `baseUrl` origin. A `gitlab`, `jira`, or `rss`
-connector SHALL return the `baseUrl` origin (`originPatternForBaseUrl(node.baseUrl)`).
-The host-permission gate and the create/enable request SHALL use this set,
-never `node.baseUrl` directly. The derivation itself SHALL live in a single pure
-`shared/connector-origins.ts` export, `requiredOriginsForNode(node)`: the
-`SourceConnector.requiredOrigins` members delegate to it (so the SW gate keys on
-the connector member), and the sidebar/editor surfaces — which cannot import
-`background/connectors` under the layer DAG — call it directly. There is exactly
-one derivation, so the SW gate and the surface request never drift.
+The `SourceConnector` contract (`background/connectors/connector.ts`) SHALL include
+`requiredOrigins(cfg: SmartSourceConfig): string[]`, accepting a `SmartSourceConfig` (not
+a full node), returning the host match patterns the connector actually fetches for that
+config entry. The per-config derivation is unchanged: `github` on `github.com` returns
+`['https://api.github.com/*']`; `gitlab`, `jira`, and `rss` return the `baseUrl` origin.
+
+The shared utility `requiredOriginsForConfig(cfg: SmartSourceConfig): string[]` (renamed
+from `requiredOriginsForNode` in `shared/connector-origins.ts`) returns the same result
+and is the single derivation used by both the SW gate (via `SourceConnector.requiredOrigins`)
+and the sidebar/editor (which cannot import `background/connectors` under the layer DAG).
+
+For a multi-source folder, the engine computes the **union** of `requiredOriginsForConfig`
+across all `sources[]` entries as the folder-level origin set, used only for the initial
+`requestHostPermissions` call on create/edit. The per-section gate uses the per-config
+result (see Requirement: Connector fetches are gated on a runtime host-permission grant).
 
 #### Scenario: GitHub declares the api origin it fetches
 
-- **WHEN** `requiredOrigins` is called for a `github` folder on `https://github.com`
+- **WHEN** `requiredOrigins` is called for a `github` config on `https://github.com`
 - **THEN** it SHALL return `['https://api.github.com/*']`, not `['https://github.com/*']`
 
 #### Scenario: Same-origin connectors declare the baseUrl origin
 
-- **WHEN** `requiredOrigins` is called for a `gitlab`, `jira`, or `rss` folder on `https://host.example.com/path`
+- **WHEN** `requiredOrigins` is called for a `gitlab`, `jira`, or `rss` config on `https://host.example.com/path`
 - **THEN** it SHALL return `['https://host.example.com/*']`
+
+#### Scenario: requiredOriginsForConfig is the sole derivation (no drift)
+
+- **WHEN** the SW gate and the sidebar editor both resolve required origins for the same SmartSourceConfig
+- **THEN** they SHALL use `requiredOriginsForConfig` from `shared/connector-origins.ts` and produce identical results
 
 ### Requirement: Connector fetches are gated on a runtime host-permission grant
 
-The smart-folder engine in `background/smart-folders.ts` SHALL check
-`hasHostPermissions(connector.requiredOrigins(node))` (from
-`shared/permissions.ts`) before dispatching a connector fetch for a folder. When
-any required origin is not granted, the engine SHALL resolve the folder to the
-`'needs-access'` runtime state **without performing any network request**. This
-gate runs **before** the connector's auth short-circuit, so a folder that is both
-host-ungranted and token-absent SHALL show `needs-access` (host access takes
-precedence over `signed-out`); after the origins are granted, the refetch may
-then surface `signed-out`. The gate applies to **all** sources, including RSS.
-When `onPermissionsChange` reports that a required origin has been granted,
-folders whose required origins are now all granted and that are due (or in
-`needs-access`) SHALL refetch; when a required origin is revoked, affected
-folders SHALL return to `needs-access`. Connectors SHALL remain bounded and SHALL
-never throw on a missing grant.
+The smart-folder engine SHALL check `hasHostPermissions(requiredOriginsForConfig(cfg))`
+**per section** (per `SmartSourceConfig` entry) before dispatching a connector fetch. When
+any required origin for a section is not granted, that section SHALL resolve to
+`'needs-access'` **without performing any network request**. Other sections whose origins
+ARE granted SHALL proceed to fetch normally — partial grants are explicitly supported.
 
-#### Scenario: An ungranted origin short-circuits to needs-access without a fetch
+The `onPermissionsChange` behavior, refetch-on-grant, and return-to-needs-access-on-revoke
+rules from the original requirement apply per-section. A folder whose ALL sections are in
+`needs-access` has no granted sections; a folder where SOME sections are granted and some
+are not shows mixed states in the sectioned render.
 
-- **GIVEN** a smart folder on `https://gitlab.example.com` whose required origin is not granted
-- **WHEN** a poll for that folder is due
-- **THEN** the engine SHALL set the runtime to `needs-access` and SHALL NOT issue a network request
+#### Scenario: A section on an ungranted origin shows needs-access while other sections fetch
 
-#### Scenario: A GitHub folder gates on the api origin it fetches
-
-- **GIVEN** a `github` folder on `https://github.com` with only `https://github.com/*` granted (not `https://api.github.com/*`)
+- **GIVEN** a folder with sources `[gitlab:gitlab.com, github:github.com]` where `https://api.github.com/*` is not granted but `https://gitlab.com/*` is
 - **WHEN** a poll is due
-- **THEN** the engine SHALL resolve to `needs-access` (the connector's required origin `https://api.github.com/*` is ungranted) and SHALL NOT fetch
+- **THEN** the `github:github.com` section resolves to `needs-access` without a network request
+- **AND** the `gitlab:gitlab.com` section proceeds to fetch normally
 
-#### Scenario: An RSS feed on an ungranted origin shows needs-access
+#### Scenario: Granting one section's origin triggers only that section's refetch
 
-- **GIVEN** an `rss` folder whose feed origin is not granted
-- **WHEN** a poll is due
-- **THEN** the folder SHALL resolve to `needs-access` (not `error`) without a network request
-
-#### Scenario: needs-access precedes signed-out
-
-- **GIVEN** a token-only `github` folder whose api origin is ungranted AND no token is stored
-- **WHEN** a poll is due
-- **THEN** the folder SHALL show `needs-access` first, and only after the origin is granted MAY the refetch surface `signed-out`
-
-#### Scenario: Granting the origins triggers a refetch
-
-- **GIVEN** a folder in `needs-access` on `https://gitlab.example.com`
-- **WHEN** the user grants `https://gitlab.example.com/*`
-- **THEN** `onPermissionsChange` fires and the folder refetches, transitioning `needs-access` → `pending` → `ok`
-
-#### Scenario: Revoking a required origin returns the folder to needs-access
-
-- **GIVEN** a folder in `ok` whose required origin is then revoked via Chrome
-- **WHEN** `onPermissionsChange` reports the removal
-- **THEN** the engine SHALL set the folder to `needs-access`
+- **GIVEN** a multi-source folder with `gitlab:gitlab.com` in `ok` and `github:github.com` in `needs-access`
+- **WHEN** the user grants `https://api.github.com/*`
+- **THEN** only the `github:github.com` section refetches (the gitlab section is unaffected)
 
 ### Requirement: Creating or enabling a smart folder requests its host origin
 
 The `SmartFolderEditor` SHALL call
-`requestHostPermissions(requiredOriginsForNode(node))` (the shared derivation —
-the surface cannot import the connector) when it confirms a create or an edit
-that changes the required origins (`createSmartFolder` / `updateSmartFolder`) —
-it is an extension-page surface with a user gesture. A
-grant proceeds to a normal first poll. A denial or dismissal SHALL NOT block the
-operation: the folder SHALL still be created/updated and SHALL sit in
-`needs-access` with the inline grant affordance. The user's configuration is
-never lost to a permission dialog.
+`requestHostPermissions(unionOfRequiredOrigins(node.sources))` (a helper that unions
+`requiredOriginsForConfig` across all `sources[]` entries) when it confirms a create or an
+edit that changes any source entry's `baseUrl`. A grant proceeds to a normal first poll
+for each section. A denial or dismissal SHALL NOT block the operation: the folder SHALL
+still be created/updated and affected sections SHALL sit in `needs-access` with the inline
+grant affordance.
 
-#### Scenario: Confirming a new GitHub folder requests the api origin
+#### Scenario: Confirming a new multi-source folder requests union origins
 
-- **WHEN** the user confirms "New smart folder…" for `https://github.com`
-- **THEN** the editor SHALL call `requestHostPermissions(['https://api.github.com/*'])` from the confirm handler
-- **AND** on grant the folder begins its first fetch
+- **WHEN** the user confirms a new folder with `sources: [github, gitlab]`
+- **THEN** the editor SHALL call `requestHostPermissions(['https://api.github.com/*', 'https://gitlab.com/*'])` from the confirm handler
 
-#### Scenario: Denying the host still saves the folder
+#### Scenario: Denying union host still saves the folder with sections in needs-access
 
-- **GIVEN** the user confirms a new smart folder
+- **GIVEN** the user confirms a new multi-source folder
 - **WHEN** the host-permission dialog is denied or dismissed
-- **THEN** the folder SHALL still be created and SHALL render in `needs-access` with a "Grant access" affordance
+- **THEN** the folder SHALL still be created and SHALL render all sections in `needs-access`
 
 ### Requirement: The needs-access state renders a calm grant prompt
 
-A folder in `needs-access` SHALL render quietly, in the calm non-`ok` family
-(never a red error card): a single muted row with a key/lock-open `Icon`, the
-copy "Lunma needs access to ⟨host⟩", and a "Grant access" control composed from
-the `Button`/`Icon` primitives. Activating it from the sidebar SHALL call
-`requestHostPermissions(requiredOriginsForNode(node))` (the shared derivation —
-the surface cannot import the connector); on grant the folder transitions to
-`pending`. `needs-access` SHALL be visually and behaviourally
-distinct from `signed-out` (which concerns auth, not host access) and from
-`error`. The grant affordance lives on the smart-folder card and in the editor
-(which have the folder `node`); the options Connectors section SHALL remain
-token management only.
+A section in `needs-access` SHALL render a single muted "Lunma needs access to ⟨host⟩"
+row with a "Grant access" control (composed from `Button`/`Icon` primitives) **inside
+that section**, below the section header (when visible). Other sections in the same folder
+SHALL render normally. Activating the grant row SHALL call
+`requestHostPermissions(requiredOriginsForConfig(cfg))` for that section's config. The
+visual treatment (muted, key icon, non-`error` styling) is unchanged.
 
-#### Scenario: A needs-access folder shows the grant row
+#### Scenario: A folder with one granted and one needs-access section renders both
 
-- **GIVEN** a folder on `https://gitlab.example.com` whose runtime is `needs-access`
-- **WHEN** the folder is expanded in the sidebar
-- **THEN** it renders one muted "Lunma needs access to gitlab.example.com" row with a "Grant access" control, and no red error card
-- **AND** activating it calls `requestHostPermissions(['https://gitlab.example.com/*'])`
+- **GIVEN** a folder with sections `gitlab:gitlab.com` (ok, 5 items) and `github:github.com` (needs-access)
+- **WHEN** the folder is expanded
+- **THEN** the `gitlab:gitlab.com` section renders its 5 items normally
+- **AND** the `github:github.com` section renders one muted "Lunma needs access to api.github.com" row with a "Grant access" control
 
 ### Requirement: The GitLab connector fetches canned queries over REST
 
@@ -349,54 +305,27 @@ retry-loop, or surface an exception for auth failures.
 
 ### Requirement: Connector implementations conform to the SourceConnector contract
 
-Connector sources SHALL be implemented as modules under
-`apps/extension/src/background/connectors/`, each conforming to the
-`SourceConnector` interface declared in
-`apps/extension/src/background/connectors/connector.ts`:
-`{ source: SmartSource; defaultBaseUrl: string; mintedIcon: string; fetchRuntime(node: Pick<SmartFolderNode, 'baseUrl' | 'query' | 'maxItems'>, caches?: ConnectorCaches): Promise<SmartFolderRuntime>; listingUrl(node: Pick<SmartFolderNode, 'baseUrl' | 'query'>): string }`.
-`fetchRuntime` SHALL bound its results: the **queue** connectors slice to the
-node's `maxItems` (the total cap); the **feed** connector keeps the whole feed
-bounded by a `FEED_BUFFER` (200) and leaves the `maxItems` unread budget to the
-sidebar (the draining queue — see Requirement: Smart folders honour a per-folder
-maximum item count). `listingUrl`
-SHALL return the URL that shows the source's full listing in a browser — for the
-queue sources their dashboard/search/JQL view, for `rss` the feed channel's own
-website link — consumed by "open all in a tab" (see Requirement: Smart folders
-open their full listing in a tab).
-`ConnectorCaches` (declared in `connector.ts`) is a per-poll-cycle scratch map a
-connector MAY use, holding the in-flight resolution promise per key (set
-synchronously before the first await, so the engine's concurrent fan-out cannot
-race two same-host folders into duplicate lookups): `refreshDueSmartFolders` SHALL
-construct one per cycle and thread it through
-`startSmartFolderRefresh(deps, node, caches?)`, so per-cycle resolutions happen
-once per cycle, not once per folder; a manual/single refresh passes none and the
-fetch defaults its own.
-`fetchRuntime` SHALL be bounded and non-throwing — every failure shape resolves to
-a runtime state, and every network request goes through the exported
-`boundedFetch(url, init)` helper in `connector.ts` (the 20 s
-`AbortSignal.timeout` wrapper ONLY — response interpretation stays per connector).
-The source-agnostic engine in `apps/extension/src/background/smart-folders.ts`
-SHALL dispatch fetches through a closed registry
-`CONNECTORS: Record<SmartSource, SourceConnector>` holding exactly the shipped
-sources (`gitlab`, `github`, `jira`, `rss`) — no plug-in mechanism, no speculative
-members; its `fetchSmartFolderRuntime(node, caches?)` entry point widens its node
-parameter to `Pick<SmartFolderNode, 'source' | 'baseUrl' | 'query' | 'maxItems'>`
-(dispatch needs the discriminant and the cap).
+The `SourceConnector` interface in `background/connectors/connector.ts` SHALL be updated:
+`fetchRuntime` accepts `SmartSourceConfig` (not a full node) plus `ConnectorCaches?`:
+`fetchRuntime(cfg: SmartSourceConfig, maxItems: number, caches?: ConnectorCaches): Promise<SmartSectionRuntime>`.
+`maxItems` is passed separately (it is a folder-level field, not per-config).
+`listingUrl` accepts `SmartSourceConfig` (unchanged semantics).
+`requiredOrigins` accepts `SmartSourceConfig` (updated from full node — see Requirement: Each
+connector declares the origins it fetches for a SmartSourceConfig).
+`defaultBaseUrl` and `mintedIcon` are unchanged.
 
-#### Scenario: A fetch dispatches through the registry by source
+The engine's `fetchSmartSectionRuntime(cfg: SmartSourceConfig, maxItems: number, caches?)` entry
+point dispatches to `CONNECTORS[cfg.source].fetchRuntime(cfg, maxItems, caches)`.
 
-- **WHEN** the engine refreshes a folder whose node carries `source: 'rss'`
-- **THEN** `CONNECTORS.rss.fetchRuntime` performs the fetch and the result event reaches the drain exactly as a GitLab, GitHub, or Jira result does
+#### Scenario: A fetch dispatches through the registry by source config
+
+- **WHEN** the engine refreshes a section whose config carries `source: 'rss'`
+- **THEN** `CONNECTORS.rss.fetchRuntime(cfg, maxItems, caches)` performs the fetch and the result event reaches the drain
 
 #### Scenario: The registry holds exactly the four shipped sources
 
 - **WHEN** the `CONNECTORS` registry is inspected
-- **THEN** its keys are exactly `gitlab`, `github`, `jira`, and `rss` — no plug-in mechanism, no speculative members
-
-#### Scenario: Every connector resolves a listing URL
-
-- **WHEN** `listingUrl(node)` is called for a node of any source
-- **THEN** it returns the source's full-listing URL (the feed website for `rss`; the dashboard/search/JQL view for the queue sources) without performing any network I/O
+- **THEN** its keys are exactly `gitlab`, `github`, `jira`, and `rss`
 
 ### Requirement: The GitHub connector fetches canned queries over the search API
 
@@ -574,75 +503,37 @@ for auth failures.
 
 ### Requirement: Polling and refresh scheduling
 
-The SW SHALL maintain a single repeating alarm (`lunma/smart-folders-poll`)
-whose period equals the minimum `refreshMinutes` across all smart folders,
-re-registered whenever a smart folder is created, updated, or deleted, and
-cleared when no smart folders exist (zero idle cost for non-users). On each
-alarm tick the SW SHALL refresh exactly the folders whose
-`now - fetchedAt ≥ refreshMinutes` (a `null` `fetchedAt` is always due).
-`background/smart-folders.ts` SHALL register its own parallel
-`chrome.runtime.onMessage` listener for `'lunma/state-request'` (the sidebar's
-boot/open signal) that kicks the same refresh-due check — the pure-read
-snapshot handler in `state-snapshot-handler.ts` is NOT modified (see the
-`chrome-event-coordination` delta). The SW SHALL also run the refresh-due check
-once post-boot: the runtime slice dies with the SW, so after a restart every
-smart folder is due (`fetchedAt` gone) and an ALREADY-OPEN sidebar — which
-never re-sends its `state-request` — would otherwise show ghosts until the
-next alarm tick. `refreshSmartFolder { spaceId, folderId }` SHALL refresh that
-folder unconditionally.
+The single repeating alarm (`lunma/smart-folders-poll`) and cadence logic are unchanged.
+On each tick, the engine fans out per `SmartSourceConfig` entry across all due folders,
+fetching each section independently. `startSmartFolderRefresh(deps, node, caches?)` SHALL
+iterate `node.sources`, derive each `sourceKey`, and call
+`fetchSmartSectionRuntime(cfg, node.maxItems, caches)` for each entry in parallel (bounded
+by the existing concurrency model). `refreshSmartFolder { spaceId, folderId }` SHALL
+unconditionally refresh ALL sections of that folder.
 
 #### Scenario: Only due folders refresh on a tick
 
-- **GIVEN** folder A (`refreshMinutes: 5`, last fetched 6 minutes ago) and folder B (`refreshMinutes: 30`, last fetched 10 minutes ago)
+- **GIVEN** folder A (`refreshMinutes: 5`, last fetched 6 minutes ago) with 2 sources, and folder B (`refreshMinutes: 30`, last fetched 10 minutes ago)
 - **WHEN** the poll alarm fires
-- **THEN** folder A refreshes and folder B does not
-
-#### Scenario: Deleting the last smart folder clears the alarm
-
-- **WHEN** `deleteSmartFolder` removes the only smart node
-- **THEN** the `lunma/smart-folders-poll` alarm is cleared
-
-#### Scenario: Opening the sidebar freshens due folders
-
-- **WHEN** a sidebar issues its `state-request` and a smart folder is past its cadence
-- **THEN** the parallel refresh-kick listener triggers that folder's refresh
-- **AND** the snapshot response itself is served by the unmodified pure-read handler, unblocked
-
-#### Scenario: An SW restart refetches immediately for an open sidebar
-
-- **GIVEN** a sidebar already open while the service worker idles out and restarts
-- **WHEN** the SW finishes booting with smart folders in the pinned trees
-- **THEN** the post-boot refresh-due check refetches every folder (all are due — the runtime slice was wiped)
-- **AND** the open sidebar's results heal within the fetch round-trip, not the alarm cadence
+- **THEN** both of folder A's sections refresh and folder B's sections do not
 
 ### Requirement: Smart-item bindings give results pinned-tab activation
 
-`smartItemBindings` is typed as `{ [folderId: FolderId]: { [itemId: string]: { [windowId: WindowId]: { tabId: TabId; allowGlob: string } } } }` in `AppState` and persisted at schema v7 (raised by this change from v6). Each slot SHALL store the bound tab id **and** the `pageGlob(itemUrl)` computed at open time so the boundary can be re-armed without the ephemeral runtime slice being populated (design D1).
+`smartItemBindings` is typed as `{ [folderId: FolderId]: { [namespacedItemId: string]: { [windowId: WindowId]: { tabId: TabId; allowGlob: string } } } }` in `AppState`, persisted at schema v8 (raised from v7 by this change). Each `namespacedItemId` SHALL be of the form `${sourceKey}:${nativeId}` where `sourceKey` is derived from the section's `SmartSourceConfig` and `nativeId` is the connector's native item id. This prevents collisions when two sources produce items with the same native id.
 
-On `openSmartItem`, after the tab is created and bound via `store.bindSmartItem(folderId, itemId, windowId, tabId, allowGlob)`, the SW SHALL arm the boundary content script on the new tab as a side effect: `ctx.boundary.configureSmartItemBoundary(tabId, allowGlob)`. The `allowGlob` SHALL be `pageGlob(item.url)` — `origin + pathname + '*'` — so every sub-path and query-string variation of the item URL stays in-tab, and any off-prefix click opens a new temp tab instead.
+All open/close/bind/unbind behavior, the `dropSmartFolderBindings` demote-on-delete behavior, and the `isBound` tab-created guard are unchanged except that every slot read/write uses the namespaced id form. `openSmartItem` receives a `namespacedItemId` from the sidebar; the SW uses it as the binding key directly.
 
-The `tabs.onRemoved` unbind behaviour, the `dropSmartFolderBindings` demote-on-folder-delete behaviour, and the `isBound` tab-created guard are unchanged except that every slot read/write must use the `{ tabId, allowGlob }` shape.
+#### Scenario: Opening a smart item from a multi-source folder uses namespaced id
 
-#### Scenario: Opening a dormant smart item arms the boundary
+- **GIVEN** a folder with sources `[gitlab:gitlab.com, github:github.com]` and a gitlab item with native id `42`
+- **WHEN** `openSmartItem { folderId, itemId: 'gitlab:gitlab.com:42', windowId: 100, spaceId }` is dispatched
+- **THEN** a tab opens at the item's URL and is bound under `smartItemBindings[folderId]['gitlab:gitlab.com:42'][100]`
 
-- **GIVEN** a smart folder with a runtime item `{ id: '42', url: 'https://gitlab.example.com/proj/-/merge_requests/42', ... }` in window 100 with no existing binding
-- **WHEN** `openSmartItem { folderId, itemId: '42', windowId: 100, spaceId }` is dispatched
-- **THEN** a tab opens at the item's URL, joins the Space's Chrome group, and is bound under `smartItemBindings[folderId]['42'][100]` as `{ tabId: <new>, allowGlob: 'https://gitlab.example.com/proj/-/merge_requests/42*' }`
-- **AND** the boundary content script SHALL be injected into the tab and configured with `allow: ['https://gitlab.example.com/proj/-/merge_requests/42*']`
+#### Scenario: Items from two sources with the same native id do not collide
 
-#### Scenario: Clicking an off-prefix link in a smart tab opens a temp tab
-
-- **GIVEN** a smart item tab bound to `https://gitlab.example.com/proj/-/merge_requests/42` with allowGlob `https://gitlab.example.com/proj/-/merge_requests/42*`
-- **WHEN** the user clicks a link to `https://gitlab.example.com/proj/-/merge_requests/` (the MR list) inside the smart tab
-- **THEN** the boundary content script SHALL intercept the click and open the link in a new temp tab
-- **AND** the smart item tab SHALL remain on its current URL and stay bound
-
-#### Scenario: In-prefix link navigation stays in the smart tab
-
-- **GIVEN** the same smart item tab
-- **WHEN** the user clicks a link to `https://gitlab.example.com/proj/-/merge_requests/42/diffs`
-- **THEN** the browser navigates the smart tab to the diffs view (within the `42*` prefix)
-- **AND** the smart item tab remains bound
+- **GIVEN** a gitlab item `{ id: '42', ... }` and a jira item `{ id: '42', ... }` in the same folder
+- **WHEN** both items are bound
+- **THEN** `smartItemBindings[folderId]` SHALL hold separate keys `'gitlab:gitlab.com:42'` and `'jira:acme.atlassian.net:42'`
 
 ### Requirement: Smart-item boundary re-arms on page load
 
@@ -711,112 +602,48 @@ This method is the only new surface on `BoundaryController`; all other boundary 
 
 ### Requirement: Smart-folder rendering and the one-glyph restraint
 
-The sidebar SHALL render a smart node as a smart folder, implemented as the
-feature component `apps/extension/src/sidebar/SmartFolder.svelte` composed by
-`PinnedTabs.svelte`: a folder-style row composing the `ui/FolderRow.svelte`
-primitive (extended for the smart row with an optional trailing badge, a
-menu-items override, a `busy` flag that spins the glyph during an in-flight
-refresh, pass-through forwarding of `RowMenu`'s `panel`/`panelTitle` drill-in, and
-an optional **bindable `menuOpen`** pass-through. The smart row SHALL NOT re-roll
-the folder-row chrome) with the node's icon in the shared icon column, name in the
-title column, the standard disclosure chevron in the leading gutter, and a
-trailing quiet count badge, and — when expanded — one row per result item at the
-folder-child inset.
+The sidebar SHALL render a smart folder with a sectioned layout when it has ≥ 2 sources.
+A single-source folder renders identically to today (no section headers, no visual change).
 
-The **badge counts what needs the user's attention**: for a **queue** source it is
-the item count (`N+` when the folder's `maxItems` cap is hit); for a **feed**
-(`rss`) it is the **unread count** (`N+` when more unread than the `maxItems`
-budget) and SHALL be **hidden entirely at zero** (the calm "caught up" state). The
-badge never renders below zero and never shows a `0`.
+When expanded with ≥ 2 sources, the folder SHALL render, for each `SmartSourceConfig`
+entry in `node.sources` order: (a) a **section header** row (source icon in `--text-dim` +
+host label in `--text-muted`, `--font-size-xs`, 12px height) followed by (b) the section's
+result rows using the existing per-kind rules (queue → status dots; feed → unread marks).
+Section headers SHALL be implemented as `SmartSectionHeader.svelte` (a new component
+composed of the `Icon` primitive only — no new primitives).
 
-A result row SHALL be exactly: leading instance favicon, single-line ellipsized
-title, and at most **one** trailing dot. For a **queue** source the dot is the
-semantic status painted from the existing tokens (`ok → --success`,
-`fail → --danger`, `warn → --warning`, `pending → --info`); for a **feed** the dot
-is the **unread mark** in the Space hue, and it clears when the item is read. The
-one-glyph restraint holds for both. Colour SHALL NOT be the only carrier of the
-unread/read or status meaning — the row's accessible name SHALL state it, and a
-**read** feed row additionally recedes (title at `--text-muted`, favicon at reduced
-opacity; see Requirement: Reading folders are a draining unread queue).
+The folder badge SHALL sum per-section attention counts: `Σ (item count for queue sections)
++ Σ (unread count for feed sections)`. The `N+` cap triggers when any section has hit its
+`maxItems` cap. The badge never shows 0 (hidden when sum is 0). For a single-source folder
+the badge is identical to today.
 
-Result rows SHALL activate like pinned tabs: click dispatches
-`openSmartItem { spaceId, folderId, itemId, windowId }` — open-if-dormant,
-focus-if-bound (the binding lifecycle is owned by Requirement: Smart-item bindings
-give results pinned-tab activation); for a feed source, activating a row does NOT
-mark it read — the item drains only when the user moves on (see Requirement:
-Reading folders are a draining unread queue). A bound row SHALL take the `TabRow` selection grammar — the
-`--space-c-soft` active wash when its bound tab is the window's focused tab — and a
-hover ✕ at the trailing slot dispatching the existing `closeTab`. Rows SHALL NOT
-drag, reorder, or rename.
+Empty-state notes, ghost rows (first-fetch), signed-out/error/needs-access states, and
+the "open work holds its row" behavior apply per section. A section in `pending`
+(first-ever fetch) renders three static ghost rows.
 
-The folder's kebab/right-click menu SHALL carry **Refresh now**, **Edit…**,
-**Open all in a tab** (every source; see Requirement: Smart folders open their full
-listing in a tab), **Move up** / **Move down** (the keyboard-reachable reorder pair
-every pinned row carries — disabled at the respective end of the top-level list,
-dispatching the full-tree `reorderPinned`), and **Delete**, gated behind a
-**two-step confirm** that mirrors the folder-row Delete arm: the first activation
-SHALL arm the entry into a danger **"Delete — confirm"** and keep the menu open
-(`keepOpen`), and only the second activation SHALL dispatch `deleteSmartFolder`.
-Closing or Escaping the menu SHALL disarm a pending confirm, so a reopened menu
-lands on the unarmed **"Delete"**, never a stale **"Delete — confirm"**. The arm
-SHALL be identical across both menu surfaces — the kebab `RowMenu` (via
-`FolderRow`) and the right-click `ContextMenu` — because both render the same
-`menuItems` source. A confirmed deletion destroys only the folder's own
-recreatable config and closes no tabs; its bound tabs demote to Temporary per the
-binding requirement. For a **feed** source the menu SHALL additionally carry **Mark
-all read**. Under `prefers-reduced-motion` the in-flight refresh indicator SHALL
-NOT rotate and item-set changes (including the unread→read transition and hide-read
-collapse) SHALL swap instantly with an identical end state.
+#### Scenario: A single-source folder renders identically to before this change
 
-A **settled but empty** expanded folder SHALL show a quiet empty-state note
-(parity with a normal folder's empty copy), NOT a blank list: "Nothing here right
-now." for a queue with no items, "No entries yet." for a feed with no entries, and
-"You're all caught up." for a caught-up feed (no unread). The pending-first-fetch
-(ghost rows), signed-out (sign-in row), and error ("Couldn't reach …" note) states
-own their own copy and SHALL NOT also show the empty note.
-
-#### Scenario: An empty settled folder shows a note, not a blank list
-
-- **GIVEN** a smart folder whose runtime is `ok` with no rows to show
+- **GIVEN** a smart folder with exactly one source entry
 - **WHEN** the folder is expanded
-- **THEN** it renders a quiet empty-state note ("Nothing here right now." for a queue, "No entries yet." / "You're all caught up." for a feed), never a blank list
+- **THEN** no section header is rendered and the layout is visually identical to the pre-change behavior
 
-#### Scenario: A populated queue folder renders rows with one status glyph each
+#### Scenario: A two-source folder renders sectioned
 
-- **GIVEN** a `gitlab` smart folder whose runtime is `ok` with items carrying `status` tones
+- **GIVEN** a smart folder with sources `[gitlab:gitlab.com, github:github.com]`, each `ok` with items
 - **WHEN** the folder is expanded
-- **THEN** each row shows favicon + title + at most one status dot, with the full status text in the tooltip/ARIA label
+- **THEN** the folder renders: section header "gitlab.com" → gitlab items → section header "api.github.com" → github items
 
-#### Scenario: An rss folder renders unread and read rows distinctly
+#### Scenario: The folder badge sums per-section attention counts
 
-- **GIVEN** an `rss` folder whose runtime is `ok` with some items read and some unread
-- **WHEN** the folder is expanded
-- **THEN** unread rows show a Space-hued unread dot with full-ink title, read rows show no dot with a `--text-muted` title and a dimmed favicon, and each row's accessible name states unread or read
-
-#### Scenario: The feed badge counts unread and hides at zero
-
-- **GIVEN** an `rss` folder with 3 unread of 20 items
+- **GIVEN** a folder with a queue section (7 items) and a feed section (3 unread of 10)
 - **WHEN** the folder renders
-- **THEN** the badge reads `3`; and when every item is read the badge is absent
+- **THEN** the badge reads `10`
 
-#### Scenario: The queue badge reflects the cap honestly
+#### Scenario: A section in needs-access renders inline while other sections render normally
 
-- **WHEN** a queue folder's runtime holds items at its `maxItems` cap
-- **THEN** the folder badge renders `<maxItems>+`, and with 7 items it renders `7`
-
-#### Scenario: Deleting a smart folder is a two-step confirm
-
-- **GIVEN** an expanded smart folder's kebab (or right-click) menu is open
-- **WHEN** the user activates **Delete** the first time
-- **THEN** no `deleteSmartFolder` is dispatched, the entry morphs to a danger **"Delete — confirm"**, and the menu stays open
-- **AND** activating **"Delete — confirm"** dispatches `deleteSmartFolder { spaceId, folderId }` once
-
-#### Scenario: Closing the menu disarms a pending Delete
-
-- **GIVEN** the user has armed **Delete** into **"Delete — confirm"**
-- **WHEN** the menu is closed or Escaped without confirming
-- **THEN** no `deleteSmartFolder` is dispatched
-- **AND** reopening the menu shows the unarmed **"Delete"**, not **"Delete — confirm"**
+- **GIVEN** a folder with sections `gitlab:ok:5items` and `github:needs-access`
+- **WHEN** the folder is expanded
+- **THEN** the gitlab section renders its 5 items; the github section renders one "Lunma needs access to api.github.com" row
 
 ### Requirement: Calm failure and pending states
 
@@ -893,63 +720,37 @@ notification.
 
 ### Requirement: Creation and configuration via the pinned-header menu
 
-The pinned-section header kebab (`RowMenu`) SHALL carry a "New smart folder…"
-entry alongside the existing "New folder". Both it and the smart folder's
-**Edit…** menu entry SHALL drill their menu in place into a
-`apps/extension/src/sidebar/SmartFolderEditor.svelte` panel (`RowMenu`'s existing
-`panel`/`panelTitle` drill-in; Edit… reaches it through `FolderRow`'s forwarded
-panel, and the right-click `ContextMenu` path drills into the same editor). The
-editor's **source picker SHALL be a `Select`** (scaling past four sources — it
-SHALL NOT be a fixed-width segmented control), ABOVE the base-URL field. The
-editor is **source-adaptive**:
+The `SmartFolderEditor.svelte` SHALL render a sub-source list: each entry shows a source
+chip (small coloured pill: source icon + label, `--space-c-soft` background), a host/URL
+label, and a remove `×` button. Below the list, an `+ Add source` ghost `Button` opens
+an inline add-source panel (source picker → auto-URL → optional query picker → Add confirm).
+Entries can be reordered via `Move up` / `Move down` controls (accessible from keyboard,
+same pattern as pinned-row reorder).
 
-- **base URL** (text), defaulting per source (`https://gitlab.com` /
-  `https://github.com` / `https://your-site.atlassian.net` / empty for `rss`),
-  with a source switch swapping the value whenever it currently equals any
-  source's canonical default (a custom/self-hosted URL is never clobbered); the
-  label reads **"Feed URL"** for `rss` and "Instance URL" otherwise.
-- **query** (a three-option control whose third slot's label is source-aware —
-  "Watching" for Jira, "Review" otherwise) — **shown only for queue sources;
-  hidden for `rss`** (a feed has no canned query).
-- the `maxItems` `Select` (10 / 20 / 30 / 50) — shown for every source, labelled
-  **"Show at most"** for a queue (the total cap) and **"Show up to N unread"** for
-  a feed (the unread budget).
-- **refresh cadence** (the enum 5 / 10 / 30 / 60 minutes; the editor's default is
-  **30** for `rss` and 10 otherwise).
-- **name** (text, auto-suggested per source; for `rss` it is not derived from a
-  query and stays empty until typed or seeded from the feed title).
-- a per-source **hint** — the existing token lines for the queue sources, and for
-  `rss` a no-sign-in line ("Public feed — no sign-in needed. Paste the feed URL.").
+The source `Select` and per-source URL/query fields from the existing editor are moved into
+the per-entry form and the inline add-source panel. The existing source-adaptive behavior
+(label "Feed URL" vs "Instance URL", query control hidden for rss, hint line, refresh
+default) applies per-entry.
 
-Confirming dispatches `createSmartFolder` (or `updateSmartFolder`) carrying the
-chosen `source`, `maxItems`, and (for queue sources) `query`, and SHALL dismiss the
-hosting menu entirely (the `onDone` contract, unchanged). A `baseUrl`, `query`,
-`source`, or `maxItems` change on an existing folder SHALL trigger an immediate
-refetch.
+Confirming is blocked when `sources` is empty. A `baseUrl` or `source` change on an
+existing entry triggers an immediate refetch of that section only (`updateSmartFolder`
+carries the full new `sources[]`; the engine diffs to find changed entries).
 
-#### Scenario: Creating a review-requests folder from the header menu
+#### Scenario: Creating a multi-source folder from the header menu
 
-- **WHEN** the user opens the pinned-header kebab, selects "New smart folder…", keeps the GitLab defaults, picks `review-requested`, and confirms
-- **THEN** the sidebar dispatches `createSmartFolder` with the panel's values (including `source` and `maxItems`)
-- **AND** the new folder appears in the pinned tree and begins its first fetch
+- **WHEN** the user opens "New smart folder…", adds a GitLab source and a GitHub source, and confirms
+- **THEN** `createSmartFolder` is dispatched with `sources: [{ source: 'gitlab', ... }, { source: 'github', ... }]`
+- **AND** the folder appears with two sections, each pending its first fetch
 
-#### Scenario: Picking RSS adapts the editor
+#### Scenario: Confirming with no sources is blocked
 
-- **WHEN** the user opens "New smart folder…" and switches the source `Select` to RSS
-- **THEN** the base-URL field's label reads "Feed URL", the query control is hidden, the "Show up to N unread" control is shown, the refresh default reads 30 minutes, and the hint states no sign-in is needed
-- **AND** confirming dispatches `createSmartFolder` with `source: 'rss'`, the feed URL, the chosen `maxItems`, and no `query`
+- **GIVEN** the editor is open with all sources removed
+- **THEN** the Confirm button SHALL be disabled
 
-#### Scenario: Editing maxItems refetches immediately
+#### Scenario: Removing a source from an existing folder updates it immediately
 
-- **GIVEN** an existing smart folder
-- **WHEN** the user changes "Show at most" and confirms
-- **THEN** `updateSmartFolder` carries the new `maxItems` and the folder refetches without waiting for its cadence
-
-#### Scenario: Confirming the editor dismisses the hosting menu on every path
-
-- **GIVEN** an existing smart folder whose kebab menu is drilled into Edit…
-- **WHEN** the user confirms with Save
-- **THEN** `updateSmartFolder` is dispatched and the menu closes entirely — no action list remains open
+- **GIVEN** a folder with 3 sources; the user removes the second and confirms
+- **THEN** `updateSmartFolder` carries `sources: [first, third]` and the folder's runtime drops the removed section
 
 ### Requirement: Connectors section in the options page
 
@@ -1065,27 +866,23 @@ items carry no read-state.
 
 ### Requirement: Smart folders honour a per-folder maximum item count
 
-Every smart folder SHALL bound its rendered results by the node's `maxItems`,
-superseding any previously-fixed per-connector cap (`RESULTS_CAP`); migrated nodes
-default to `20`. For a **queue** source `maxItems` is the **total result cap** —
-the connector slices its normalized results to it. For the **feed** source it is
-the **unread budget** (the editor's "Show up to N unread"): the connector keeps
-the whole feed file bounded by a `FEED_BUFFER` (200, NOT sliced to `maxItems`), and
-the sidebar surfaces the newest `maxItems` unread, backfilling older unread from
-the buffer as items are consumed. The folder badge SHALL read `<maxItems>+` when
-the cap/budget is reached (queue: total at the cap; feed: unread over the budget),
-so it is never silent.
+`maxItems` is a folder-level field applied per section: each section shows up to `maxItems`
+rows (queue cap) or up to `maxItems` unread rows (feed budget). The total visible rows
+across all sections can be up to `N × maxItems` where N is the number of sources. The
+folder badge sums per-section attention counts; the `N+` cap triggers when any section
+has hit its `maxItems` cap. Migrated nodes default `maxItems: 20` (unchanged). The editor
+label reads "per section" when the folder has ≥ 2 sources.
 
-#### Scenario: The cap drives the connector slice and the badge (queue)
+#### Scenario: The cap applies per section
 
-- **GIVEN** a `gitlab` folder with `maxItems: 30` whose source returns 50 results
-- **THEN** the runtime holds 30 items and the folder badge reads `30+`
+- **GIVEN** a folder with `maxItems: 10`, a gitlab section returning 15 items, and an rss section with 20 unread
+- **THEN** the gitlab section renders 10 items (capped) and the rss section renders 10 unread (budget)
+- **AND** the badge reads `20+` (any section hit cap)
 
-#### Scenario: The budget drives the unread window and the badge (feed)
+#### Scenario: Single-source folder cap is unchanged
 
-- **GIVEN** an `rss` folder with `maxItems: 10` whose feed holds 40 unread entries
-- **THEN** the connector keeps the whole feed (bounded by the buffer), the sidebar renders the newest 10 unread, and the badge reads `10+`
-- **AND** as the user consumes the newest unread, older unread backfill to keep the window full
+- **GIVEN** a folder with exactly one source and `maxItems: 20` returning 25 items
+- **THEN** the section renders 20 items and the badge reads `20+`
 
 ### Requirement: Smart folders open their full listing in a tab
 
@@ -1106,3 +903,43 @@ and touch-reachable.
 
 - **WHEN** the user selects "Open all in a tab" on a `gitlab` folder
 - **THEN** the GitLab listing view (e.g. the dashboard merge-requests page) opens in a new tab
+
+### Requirement: `SmartSourceConfig` is the per-section connector unit
+
+`SmartSourceConfig` (`{ source: SmartSource; baseUrl: string; query?: SmartQuery }`) is
+exported from `apps/extension/src/shared/types.ts` as the per-entry type for `sources[]`
+on a smart `PinNode`. It is also the parameter type for `SourceConnector.fetchRuntime`,
+`SourceConnector.requiredOrigins`, `SourceConnector.listingUrl`, and `requiredOriginsForConfig`
+in `shared/connector-origins.ts`.
+
+#### Scenario: SmartSourceConfig round-trips through the schema
+
+- **WHEN** a `SmartSourceConfig` `{ source: 'rss', baseUrl: 'https://feeds.example.com/rss' }` is persisted and loaded
+- **THEN** it SHALL parse cleanly under `SmartSourceConfigSchema` with no `query` field
+
+### Requirement: Source key derivation is pure and stable
+
+`sourceKey(cfg: SmartSourceConfig): string` in `background/smart-folders.ts` SHALL return
+`${cfg.source}:${new URL(cfg.baseUrl).host}`. It SHALL be pure and SHALL NOT perform I/O.
+The same derivation SHALL be used by `setSmartSectionRuntime`, `smartFolders.result` events,
+and the `smartItemBindings` namespace.
+
+#### Scenario: Source key is stable across renames
+
+- **WHEN** a gitlab source on `https://gitlab.example.com` produces `sourceKey`
+- **THEN** the key is `'gitlab:gitlab.example.com'` and is stable across folder name changes
+
+### Requirement: `hideRead` and feed menu actions apply only to feed sections
+
+`hideRead` and the "Mark all read" / "Show recently read" folder menu actions SHALL apply
+only to sections whose `SmartSourceConfig` has `source: 'rss'`. Queue sections (gitlab /
+github / jira) are unaffected. When a folder has NO feed sections, the "Mark all read"
+and "Show recently read" menu items SHALL be absent from the folder menu.
+
+#### Scenario: Mark all read on a mixed folder marks only feed sections
+
+- **GIVEN** a folder with a gitlab section (4 items) and an rss section (6 unread)
+- **WHEN** the user selects "Mark all read"
+- **THEN** the rss section's items are all marked read (badge drops to 0 for that section)
+- **AND** the gitlab section is unaffected
+

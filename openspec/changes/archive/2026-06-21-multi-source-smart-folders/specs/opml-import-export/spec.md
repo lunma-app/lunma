@@ -1,6 +1,6 @@
 ## MODIFIED Requirements
 
-### Requirement: importOpml bus command creates one multi-source RSS smart folder
+### Requirement: importOpml bus command bulk-creates RSS smart folders
 
 The `importOpml` `SidebarCommand` SHALL be accepted by the background coordinator with
 the same payload shape: `{ spaceId: string; feeds: { name: string; feedUrl: string }[] }`.
@@ -53,7 +53,7 @@ no folder is created and the ack carries `{ imported: 0, skipped: N }`.
 - **WHEN** `importOpml` is dispatched with feeds all having invalid (relative) `feedUrl` values
 - **THEN** no folder is created and the ack carries `{ imported: 0, skipped: N }`
 
-### Requirement: OPML build utility serialises RSS sources from multi-source folders
+### Requirement: OPML build utility serialises RSS feed folders to OPML 1.0
 
 `buildOpml(nodes: SmartFolderNode[])` in `shared/opml.ts` SHALL accept the updated
 node shape (with `sources: SmartSourceConfig[]`) and for each node produce one `<outline>`
@@ -79,7 +79,7 @@ Nodes where no `sources` entry has `source === 'rss'` produce no `<outline>`.
 - **WHEN** `buildOpml` is called with a folder containing sources `[{ source: 'gitlab', ... }, { source: 'rss', baseUrl: 'https://feed.example.com/rss' }]`
 - **THEN** only the rss source appears as an `<outline>` in the output
 
-### Requirement: Options-page Feed subscriptions card (import flow updated)
+### Requirement: Options-page Feed subscriptions card
 
 The import flow in `FeedSubscriptions.svelte` SHALL be updated to reflect the new
 one-folder-per-import behaviour. The confirm step SHALL read:

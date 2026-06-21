@@ -6,7 +6,7 @@ Defines the versioned local-storage envelope, the append-only migration pipeline
 ## Requirements
 ### Requirement: Versioned local-storage envelope
 
-The persisted `AppState` SHALL live in `chrome.storage.local` under the key `lunma.state` as an envelope of shape `{ schemaVersion: number; state: AppState }`. The envelope's `schemaVersion` SHALL equal the `CURRENT_SCHEMA_VERSION` constant exported from `apps/extension/src/shared/schemas.ts` at write time. The current version SHALL be `7` (raised from `6` by the `smart-tab-boundary` change, which widened each `smartItemBindings` slot from a bare `TabId` to `{ tabId: TabId; allowGlob: string }` to persist the page-glob needed for boundary re-arm without the ephemeral runtime slice). Version 6 was consumed by the `rss-connector` change as a pass-through migration.
+The persisted `AppState` SHALL live in `chrome.storage.local` under the key `lunma.state` as an envelope of shape `{ schemaVersion: number; state: AppState }`. The envelope's `schemaVersion` SHALL equal the `CURRENT_SCHEMA_VERSION` constant exported from `apps/extension/src/shared/schemas.ts` at write time. The current version SHALL be `8` (raised from `7` by the `multi-source-smart-folders` change, which replaces the flat `source`/`baseUrl`/`query?` triple on smart `PinNode`s with `sources: SmartSourceConfig[]`, and widens `smartItemBindings` item keys to the namespaced form `${sourceKey}:${nativeId}`).
 
 The `state.schemaVersion` field on `AppState` itself SHALL match the envelope's `schemaVersion` whenever both are present. The envelope-level field is the value the migration runner reads; the in-state field is informational.
 
@@ -17,78 +17,58 @@ The `state.schemaVersion` field on `AppState` itself SHALL match the envelope's 
 
 ### Requirement: Append-only migrations list
 
-The `migrations: Migration[]` array exported from `apps/extension/src/shared/migrations.ts` SHALL be append-only **from the v1 baseline onward**. A `Migration` SHALL be `{ toVersion: number; migrate: (raw: unknown) => unknown }`. Each `migrate` function SHALL be synchronous and pure — it SHALL NOT call any `chrome.*` API and SHALL NOT perform I/O.
+The `migrations: Migration[]` array exported from `apps/extension/src/shared/migrations.ts` SHALL be append-only **from the v1 baseline onward**. A `Migration` SHALL be `{ toVersion: number; migrate: (raw: unknown) => unknown }`. Each `migrate` function SHALL be synchronous and pure.
 
-A new entry MAY only be added at the end of the array, and its `toVersion` SHALL equal `CURRENT_SCHEMA_VERSION` after it is added. **Once the product has shipped**, existing entries SHALL NOT be modified, reordered, or removed in any subsequent change.
+The list holds seven entries: the six entries from the prior version (`toVersion: 2` through `toVersion: 7`) plus a new `{ toVersion: 8 }` migration added by this change. The v8 migration is a **real transformation**: for each `smart` `PinNode` in every space in `pinnedBySpace`, it wraps the flat `source`/`baseUrl`/`query?` fields into `sources: [{ source, baseUrl, query }]` and removes the root-level fields. Additionally, for each `smartItemBindings[folderId]`, it derives the `sourceKey` from the corresponding migrated node's `sources[0]` (as `${source}:${new URL(baseUrl).host}`) and prefixes every `itemId` as `${sourceKey}:${itemId}`. A `folderId` in `smartItemBindings` with no matching node in `pinnedBySpace` (orphaned binding) SHALL have its entire entry dropped (correct: orphaned bindings are pruned).
 
-The product is **pre-release** at the time of this change, so the accumulated placeholder-era chain (`v1Tov2 … v10Tov11`) was reset **once** to a clean empty baseline (`migrations = []`, `CURRENT_SCHEMA_VERSION = 1`). This one-time reset was permitted precisely because there are no released installs and no persisted data to upgrade; it SHALL NOT recur after the first public release.
-
-The list holds six entries: the `smart-folders` migration `{ toVersion: 2 }` (a pure pass-through — v1 data cannot contain `smart` nodes), the `github-connector` migration `{ toVersion: 3 }` (likewise a pass-through — v2 data cannot contain `source: 'github'` nodes), the `smart-folder-item-bindings` migration `{ toVersion: 4 }` (likewise a pass-through — the new `smartItemBindings` slice parses via its `.default({})`, so v3 data needs no transformation), the `jira-connector` migration `{ toVersion: 5 }` (likewise a pass-through — v4 data cannot contain `source: 'jira'` nodes and no field changes shape; the v5 schema simply admits the value), the `rss-connector` migration `{ toVersion: 6 }` (likewise a pass-through), and the `smart-tab-boundary` migration `{ toVersion: 7 }` (a **real transformation** — every `smartItemBindings[folderId][itemId][windowId]` slot that holds a raw number is converted to `{ tabId: <that number>, allowGlob: '' }`; slots already in object form are left untouched). Each bump is deliberate despite being a pass-through where applicable: it makes a downgrade detectable (an older build reading newer data quarantines on the version gate instead of Zod-rejecting unfamiliar fields with a confusing parse error).
-
-#### Scenario: The chain holds exactly the v2, v3, v4, v5, v6, and v7 entries
+#### Scenario: The chain holds exactly the v2 through v8 entries
 
 - **GIVEN** the `migrations` list exported from `apps/extension/src/shared/migrations.ts`
-- **THEN** `migrations` SHALL equal a six-entry list — `{ toVersion: 2 }`, `{ toVersion: 3 }`, `{ toVersion: 4 }`, `{ toVersion: 5 }`, `{ toVersion: 6 }`, then `{ toVersion: 7 }` (the last being a real transformation, the others pass-throughs)
-- **AND** `CURRENT_SCHEMA_VERSION` SHALL equal `7`
+- **THEN** `migrations` SHALL equal a seven-entry list — `{ toVersion: 2 }`, `{ toVersion: 3 }`, `{ toVersion: 4 }`, `{ toVersion: 5 }`, `{ toVersion: 6 }`, `{ toVersion: 7 }`, then `{ toVersion: 8 }` (the last being a real transformation; the earlier entries are as previously specified)
+- **AND** `CURRENT_SCHEMA_VERSION` SHALL equal `8`
 
-#### Scenario: A v6 envelope with a numeric smartItemBindings slot migrates to the object form
+#### Scenario: A v7 smart node is wrapped into sources array
 
-- **GIVEN** a persisted envelope at `schemaVersion: 6` with `smartItemBindings: { 'f1': { 'item-a': { 100: 42 } } }`
-- **WHEN** `runMigrations` applies the v7 migration
-- **THEN** the result SHALL have `smartItemBindings: { 'f1': { 'item-a': { 100: { tabId: 42, allowGlob: '' } } } }`
-- **AND** `schemaVersion` in the written envelope SHALL be `7`
+- **GIVEN** a persisted envelope at `schemaVersion: 7` with a smart PinNode `{ kind: 'smart', source: 'gitlab', baseUrl: 'https://gitlab.com', query: 'authored', ... }`
+- **WHEN** `runMigrations` applies the v8 migration
+- **THEN** the node SHALL become `{ kind: 'smart', sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', query: 'authored' }], ... }` with no root-level `source`/`baseUrl`/`query` fields
+- **AND** `schemaVersion` in the written envelope SHALL be `8`
 
-#### Scenario: A v6 envelope with no smartItemBindings passes through unchanged
+#### Scenario: A v7 smartItemBindings entry is re-keyed with the source namespace
 
-- **GIVEN** a persisted envelope at `schemaVersion: 6` with `smartItemBindings: {}` (or the field absent)
-- **WHEN** `runMigrations` applies the v7 migration
-- **THEN** `smartItemBindings` SHALL be `{}` in the result (no-op for empty bindings)
-- **AND** `schemaVersion` SHALL be `7`
+- **GIVEN** a persisted envelope at `schemaVersion: 7` with a smart node `{ source: 'gitlab', baseUrl: 'https://gitlab.com', ... }` having folderId `f1` and `smartItemBindings: { 'f1': { '42': { 100: { tabId: 99, allowGlob: 'https://gitlab.com/-/merge_requests/42*' } } } }`
+- **WHEN** `runMigrations` applies the v8 migration
+- **THEN** the result SHALL have `smartItemBindings: { 'f1': { 'gitlab:gitlab.com:42': { 100: { tabId: 99, allowGlob: 'https://gitlab.com/-/merge_requests/42*' } } } }`
+- **AND** the old non-namespaced key `'42'` SHALL be absent
+
+#### Scenario: An orphaned smartItemBindings folderId is dropped
+
+- **GIVEN** a persisted envelope at `schemaVersion: 7` with `smartItemBindings: { 'orphan-f2': { '5': { 100: { tabId: 88, allowGlob: '' } } } }` but no matching smart node in `pinnedBySpace`
+- **WHEN** `runMigrations` applies the v8 migration
+- **THEN** `smartItemBindings` SHALL NOT contain key `'orphan-f2'`
+
+#### Scenario: A v7 envelope with no smart nodes or bindings passes through cleanly
+
+- **GIVEN** a persisted envelope at `schemaVersion: 7` with no smart PinNodes and `smartItemBindings: {}`
+- **WHEN** `runMigrations` applies the v8 migration
+- **THEN** `pinnedBySpace` is unchanged, `smartItemBindings` is `{}`, and `schemaVersion` is `8`
 
 #### Scenario: A v1 envelope migrates to the current version losslessly
 
-- **WHEN** `persistedVersion = 1`, `CURRENT_SCHEMA_VERSION = 7`, and `migrations` contains entries with `toVersion: 2`, `3`, `4`, `5`, `6`, and `7`
-- **THEN** the runner applies all six in order, validation succeeds against the v7 schema, and the envelope is written back as `{ schemaVersion: 7, state }` with the state content unchanged (no smart item bindings in v1 data)
-
-#### Scenario: A future change adds a migration
-
-- **WHEN** a future change introduces migration `M` producing version `N`
-- **THEN** `M` SHALL be appended as the last entry in `migrations` with `toVersion: N`
-- **AND** `CURRENT_SCHEMA_VERSION` SHALL be raised to `N` in the same change
-- **AND** existing entries SHALL NOT be modified, reordered, or removed (the append-only rule binds from the v1 baseline forward)
+- **WHEN** `persistedVersion = 1`, `CURRENT_SCHEMA_VERSION = 8`, and `migrations` contains entries with `toVersion: 2` through `toVersion: 8`
+- **THEN** the runner applies all seven in order, validation succeeds against the v8 schema, and the envelope is written back as `{ schemaVersion: 8, state }`
 
 ### Requirement: Migration runner applies pending migrations in order
 
 On every SW boot, the storage layer SHALL invoke `runMigrations(raw, persistedVersion)` which iterates `migrations` in array order, applies the `migrate` function of every entry whose `toVersion > persistedVersion`, threading each output as the input to the next, and stops when there are no more entries to apply.
 
-After the runner returns, the resulting object SHALL be validated against the Zod schema for the **current** schema version, `AppStateV<CURRENT_SCHEMA_VERSION>Schema`. At `CURRENT_SCHEMA_VERSION = 7` the validator is `AppStateV7Schema` (the v6 schema with `smartItemBindings` slots widened from bare `TabId` numbers to `{ tabId: TabId; allowGlob: string }` objects). Because the runner migrates the payload UP to `CURRENT_SCHEMA_VERSION` before validation, the validator MUST be the current-version schema; validating against any older-version schema SHALL be treated as a defect — it would reject the current nested-instance / `PinNode` shape and corrupt every restart. If `persistedVersion < CURRENT_SCHEMA_VERSION` and validation succeeds, the storage layer SHALL write the new envelope `{ schemaVersion: CURRENT_SCHEMA_VERSION, state }` back to `lunma.state` before returning.
-
-If `persistedVersion === CURRENT_SCHEMA_VERSION`, no write-back SHALL occur on boot.
-
-#### Scenario: Persisted version equals current — no migrations run
-
-- **WHEN** `persistedVersion === CURRENT_SCHEMA_VERSION` and the payload validates
-- **THEN** `runMigrations` SHALL return the input unchanged
-- **AND** no write to `lunma.state` SHALL occur
-
-#### Scenario: Pending migrations apply in order (runner contract)
-
-- **WHEN** `persistedVersion = 1`, `CURRENT_SCHEMA_VERSION = 7`, and `migrations` contains entries with `toVersion: 2`, `toVersion: 3`, `toVersion: 4`, `toVersion: 5`, `toVersion: 6`, and `toVersion: 7`
-- **THEN** the runner SHALL invoke the `toVersion: 2` migration first, threading each output into the next entry
-- **AND** the final result SHALL be validated against the current schema
-- **AND** the migrated envelope SHALL be written back to `lunma.state` before `loadState` returns
-
-#### Scenario: Migrations skip entries already at or below persisted version (runner contract)
-
-- **WHEN** `persistedVersion = 2` and `migrations` contains entries with `toVersion: 2`, `toVersion: 3`, `toVersion: 4`, `toVersion: 5`, `toVersion: 6`, and `toVersion: 7`
-- **THEN** the runner SHALL skip the `toVersion: 2` entry
-- **AND** apply only the `toVersion: 3`, `toVersion: 4`, `toVersion: 5`, `toVersion: 6`, and `toVersion: 7` entries, in order
+After the runner returns, the resulting object SHALL be validated against the Zod schema for the current schema version, `AppStateV8Schema`. `AppStateV8Schema` is the v7 schema with `PinNodeSchema`'s smart branch updated to use `SmartSourceConfigSchema[]` and with `SmartItemBindingsSchema` using namespaced string item keys. If `persistedVersion < CURRENT_SCHEMA_VERSION` and validation succeeds, the storage layer SHALL write the new envelope `{ schemaVersion: 8, state }` back to `lunma.state` before returning. If `persistedVersion === CURRENT_SCHEMA_VERSION`, no write-back SHALL occur on boot.
 
 #### Scenario: Current-shape state round-trips without spurious corruption
 
-- **GIVEN** a persisted state at `CURRENT_SCHEMA_VERSION` containing a Space with a materialized nested `spaceInstancesByWindow[windowId][spaceId]` instance, a pinned tab (`pinnedBySpace[spaceId]` holding a `PinNode`, including a `smart` node of any source), and a populated `smartItemBindings` entry
+- **GIVEN** a persisted state at `CURRENT_SCHEMA_VERSION = 8` containing a smart PinNode with `sources: [...]` and a populated `smartItemBindings` entry with namespaced keys
 - **WHEN** `readPersistedState` validates it after migration
-- **THEN** validation SHALL succeed and `readPersistedState` SHALL return `{ kind: 'ok', state }` with the Space, the nested instance, the pins, and the bindings intact
+- **THEN** validation SHALL succeed and `readPersistedState` SHALL return `{ kind: 'ok', state }` with all data intact
 - **AND** no `__corrupt_backup_*` record SHALL be written
 
 ### Requirement: Corruption quarantine and fallback
@@ -517,3 +497,4 @@ included in the schema-to-type coherence check.
 
 - **WHEN** `loadState()` reads a persisted envelope written before this slice existed
 - **THEN** `smartReadState` SHALL default to `{}` and validate under the current-version schema
+
