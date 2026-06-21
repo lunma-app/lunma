@@ -86,7 +86,7 @@ async function lockToSite(sidebar: Page): Promise<void> {
   const editor = sidebar.getByTestId('tab-boundary-editor');
   await expect(editor).toBeVisible();
   await editor.getByText('On', { exact: true }).click();
-  await expect(editor.getByTestId('boundary-allow-list')).toBeVisible();
+  await expect(editor.getByTestId('chip')).toBeVisible();
 }
 
 test('the menu drills into the boundary editor, seeds the domain, and back returns', async ({
