@@ -97,20 +97,24 @@ jobs:
           REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
           CWS_PRIVATE_KEY: ${{ secrets.CWS_PRIVATE_KEY }}
         run: |
-          TOKEN=$(curl -sf -X POST https://oauth2.googleapis.com/token \
-            -d "client_id=${CLIENT_ID}&client_secret=${CLIENT_SECRET}&refresh_token=${REFRESH_TOKEN}&grant_type=refresh_token" \
-            | jq -r .access_token)
+          TOKEN_RESP=$(curl -s -X POST https://oauth2.googleapis.com/token \
+            -d "client_id=${CLIENT_ID}&client_secret=${CLIENT_SECRET}&refresh_token=${REFRESH_TOKEN}&grant_type=refresh_token")
+          TOKEN=$(printf '%s' "$TOKEN_RESP" | jq -r .access_token)
+          if [[ -z "$TOKEN" || "$TOKEN" == "null" ]]; then
+            echo "::error::OAuth token request failed: $(printf '%s' "$TOKEN_RESP" | jq -c .)"
+            exit 1
+          fi
 
           SIG_HEADER=()
           if [[ "${{ env.HAS_CWS_KEY }}" == "true" ]]; then
-            echo "$CWS_PRIVATE_KEY" > /tmp/cws-private.pem
+            printf '%s' "$CWS_PRIVATE_KEY" | tr -d '\r' > /tmp/cws-private.pem
             openssl dgst -sha256 -sign /tmp/cws-private.pem -out /tmp/cws-sig.bin "$ASSET"
             SIG=$(base64 -w0 /tmp/cws-sig.bin)
             SIG_HEADER=(-H "x-goog-signature: ${SIG}")
             rm -f /tmp/cws-private.pem /tmp/cws-sig.bin
           fi
 
-          curl -sf -X PUT \
+          curl --no-progress-meter -X PUT \
             -H "Authorization: Bearer ${TOKEN}" \
             -H "x-goog-api-version: 2" \
             -H "Content-Type: application/zip" \
@@ -119,7 +123,7 @@ jobs:
             "https://www.googleapis.com/upload/chromewebstore/v1.1/items/${EXTENSION_ID}" \
             | tee /dev/stderr | jq -e '.uploadState == "SUCCESS"'
 
-          curl -sf -X POST \
+          curl --no-progress-meter -X POST \
             -H "Authorization: Bearer ${TOKEN}" \
             -H "x-goog-api-version: 2" \
             -H "Content-Length: 0" \
