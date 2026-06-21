@@ -168,7 +168,7 @@
       "location": "apps/extension/e2e/launcher-overlay.spec.ts — no result-selection or search-navigation assertions",
       "action": "Extend launcher-overlay.spec.ts (or add launcher-search.spec.ts) to dispatch a query, assert a non-empty result list, and verify selecting a result focuses the existing tab rather than duplicating it.",
       "rationale": "Real-Chrome history/bookmarks integration and dedup-on-select are never exercised end-to-end, leaving the launcher's primary purpose untested in the real environment.",
-      "status": "skipped"
+      "status": "resolved"
     },
     {
       "rank": 18,
@@ -378,7 +378,7 @@
       "location": "apps/extension biome.json:179-224",
       "action": "Consolidate the two background/** override entries in biome.json into one using includes exclusions and remove the redundant !**/handlers patterns.",
       "rationale": "Config-auditability cleanup with no current functional gap, lowest type-safety priority.",
-      "status": "skipped"
+      "status": "resolved"
     },
     {
       "rank": 39,
