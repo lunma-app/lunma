@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.1](https://github.com/lunma-app/lunma/compare/v0.2.0...v0.2.1) (2026-06-21)
+
+
+### Bug Fixes
+
+* close recurring type-safety and security gaps ([85e2b2c](https://github.com/lunma-app/lunma/commit/85e2b2cfdf1eeedd51fd8465844f3ce5705b2adb))
+* **e2e:** add data-name to chip; fix invalid color in test ([941e179](https://github.com/lunma-app/lunma/commit/941e179c2c4ab5a8c9b38c56f8a74cdfa3597c38))
+* **e2e:** bound ctx.waitForEvent('page') with 2 s timeout ([864b4c0](https://github.com/lunma-app/lunma/commit/864b4c0183c005f55bcd86fdb3954c4f61eff69a))
+* **e2e:** fix invalid icon and cap SW wait in workspace-creation ([07795af](https://github.com/lunma-app/lunma/commit/07795af790162c51cb3909b5b96754851ba92755))
+* **launcher:** guard overlay message listener against foreign-origin senders and validate SW suggestion payload ([947fbb2](https://github.com/lunma-app/lunma/commit/947fbb2d8f35b87300b08f123da2d4ed14b9ed9a))
+* remove redundant SpaceColor casts, guard async onMount, narrow spy types ([faa41d3](https://github.com/lunma-app/lunma/commit/faa41d3543fdc8dcda26a09b3de07afc8fbd3010))
+
 ## [0.2.0](https://github.com/lunma-app/lunma/compare/v0.1.1...v0.2.0) (2026-06-21)
 
 
