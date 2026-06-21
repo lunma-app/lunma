@@ -198,7 +198,7 @@ test('a created Space survives a full browser restart', async () => {
         .catch(() => undefined),
     {
       type: CMD,
-      cmd: { kind: 'createSpace', payload: { name: 'Garden', color: 'teal', icon: 'leaf', windowId } },
+      cmd: { kind: 'createSpace', payload: { name: 'Garden', color: 'cyan', icon: 'leaf', windowId } },
     },
   );
 

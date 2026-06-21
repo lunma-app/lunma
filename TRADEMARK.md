@@ -1,9 +1,5 @@
 # Lunma Trademark & Brand Policy
 
-> **DRAFT.** A starting policy; have a lawyer review before the repository goes
-> public. Securing the "Lunma" mark (or establishing common-law rights by being
-> the first to publish) is a pre-launch task.
-
 The Lunma **code** is open source under the Apache License 2.0 — you are free to
 use, modify, and redistribute it. The Lunma **name, the "Lunma" wordmark, and the
 logo** are different: they identify *this* project and its official builds, and
@@ -36,8 +32,9 @@ site (`lunma.app`) and repository.
 
 The only official Lunma is the Chrome Web Store / Edge Add-ons listing linked from
 `lunma.app` and this repository, published under the Project Owner's verified
-developer account. When the listings are live, their extension IDs will be
-documented on the site so you can confirm you have the real one.
+developer account. The store listings are not yet live. The official Chrome extension ID is
+`efdgelbfagbcjnobncgoodbekgcihlle`; once the listings are live you can use it
+to confirm you have the real one.
 
 ## Reporting impersonation
 

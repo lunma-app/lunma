@@ -186,6 +186,7 @@ function openOptions(): void {
           class:dragging={isDragSource(space)}
           data-testid="space-chip"
           data-space-id={space.id}
+          data-name={space.name}
           data-active={isActive ? 'true' : 'false'}
           aria-current={isActive ? 'true' : undefined}
           aria-label={isActive ? `Edit ${space.name}` : `Activate ${space.name}`}
