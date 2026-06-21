@@ -114,10 +114,18 @@ function applyTint(tint: Settings['tint']): void {
   document.documentElement.dataset.tint = tint;
 }
 
-onMount(async () => {
-  settings = await readSettings();
-  applyDensity(settings.density);
-  applyTint(settings.tint);
+onMount(() => {
+  let cancelled = false;
+  void (async () => {
+    const s = await readSettings();
+    if (cancelled) return;
+    settings = s;
+    applyDensity(s.density);
+    applyTint(s.tint);
+  })();
+  return () => {
+    cancelled = true;
+  };
 });
 
 // Deep-link by hash: scroll the matching element into view on load and on hash

@@ -80,11 +80,11 @@ describe('registerStateSnapshotHandler', () => {
       'onWindowOpened',
       'onWindowClosed',
     ] as const;
+    type MutatorKey = (typeof mutatorNames)[number];
+    const storeForSpy = store as Pick<LunmaStore, MutatorKey>;
     const spies = mutatorNames.map((name) => {
-      // biome-ignore lint/suspicious/noExplicitAny: spy on a known-good mutator name
-      const spy = vi.spyOn(store as any, name);
-      // biome-ignore lint/suspicious/noExplicitAny: mock impl is no-op
-      (spy as any).mockImplementation(() => undefined);
+      const spy = vi.spyOn(storeForSpy, name);
+      spy.mockImplementation(() => undefined);
       return spy;
     });
     registerStateSnapshotHandler(store);

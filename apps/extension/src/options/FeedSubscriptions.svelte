@@ -30,11 +30,17 @@ let importError = $state<string | null>(null);
 let actionsEl = $state<HTMLElement>();
 let confirmRowEl = $state<HTMLElement>();
 
-onMount(async () => {
-  // D8: read at mount to determine export button visibility.
-  const persisted = await readPersistedState();
-  if (persisted.kind !== 'ok' && persisted.kind !== 'salvaged') return;
-  rssNodes = collectRssNodes(persisted.state);
+onMount(() => {
+  let cancelled = false;
+  void (async () => {
+    // D8: read at mount to determine export button visibility.
+    const persisted = await readPersistedState();
+    if (cancelled || (persisted.kind !== 'ok' && persisted.kind !== 'salvaged')) return;
+    rssNodes = collectRssNodes(persisted.state);
+  })();
+  return () => {
+    cancelled = true;
+  };
 });
 
 function collectRssNodes(state: AppState): SmartFolderNode[] {

@@ -115,8 +115,8 @@ interface Panel {
   on: string;
 }
 const panelOf = (space: Space): Panel => {
-  const ok = colourToOklch(space.color as SpaceColor);
-  return { space, hue: ok.h, chroma: ok.c, l: ok.l, on: colourToOn(space.color as SpaceColor) };
+  const ok = colourToOklch(space.color);
+  return { space, hue: ok.h, chroma: ok.c, l: ok.l, on: colourToOn(space.color) };
 };
 
 // ONE panel per Space — all pre-rendered (the spike model), so a commit is a PURE
@@ -156,13 +156,11 @@ const activeIndex = $derived(
 const centredSpace = $derived(
   centredId === null ? null : (store.state.spaces.find((s) => s.id === centredId) ?? null),
 );
-const centredOklch = $derived(
-  centredSpace ? colourToOklch(centredSpace.color as SpaceColor) : null,
-);
+const centredOklch = $derived(centredSpace ? colourToOklch(centredSpace.color) : null);
 const spaceHue = $derived(centredOklch?.h ?? DEFAULT_HUE);
 const spaceChroma = $derived(centredOklch?.c ?? SPACE_CHROMA);
 const spaceL = $derived(centredOklch?.l ?? DEFAULT_L);
-const spaceOn = $derived(centredSpace ? colourToOn(centredSpace.color as SpaceColor) : DEFAULT_ON);
+const spaceOn = $derived(centredSpace ? colourToOn(centredSpace.color) : DEFAULT_ON);
 let stageEl: HTMLElement | undefined = $state();
 let trackEl: HTMLElement | undefined = $state();
 // Track position in px, written IMPERATIVELY to the DOM each rAF frame (exactly
