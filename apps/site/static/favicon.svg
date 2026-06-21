@@ -1,27 +1,34 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none" role="img" aria-label="Lunma">
   <defs>
-    <radialGradient id="glow" cx="50%" cy="56%" r="50%">
-      <stop offset="0%" stop-color="#f2b65e" stop-opacity="0.7" />
-      <stop offset="58%" stop-color="#f2b65e" stop-opacity="0.16" />
-      <stop offset="100%" stop-color="#f2b65e" stop-opacity="0" />
+    <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#F0912F" stop-opacity="0.55" />
+      <stop offset="40%" stop-color="#F0912F" stop-opacity="0.2475" />
+      <stop offset="100%" stop-color="#F0912F" stop-opacity="0" />
     </radialGradient>
-    <linearGradient id="ember" x1="16" y1="12" x2="16" y2="22" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#ffce7a" />
-      <stop offset="100%" stop-color="#e09a3f" />
+    <linearGradient id="cres" x1="0" y1="0" x2="0.25" y2="1">
+      <stop offset="0%" stop-color="#FFE3B8" />
+      <stop offset="55%" stop-color="#FFB35E" />
+      <stop offset="100%" stop-color="#E07E22" />
     </linearGradient>
+    <radialGradient id="dot" cx="42%" cy="38%" r="72%">
+      <stop offset="0%" stop-color="#FFE3B8" />
+      <stop offset="45%" stop-color="#FFB35E" />
+      <stop offset="100%" stop-color="#E07E22" />
+    </radialGradient>
+    <!-- The crescent: a warm disc with an offset disc bitten out. -->
+    <mask id="cmask">
+      <rect x="0" y="0" width="200" height="200" fill="black" />
+      <circle cx="96" cy="102" r="64" fill="white" />
+      <circle cx="120" cy="86" r="54" fill="black" />
+    </mask>
   </defs>
   <!-- Dark warm substrate, matching the brand --bg. -->
-  <rect width="32" height="32" rx="8.5" fill="#201b15" />
-  <!-- The alcove arch — a lit recess cradling the ember. -->
-  <path
-    d="M8.5 25.5 V14.5 a7.5 7.5 0 0 1 15 0 V25.5"
-    fill="none"
-    stroke="#e0a24f"
-    stroke-opacity="0.45"
-    stroke-width="1.8"
-    stroke-linecap="round"
-  />
-  <!-- The ember and its hue-glow halo — the central brand motif. -->
-  <circle cx="16" cy="17" r="10" fill="url(#glow)" />
-  <circle cx="16" cy="17" r="4.6" fill="url(#ember)" />
+  <rect width="200" height="200" rx="53" fill="#201b15" />
+  <g transform="translate(20 20) scale(0.8)">
+    <circle cx="108" cy="96" r="96" fill="url(#halo)" />
+    <g mask="url(#cmask)"><rect x="0" y="0" width="200" height="200" fill="url(#cres)" /></g>
+    <!-- The ember in the crescent's mouth — the same dot that ends the wordmark. -->
+    <circle cx="124" cy="92" r="30" fill="url(#halo)" />
+    <circle cx="124" cy="92" r="14" fill="url(#dot)" />
+  </g>
 </svg>
