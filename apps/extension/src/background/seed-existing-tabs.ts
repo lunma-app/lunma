@@ -44,6 +44,9 @@ export function seedExistingTabs(
   // The `-1` "no live group" sentinel is skipped (many instances may share it).
   // Built once up front: instances created during the loop are the active
   // Space's (groupId `-1`), which contribute no mapping anyway.
+  // spaceByGroupByWindow is rebuilt from scratch on every SW boot (O(n×m) over
+  // windows × spaces). Caching it in store.state would avoid the rebuild, but
+  // the map is small and this runs once per boot, so it hasn't been worth it.
   const spaceByGroupByWindow = new Map<number, Map<number, SpaceId>>();
   for (const [windowIdStr, windowMap] of Object.entries(store.state.spaceInstancesByWindow)) {
     if (!windowMap) continue;

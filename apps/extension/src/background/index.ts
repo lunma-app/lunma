@@ -243,6 +243,9 @@ chrome.runtime.onMessage.addListener((raw: unknown, sender: chrome.runtime.Messa
   const url = m.url;
   const windowId = sender.tab?.windowId;
   if (typeof url !== 'string' || windowId === undefined) return;
+  // URL is forwarded to openUrl, which validates http(s) scheme before opening —
+  // that sink is the authoritative scheme guard. Add an explicit check here too
+  // if openUrl is ever refactored to trust its callers instead of re-validating.
   enqueueAfterBoot({
     source: 'sidebar',
     kind: 'openUrl',

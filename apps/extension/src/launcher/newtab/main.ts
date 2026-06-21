@@ -47,6 +47,9 @@ async function boot(): Promise<void> {
   // + data-tint), the way the sidebar boot seeds App's tint. The same read
   // builds the Tab-to-search engine registry passed to NewTab (captured at mount,
   // like tint; an options edit is reflected on the next page open).
+  // readSettings() is serial before mount, same pattern as the sidebar. Lower
+  // impact here (transient page), but a Promise.all with applyShowGlares would
+  // be the same fix if this surface's boot latency ever needs tuning.
   const initialSettings = await readSettings();
   // Apply the saved density BEFORE mount so the first painted result list is at
   // the right rhythm — no Normal→Comfort flash (mirrors the sidebar boot).

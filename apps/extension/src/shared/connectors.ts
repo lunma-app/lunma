@@ -13,6 +13,10 @@ import { log } from './logger';
  * Token hygiene: values are never logged, never included in any state
  * broadcast, and never echoed back into the options UI (the Connectors card
  * shows a token-set indicator instead). This module is the ONLY accessor.
+ *
+ * Tokens are stored plaintext — an inherent MV3 constraint. The Web Crypto
+ * API can only XOR-encrypt against keys that are themselves in local storage,
+ * which provides no real confidentiality. Accepted platform limitation.
  */
 
 const CONNECTORS_KEY = 'lunma.connectors';

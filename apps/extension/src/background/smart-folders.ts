@@ -3,6 +3,10 @@ import { hasHostPermissions, onPermissionsChange } from '../shared/permissions';
 import type { LunmaStore } from '../shared/store.svelte';
 import type { AppState, FolderId, PinNode, SmartFolderRuntime, SmartSource } from '../shared/types';
 import type { ConnectorCaches, SourceConnector } from './connectors/connector';
+// All 4 connectors are eagerly imported on every SW boot (~52 KB / ~11 KB gzip
+// total, even for users who have enabled none). Converting to a lazy registry
+// (dynamic import on first use of each source) is the straightforward fix when
+// SW boot budget becomes a concern.
 import { githubConnector } from './connectors/github';
 import { gitlabConnector } from './connectors/gitlab';
 import { jiraConnector } from './connectors/jira';

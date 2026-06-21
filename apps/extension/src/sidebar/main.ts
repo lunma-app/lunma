@@ -50,6 +50,9 @@ async function boot(): Promise<void> {
   // Apply the saved density BEFORE mount so the first paint is at the right
   // rhythm — no Normal→Compact flash (App's onMount runs after first paint).
   // Capture the read so the tint seeds App's prop too.
+  // readSettings() is serial before mount. Parallelising with requestStateSnapshot
+  // via Promise.all would cut cold-start latency, but density must be applied
+  // pre-mount to prevent a layout flash — so only non-layout settings can move.
   const initialSettings = await readSettings();
   applyDensity(initialSettings);
   // Seed the sidebar's live mirror of the pinned-tab boundary default so the

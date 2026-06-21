@@ -20,6 +20,10 @@
    * app's `.sidebar` / `.home` rebind `--base-hue` to `--space-h`. */
   --base-hue: var(--space-h, 62);
 
+  /* Base tokens below are intentionally hard-coded: this shadow root cannot
+   * inherit from the host document's tokens.css. Values must stay in sync with
+   * @lunma/tokens manually; a parity test (à la space-palette-parity.test.ts)
+   * would catch silent drift — worth adding if this block grows. */
   --surface: oklch(0.2 0 0);
   --surface-2: oklch(0.23 0 0);
   --hover: oklch(0.255 0 0);

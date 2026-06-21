@@ -377,7 +377,11 @@ export async function writeAllSettings(settings: Settings): Promise<void> {
 
 /** Merge a single field into the stored settings object and persist it. Never
  * rejects to the caller: a storage failure is caught and logged (the in-memory
- * selection still applies locally so the user isn't blocked). */
+ * selection still applies locally so the user isn't blocked).
+ *
+ * Each call re-reads all settings from storage before writing the single changed
+ * key. An in-memory cache shared with readSettings() would avoid the extra sync
+ * round-trip, but settings writes are infrequent enough that it hasn't mattered. */
 export async function writeSetting<K extends keyof Settings>(
   key: K,
   value: Settings[K],

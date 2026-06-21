@@ -34,6 +34,9 @@ import FirstRunNotice from './FirstRunNotice.svelte';
 import { openOptionsAt } from './open-options';
 import PinnedTabs from './PinnedTabs.svelte';
 import SectionHeader from './SectionHeader.svelte';
+// SmartFolderEditor (and any future conditionally-shown panel) is statically
+// imported — no code splitting. A dynamic import would reduce first-parse cost
+// but needs bundle-size measurement before it's worth the complexity.
 import SmartFolderEditor from './SmartFolderEditor.svelte';
 import SpaceSwitcher from './SpaceSwitcher.svelte';
 import { sidebarGlares } from './show-glares-state.svelte';
