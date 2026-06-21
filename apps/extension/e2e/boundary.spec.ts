@@ -113,6 +113,7 @@ test('the menu drills into the boundary editor, seeds the domain, and back retur
 
   // On seeds the tab's registrable domain (localhost) as a chip.
   await editor.getByText('On', { exact: true }).click();
+  await expect(editor.getByTestId('chip')).toBeVisible();
   await expect(editor.getByTestId('chip')).toHaveText(/localhost/);
 
   // Back returns to the action list (editor gone).
