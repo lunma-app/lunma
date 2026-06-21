@@ -81,16 +81,16 @@ jobs:
           asset="lunma-${{ steps.release.outputs['apps/extension--version'] }}.zip"
           mv apps/extension/extension.zip "$asset"
           gh release upload "${{ steps.release.outputs['apps/extension--tag_name'] }}" "$asset" --clobber
-      # Upload + publish to the Chrome Web Store via the REST API directly (not
-      # chrome-webstore-upload-cli, which has no signing support). When
-      # CWS_PRIVATE_KEY is set the zip is RSA-SHA256-signed and the signature
-      # sent in x-goog-signature — required once Verified CRX uploads is opted
-      # in. Skipped until CWS_EXTENSION_ID is set.
+      # Pack the ZIP as a signed CRX3 (Verified CRX uploads is opted in — the
+      # store requires a CRX signed with the registered private key) then upload
+      # via the Verified CRX protocol. Both CWS_EXTENSION_ID and CWS_PRIVATE_KEY
+      # must be set; the step is skipped otherwise.
       # See the openspec change `extension-store-publish` + docs/releasing.md.
-      - if: ${{ steps.release.outputs['apps/extension--release_created'] == 'true' && env.HAS_CWS == 'true' }}
-        name: Publish lunma-${{ steps.release.outputs['apps/extension--version'] }}.zip to the Chrome Web Store
+      - if: ${{ steps.release.outputs['apps/extension--release_created'] == 'true' && env.HAS_CWS == 'true' && env.HAS_CWS_KEY == 'true' }}
+        name: Publish lunma-${{ steps.release.outputs['apps/extension--version'] }}.crx to the Chrome Web Store
         env:
-          ASSET: lunma-${{ steps.release.outputs['apps/extension--version'] }}.zip
+          ZIP: lunma-${{ steps.release.outputs['apps/extension--version'] }}.zip
+          VERSION: ${{ steps.release.outputs['apps/extension--version'] }}
           EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
           CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
@@ -105,23 +105,24 @@ jobs:
             exit 1
           fi
 
-          SIG_HEADER=()
-          if [[ "${{ env.HAS_CWS_KEY }}" == "true" ]]; then
-            printf '%s' "$CWS_PRIVATE_KEY" | tr -d '\r' > /tmp/cws-private.pem
-            openssl dgst -sha256 -sign /tmp/cws-private.pem -out /tmp/cws-sig.bin "$ASSET"
-            SIG=$(base64 -w0 /tmp/cws-sig.bin)
-            SIG_HEADER=(-H "x-goog-signature: ${SIG}")
-            rm -f /tmp/cws-private.pem /tmp/cws-sig.bin
-          fi
+          # Unpack the release ZIP and re-pack as a signed CRX3.
+          unzip -q "$ZIP" -d /tmp/lunma-ext
+          printf '%s' "$CWS_PRIVATE_KEY" | tr -d '\r' > /tmp/cws-private.pem
+          google-chrome --pack-extension=/tmp/lunma-ext \
+            --pack-extension-key=/tmp/cws-private.pem \
+            --no-sandbox
+          rm -f /tmp/cws-private.pem
+          CRX=/tmp/lunma-ext.crx
 
           curl --no-progress-meter -X PUT \
             -H "Authorization: Bearer ${TOKEN}" \
             -H "x-goog-api-version: 2" \
-            -H "Content-Type: application/zip" \
-            "${SIG_HEADER[@]}" \
-            -T "$ASSET" \
+            -H "X-Goog-Upload-Protocol: raw" \
+            -H "X-Goog-Upload-File-Name: lunma-${VERSION}.crx" \
+            -T "$CRX" \
             "https://www.googleapis.com/upload/chromewebstore/v1.1/items/${EXTENSION_ID}" \
             | tee /dev/stderr | jq -e '.uploadState == "SUCCESS"'
+          rm -rf "$CRX" /tmp/lunma-ext
 
           curl --no-progress-meter -X POST \
             -H "Authorization: Bearer ${TOKEN}" \
