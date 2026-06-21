@@ -47,6 +47,9 @@ const HISTORY_SCHEMA = {
           dimension: { type: 'string' },
           severity: { type: 'string' },
           location: { type: 'string' },
+          action: { type: 'string' },
+          rationale: { type: 'string' },
+          status: { type: 'string' },
         },
         required: ['title', 'dimension'],
       },
@@ -70,7 +73,7 @@ const SYNTHESIS_SCHEMA = {
           location: { type: 'string' },
           action: { type: 'string' },
           rationale: { type: 'string' },
-          status: { type: 'string', enum: ['new', 'recurring'] },
+          status: { type: 'string', enum: ['new', 'recurring', 'skipped'] },
         },
         required: ['rank', 'dimension', 'title', 'severity', 'action', 'rationale', 'status'],
       },
@@ -288,8 +291,10 @@ Do not create or modify any files. Read only.`,
 )
 
 const previousItems = historyResult?.found ? (historyResult.items ?? []) : []
+const skippedItems = previousItems.filter(i => i.status === 'skipped')
+const activeItems = previousItems.filter(i => i.status !== 'skipped')
 log(previousItems.length > 0
-  ? `Loaded ${previousItems.length} findings from previous review`
+  ? `Loaded ${previousItems.length} findings from previous review (${skippedItems.length} skipped, carried forward)`
   : 'No previous review found — this will be the baseline')
 
 // ── Scan ──────────────────────────────────────────────────────────────────────
@@ -322,8 +327,11 @@ const synthesis = await agent(
 Current scan findings by dimension:
 ${JSON.stringify(populated, null, 2)}
 
-Previous review findings (for comparison):
-${previousItems.length > 0 ? JSON.stringify(previousItems, null, 2) : 'None — this is the first run, mark all findings as "new".'}
+Previously accepted/skipped findings (DO NOT re-raise these):
+${skippedItems.length > 0 ? JSON.stringify(skippedItems.map(i => ({ title: i.title, dimension: i.dimension, location: i.location, rationale: i.rationale })), null, 2) : 'None.'}
+
+Previous open findings (for recurring detection):
+${activeItems.length > 0 ? JSON.stringify(activeItems, null, 2) : 'None — this is the first run, mark all findings as "new".'}
 
 Rules:
 - Rank ALL current findings (1 = highest priority). Include every finding — do not drop any.
@@ -332,8 +340,9 @@ Rules:
 - 'action' must be concrete: what to change, in which file. One sentence.
 - 'rationale' must say WHY this rank. One sentence.
 - Preserve the original 'location' field when present.
-- 'status': mark 'recurring' if a finding with the same or very similar title/location exists in the previous review; mark 'new' otherwise.
-- 'resolvedItems': list findings from the previous review that do NOT appear in the current scan (i.e. they were fixed). Include title, dimension, and location.`,
+- 'status': mark 'recurring' if a finding matches a previous open finding; mark 'new' otherwise.
+- SUPPRESSION RULE: if a current scan finding matches a previously-skipped finding (same title or same location), do NOT include it in the output at all. Those trade-offs were reviewed and accepted; surfacing them again is noise. Only override this if the severity has visibly escalated (e.g. a new code path makes an accepted risk exploitable).
+- 'resolvedItems': list findings from the previous open review that do NOT appear in the current scan (i.e. they were fixed). Include title, dimension, and location.`,
   {
     label: 'Rank & Synthesize',
     phase: 'Synthesize',
@@ -351,13 +360,21 @@ log(`${newCount} new · ${recurringCount} recurring · ${resolvedCount} resolved
 
 phase('Persist')
 
+// Merge: current synthesis findings + carried-forward skipped items.
+// Skipped items are never re-ranked; they keep their original rank/rationale
+// and status='skipped' so future runs continue to suppress them.
+const persistedItems = [
+  ...(synthesis?.items ?? []),
+  ...skippedItems,
+]
+
 await agent(
   `Write the following JSON to the file at path: ${HISTORY_PATH}
 
 Overwrite the file if it exists. Create it if it does not.
 
 Content to write (write exactly this, nothing else):
-${JSON.stringify({ items: synthesis?.items ?? [] }, null, 2)}`,
+${JSON.stringify({ items: persistedItems }, null, 2)}`,
   { label: 'Persist results', phase: 'Persist' }
 )
 
