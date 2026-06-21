@@ -1,6 +1,6 @@
 ---
-name: Help / Support
-about: Something isn't working or you need help — start here
+name: Bug or question
+about: Something isn't working, or you have a question — start here
 title: ""
 labels: ["support", "cws"]
 ---
