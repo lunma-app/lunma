@@ -35,6 +35,10 @@ jobs:
       # store-publish step so releases still succeed before the store is armed.
       # (secrets can't be read directly in `if:`, so surface it as an env flag.)
       HAS_CWS: ${{ secrets.CWS_EXTENSION_ID != '' }}
+      # 'true' once the CWS_PRIVATE_KEY secret is set (Verified CRX uploads).
+      # Upload is signed when true; unsigned otherwise (store rejects unsigned
+      # uploads once Verified CRX is opted in, so set this before opting in).
+      HAS_CWS_KEY: ${{ secrets.CWS_PRIVATE_KEY != '' }}
     steps:
       # Pinned to a major (consistent with the other workflows' action pinning);
       # CI-only, least-privilege token, so the action has no runtime blast radius.
@@ -77,17 +81,47 @@ jobs:
           asset="lunma-${{ steps.release.outputs['apps/extension--version'] }}.zip"
           mv apps/extension/extension.zip "$asset"
           gh release upload "${{ steps.release.outputs['apps/extension--tag_name'] }}" "$asset" --clobber
-      # Publish the same zip to the Chrome Web Store, when configured. The
-      # no-subcommand default of chrome-webstore-upload is upload + publish
-      # (auto-publish → Google's review queue). Run via pnpm dlx (pinned, no dep,
-      # matching the wrangler deploy pattern). Skipped until CWS_EXTENSION_ID is
-      # set, so releases still succeed before the store listing is bootstrapped.
+      # Upload + publish to the Chrome Web Store via the REST API directly (not
+      # chrome-webstore-upload-cli, which has no signing support). When
+      # CWS_PRIVATE_KEY is set the zip is RSA-SHA256-signed and the signature
+      # sent in x-goog-signature — required once Verified CRX uploads is opted
+      # in. Skipped until CWS_EXTENSION_ID is set.
       # See the openspec change `extension-store-publish` + docs/releasing.md.
       - if: ${{ steps.release.outputs['apps/extension--release_created'] == 'true' && env.HAS_CWS == 'true' }}
         name: Publish lunma-${{ steps.release.outputs['apps/extension--version'] }}.zip to the Chrome Web Store
         env:
+          ASSET: lunma-${{ steps.release.outputs['apps/extension--version'] }}.zip
           EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
           CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
           REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
-        run: pnpm dlx --package=chrome-webstore-upload-cli@4.0.1 chrome-webstore-upload --source "lunma-${{ steps.release.outputs['apps/extension--version'] }}.zip"
+          CWS_PRIVATE_KEY: ${{ secrets.CWS_PRIVATE_KEY }}
+        run: |
+          TOKEN=$(curl -sf -X POST https://oauth2.googleapis.com/token \
+            -d "client_id=${CLIENT_ID}&client_secret=${CLIENT_SECRET}&refresh_token=${REFRESH_TOKEN}&grant_type=refresh_token" \
+            | jq -r .access_token)
+
+          SIG_HEADER=()
+          if [[ "${{ env.HAS_CWS_KEY }}" == "true" ]]; then
+            echo "$CWS_PRIVATE_KEY" > /tmp/cws-private.pem
+            openssl dgst -sha256 -sign /tmp/cws-private.pem -out /tmp/cws-sig.bin "$ASSET"
+            SIG=$(base64 -w0 /tmp/cws-sig.bin)
+            SIG_HEADER=(-H "x-goog-signature: ${SIG}")
+            rm -f /tmp/cws-private.pem /tmp/cws-sig.bin
+          fi
+
+          curl -sf -X PUT \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "x-goog-api-version: 2" \
+            -H "Content-Type: application/zip" \
+            "${SIG_HEADER[@]}" \
+            -T "$ASSET" \
+            "https://www.googleapis.com/upload/chromewebstore/v1.1/items/${EXTENSION_ID}" \
+            | tee /dev/stderr | jq -e '.uploadState == "SUCCESS"'
+
+          curl -sf -X POST \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "x-goog-api-version: 2" \
+            -H "Content-Length: 0" \
+            "https://www.googleapis.com/chromewebstore/v1.1/items/${EXTENSION_ID}/publish" \
+            | tee /dev/stderr | jq -e '[.status[]] | map(test("^OK")) | all'
