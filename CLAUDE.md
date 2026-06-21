@@ -58,6 +58,13 @@ workspace root runs `pnpm -r verify`, fanning out to every package:
 
 Run `pnpm test:e2e` (root, delegates to the extension) for the Playwright smoke.
 
+## Git commits
+
+Always use `git commit -s` (or `--signoff`). The DCO check is a required PR
+status check — any commit without `Signed-off-by: Name <email>` will fail it.
+The `prepare-commit-msg` hook auto-appends the trailer as a fallback, but `-s`
+is the authoritative signal.
+
 ## OpenSpec workflow
 
 Non-trivial changes go through the `openspec-*` skills — they inject the full
