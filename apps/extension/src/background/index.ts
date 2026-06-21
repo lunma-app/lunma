@@ -551,9 +551,16 @@ async function toggleLauncherOverlay(): Promise<void> {
  * safe default.
  */
 async function openNewTabLauncher(windowId: number | undefined): Promise<void> {
+  const url = chrome.runtime.getURL(NEWTAB_PAGE_PATH);
   try {
     const tabs = await chrome.tabs.query(windowId === undefined ? {} : { windowId });
-    const existing = tabs.find((t) => t.id !== undefined && isNewTabUrl(t.url));
+    // Match only tabs already resolved to the extension's explicit NTP URL — not
+    // bare `chrome://newtab` tabs, which may be stale browser-default pages from
+    // before the extension's override became active, or ones Chrome failed to
+    // redirect. Focusing those would show the browser's default NTP instead of the
+    // launcher. The extension always opens its NTP via the explicit URL (see create
+    // call below), so resolved launchers will always appear under that URL.
+    const existing = tabs.find((t) => t.id && t.url?.startsWith(url));
     if (existing?.id !== undefined) {
       await chrome.tabs.update(existing.id, { active: true });
       return;
@@ -561,7 +568,6 @@ async function openNewTabLauncher(windowId: number | undefined): Promise<void> {
   } catch (err) {
     log.debug('toggle-launcher: new-tab reuse query failed; creating fresh', { err });
   }
-  const url = chrome.runtime.getURL(NEWTAB_PAGE_PATH);
   await chrome.tabs
     .create(windowId === undefined ? { url, active: true } : { url, windowId, active: true })
     .catch((err) => log.error('openNewTabLauncher: tabs.create failed', { err }));

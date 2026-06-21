@@ -290,13 +290,39 @@ describe('toggle-launcher command path — new-tab launcher fallback (launcher-r
     const overlay = await import('./overlay-injection');
     vi.mocked(overlay.injectOverlay).mockRejectedValue(new Error('cannot inject'));
     // A new-tab launcher is already open in the window — reuse (focus) it so
-    // repeated Alt+L doesn't pile up empty tabs (design D3).
-    windowTabs = [{ id: 555, url: 'chrome://newtab/' }];
+    // repeated Alt+L doesn't pile up empty tabs (design D3). Must use the
+    // extension's explicit NTP URL; a bare `chrome://newtab` tab is not reused
+    // (it may be a stale browser-default page, not the launcher).
+    windowTabs = [{ id: 555, url: 'chrome-extension://test/src/launcher/newtab/index.html' }];
 
     commandHandler?.('toggle-launcher');
 
     await vi.waitFor(() => expect(updateTabSpy).toHaveBeenCalledWith(555, { active: true }));
     expect(createTabSpy).not.toHaveBeenCalled();
+  });
+
+  test('a bare chrome://newtab tab is not reused — creates a fresh extension NTP', async () => {
+    await boot({ kind: 'empty' });
+    activeTab = { id: 7, windowId: 100 };
+    sendMessageSpy.mockRejectedValue(new Error('no receiver'));
+    const overlay = await import('./overlay-injection');
+    vi.mocked(overlay.injectOverlay).mockRejectedValue(new Error('cannot inject'));
+    // A stale chrome://newtab tab (browser default NTP, from before the extension
+    // loaded or when Chrome's redirect failed) must NOT be focused as a launcher —
+    // that would show the browser's default NTP instead of the extension's. A fresh
+    // extension NTP tab must be created instead.
+    windowTabs = [{ id: 555, url: 'chrome://newtab/' }];
+
+    commandHandler?.('toggle-launcher');
+
+    await vi.waitFor(() =>
+      expect(createTabSpy).toHaveBeenCalledWith({
+        url: 'chrome-extension://test/src/launcher/newtab/index.html',
+        windowId: 100,
+        active: true,
+      }),
+    );
+    expect(updateTabSpy).not.toHaveBeenCalled();
   });
 
   test('the injectable on-demand path injects + re-sends and opens no new tab', async () => {

@@ -1183,7 +1183,7 @@ export class LunmaStore {
    * fields.
    */
   setPinnedExpanded(windowId: WindowId, expanded: boolean): void {
-    const augmented = this.state as SidebarLocalState;
+    const augmented = this.state as AppState & SidebarLocalState;
     if (!augmented.pinnedExpandedByWindow) augmented.pinnedExpandedByWindow = {};
     augmented.pinnedExpandedByWindow[windowId] = expanded;
   }
@@ -1196,7 +1196,7 @@ export class LunmaStore {
    * folder can be open in one window and collapsed in another.
    */
   setFolderExpanded(windowId: WindowId, folderId: FolderId, expanded: boolean): void {
-    const augmented = this.state as SidebarLocalState;
+    const augmented = this.state as AppState & SidebarLocalState;
     if (!augmented.expandedFoldersByWindow) augmented.expandedFoldersByWindow = {};
     if (!augmented.expandedFoldersByWindow[windowId]) {
       augmented.expandedFoldersByWindow[windowId] = {};
@@ -1218,7 +1218,7 @@ export class LunmaStore {
    * its own flag, and the broadcast carries only `AppState`).
    */
   setAutoRenameNextFolder(windowId: WindowId, armed: boolean): void {
-    const augmented = this.state as SidebarLocalState;
+    const augmented = this.state as AppState & SidebarLocalState;
     if (!augmented.autoRenameNextFolderByWindow) augmented.autoRenameNextFolderByWindow = {};
     augmented.autoRenameNextFolderByWindow[windowId] = armed;
   }

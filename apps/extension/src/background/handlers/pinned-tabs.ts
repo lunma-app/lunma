@@ -8,6 +8,21 @@ import { activateSpaceInWindow } from './activation';
 import type { HandlersMap } from './context';
 import { spaceExists } from './queries';
 
+function assertHttps(url: string, ctx: string): boolean {
+  let scheme: string;
+  try {
+    scheme = new URL(url).protocol;
+  } catch {
+    log.warn(`${ctx}: unparseable URL, dropping`, { url });
+    return false;
+  }
+  if (scheme !== 'http:' && scheme !== 'https:') {
+    log.warn(`${ctx}: blocked non-http(s) scheme`, { url, scheme });
+    return false;
+  }
+  return true;
+}
+
 export function pinnedTabHandlers(): Pick<
   HandlersMap,
   | 'openSavedTab'
@@ -26,6 +41,7 @@ export function pinnedTabHandlers(): Pick<
       if (!saved) {
         throw new Error(`openSavedTab: unknown savedTabId '${savedTabId}'`);
       }
+      if (!assertHttps(saved.originalURL, 'openSavedTab')) return;
       // In-place open (newtab-hearth): when the home passes `replaceTabId` (its
       // own tab id), navigate THAT tab to the saved tab instead of spawning a new
       // one and stranding the home — the Arc/Chrome new-tab convention. A stale id
@@ -153,6 +169,7 @@ export function pinnedTabHandlers(): Pick<
       if (!saved) {
         throw new Error(`goHome: unknown savedTabId '${savedTabId}'`);
       }
+      if (!assertHttps(saved.originalURL, 'goHome')) return;
       // Navigate THIS window's bound tab home (per-window-tab-bindings): the
       // drift "Go home" affordance is per-(saved tab, window).
       const tabId = ctx.store.state.tabBindings[savedTabId]?.[windowId];

@@ -1,7 +1,7 @@
 <script lang="ts">
 import { onMount, tick } from 'svelte';
 import { bus } from '../shared/bus';
-import { STATE_STORAGE_KEY } from '../shared/chrome/storage';
+import { readPersistedState, STATE_STORAGE_KEY } from '../shared/chrome/storage';
 import { labelFor } from '../shared/label-for';
 import { log } from '../shared/logger';
 import { DEFAULTS, readSettings, watchSettings } from '../shared/settings';
@@ -39,10 +39,9 @@ function isArchivedTab(e: unknown): e is ArchivedTab {
 
 async function read(): Promise<void> {
   try {
-    const got = await chrome.storage.local.get(STATE_STORAGE_KEY);
-    const env = got[STATE_STORAGE_KEY] as { state?: { archivedTabs?: unknown } } | undefined;
-    const list = env?.state?.archivedTabs;
-    archived = Array.isArray(list) ? list.filter(isArchivedTab) : [];
+    const persisted = await readPersistedState();
+    archived =
+      persisted.kind === 'ok' || persisted.kind === 'salvaged' ? persisted.state.archivedTabs : [];
   } catch (err) {
     log.error('RecentlyArchived: read failed', { err });
     archived = [];

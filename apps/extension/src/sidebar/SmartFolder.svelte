@@ -134,8 +134,11 @@ $effect(() => {
   // Prune entries no longer referenced by current items or live bindings so the
   // map doesn't grow unboundedly as items rotate through a smart folder.
   const liveIds = new Set([...items.map((i) => i.id), ...Object.keys(folderBindings)]);
-  for (const id of Object.keys(lastSeenById)) {
-    if (!liveIds.has(id)) delete lastSeenById[id];
+  const stale = Object.keys(lastSeenById).filter((id) => !liveIds.has(id));
+  if (stale.length > 0) {
+    const next = { ...lastSeenById };
+    for (const id of stale) delete next[id];
+    lastSeenById = next;
   }
 });
 

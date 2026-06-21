@@ -303,10 +303,21 @@ export const TOGGLE_SEGMENTS: { value: string; label: string }[] = [
 
 // --- derived defaults + schema ---------------------------------------------
 
-/** `DEFAULTS` is built from the declared `default` of each setting. */
-export const DEFAULTS: Settings = Object.fromEntries(
-  SETTINGS.map((decl) => [decl.key, decl.default]),
-) satisfies Partial<Settings> as unknown as Settings;
+/** `DEFAULTS` mirrors the declared `default` of each setting in `SETTINGS`. */
+export const DEFAULTS: Settings = {
+  defaultSearchEngine: 'google',
+  customSearchUrl: '',
+  customSearchKeyword: '',
+  launcherScope: 'prefer-current-space',
+  density: 'normal',
+  tint: 'vivid',
+  showGlares: true,
+  pinnedTabBoundaryDefault: 'off',
+  dedupNewTabNavigations: true,
+  autoArchiveEnabled: true,
+  autoArchiveIdleMinutes: 720,
+  autoArchiveRetentionDays: 7,
+};
 
 /** The Zod schema is built from the declarations, dispatching on `type`:
  * `enum → z.enum(values).catch(default)`, `text → z.string().catch(default)`,

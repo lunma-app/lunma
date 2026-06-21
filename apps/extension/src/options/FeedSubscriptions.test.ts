@@ -35,7 +35,6 @@ function makeState(rssCount = 0) {
     }));
   }
   return {
-    schemaVersion: 10,
     spaces: [
       { id: 's1', name: 'Work', color: 'blue', icon: 'star' },
       { id: 's2', name: 'Personal', color: 'green', icon: 'home' },
@@ -60,10 +59,12 @@ function makeState(rssCount = 0) {
 let getStorageMock: ReturnType<typeof vi.fn>;
 
 function installChrome(rssCount = 0): void {
-  getStorageMock = vi.fn(async () => ({ [STATE_KEY]: { state: makeState(rssCount) } }));
+  getStorageMock = vi.fn(async () => ({
+    [STATE_KEY]: { schemaVersion: 7, state: makeState(rssCount) },
+  }));
   (globalThis as unknown as { chrome: unknown }).chrome = {
     storage: {
-      local: { get: getStorageMock },
+      local: { get: getStorageMock, set: vi.fn(async () => undefined) },
       sync: { get: vi.fn(async () => ({})) },
     },
     runtime: { getURL: (p: string) => `chrome-extension://x/${p}` },

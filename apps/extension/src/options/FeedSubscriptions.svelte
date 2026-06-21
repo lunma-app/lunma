@@ -1,10 +1,9 @@
 <script lang="ts">
 import { onMount, tick } from 'svelte';
 import { bus } from '../shared/bus';
-import { STATE_STORAGE_KEY } from '../shared/chrome/storage';
+import { readPersistedState } from '../shared/chrome/storage';
 import { log } from '../shared/logger';
 import { buildOpml, parseOpml, type SmartFolderNode } from '../shared/opml';
-import { AppStateV7Schema } from '../shared/schemas';
 import type { AppState } from '../shared/types';
 import Button from '../ui/Button.svelte';
 import InlineError from '../ui/InlineError.svelte';
@@ -33,11 +32,9 @@ let confirmRowEl = $state<HTMLElement>();
 
 onMount(async () => {
   // D8: read at mount to determine export button visibility.
-  const got = await chrome.storage.local.get(STATE_STORAGE_KEY);
-  const raw = (got[STATE_STORAGE_KEY] as Record<string, unknown> | undefined)?.state;
-  const stateResult = AppStateV7Schema.safeParse(raw);
-  if (!stateResult.success) return;
-  rssNodes = collectRssNodes(stateResult.data);
+  const persisted = await readPersistedState();
+  if (persisted.kind !== 'ok' && persisted.kind !== 'salvaged') return;
+  rssNodes = collectRssNodes(persisted.state);
 });
 
 function collectRssNodes(state: AppState): SmartFolderNode[] {
@@ -81,10 +78,9 @@ async function onFileChange(e: Event): Promise<void> {
   }
 
   // D8: read state at file-select time to populate the Space picker.
-  const got = await chrome.storage.local.get(STATE_STORAGE_KEY);
-  const raw = (got[STATE_STORAGE_KEY] as Record<string, unknown> | undefined)?.state;
-  const stateResult = AppStateV7Schema.safeParse(raw);
-  const spaces = stateResult.success ? stateResult.data.spaces : [];
+  const persisted = await readPersistedState();
+  const spaces =
+    persisted.kind === 'ok' || persisted.kind === 'salvaged' ? persisted.state.spaces : [];
 
   parsedFeeds = feeds;
   spaceOptions = spaces.map((s) => ({ value: s.id, label: s.name }));
@@ -108,10 +104,9 @@ async function confirmImport(): Promise<void> {
       payload: { spaceId: selectedSpaceId, feeds },
     });
     // Refresh export-button visibility after a successful import.
-    const got = await chrome.storage.local.get(STATE_STORAGE_KEY);
-    const raw = (got[STATE_STORAGE_KEY] as Record<string, unknown> | undefined)?.state;
-    const stateResult = AppStateV7Schema.safeParse(raw);
-    if (stateResult.success) rssNodes = collectRssNodes(stateResult.data);
+    const persisted = await readPersistedState();
+    if (persisted.kind === 'ok' || persisted.kind === 'salvaged')
+      rssNodes = collectRssNodes(persisted.state);
     toast = { message: `${feeds.length} feeds imported` };
   } catch (err) {
     log.error('FeedSubscriptions: import failed', { err });
