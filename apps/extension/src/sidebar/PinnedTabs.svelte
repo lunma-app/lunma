@@ -1061,7 +1061,7 @@ function tabMenuItems(row: TabView): MenuItem[] {
   .folder-empty {
     padding: var(--space-1) var(--space-2);
     color: var(--text-faint);
-    font: 400 11.5px/1.2 var(--font-sans);
+    font: var(--weight-regular) var(--text-xs)/1.2 var(--font-sans);
   }
 
   .drop-line {

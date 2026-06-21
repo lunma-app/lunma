@@ -297,9 +297,10 @@ export async function requestStateSnapshot(): Promise<AppState> {
 export function respondWithStateSnapshot(handler: () => AppState): () => void {
   const listener = (
     raw: unknown,
-    _sender: chrome.runtime.MessageSender,
+    sender: chrome.runtime.MessageSender,
     sendResponse: (response: StateSnapshotMessage) => void,
   ): boolean | undefined => {
+    if (sender.id !== chrome.runtime.id) return undefined;
     if (!raw || typeof raw !== 'object') return undefined;
     const m = raw as Partial<LunmaMessage>;
     if (m.type !== 'lunma/state-request') return undefined;
@@ -433,9 +434,10 @@ export function respondWithLauncherSuggestions(
 ): () => void {
   const listener = (
     raw: unknown,
-    _sender: chrome.runtime.MessageSender,
+    sender: chrome.runtime.MessageSender,
     sendResponse: (response: LauncherSuggestionsResponseMessage) => void,
   ): boolean | undefined => {
+    if (sender.id !== chrome.runtime.id) return undefined;
     if (!raw || typeof raw !== 'object') return undefined;
     const m = raw as Partial<LauncherSuggestionsRequestMessage>;
     if (m.type !== 'lunma/launcher-suggestions-request') return undefined;
