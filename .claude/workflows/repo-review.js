@@ -221,7 +221,7 @@ Look for:
 - Duplication: copy-pasted blocks that should be extracted into a shared helper
 - God objects/files: files doing too many things, functions with too many responsibilities
 - Magic values: inline string literals or numeric constants that should be named
-- Unnecessary comments: comments that restate what the code already says (e.g. `// increment i` above `i++`), noise JSDoc on obvious getters/setters, section-header comments that just name a block of code
+- Unnecessary comments: comments that restate what the code already says (e.g. \`// increment i\` above \`i++\`), noise JSDoc on obvious getters/setters, section-header comments that just name a block of code
 - Stale comments: commented-out code, misleading or outdated comments
 - Naming drift: inconsistent naming conventions (camelCase vs snake_case, plural vs singular, Hungarian notation)
 - TODO/FIXME debt: annotated issues that should be tracked or resolved
