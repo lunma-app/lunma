@@ -76,8 +76,10 @@ fine before then. Arming it is a one-time setup:
    Submit this first version by hand; automation takes over from the next release.
 3. Create a **Google OAuth client + refresh token** for the Chrome Web Store API
    (see the `chrome-webstore-upload-keys` guide).
-4. Set the four secrets: `gh secret set CWS_EXTENSION_ID` (the item id),
-   `CWS_CLIENT_ID`, `CWS_CLIENT_SECRET`, `CWS_REFRESH_TOKEN` (from 1Password).
+4. Set the five secrets: `gh secret set CWS_EXTENSION_ID` (the item id),
+   `CWS_CLIENT_ID`, `CWS_CLIENT_SECRET`, `CWS_REFRESH_TOKEN`, `CWS_PRIVATE_KEY`
+   (the PEM private key registered with the store for Verified CRX signing — all
+   from 1Password).
 
 After that, each merged Release PR uploads + submits automatically. To submit by
 hand instead of auto-publishing, switch the workflow's CLI call to the `upload`
