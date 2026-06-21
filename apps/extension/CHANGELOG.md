@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/lunma-app/lunma/compare/v0.3.0...v0.3.1) (2026-06-21)
+
+
+### Bug Fixes
+
+* **tests:** replace non-null assertions with explicit checks ([c9483c5](https://github.com/lunma-app/lunma/commit/c9483c5065c9a8de0a9a4e67d2432a9dc36d1f49))
+
 ## [0.3.0](https://github.com/lunma-app/lunma/compare/v0.2.1...v0.3.0) (2026-06-21)
 
 
