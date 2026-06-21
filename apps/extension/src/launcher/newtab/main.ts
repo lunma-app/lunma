@@ -37,6 +37,11 @@ function applyTint(settings: Settings): void {
   if (home) home.dataset.tint = settings.tint;
 }
 
+function applyShowGlares(settings: Settings): void {
+  const home = target.querySelector<HTMLElement>('[data-testid="newtab-home"]');
+  if (home) home.dataset.showGlares = String(settings.showGlares);
+}
+
 async function boot(): Promise<void> {
   // Read the saved tint so it seeds NewTab's prop (first-paint aurora intensity
   // + data-tint), the way the sidebar boot seeds App's tint. The same read
@@ -60,9 +65,11 @@ async function boot(): Promise<void> {
       target,
       props: { windowId: -1, initialState: null, tint: initialSettings.tint, engines },
     });
+    applyShowGlares(initialSettings);
     watchSettings((settings) => {
       applyDensity(settings);
       applyTint(settings);
+      applyShowGlares(settings);
     });
     return;
   }
@@ -94,12 +101,14 @@ async function boot(): Promise<void> {
     target,
     props: { windowId, initialState, tint: initialSettings.tint, engines },
   });
+  applyShowGlares(initialSettings);
 
   // Re-apply on change (e.g. the user switches density or colour intensity in
   // the options page). Registered once per boot, after mount.
   watchSettings((settings) => {
     applyDensity(settings);
     applyTint(settings);
+    applyShowGlares(settings);
   });
 }
 

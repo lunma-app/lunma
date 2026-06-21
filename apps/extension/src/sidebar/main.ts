@@ -8,6 +8,7 @@ import { getCurrentWindowId } from '../shared/window-id';
 import App from './App.svelte';
 import { boundaryDefault } from './boundary-default.svelte';
 import { createBroadcastApply } from './broadcast-apply';
+import { sidebarGlares } from './show-glares-state.svelte';
 import { createSidebarStore } from './store-context.svelte';
 import { isSwipeLive, onSwipeLiveChange } from './swipe-live';
 
@@ -37,6 +38,12 @@ function applyDensity(settings: Settings): void {
 function applyTint(settings: Settings): void {
   const sidebar = target.querySelector<HTMLElement>('[data-testid="sidebar"]');
   if (sidebar) sidebar.dataset.tint = settings.tint;
+}
+
+function applyShowGlares(settings: Settings): void {
+  sidebarGlares.value = settings.showGlares;
+  const sidebar = target.querySelector<HTMLElement>('[data-testid="sidebar"]');
+  if (sidebar) sidebar.dataset.showGlares = String(settings.showGlares);
 }
 
 async function boot(): Promise<void> {
@@ -139,6 +146,7 @@ async function boot(): Promise<void> {
   onSwipeLiveChange(broadcastApply.onLiveChange);
 
   target.innerHTML = '';
+  applyShowGlares(initialSettings);
   mount(App, { target, props: { store, windowId, tint: initialSettings.tint } });
 
   // Report the side panel's focus state to the SW (launcher-sidebar-focus-reach)
@@ -157,6 +165,7 @@ async function boot(): Promise<void> {
   watchSettings((settings) => {
     applyDensity(settings);
     applyTint(settings);
+    applyShowGlares(settings);
     boundaryDefault.value = settings.pinnedTabBoundaryDefault;
   });
 }

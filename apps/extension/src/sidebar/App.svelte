@@ -36,6 +36,7 @@ import PinnedTabs from './PinnedTabs.svelte';
 import SectionHeader from './SectionHeader.svelte';
 import SmartFolderEditor from './SmartFolderEditor.svelte';
 import SpaceSwitcher from './SpaceSwitcher.svelte';
+import { sidebarGlares } from './show-glares-state.svelte';
 import { setStore } from './store-context.svelte';
 import { swipe } from './swipe';
 import { setSwipeLive } from './swipe-live';
@@ -530,7 +531,9 @@ function onCancel(): void {
        wrapper masks the aurora to the upper region so it reads as one soft glow
        cohesive with the top wash, and the dense working area below stays clean.
        Sits behind every foreground region; aria-hidden, never interactive. -->
-  <div class="sidebar-aurora"><Aurora /></div>
+  {#if sidebarGlares.value}
+    <div class="sidebar-aurora"><Aurora /></div>
+  {/if}
   <!-- Top search bar: a trigger-mode `SearchField` that opens the new-tab launcher
        (the search pill restored above the favicon grid). `position: relative` so it
        paints above the aurora by DOM order, plumb-aligned via `--list-pad`. -->

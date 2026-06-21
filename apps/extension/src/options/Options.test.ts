@@ -154,6 +154,7 @@ describe('Options', () => {
         'lunma.settings': {
           density: 'comfort',
           tint: 'vivid',
+          showGlares: true,
           pinnedTabBoundaryDefault: 'off',
           defaultSearchEngine: 'google',
           customSearchUrl: '',
@@ -181,6 +182,7 @@ describe('Options', () => {
         'lunma.settings': {
           density: 'normal',
           tint: 'subtle',
+          showGlares: true,
           pinnedTabBoundaryDefault: 'off',
           defaultSearchEngine: 'google',
           customSearchUrl: '',
@@ -207,6 +209,7 @@ describe('Options', () => {
         'lunma.settings': {
           density: 'normal',
           tint: 'vivid',
+          showGlares: true,
           pinnedTabBoundaryDefault: 'domain',
           defaultSearchEngine: 'google',
           customSearchUrl: '',

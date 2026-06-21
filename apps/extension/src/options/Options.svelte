@@ -184,8 +184,10 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
 }
 </script>
 
-<div class="page lunma-space-scope">
-  <Aurora intensity="subtle" />
+<div class="page lunma-space-scope" data-show-glares={String(settings.showGlares)}>
+  {#if settings.showGlares}
+    <Aurora intensity="subtle" />
+  {/if}
 
   <header class="topbar">
     <span class="wordmark">
@@ -358,6 +360,16 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
      * has no active Space, so `--space-l` inherits the `:root` ember default. */
     --glow-space: 0 0 40px
       oklch(clamp(0, calc(var(--space-l) + 0.1), 1) var(--space-chroma) var(--space-h) / 0.35);
+  }
+
+  /* Background-effects off (`showGlares: false`): suppress the hue-glow tokens at
+   * `.page` scope (redeclared here so the substitution captures the local
+   * `--space-chroma`; the override must live at the same scope to win the cascade).
+   * Aurora is gated by `{#if settings.showGlares}` in the template. */
+  .page[data-show-glares='false'] {
+    --glow-space: 0 0 0 0 transparent;
+    --glow-space-soft: 0 0 0 0 transparent;
+    --glow-hearth: transparent;
   }
 
   /* Foreground above the aurora (positioned, z-base): the masthead and column

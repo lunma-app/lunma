@@ -18,6 +18,7 @@ function settings(over: Partial<Settings> = {}): Settings {
   return {
     density: 'normal',
     tint: 'vivid',
+    showGlares: true,
     pinnedTabBoundaryDefault: 'off',
     defaultSearchEngine: 'google',
     customSearchUrl: '',

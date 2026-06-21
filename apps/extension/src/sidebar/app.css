@@ -141,6 +141,16 @@ body,
   --glass-bg-strong: oklch(0.24 0 0 / 0.66);
 }
 
+/* Background-effects off (`showGlares: false`): suppress the hue-glow tokens at
+ * `.sidebar` scope (they are redeclared here to capture the scoped hue, so the
+ * override must also live here to win the cascade). Aurora is gated by
+ * `{#if sidebarGlares.value}` in App.svelte so it is fully unmounted. */
+.sidebar[data-show-glares='false'] {
+  --glow-space: 0 0 0 0 transparent;
+  --glow-space-soft: 0 0 0 0 transparent;
+  --glow-hearth: transparent;
+}
+
 /* The edge stripe (a 3px Space-coloured inner-edge stripe) was removed on user
  * feedback — Space identity now reads through hue-rebound surfaces, the tinted
  * pinned-section header, and the top-down wash, without the hard colour line on the

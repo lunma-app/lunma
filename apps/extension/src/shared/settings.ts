@@ -39,6 +39,10 @@ export type LauncherScope = 'global' | 'prefer-current-space' | 'current-space-o
 export interface Settings {
   density: DensityMode;
   tint: Tint;
+  /** Show aurora backdrop and hue-glow light effects (appearance-disable-glares).
+   * When `false`, the aurora is not mounted and glow tokens resolve to transparent
+   * on every surface, regardless of the `tint` setting. */
+  showGlares: boolean;
   pinnedTabBoundaryDefault: PinnedTabBoundaryDefault;
   defaultSearchEngine: DefaultSearchEngine;
   customSearchUrl: string;
@@ -218,6 +222,14 @@ export const SETTINGS: readonly SettingDeclaration[] = [
       { value: 'standard', label: 'Standard' },
       { value: 'vivid', label: 'Vivid' },
     ],
+  },
+  {
+    key: 'showGlares',
+    type: 'toggle',
+    default: true,
+    label: 'Background effects',
+    description: 'Show aurora backdrop and colour glow effects',
+    group: 'Appearance',
   },
   {
     key: 'pinnedTabBoundaryDefault',

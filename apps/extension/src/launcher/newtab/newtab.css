@@ -60,6 +60,23 @@ body,
   color: var(--text);
 }
 
+/* Background-effects off (`showGlares: false`): suppress the hue-glow tokens at
+ * `.home` scope (redeclared here to capture the scoped hue; the override must
+ * live at the same scope to win the cascade). Aurora and hearth are hidden via
+ * `display: none` — the new-tab aurora intensity prop is captured at first paint
+ * and can't be updated live, so CSS is the live-toggle path. */
+.home[data-show-glares='false'] {
+  --glow-space: 0 0 0 0 transparent;
+  --glow-space-soft: 0 0 0 0 transparent;
+  --glow-hearth: transparent;
+}
+.home[data-show-glares='false'] .aurora {
+  display: none;
+}
+.home[data-show-glares='false'] .hearth {
+  display: none;
+}
+
 /* Tint dial — the aurora intensity is driven by the `intensity` prop (per the
  * tint level); here we only calm the frosted glass so `subtle`/`standard` read
  * near-neutral while `vivid` keeps the :root hue-tinted fill. Mirrors the
