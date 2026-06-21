@@ -95,7 +95,9 @@ import { isNavigationAllowed } from '../shared/url-boundary';
     const m = msg as { type?: string; allow?: unknown } | null;
     if (m?.type !== 'lunma/boundary-config') return;
     // A non-array (e.g. `null`) disarms; an array arms with that allow-set.
-    allow = Array.isArray(m.allow) ? (m.allow as string[]) : null;
+    allow = Array.isArray(m.allow)
+      ? m.allow.filter((x): x is string => typeof x === 'string')
+      : null;
   });
 
   // Capture phase so a page that `stopPropagation()`s on bubble-phase clicks

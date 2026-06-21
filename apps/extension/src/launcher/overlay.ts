@@ -174,7 +174,8 @@ export function shouldDismissOnFocusOut(
   // content script runs at document_start on every page, so storage is untouched
   // until the launcher is first opened; the value is cached and kept fresh via
   // storage.onChanged. No Zod / settings import (byte budget) — a raw field read
-  // plus a three-value guard.
+  // plus a three-value guard. SETTINGS_KEY is intentionally re-declared here
+  // rather than imported: importing settings.ts would drag Zod into this bundle.
   type Density = 'compact' | 'normal' | 'comfort';
   const SETTINGS_KEY = 'lunma.settings';
   let density: Density = 'normal';

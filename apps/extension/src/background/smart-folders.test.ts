@@ -36,6 +36,7 @@ interface ChromeStub {
   storage: { local: { get: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn> } };
   alarms: { create: ReturnType<typeof vi.fn>; clear: ReturnType<typeof vi.fn> };
   runtime: {
+    id: string;
     onMessage: {
       addListener: ReturnType<typeof vi.fn>;
       removeListener: ReturnType<typeof vi.fn>;
@@ -62,7 +63,7 @@ function installChromeStub(): void {
       },
     },
     alarms: { create: vi.fn(), clear: vi.fn(async () => true) },
-    runtime: { onMessage: { addListener: vi.fn(), removeListener: vi.fn() } },
+    runtime: { id: 'test-ext', onMessage: { addListener: vi.fn(), removeListener: vi.fn() } },
     // The host-permission gate (design D8/D9) calls `chrome.permissions.contains`
     // before every dispatch; default to GRANTED so the existing fetch/scheduling
     // suites exercise the connectors. The gate suites flip it to ungranted.
@@ -527,11 +528,13 @@ describe('registerSmartFoldersRefreshKick', () => {
     registerSmartFoldersRefreshKick({ store, enqueue: (e) => events.push(e) });
     const listener = chromeStub.runtime.onMessage.addListener.mock.calls[0]?.[0] as (
       raw: unknown,
+      sender: { id: string },
     ) => unknown;
+    const self = { id: chromeStub.runtime.id };
 
     // The listener NEVER returns true (it never claims the response channel) —
     // the snapshot handler is free to respond synchronously and unblocked.
-    const returned = listener({ type: 'lunma/state-request' });
+    const returned = listener({ type: 'lunma/state-request' }, self);
     expect(returned).toBeUndefined();
 
     await vi.waitFor(() => {
@@ -546,11 +549,13 @@ describe('registerSmartFoldersRefreshKick', () => {
     registerSmartFoldersRefreshKick({ store, enqueue: (e) => events.push(e) });
     const listener = chromeStub.runtime.onMessage.addListener.mock.calls[0]?.[0] as (
       raw: unknown,
+      sender: { id: string },
     ) => unknown;
+    const self = { id: chromeStub.runtime.id };
 
-    expect(listener({ type: 'lunma/command' })).toBeUndefined();
-    expect(listener(null)).toBeUndefined();
-    expect(listener('nope')).toBeUndefined();
+    expect(listener({ type: 'lunma/command' }, self)).toBeUndefined();
+    expect(listener(null, self)).toBeUndefined();
+    expect(listener('nope', self)).toBeUndefined();
     await Promise.resolve();
     expect(events).toHaveLength(0);
   });
@@ -566,9 +571,11 @@ describe('registerSmartFoldersRefreshKick', () => {
     registerSmartFoldersRefreshKick({ store, enqueue: (e) => events.push(e) }, bootReady);
     const listener = chromeStub.runtime.onMessage.addListener.mock.calls[0]?.[0] as (
       raw: unknown,
+      sender: { id: string },
     ) => unknown;
+    const self = { id: chromeStub.runtime.id };
 
-    listener({ type: 'lunma/state-request' });
+    listener({ type: 'lunma/state-request' }, self);
     await Promise.resolve();
     expect(events).toHaveLength(0); // boot not finished — nothing fired
     releaseBoot();

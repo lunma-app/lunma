@@ -18,7 +18,7 @@ import type {
   WindowId,
 } from './types';
 
-// Tasks 1.1, 1.2: typed command + ack discriminated unions.
+// Command + ack discriminated unions.
 
 export type SidebarCommand =
   | {
@@ -780,7 +780,7 @@ export interface CommandAck {
   result: CommandAckResult;
 }
 
-// Task 1.3: structured errors.
+// Structured errors.
 
 export class BusTimeoutError extends Error {
   readonly kind: SidebarCommandKind;
@@ -815,10 +815,10 @@ function describeCause(cause: unknown): string {
   }
 }
 
-// Task 1.4: tunable timeout, no per-call override.
+// Tunable timeout — no per-call override.
 export const BUS_TIMEOUT_MS = 10000;
 
-// Task 1.5: transport seam.
+// Transport seam — injectable for testing.
 export interface BusTransport {
   sendMessage(msg: unknown): Promise<unknown>;
   onMessage: {
@@ -937,7 +937,7 @@ export function createBus(transport: BusTransport): Bus {
   };
 }
 
-// Task 1.7: singleton wired to chrome.runtime. The transport adapter below
+// Singleton wired to chrome.runtime. The transport adapter below
 // wraps chrome.runtime so the BusTransport surface stays minimal.
 //
 // Lazy construction: in non-extension contexts (e.g. Vitest unit tests that

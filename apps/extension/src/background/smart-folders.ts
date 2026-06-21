@@ -258,7 +258,8 @@ export function registerSmartFoldersRefreshKick(
   deps: SmartFolderDeps,
   whenReady: Promise<unknown> = Promise.resolve(),
 ): () => void {
-  const listener = (raw: unknown): undefined => {
+  const listener = (raw: unknown, sender: chrome.runtime.MessageSender): undefined => {
+    if (sender.id !== chrome.runtime.id) return undefined;
     if (!raw || typeof raw !== 'object') return undefined;
     if ((raw as { type?: unknown }).type !== 'lunma/state-request') return undefined;
     void whenReady.then(() => refreshDueSmartFolders(deps));

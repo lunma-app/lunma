@@ -8,9 +8,8 @@ import {
 import { log } from '../shared/logger';
 import { type Coordinator, defaultEmitAck, type PendingEvent } from './coordinator';
 
-// Task 2.x: bus adapter — translates `'lunma/command'` messages into coordinator
-// enqueues. Holds no state of its own; coordinator owns correlation-to-ack
-// bookkeeping (D2).
+// Bus adapter — translates `'lunma/command'` messages into coordinator enqueues.
+// Holds no state of its own; coordinator owns correlation-to-ack bookkeeping.
 
 type SidebarPendingEvent = Extract<PendingEvent, { source: 'sidebar' }>;
 

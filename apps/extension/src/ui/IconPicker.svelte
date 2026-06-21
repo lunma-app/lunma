@@ -196,7 +196,7 @@ function choose(icon: IconName, index: number): void {
   }
   .tile:focus-visible {
     outline: var(--focus-width) solid var(--focus-color);
-    outline-offset: 1px;
+    outline-offset: var(--focus-offset);
   }
 
   /* Selection reads as a soft accent fill with a tinted glyph — no hard

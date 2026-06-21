@@ -73,7 +73,7 @@ const ok = $derived(colourToOklch(color));
   }
   .swatch:focus-visible {
     outline: var(--focus-width) solid var(--focus-color);
-    outline-offset: 1px;
+    outline-offset: var(--focus-offset);
   }
 
   /* Selected = a ring in --text around the dot, plus a subtle lift. */

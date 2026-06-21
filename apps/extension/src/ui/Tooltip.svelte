@@ -51,7 +51,7 @@ const { label, side = 'top', enabled = true, children }: Props = $props();
     color: var(--text);
     border: 1px solid var(--border-soft);
     border-radius: var(--r-sm);
-    padding: 4px 8px;
+    padding: var(--space-1) var(--space-2);
     font: var(--weight-medium) var(--text-xs) / 1 var(--font-sans);
     white-space: nowrap;
     pointer-events: none;

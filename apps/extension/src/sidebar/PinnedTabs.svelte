@@ -912,7 +912,6 @@ function tabMenuItems(row: TabView): MenuItem[] {
             {/if}
             {#each row.children as child (child.id)}
               <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div
                 class="child-wrap"
                 class:dragging={isDragSource(child.id)}
