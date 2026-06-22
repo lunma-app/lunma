@@ -247,19 +247,32 @@ describe('feed read-state (rss-connector design D3)', () => {
   });
 
   test('pruneSmartReadState drops read ids absent from the live window (18 → 12 live → 6 dropped)', () => {
-    const all = Array.from({ length: 18 }, (_, i) => `item-${i}`);
+    const sk = 'rss:a.example.com';
+    const all = Array.from({ length: 18 }, (_, i) => `${sk}:item-${i}`);
     for (const id of all) store.markSmartItemRead('feed-1', id);
     expect(store.state.smartReadState['feed-1']).toHaveLength(18);
     const live = all.slice(0, 12); // the latest fetch only returned 12 of them
-    store.pruneSmartReadState('feed-1', live);
+    store.pruneSmartReadState('feed-1', sk, live);
     expect(store.state.smartReadState['feed-1']).toEqual(live);
     expect(store.state.smartReadState['feed-1']).toHaveLength(12);
   });
 
   test('pruneSmartReadState removes the folder entry once empty', () => {
-    store.markSmartItemRead('feed-1', 'a');
-    store.pruneSmartReadState('feed-1', ['x', 'y']); // none survive
+    const sk = 'rss:a.example.com';
+    store.markSmartItemRead('feed-1', `${sk}:a`);
+    store.pruneSmartReadState('feed-1', sk, [`${sk}:x`, `${sk}:y`]); // none survive
     expect(store.state.smartReadState['feed-1']).toBeUndefined();
+  });
+
+  test('pruneSmartReadState leaves OTHER sections read ids intact (multi-section / OPML)', () => {
+    const skA = 'rss:a.example.com';
+    const skB = 'rss:b.example.com';
+    store.markSmartItemRead('feed-1', `${skA}:post-1`);
+    store.markSmartItemRead('feed-1', `${skB}:post-1`);
+    // Section B refetches; its window omits its own read id, but MUST NOT touch A.
+    store.pruneSmartReadState('feed-1', skB, [`${skB}:post-9`]);
+    expect(store.state.smartReadState['feed-1']).toContain(`${skA}:post-1`);
+    expect(store.state.smartReadState['feed-1']).not.toContain(`${skB}:post-1`);
   });
 
   test("deleteSmartFolder drops the folder's read-state", () => {
