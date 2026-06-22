@@ -121,6 +121,29 @@ describe('GroupOrchestrator.orchestrateActivation — preserveFavoriteFocus skip
   });
 });
 
+describe('GroupOrchestrator — no grouping in a window with no active Space', () => {
+  // The window-type guard keeps non-normal windows (popups, app, devtools) out
+  // of `activeSpaceByWindow`. Consequence: groupNewTab/groupHomeTab no-op there,
+  // so chrome.tabs.group is never invoked — no "Grouping is not supported by
+  // tabs in this window." rejection, no `ensureGroupForSpace failed` error.
+  test('groupNewTab no-ops for an unseeded (popup) window — chrome.tabs.group never called', async () => {
+    const store = makeStore();
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    // Window 999 (a popup) has no activeSpaceByWindow entry.
+    const orchestrator = new GroupOrchestrator(store);
+    await orchestrator.groupNewTab(42, 999);
+    expect(chrome.calls.some((c) => c.startsWith('tabs.group'))).toBe(false);
+  });
+
+  test('groupHomeTab no-ops for an unseeded (popup) window — chrome.tabs.group never called', async () => {
+    const store = makeStore();
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    const orchestrator = new GroupOrchestrator(store);
+    await orchestrator.groupHomeTab(42, 999);
+    expect(chrome.calls.some((c) => c.startsWith('tabs.group'))).toBe(false);
+  });
+});
+
 describe('GroupOrchestrator.orchestrateActivation — preserveFavoriteFocus proceed branch', () => {
   test('active tab is NOT a global favorite: steps (b)+(c) proceed normally', async () => {
     // When preserveFavoriteFocus=true but the active tab is a Space temp tab

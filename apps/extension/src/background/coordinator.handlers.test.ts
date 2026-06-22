@@ -180,6 +180,30 @@ describe('Coordinator handlers for windows', () => {
     expect(store.state.activeSpaceByWindow[200]).toBe('work');
   });
 
+  test('windows.onCreated for a popup window is ignored (no adopt, not dirty)', async () => {
+    const { coordinator, store, persist } = makeCoordinator();
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.lastActivatedSpaceId = 'work';
+    const onWindowOpened = vi.spyOn(store, 'onWindowOpened');
+    coordinator.enqueue(windowCreated(300, 'popup'));
+    await coordinator.idle();
+    expect(onWindowOpened).not.toHaveBeenCalled();
+    expect(store.state.activeSpaceByWindow[300]).toBeUndefined();
+    expect(persist).not.toHaveBeenCalled();
+  });
+
+  test('windows.onCreated for a normal window still adopts and marks dirty', async () => {
+    const { coordinator, store, persist } = makeCoordinator();
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.lastActivatedSpaceId = 'work';
+    const onWindowOpened = vi.spyOn(store, 'onWindowOpened');
+    coordinator.enqueue(windowCreated(200, 'normal'));
+    await coordinator.idle();
+    expect(onWindowOpened).toHaveBeenCalledWith(200);
+    expect(store.state.activeSpaceByWindow[200]).toBe('work');
+    expect(persist).toHaveBeenCalledTimes(1);
+  });
+
   test('windows.onCreated with undefined id is a no-op', async () => {
     const { coordinator, persist } = makeCoordinator();
     coordinator.enqueue({
