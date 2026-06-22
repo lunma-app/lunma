@@ -158,7 +158,7 @@ test('a smart-folder row activates like a pinned tab: open bound, re-click focus
         kind: 'createSmartFolder',
         payload: {
           spaceId: sid,
-          sources: [{ source: 'gitlab', baseUrl: 'https://forge.e2e.test', query: 'authored' }],
+          sources: [{ source: 'gitlab', baseUrl: 'https://forge.e2e.test', queries: ['authored'] }],
           name: 'E2E review queue',
           maxItems: 20,
           refreshMinutes: 10,
@@ -181,8 +181,9 @@ test('a smart-folder row activates like a pinned tab: open bound, re-click focus
   // --- first activation: a bound, NON-temporary tab opens ------------------
   await page.getByTestId('smart-result-row').first().click();
 
-  // The binding key is namespaced: sourceKey:nativeId → gitlab:forge.e2e.test:42
-  const ITEM_KEY = 'gitlab:forge.e2e.test:42';
+  // The binding key is namespaced: sourceKey:nativeId, where the per-filter
+  // sourceKey carries the query axis → gitlab:forge.e2e.test:authored:42
+  const ITEM_KEY = 'gitlab:forge.e2e.test:authored:42';
   await expect
     .poll(async () => Object.keys((await snapshot(page)).bindings[folderId] ?? {}))
     .toEqual([ITEM_KEY]);

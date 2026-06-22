@@ -11,7 +11,7 @@ function smartNode(overrides: Partial<SmartNode> = {}): SmartNode {
     name: 'Review requests',
     icon: 'folder-git-2',
     sources: [
-      { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+      { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['review-requested'] },
     ],
     maxItems: 20,
     hideRead: false,
@@ -63,25 +63,27 @@ describe('updateSmartFolder', () => {
     store.updateSmartFolder('work', 'sf-1', {
       icon: 'folder-git-2',
       name: 'Assigned',
-      sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'assigned' }],
+      sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['assigned'] }],
       maxItems: 20,
       refreshMinutes: 30,
     });
     expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({
       name: 'Assigned',
-      sources: [{ query: 'assigned' }],
+      sources: [{ queries: ['assigned'] }],
       refreshMinutes: 30,
     });
   });
 
-  test('a query change invalidates the runtime fetchedAt (immediately due)', () => {
+  test('a query change prunes the removed section runtime (multi-filter design D6)', () => {
     store.addSmartFolder(
       'work',
       smartNode({
-        sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'assigned' }],
+        sources: [
+          { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['assigned'] },
+        ],
       }),
     );
-    store.setSmartSectionRuntime('sf-1', 'gitlab:gitlab.example.com', {
+    store.setSmartSectionRuntime('sf-1', 'gitlab:gitlab.example.com:assigned', {
       state: 'ok',
       items: items('A'),
       fetchedAt: 123,
@@ -90,52 +92,57 @@ describe('updateSmartFolder', () => {
       icon: 'folder-git-2',
       name: 'Review requests',
       sources: [
-        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['review-requested'] },
       ],
       maxItems: 20,
       refreshMinutes: 10,
     });
+    // The removed filter's section is dropped; the new one is added by the
+    // coordinator's refetch, not the store.
     expect(
-      store.state.smartFolders['sf-1']?.sections['gitlab:gitlab.example.com']?.fetchedAt,
-    ).toBeNull();
+      store.state.smartFolders['sf-1']?.sections['gitlab:gitlab.example.com:assigned'],
+    ).toBeUndefined();
   });
 
-  test('a baseUrl change invalidates fetchedAt; a name-only change does not', () => {
+  test('a baseUrl change prunes the old section; a name-only change keeps it intact', () => {
     store.addSmartFolder('work', smartNode());
-    store.setSmartSectionRuntime('sf-1', 'gitlab:gitlab.example.com', {
+    store.setSmartSectionRuntime('sf-1', 'gitlab:gitlab.example.com:review-requested', {
       state: 'ok',
       items: [],
       fetchedAt: 123,
     });
+    // Name-only change: the section (same resolved key) keeps its fetchedAt.
     store.updateSmartFolder('work', 'sf-1', {
       icon: 'folder-git-2',
       name: 'Renamed only',
       sources: [
-        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
-      ],
-      maxItems: 20,
-      refreshMinutes: 10,
-    });
-    expect(store.state.smartFolders['sf-1']?.sections['gitlab:gitlab.example.com']?.fetchedAt).toBe(
-      123,
-    );
-    store.updateSmartFolder('work', 'sf-1', {
-      icon: 'folder-git-2',
-      name: 'Renamed only',
-      sources: [
-        { source: 'gitlab', baseUrl: 'https://gitlab.other.com', query: 'review-requested' },
+        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['review-requested'] },
       ],
       maxItems: 20,
       refreshMinutes: 10,
     });
     expect(
-      store.state.smartFolders['sf-1']?.sections['gitlab:gitlab.example.com']?.fetchedAt,
-    ).toBeNull();
+      store.state.smartFolders['sf-1']?.sections['gitlab:gitlab.example.com:review-requested']
+        ?.fetchedAt,
+    ).toBe(123);
+    // baseUrl change → the old section key no longer resolves → pruned.
+    store.updateSmartFolder('work', 'sf-1', {
+      icon: 'folder-git-2',
+      name: 'Renamed only',
+      sources: [
+        { source: 'gitlab', baseUrl: 'https://gitlab.other.com', queries: ['review-requested'] },
+      ],
+      maxItems: 20,
+      refreshMinutes: 10,
+    });
+    expect(
+      store.state.smartFolders['sf-1']?.sections['gitlab:gitlab.example.com:review-requested'],
+    ).toBeUndefined();
   });
 
-  test('a maxItems change invalidates fetchedAt (rss-connector design D5)', () => {
+  test('a maxItems change invalidates the remaining sections fetchedAt (rss-connector design D5)', () => {
     store.addSmartFolder('work', smartNode());
-    store.setSmartSectionRuntime('sf-1', 'gitlab:gitlab.example.com', {
+    store.setSmartSectionRuntime('sf-1', 'gitlab:gitlab.example.com:review-requested', {
       state: 'ok',
       items: items('A'),
       fetchedAt: 123,
@@ -144,27 +151,28 @@ describe('updateSmartFolder', () => {
       icon: 'folder-git-2',
       name: 'Review requests',
       sources: [
-        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['review-requested'] },
       ],
       maxItems: 50,
       refreshMinutes: 10,
     });
     expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({ maxItems: 50 });
     expect(
-      store.state.smartFolders['sf-1']?.sections['gitlab:gitlab.example.com']?.fetchedAt,
+      store.state.smartFolders['sf-1']?.sections['gitlab:gitlab.example.com:review-requested']
+        ?.fetchedAt,
     ).toBeNull();
   });
 
-  test('a source-only change invalidates fetchedAt and persists the new source', () => {
+  test('a source change prunes the old section and persists the new source', () => {
     store.addSmartFolder(
       'work',
       smartNode({
         sources: [
-          { source: 'gitlab', baseUrl: 'https://forge.example.com', query: 'review-requested' },
+          { source: 'gitlab', baseUrl: 'https://forge.example.com', queries: ['review-requested'] },
         ],
       }),
     );
-    store.setSmartSectionRuntime('sf-1', 'gitlab:forge.example.com', {
+    store.setSmartSectionRuntime('sf-1', 'gitlab:forge.example.com:review-requested', {
       state: 'ok',
       items: items('A'),
       fetchedAt: 123,
@@ -173,15 +181,15 @@ describe('updateSmartFolder', () => {
       icon: 'folder-git-2',
       name: 'Review requests',
       sources: [
-        { source: 'github', baseUrl: 'https://forge.example.com', query: 'review-requested' },
+        { source: 'github', baseUrl: 'https://forge.example.com', queries: ['review-requested'] },
       ],
       maxItems: 20,
       refreshMinutes: 10,
     });
     expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({ sources: [{ source: 'github' }] });
     expect(
-      store.state.smartFolders['sf-1']?.sections['gitlab:forge.example.com']?.fetchedAt,
-    ).toBeNull();
+      store.state.smartFolders['sf-1']?.sections['gitlab:forge.example.com:review-requested'],
+    ).toBeUndefined();
   });
 
   test('preserves hideRead (owned by setSmartFolderHideRead, not the editor)', () => {
@@ -191,7 +199,7 @@ describe('updateSmartFolder', () => {
       icon: 'folder-git-2',
       name: 'Renamed',
       sources: [
-        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['review-requested'] },
       ],
       maxItems: 20,
       refreshMinutes: 10,
@@ -203,7 +211,7 @@ describe('updateSmartFolder', () => {
     store.updateSmartFolder('work', 'nope', {
       icon: 'folder-git-2',
       name: 'X',
-      sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'authored' }],
+      sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['authored'] }],
       maxItems: 20,
       refreshMinutes: 10,
     });
@@ -215,7 +223,7 @@ describe('feed read-state (rss-connector design D3)', () => {
   function feedNode() {
     return smartNode({
       id: 'feed-1',
-      sources: [{ source: 'rss', baseUrl: 'https://news.example.com/rss' }],
+      sources: [{ source: 'rss', baseUrl: 'https://news.example.com/rss', queries: [] }],
     });
   }
 
@@ -480,7 +488,7 @@ function feedNode(overrides: Partial<SmartNode> = {}): SmartNode {
     id: 'sf-feed',
     name: 'News',
     icon: 'rss',
-    sources: [{ source: 'rss', baseUrl: 'https://news.example.com/feed.xml' }],
+    sources: [{ source: 'rss', baseUrl: 'https://news.example.com/feed.xml', queries: [] }],
     maxItems: 10,
     hideRead: false,
     refreshMinutes: 30,
@@ -546,7 +554,7 @@ describe('nextUnreadFeedItemAfterClose', () => {
   test('returns undefined for a non-feed folder (e.g. GitLab)', () => {
     store.addSmartFolder('work', {
       ...smartNode({ id: 'sf-gl' }),
-      sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'authored' }],
+      sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['authored'] }],
     });
     store.bindSmartItem('sf-gl', 'gitlab:gitlab.example.com:mr-1', W, 20, '');
     expect(store.nextUnreadFeedItemAfterClose(20, W)).toBeUndefined();

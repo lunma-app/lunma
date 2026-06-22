@@ -39,10 +39,37 @@ const confirmBtn = (c: HTMLElement): HTMLButtonElement =>
     /Add smart folder|Save/.test(b.textContent ?? ''),
   ) as HTMLButtonElement;
 
-/** The SegmentedControl label text for the option whose radio carries `value`. */
-const optionLabel = (c: HTMLElement, value: string): string =>
-  c.querySelector(`input[value="${value}"]`)?.closest('label')?.querySelector('.option-label')
-    ?.textContent ?? '';
+// The filter multi-select renders selectable `Chip` pills (buttons carrying
+// aria-pressed), not radios. Helpers below map a SmartQuery to its per-source
+// pill label and toggle pills to reach an exact selection.
+type Query = 'authored' | 'assigned' | 'review-requested';
+const ALL_QUERIES: Query[] = ['authored', 'assigned', 'review-requested'];
+
+function queryLabel(source: string, q: Query): string {
+  if (q === 'authored') return 'Authored';
+  if (q === 'assigned') return 'Assigned';
+  return source === 'jira' ? 'Watching' : 'Reviewing';
+}
+
+const addFilterPills = (c: HTMLElement): HTMLButtonElement[] =>
+  [...c.querySelectorAll('[data-testid="smart-add-filter-pill"]')] as HTMLButtonElement[];
+
+const cardFilterPills = (c: HTMLElement): HTMLButtonElement[] =>
+  [...c.querySelectorAll('[data-testid="smart-filter-pill"]')] as HTMLButtonElement[];
+
+const pillByLabel = (pills: HTMLButtonElement[], label: string): HTMLButtonElement | undefined =>
+  pills.find((p) => (p.textContent ?? '').trim() === label);
+
+const isPressed = (b: HTMLButtonElement): boolean => b.getAttribute('aria-pressed') === 'true';
+
+/** Toggle the add-form filter pills until the selection equals `queries`. */
+async function setAddFilters(c: HTMLElement, source: string, queries: Query[]): Promise<void> {
+  for (const q of ALL_QUERIES) {
+    const pill = pillByLabel(addFilterPills(c), queryLabel(source, q));
+    if (!pill) continue;
+    if (isPressed(pill) !== queries.includes(q)) await fireEvent.click(pill);
+  }
+}
 
 const trigger = (c: HTMLElement, testid: string): HTMLButtonElement =>
   c.querySelector(`[data-testid="${testid}"]`) as HTMLButtonElement;
@@ -83,19 +110,17 @@ const openAddForm = async (c: HTMLElement): Promise<void> => {
   if (btn) await fireEvent.click(btn);
 };
 
-/** Open the add form, optionally override source/URL/query, then click Add. */
+/** Open the add form, optionally override source/URL/filters, then click Add. */
 async function fillAndAddSource(
   c: HTMLElement,
-  opts: { source?: string; baseUrl?: string; query?: string } = {},
+  opts: { source?: string; baseUrl?: string; queries?: Query[] } = {},
 ): Promise<void> {
   await openAddForm(c);
   if (opts.source) await pickSelect(c, 'smart-add-source-type', opts.source);
   if (opts.baseUrl !== undefined) {
     await fireEvent.input(addSourceUrlInput(c), { target: { value: opts.baseUrl } });
   }
-  if (opts.query) {
-    await fireEvent.click(c.querySelector(`input[value="${opts.query}"]`) as HTMLInputElement);
-  }
+  if (opts.queries) await setAddFilters(c, opts.source ?? 'gitlab', opts.queries);
   await fireEvent.click(addSourceConfirmBtn(c));
 }
 
@@ -105,7 +130,7 @@ function existingNode(overrides: Partial<SmartNode> = {}): SmartNode {
     id: 'sf-1',
     name: 'Assigned to me',
     icon: 'folder-git-2',
-    sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'assigned' }],
+    sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['assigned'] }],
     maxItems: 20,
     hideRead: false,
     refreshMinutes: 10,
@@ -125,9 +150,8 @@ describe('SmartFolderEditor — create mode', () => {
     await openAddForm(container);
     expect(selectValue(container, 'smart-add-source-type')).toBe('gitlab');
     expect(addSourceUrlInput(container).value).toBe('https://gitlab.com');
-    expect(
-      (container.querySelector('input[value="review-requested"]') as HTMLInputElement).checked,
-    ).toBe(true);
+    const reviewing = pillByLabel(addFilterPills(container), 'Reviewing');
+    expect(reviewing && isPressed(reviewing)).toBe(true);
   });
 
   test('global cadence defaults to 10 min and cap defaults to 10 items', () => {
@@ -153,7 +177,7 @@ describe('SmartFolderEditor — create mode', () => {
     });
     await fillAndAddSource(container, {
       baseUrl: 'https://gitlab.example.com',
-      query: 'authored',
+      queries: ['authored'],
     });
     await pickSelect(container, 'smart-folder-cadence', '30');
     await pickSelect(container, 'smart-folder-max-items', '50');
@@ -163,7 +187,9 @@ describe('SmartFolderEditor — create mode', () => {
       kind: 'createSmartFolder',
       payload: {
         spaceId: 'work',
-        sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'authored' }],
+        sources: [
+          { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['authored'] },
+        ],
         name: 'My merge requests',
         maxItems: 50,
         refreshMinutes: 30,
@@ -181,7 +207,9 @@ describe('SmartFolderEditor — create mode', () => {
       kind: 'createSmartFolder',
       payload: {
         spaceId: 'work',
-        sources: [{ source: 'github', baseUrl: 'https://github.com', query: 'review-requested' }],
+        sources: [
+          { source: 'github', baseUrl: 'https://github.com', queries: ['review-requested'] },
+        ],
         name: 'Review requests',
         maxItems: 10,
         refreshMinutes: 10,
@@ -191,13 +219,13 @@ describe('SmartFolderEditor — create mode', () => {
 
   test('the suggested name follows the first added source+query; a manual name sticks afterwards', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await fillAndAddSource(container, { query: 'assigned' });
+    await fillAndAddSource(container, { queries: ['assigned'] });
     expect(nameInput(container).value).toBe('Assigned to me');
     // Manual input pins the name.
     await fireEvent.input(nameInput(container), { target: { value: 'My queue' } });
     // Remove source and re-add with a different query — manual name must not be overwritten.
     await fireEvent.click(removeSourceBtns(container)[0] as HTMLButtonElement);
-    await fillAndAddSource(container, { query: 'authored' });
+    await fillAndAddSource(container, { queries: ['authored'] });
     expect(nameInput(container).value).toBe('My queue');
   });
 
@@ -270,10 +298,9 @@ describe('SmartFolderEditor — create mode', () => {
     await openAddForm(container);
     await pickSelect(container, 'smart-add-source-type', 'jira');
     expect(addSourceUrlInput(container).value).toBe('https://your-site.atlassian.net');
-    expect(optionLabel(container, 'review-requested')).toBe('Watching');
-    expect(
-      (container.querySelector('input[value="review-requested"]') as HTMLInputElement).checked,
-    ).toBe(true);
+    const watching = pillByLabel(addFilterPills(container), 'Watching');
+    expect(watching).toBeTruthy();
+    expect(watching && isPressed(watching)).toBe(true);
     await fireEvent.click(addSourceConfirmBtn(container));
     expect(container.querySelector('[data-testid="smart-folder-hint"]')?.textContent).toBe(
       "Signed in to Jira in this browser? That's enough.",
@@ -292,7 +319,7 @@ describe('SmartFolderEditor — create mode', () => {
           {
             source: 'jira',
             baseUrl: 'https://your-site.atlassian.net',
-            query: 'review-requested',
+            queries: ['review-requested'],
           },
         ],
         name: 'Watching',
@@ -335,8 +362,8 @@ describe('SmartFolderEditor — RSS adaptation (rss-connector)', () => {
     // "Feed URL" label, not "Instance URL".
     expect(container.textContent).toContain('Feed URL');
     expect(container.textContent).not.toContain('Instance URL');
-    // The canned-query control is hidden for a feed.
-    expect(container.querySelector('input[value="authored"]')).toBeNull();
+    // The filter multi-select is hidden for a feed.
+    expect(addFilterPills(container)).toHaveLength(0);
     // The "Show at most" cap is still rendered.
     expect(container.querySelector('[data-testid="smart-folder-max-items"]')).not.toBeNull();
 
@@ -371,7 +398,7 @@ describe('SmartFolderEditor — RSS adaptation (rss-connector)', () => {
       kind: 'createSmartFolder',
       payload: {
         spaceId: 'work',
-        sources: [{ source: 'rss', baseUrl: 'https://news.ycombinator.com/rss' }],
+        sources: [{ source: 'rss', baseUrl: 'https://news.ycombinator.com/rss', queries: [] }],
         name: 'Hacker News',
         maxItems: 30,
         refreshMinutes: 30,
@@ -420,7 +447,9 @@ describe('SmartFolderEditor — edit mode', () => {
       payload: {
         spaceId: 'work',
         folderId: 'sf-1',
-        sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'assigned' }],
+        sources: [
+          { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['assigned'] },
+        ],
         name: 'Assigned to me',
         maxItems: 50,
         refreshMinutes: 10,
@@ -436,7 +465,7 @@ describe('SmartFolderEditor — edit mode', () => {
     await fireEvent.click(removeSourceBtns(container)[0] as HTMLButtonElement);
     await fillAndAddSource(container, {
       baseUrl: 'https://gitlab.example.com',
-      query: 'review-requested',
+      queries: ['review-requested'],
     });
     await fireEvent.click(confirmBtn(container));
 
@@ -446,7 +475,11 @@ describe('SmartFolderEditor — edit mode', () => {
         spaceId: 'work',
         folderId: 'sf-1',
         sources: [
-          { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+          {
+            source: 'gitlab',
+            baseUrl: 'https://gitlab.example.com',
+            queries: ['review-requested'],
+          },
         ],
         name: 'Assigned to me',
         maxItems: 20,
@@ -473,7 +506,11 @@ describe('SmartFolderEditor — edit mode', () => {
         spaceId: 'work',
         folderId: 'sf-1',
         sources: [
-          { source: 'github', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+          {
+            source: 'github',
+            baseUrl: 'https://gitlab.example.com',
+            queries: ['review-requested'],
+          },
         ],
         name: 'Assigned to me',
         maxItems: 20,
@@ -487,7 +524,7 @@ describe('SmartFolderEditor — edit mode', () => {
       props: {
         spaceId: 'work',
         node: existingNode({
-          sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', query: 'assigned' }],
+          sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['assigned'] }],
         }),
       },
     });
@@ -500,7 +537,7 @@ describe('SmartFolderEditor — edit mode', () => {
   test('editing an existing RSS folder pre-fills the source in the list and omits query on save', async () => {
     const feed = existingNode({
       id: 'feed-1',
-      sources: [{ source: 'rss', baseUrl: 'https://news.ycombinator.com/rss' }],
+      sources: [{ source: 'rss', baseUrl: 'https://news.ycombinator.com/rss', queries: [] }],
       icon: 'rss',
       name: 'Hacker News',
       maxItems: 30,
@@ -512,20 +549,107 @@ describe('SmartFolderEditor — edit mode', () => {
     const entries = sourceEntries(container);
     expect(entries).toHaveLength(1);
     expect((entries[0] as HTMLElement).querySelector('.source-chip')?.textContent).toBe('RSS');
-    // No query picker visible outside the (closed) add form.
-    expect(container.querySelector('input[value="authored"]')).toBeNull();
+    // No filter pills for a feed instance (rss has no filter axis).
+    expect(cardFilterPills(container)).toHaveLength(0);
     await fireEvent.click(confirmBtn(container));
     expect(sendMock).toHaveBeenCalledWith({
       kind: 'updateSmartFolder',
       payload: {
         spaceId: 'work',
         folderId: 'feed-1',
-        sources: [{ source: 'rss', baseUrl: 'https://news.ycombinator.com/rss' }],
+        sources: [{ source: 'rss', baseUrl: 'https://news.ycombinator.com/rss', queries: [] }],
         name: 'Hacker News',
         maxItems: 30,
         refreshMinutes: 30,
       },
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Multi-filter (multi-filter-smart-connectors)
+// ---------------------------------------------------------------------------
+
+describe('SmartFolderEditor — multi-filter per instance', () => {
+  test('ticking a second filter on an instance card dispatches both filters', async () => {
+    const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
+    // Add a GitLab instance with Authored ticked.
+    await fillAndAddSource(container, {
+      baseUrl: 'https://gitlab.example.com',
+      queries: ['authored'],
+    });
+    // Tick "Reviewing" on the instance card too.
+    const reviewing = pillByLabel(cardFilterPills(container), 'Reviewing');
+    expect(reviewing).toBeTruthy();
+    await fireEvent.click(reviewing as HTMLButtonElement);
+    await fireEvent.click(confirmBtn(container));
+
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'createSmartFolder',
+        payload: expect.objectContaining({
+          sources: [
+            {
+              source: 'gitlab',
+              baseUrl: 'https://gitlab.example.com',
+              queries: ['authored', 'review-requested'],
+            },
+          ],
+        }),
+      }),
+    );
+  });
+
+  test('re-adding an existing instance MERGES filter selections (no duplicate card)', async () => {
+    const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
+    await fillAndAddSource(container, {
+      baseUrl: 'https://gitlab.example.com',
+      queries: ['authored'],
+    });
+    expect(sourceEntries(container)).toHaveLength(1);
+    // Re-add the SAME instance (gitlab + same host) with Reviewing ticked.
+    await fillAndAddSource(container, {
+      baseUrl: 'https://gitlab.example.com',
+      queries: ['review-requested'],
+    });
+    // Still ONE card; its filters are the union.
+    expect(sourceEntries(container)).toHaveLength(1);
+    await fireEvent.click(confirmBtn(container));
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          sources: [
+            {
+              source: 'gitlab',
+              baseUrl: 'https://gitlab.example.com',
+              queries: ['authored', 'review-requested'],
+            },
+          ],
+        }),
+      }),
+    );
+  });
+
+  test('Confirm is blocked when a queue instance has zero filters selected', async () => {
+    const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
+    await fillAndAddSource(container, {
+      baseUrl: 'https://gitlab.example.com',
+      queries: ['authored'],
+    });
+    expect(confirmBtn(container).disabled).toBe(false);
+    // Untick the only filter → the instance has zero filters → Confirm blocks.
+    const authored = pillByLabel(cardFilterPills(container), 'Authored');
+    await fireEvent.click(authored as HTMLButtonElement);
+    expect(confirmBtn(container).disabled).toBe(true);
+  });
+
+  test('the cap label reads "per section" once there are ≥ 2 resolved sections', async () => {
+    const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
+    await fillAndAddSource(container, {
+      baseUrl: 'https://gitlab.example.com',
+      queries: ['authored', 'review-requested'],
+    });
+    expect(container.textContent).toContain('Show per section');
   });
 });
 
@@ -552,7 +676,11 @@ describe('SmartFolderEditor — host-permission request on confirm (least-privil
         kind: 'createSmartFolder',
         payload: expect.objectContaining({
           sources: [
-            { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+            {
+              source: 'gitlab',
+              baseUrl: 'https://gitlab.example.com',
+              queries: ['review-requested'],
+            },
           ],
         }),
       }),

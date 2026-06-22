@@ -5,9 +5,9 @@ import type {
   AppState,
   FolderId,
   PinNode,
+  ResolvedSourceConfig,
   SmartSectionRuntime,
   SmartSource,
-  SmartSourceConfig,
 } from '../shared/types';
 import type { ConnectorCaches, SourceConnector } from './connectors/connector';
 // All 4 connectors are eagerly imported on every SW boot (~52 KB / ~11 KB gzip
@@ -44,13 +44,37 @@ export const REFRESH_MINUTES_DEFAULT = 10;
 export type SmartFolderNode = Extract<PinNode, { kind: 'smart' }>;
 
 /**
- * Stable section identity key for a source config: `${source}:${host}`.
- * Derived from `baseUrl` so two configs with the same source + host always
- * land in the same section regardless of query. Exported so the sidebar can
- * derive the same key without importing from `background/`.
+ * Stable per-**section** identity key for a RESOLVED single-query config:
+ * `${source}:${host}:${query}` for queue sections, `${source}:${host}` for rss
+ * (no query). Derived from `baseUrl` + the resolved `query`, so two filters of
+ * the same connector instance land in distinct sections. Exported so the
+ * sidebar can derive the same key without importing from `background/`.
  */
-export function sourceKey(cfg: SmartSourceConfig): string {
-  return `${cfg.source}:${new URL(cfg.baseUrl).host}`;
+export function sourceKey(cfg: ResolvedSourceConfig): string {
+  const base = `${cfg.source}:${new URL(cfg.baseUrl).host}`;
+  return cfg.query !== undefined ? `${base}:${cfg.query}` : base;
+}
+
+/**
+ * Expand a smart node's per-instance `sources[]` over each instance's
+ * `queries[]` into per-section {@link ResolvedSourceConfig}s (one per filter; a
+ * single resolved config — with no `query` — for a feed entry). The single
+ * derivation used by the engine fan-out, the origin union, and the editor's
+ * section preview. Order is `sources` order, then `queries` order within each
+ * instance.
+ */
+export function resolvedConfigs(node: SmartFolderNode): ResolvedSourceConfig[] {
+  const out: ResolvedSourceConfig[] = [];
+  for (const cfg of node.sources) {
+    if (cfg.queries.length === 0) {
+      out.push({ source: cfg.source, baseUrl: cfg.baseUrl });
+    } else {
+      for (const query of cfg.queries) {
+        out.push({ source: cfg.source, baseUrl: cfg.baseUrl, query });
+      }
+    }
+  }
+  return out;
 }
 
 /**
@@ -117,7 +141,7 @@ export function normalizeBaseUrl(raw: string): string {
  * another fetches normally.
  */
 export async function fetchSmartSectionRuntime(
-  cfg: SmartSourceConfig,
+  cfg: ResolvedSourceConfig,
   maxItems: number,
   caches?: ConnectorCaches,
 ): Promise<SmartSectionRuntime> {
@@ -181,14 +205,23 @@ export function startSmartFolderRefresh(
   deps: SmartFolderDeps,
   node: SmartFolderNode,
   caches?: ConnectorCaches,
+  only?: ResolvedSourceConfig[],
 ): { started: boolean; completion: Promise<void> } {
   if (inflight.has(node.id)) {
     return { started: false, completion: Promise.resolve() };
   }
   inflight.add(node.id);
 
+  // Expand the per-instance sources[] into per-filter resolved sections (or use
+  // the explicit `only` subset, for an update that touched just some sections).
+  // One `ConnectorCaches` is shared across ALL this refresh's sections, so
+  // per-instance me-resolution (keyed by baseUrl) happens once per instance per
+  // cycle even when several filters of one instance refetch (D5).
+  const sections = only ?? resolvedConfigs(node);
+  const cycleCaches = caches ?? new Map();
+
   // Emit pending per section so the UI can transition immediately.
-  for (const cfg of node.sources) {
+  for (const cfg of sections) {
     const sk = sourceKey(cfg);
     deps.enqueue({
       source: 'connector',
@@ -204,10 +237,10 @@ export function startSmartFolderRefresh(
   const completion = (async () => {
     try {
       await Promise.all(
-        node.sources.map(async (cfg) => {
+        sections.map(async (cfg) => {
           const sk = sourceKey(cfg);
           try {
-            const runtime = await fetchSmartSectionRuntime(cfg, node.maxItems, caches);
+            const runtime = await fetchSmartSectionRuntime(cfg, node.maxItems, cycleCaches);
             deps.enqueue({
               source: 'connector',
               kind: 'smartFolders.result',
@@ -343,9 +376,11 @@ export async function reconcileSmartFolderGrants(deps: SmartFolderDeps): Promise
     folders.map(async (node) => {
       const sections = deps.store.state.smartFolders[node.id]?.sections ?? {};
 
-      // Resolve grant status for every source in parallel.
+      // Resolve grant status for every resolved section in parallel. Origins
+      // are query-independent, so the filters of one instance share a grant —
+      // but each has its own section key, so a revoke must drop them all.
       const grantResults = await Promise.all(
-        node.sources.map(async (cfg) => {
+        resolvedConfigs(node).map(async (cfg) => {
           const sk = sourceKey(cfg);
           const granted = await hasHostPermissions(CONNECTORS[cfg.source].requiredOrigins(cfg));
           return { cfg, sk, granted, sectionState: sections[sk]?.state };

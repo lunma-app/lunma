@@ -15,8 +15,12 @@ import type { AppState, BackupEnvelope, SpaceColor } from './types';
 // pass-through entries in the append-only `migrations` list (see `migrations.ts`);
 // v7 (smart-tab-boundary) widens each `smartItemBindings` innermost slot from a
 // bare `TabId` to `{ tabId: TabId; allowGlob: string }` — a REAL transformation,
-// not a pass-through. Each bump is deliberate: it makes a downgrade detectable.
-export const CURRENT_SCHEMA_VERSION = 8;
+// not a pass-through; v8 (multi-source-smart-folders) wraps each smart node's
+// flat source/baseUrl/query? into `sources: [{…}]`; v9 (multi-filter-smart-
+// connectors) rewrites each `sources[]` entry from the flat `query?` shape to
+// `queries: SmartQuery[]` and re-keys `smartItemBindings` with the per-filter
+// axis. Each bump is deliberate: it makes a downgrade detectable.
+export const CURRENT_SCHEMA_VERSION = 9;
 
 const SpaceInstanceSchema = z.strictObject({
   spaceId: z.string(),
@@ -99,20 +103,34 @@ const ArchivedTabSchema = z.strictObject({
   archivedAt: z.number(),
 });
 
-// Per-entry connector sub-source (multi-source-smart-folders). Each entry
-// carries its own source discriminant, base URL, and optional canned query.
-// Queue sources carry a query; feed sources (`rss`) omit it.
+// Per-instance connector entry (multi-filter-smart-connectors). Each entry is
+// one connector instance (source + host); its `queries` array is the set of
+// canned filters that instance contributes. Queue sources carry a non-empty
+// `queries`; feed sources (`rss`) carry an empty `queries` (the create/update
+// handlers enforce the non-empty/empty split per source — the persisted schema
+// only types the shape). This is the CURRENT (v9) shape.
 const SmartSourceConfigSchema = z.strictObject({
+  source: z.enum(['gitlab', 'github', 'jira', 'rss']),
+  baseUrl: z.string(),
+  queries: z.array(z.enum(['authored', 'assigned', 'review-requested'])),
+});
+
+// Historical (v6–v8) per-entry connector sub-source — the flat `query?` shape
+// the multi-filter-smart-connectors change replaced with `queries[]`. Kept as a
+// stable parse target for the V6/V7/V8 schemas the migration tests build
+// fixtures against; the v9 migration rewrites this into the `queries[]` shape.
+const SmartSourceConfigV8Schema = z.strictObject({
   source: z.enum(['gitlab', 'github', 'jira', 'rss']),
   baseUrl: z.string(),
   query: z.enum(['authored', 'assigned', 'review-requested']).optional(),
 });
 
-// A pinned-tab placement node: a tab node, a single-level folder node, or a
-// smart-folder config node (smart-folders — configuration only; results are
-// ephemeral and never persisted). Folder `icon`/`color` are plain strings on
-// the record (as on `Space`); the narrow `IconName`/`SpaceColor` unions live
-// only at the bus boundary.
+// A pinned-tab placement node (CURRENT/v9 shape): a tab node, a single-level
+// folder node, or a smart-folder config node whose `sources[]` entries carry
+// `queries[]` (smart-folders — configuration only; results are ephemeral and
+// never persisted). Folder `icon`/`color` are plain strings on the record (as
+// on `Space`); the narrow `IconName`/`SpaceColor` unions live only at the bus
+// boundary.
 const PinNodeSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('tab'), id: z.string() }),
   z.strictObject({
@@ -128,15 +146,37 @@ const PinNodeSchema = z.discriminatedUnion('kind', [
     id: z.string(),
     name: z.string(),
     icon: z.string(),
-    // Multi-source: one or more connector sub-source entries (multi-source-
-    // smart-folders design D1). `.min(1)` enforced at the schema boundary;
-    // the editor also blocks confirming with an empty list.
+    // One or more connector instance entries (multi-filter-smart-connectors).
+    // `.min(1)` enforced at the schema boundary; the editor also blocks
+    // confirming with an empty list.
     sources: z.array(SmartSourceConfigSchema).min(1),
-    // Per-section cap (design D3). `.default(20)` so pre-v8 nodes that
-    // migrate from the flat shape still carry the prior default.
     maxItems: z.number().default(20),
-    // Feed read-hiding state (rss-connector design D9; rss sections only).
-    // `.default(true)` — a feed's resting state is the drained unread queue.
+    hideRead: z.boolean().default(true),
+    refreshMinutes: z.number(),
+  }),
+]);
+
+// Historical (v6–v8) pinned-tab node: identical to `PinNodeSchema` except the
+// smart branch uses the flat `query?` `SmartSourceConfigV8Schema`. The V6/V7/V8
+// AppState schemas reference this so a pre-v9 envelope (or v8-migration output)
+// still validates.
+const PinNodeV8Schema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('tab'), id: z.string() }),
+  z.strictObject({
+    kind: z.literal('folder'),
+    id: z.string(),
+    name: z.string(),
+    icon: z.string(),
+    color: z.string(),
+    children: z.array(z.string()),
+  }),
+  z.strictObject({
+    kind: z.literal('smart'),
+    id: z.string(),
+    name: z.string(),
+    icon: z.string(),
+    sources: z.array(SmartSourceConfigV8Schema).min(1),
+    maxItems: z.number().default(20),
     hideRead: z.boolean().default(true),
     refreshMinutes: z.number(),
   }),
@@ -230,7 +270,7 @@ export const AppStateV6Schema = z.strictObject({
   tabLastActivity: z.record(z.coerce.number(), z.number()),
   archivedTabs: z.array(ArchivedTabSchema),
   trash: z.record(z.string(), TrashedSpaceSchema),
-  pinnedBySpace: z.record(z.string(), z.array(PinNodeSchema)),
+  pinnedBySpace: z.record(z.string(), z.array(PinNodeV8Schema)),
   liveTabsById: z.record(z.coerce.number(), LiveTabSchema).optional(),
   faviconRow: z.array(z.string()),
   smartItemBindings: SmartItemBindingsSchema.default({}),
@@ -256,7 +296,7 @@ export const AppStateV7Schema = z.strictObject({
   tabLastActivity: z.record(z.coerce.number(), z.number()),
   archivedTabs: z.array(ArchivedTabSchema),
   trash: z.record(z.string(), TrashedSpaceSchema),
-  pinnedBySpace: z.record(z.string(), z.array(PinNodeSchema)),
+  pinnedBySpace: z.record(z.string(), z.array(PinNodeV8Schema)),
   liveTabsById: z.record(z.coerce.number(), LiveTabSchema).default({}),
   faviconRow: z.array(z.string()),
   smartItemBindings: SmartItemBindingsV7Schema.default({}),
@@ -280,6 +320,33 @@ export const AppStateV8Schema = z.strictObject({
   tabLastActivity: z.record(z.coerce.number(), z.number()),
   archivedTabs: z.array(ArchivedTabSchema),
   trash: z.record(z.string(), TrashedSpaceSchema),
+  pinnedBySpace: z.record(z.string(), z.array(PinNodeV8Schema)),
+  liveTabsById: z.record(z.coerce.number(), LiveTabSchema).default({}),
+  faviconRow: z.array(z.string()),
+  smartItemBindings: SmartItemBindingsV7Schema.default({}),
+  smartReadState: SmartReadStateSchema.default({}),
+  smartFolders: z.record(z.string(), SmartFolderRuntimeSchema).default({}),
+});
+
+// v9: rewrites each smart node's `sources[]` entries from the flat `query?`
+// shape to `queries: SmartQuery[]` (multi-filter-smart-connectors) via the
+// current `PinNodeSchema`. `smartItemBindings` item keys gain the per-filter
+// `${source}:${host}:${query}:${nativeId}` axis, but they remain arbitrary
+// strings so `SmartItemBindingsV7Schema` is unchanged.
+export const AppStateV9Schema = z.strictObject({
+  schemaVersion: z.number(),
+  spaces: z.array(SpaceSchema),
+  activeSpaceByWindow: z.record(z.coerce.number(), z.string().nullable()),
+  spaceInstancesByWindow: z.record(
+    z.coerce.number(),
+    z.record(z.string(), SpaceInstanceSchema).optional(),
+  ),
+  tabBindings: TabBindingsSchema,
+  savedTabs: z.record(z.string(), SavedTabSchema),
+  lastActivatedSpaceId: z.string().nullable(),
+  tabLastActivity: z.record(z.coerce.number(), z.number()),
+  archivedTabs: z.array(ArchivedTabSchema),
+  trash: z.record(z.string(), TrashedSpaceSchema),
   pinnedBySpace: z.record(z.string(), z.array(PinNodeSchema)),
   liveTabsById: z.record(z.coerce.number(), LiveTabSchema).default({}),
   faviconRow: z.array(z.string()),
@@ -290,18 +357,19 @@ export const AppStateV8Schema = z.strictObject({
 
 export const EnvelopeSchema = z.strictObject({
   schemaVersion: z.number(),
-  state: AppStateV8Schema,
+  state: AppStateV9Schema,
 });
 
 export type AppStateV6 = z.infer<typeof AppStateV6Schema>;
 export type AppStateV7 = z.infer<typeof AppStateV7Schema>;
 export type AppStateV8 = z.infer<typeof AppStateV8Schema>;
+export type AppStateV9 = z.infer<typeof AppStateV9Schema>;
 export type Envelope = z.infer<typeof EnvelopeSchema>;
 
 type AssertEqual<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
-const _schemaMatchesAppState: AssertEqual<AppStateV8, AppState> = true;
+const _schemaMatchesAppState: AssertEqual<AppStateV9, AppState> = true;
 void _schemaMatchesAppState;
 
 // ── Data-backup: BackupEnvelopeSchema ────────────────────────────────────────

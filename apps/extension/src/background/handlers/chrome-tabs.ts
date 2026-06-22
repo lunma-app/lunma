@@ -37,7 +37,12 @@ export function chromeTabHandlers(): Pick<
         id: tab.id,
         windowId: tab.windowId,
         title: tab.title,
-        url: tab.url,
+        // A tab opened with a target URL reports `url: ''` until the navigation
+        // commits, carrying the target in `pendingUrl` meanwhile (same reason the
+        // home check above reads both). Mirror `pendingUrl` so a tab pinned before
+        // its first commit still records its real `originalURL` instead of '' —
+        // `onUpdated` overwrites with the committed URL when it lands.
+        url: tab.url || tab.pendingUrl,
         active: tab.active,
         status: tab.status,
         favIconUrl: tab.favIconUrl,

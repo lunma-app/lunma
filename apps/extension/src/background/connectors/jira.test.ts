@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import type { SmartSourceConfig } from '../../shared/types';
+import type { ResolvedSourceConfig } from '../../shared/types';
 import { jiraConnector, statusForCategory } from './jira';
 
 // ── test plumbing ──────────────────────────────────────────────────────────────
@@ -59,7 +59,7 @@ function issue(
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
-function node(overrides: Partial<SmartSourceConfig> = {}): SmartSourceConfig {
+function node(overrides: Partial<ResolvedSourceConfig> = {}): ResolvedSourceConfig {
   return {
     source: 'jira',
     baseUrl: 'https://acme.atlassian.net',

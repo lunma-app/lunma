@@ -361,11 +361,15 @@ const SmartQuerySchema = z.enum(['authored', 'assigned', 'review-requested']);
 // out-of-vocabulary source (e.g. 'bitbucket') rejects at the bus boundary.
 const SmartSourceSchema = z.enum(['gitlab', 'github', 'jira', 'rss']);
 
-// Per-source config entry — mirrors `SmartSourceConfig` in `types.ts`.
+// Per-instance config entry — mirrors `SmartSourceConfig` in `types.ts`
+// (multi-filter-smart-connectors): each entry carries the set of canned filters
+// (`queries`) for one connector instance. Queue sources carry a non-empty
+// `queries`; rss carries `[]` — the per-source split is enforced by the SW's
+// create/update handlers, not at the wire boundary.
 const SmartSourceConfigSchema = z.strictObject({
   source: SmartSourceSchema,
   baseUrl: z.string(),
-  query: SmartQuerySchema.optional(),
+  queries: z.array(SmartQuerySchema),
 });
 
 // A pinned-tab placement node — mirrors `PinNode` in `types.ts` (all three
