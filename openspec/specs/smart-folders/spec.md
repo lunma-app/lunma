@@ -896,6 +896,17 @@ you are actively on is never closed, and an already-read item is never re-closed
 The read set is persisted ids-only and pruned (see the `storage-and-migrations`
 capability, Requirement: Smart-folder read-state is persisted and pruned).
 
+**Auto-advance** keeps the reading flow going: when the user **manually closes**
+the tab of the UNREAD item they are reading (`onTabRemoved` for an item still
+unread at close time), the queue SHALL open the next unread, unbound item in the
+**same section** (`nextUnreadFeedItemAfterClose` → `openSmartItem`). Auto-advance
+SHALL NOT fire for a **consume=close**: when an item is consumed by navigating
+away, the store marks it read BEFORE the SW closes its tab, so an
+already-read closing item is the signal that the close is a drain, not a manual
+close — advancing there would chase the consume into a runaway drain (consume →
+open next → consume → …, emptying the whole section). `nextUnreadFeedItemAfterClose`
+therefore SHALL return nothing when the closing item is already read.
+
 The feed's resting state SHALL be **drained** — read rows hidden (the node's
 `hideRead` defaults `true`). The sidebar SHALL expose, on a feed folder: a
 **"Show recently read"** peek toggled via
@@ -913,6 +924,18 @@ items carry no read-state.
 - **THEN** the item is bound and **stays unread** in the list while its tab is the active tab
 - **AND WHEN** the user navigates to another tab (its bound tab deactivates) or closes the tab
 - **THEN** the item is marked read, its row drains, the next-oldest unread backfills, the unread badge decrements, AND (on the navigate-away path) its bound tab is closed (consume = close — no tab trail)
+
+#### Scenario: Manually closing the reading tab advances to the next unread
+
+- **GIVEN** an UNREAD feed item whose tab is open and active
+- **WHEN** the user closes that tab themselves (it is still unread at close time)
+- **THEN** the queue opens the next unread, unbound item in the same section
+
+#### Scenario: A consume=close does NOT auto-advance (no runaway drain)
+
+- **GIVEN** a feed item that was consumed by navigating away (marked read, then its now-inactive tab closed by the SW)
+- **WHEN** `onTabRemoved` fires for that already-read tab
+- **THEN** `nextUnreadFeedItemAfterClose` returns nothing and no next item is opened — so consuming one item never cascades into draining the section
 
 #### Scenario: The resting state is drained; "Show recently read" reveals
 
