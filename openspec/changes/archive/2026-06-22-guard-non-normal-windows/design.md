@@ -28,7 +28,7 @@ The architecture keeps the store (`shared/`) chrome-free; window-type is a chrom
 The clean fix is to keep non-normal windows out of `activeSpaceByWindow` entirely. Every orchestration path already gates on "window has an active Space / instance," so excluding the window at entry transitively disables grouping, focus moves, home-tab spawning, and collapse — all of it — without scattering `type === 'normal'` checks through the orchestrator. Alternative (guard inside `ensureGroupForSpace` / `addTabToSpaceGroup`): rejected — it would still seed bogus `activeSpaceByWindow` entries, still render an active Space for a popup, and require a window-type lookup (async `chrome.windows.get`) deep in a hot path.
 
 **D2 — `seedExistingWindows` uses the API filter.**
-Change `chrome.windows.getAll()` → `chrome.windows.getAll({ windowTypes: MANAGED_WINDOW_TYPES })`. Cheaper and more idiomatic than fetching all and filtering, and it documents intent at the query.
+Change `chrome.windows.getAll()` → `chrome.windows.getAll({ windowTypes: [...MANAGED_WINDOW_TYPES] })`. Cheaper and more idiomatic than fetching all and filtering, and it documents intent at the query. (The constant is `readonly` via `as const`, and `getAll`'s `windowTypes` option is a mutable array, so the tuple is spread into a fresh array at the call site — `MANAGED_WINDOW_TYPES` stays the single source of truth.)
 
 **D3 — `windows.onCreated` uses the predicate.**
 The `onCreated` payload is a `chrome.windows.Window` carrying `type`. Guard: `if (!isManagedWindow(event.payload.window)) return;` before `onWindowOpened` / `markDirty`. Window type is fixed at creation, so a one-time check at `onCreated` is sufficient — no need to watch for type changes.

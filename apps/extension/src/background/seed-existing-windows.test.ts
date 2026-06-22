@@ -2,11 +2,19 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { LunmaStore } from '../shared/store.svelte';
 import { seedExistingWindows } from './seed-existing-windows';
 
-function installChromeStub(windows: Partial<chrome.windows.Window>[]): void {
-  const getAll = vi.fn(async () => windows);
+// The boot seed filters to normal windows at the query (`windowTypes: ['normal']`),
+// so the stub honours that filter — a `type` other than 'normal' is excluded.
+function installChromeStub(windows: Partial<chrome.windows.Window>[]): ReturnType<typeof vi.fn> {
+  const getAll = vi.fn(async (opts?: chrome.windows.QueryOptions) => {
+    const types = opts?.windowTypes;
+    if (!types) return windows;
+    // Untyped stub windows model normal windows (the common case in these tests).
+    return windows.filter((w) => types.includes(w.type ?? 'normal'));
+  });
   (globalThis as unknown as { chrome: unknown }).chrome = {
     windows: { getAll },
   };
+  return getAll;
 }
 
 describe('seedExistingWindows', () => {
@@ -32,6 +40,26 @@ describe('seedExistingWindows', () => {
       100: 'space-1',
       200: 'space-1',
     });
+  });
+
+  test("queries only normal windows (getAll({ windowTypes: ['normal'] }))", async () => {
+    const getAll = installChromeStub([{ id: 100, type: 'normal' }]);
+
+    await seedExistingWindows(store);
+
+    expect(getAll).toHaveBeenCalledWith({ windowTypes: ['normal'] });
+  });
+
+  test('a popup already open at boot is not seeded (normal window still is)', async () => {
+    installChromeStub([
+      { id: 100, type: 'normal' },
+      { id: 200, type: 'popup' },
+    ]);
+
+    await seedExistingWindows(store);
+
+    expect(store.state.activeSpaceByWindow).toEqual({ 100: 'space-1' });
+    expect(store.state.activeSpaceByWindow[200]).toBeUndefined();
   });
 
   test('leaves persisted entries untouched (including explicit null)', async () => {
