@@ -642,14 +642,20 @@ resolved section renders identically to today (no section headers, no collapse c
 change).
 
 When expanded with ≥ 2 resolved sections, the folder SHALL render, in `node.sources` order and
-within each entry in `queries` order: (a) a **section header** row (a leading disclosure chevron in
-`--text-dim` + source icon in `--text-dim` + a label in `--text-muted`, `--font-size-xs`, 12px
-height) followed by (b) the section's **body** — its result rows using the existing per-kind rules
+within each entry in `queries` order: (a) a **section header** row — a single **16px disclosure
+slot** showing the section's source icon (`rss` / git / kanban) in `--text-dim` **at rest**, which
+crossfades to a rotating `chevron-right` on the header's `:hover` / `:focus-visible` (one slot, NOT
+a separate chevron and icon), followed by a label in `--text-dim`, `--text-xs`, `--weight-medium`,
+at a compact (~24px) height, with a hairline separator above every section header except the first —
+followed by (b) the section's **body** — its result rows using the existing per-kind rules
 (queue → status dots; feed → unread marks), plus the section's ghost/empty/error/sign-in/needs-access
 rows and feed reading-controls. The header label SHALL be `host · filter` for a queue section (e.g.
 `gitlab.com · authored`, the filter using the per-source query label) and `host` for an rss section.
 Section headers SHALL be implemented as `SmartSectionHeader.svelte` (composed of the `Icon` primitive
-only — no new primitives).
+only — no new primitives). Per-item favicons SHALL be recessed at rest (reduced opacity, full on row
+hover/active) so the item title leads. The crossfade and chevron rotation SHALL collapse to instant
+under `prefers-reduced-motion: reduce`, and all header colours SHALL come from the `--text-*` ramp so
+WCAG-AA holds at every Colour intensity.
 
 The section header SHALL be an **interactive disclosure control** (a `<button>`, not an
 `aria-hidden` divider): activating it toggles that section's collapsed state (see Requirement:
@@ -661,7 +667,7 @@ normally.
 
 The section header and its result rows SHALL stay at the same indentation — the disclosure
 affordance SHALL NOT introduce an additional nesting indent (the layout is flat: collapse is
-signalled by chevron state, not indent depth).
+signalled by the section body's presence and the on-hover chevron, not indent depth).
 
 The folder badge SHALL sum per-section attention counts: `Σ (item count for queue sections)
 + Σ (unread count for feed sections)`, counting each resolved section independently (an item
@@ -684,6 +690,13 @@ renders three static ghost rows.
 - **GIVEN** a folder with one instance `{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored', 'review-requested'] }`, each section `ok` with items
 - **WHEN** the folder is expanded
 - **THEN** the folder renders: section header "gitlab.com · authored" → authored items → section header "gitlab.com · reviewing" → review-requested items
+
+#### Scenario: The section header is a single disclosure slot
+
+- **GIVEN** a two-source folder, expanded
+- **WHEN** a section header renders
+- **THEN** it presents ONE 16px leading slot — the source icon at rest — not a separate chevron plus source icon
+- **AND** the chevron is revealed (crossfaded in, rotated to reflect expanded state) on the header's hover / keyboard focus
 
 #### Scenario: The folder badge sums per-section attention counts regardless of collapse
 

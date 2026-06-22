@@ -31,13 +31,36 @@ describe('SmartSectionHeader — disclosure control', () => {
     expect(header(container).getAttribute('aria-expanded')).toBe('false');
   });
 
-  test('the chevron carries the expanded class only when not collapsed (rotation)', () => {
+  test('one disclosure slot holds both glyphs — source icon (default) + chevron (hover/expanded)', () => {
+    const { container } = render(SmartSectionHeaderHarness, { props: { cfg: gitlab } });
+    const slots = container.querySelectorAll('.section-disclosure');
+    expect(slots).toHaveLength(1); // a single merged slot, not chevron + icon
+    const slot = slots[0] as HTMLElement;
+    // The source icon (gitlab → folder-git-2) is the rest glyph; the chevron is
+    // stacked in the same slot and revealed on hover/focus via CSS.
+    expect(slot.querySelector('.glyph-type [data-icon-name="folder-git-2"]')).not.toBeNull();
+    expect(slot.querySelector('.glyph-caret [data-icon-name="chevron-right"]')).not.toBeNull();
+    // The old two-slot markup is gone.
+    expect(container.querySelector('.section-chevron')).toBeNull();
+    expect(container.querySelector('.section-icon')).toBeNull();
+  });
+
+  test('the disclosure slot carries the expanded class only when not collapsed (chevron rotation)', () => {
     const { container, rerender } = render(SmartSectionHeaderHarness, {
       props: { cfg: gitlab, collapsed: false },
     });
-    expect(container.querySelector('.section-chevron')?.classList).toContain('expanded');
+    expect(container.querySelector('.section-disclosure')?.classList).toContain('expanded');
     rerender({ cfg: gitlab, collapsed: true });
-    expect(container.querySelector('.section-chevron')?.classList).not.toContain('expanded');
+    expect(container.querySelector('.section-disclosure')?.classList).not.toContain('expanded');
+  });
+
+  test('the hairline separator is suppressed on the first section, present otherwise', () => {
+    const { container, rerender } = render(SmartSectionHeaderHarness, {
+      props: { cfg: gitlab, first: true },
+    });
+    expect(header(container).classList).toContain('first');
+    rerender({ cfg: gitlab, first: false });
+    expect(header(container).classList).not.toContain('first');
   });
 
   test('the accessible label names the section (host · filter), count, and the toggle action', () => {

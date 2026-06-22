@@ -8,6 +8,7 @@ interface Props {
   collapsed?: boolean;
   onToggle?: () => void;
   controlsId?: string | undefined;
+  first?: boolean;
 }
 
 const {
@@ -16,7 +17,8 @@ const {
   collapsed = false,
   onToggle = () => undefined,
   controlsId = undefined,
+  first = false,
 }: Props = $props();
 </script>
 
-<SmartSectionHeader {cfg} {count} {collapsed} {onToggle} {controlsId} />
+<SmartSectionHeader {cfg} {count} {collapsed} {onToggle} {controlsId} {first} />
