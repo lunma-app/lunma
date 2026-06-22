@@ -356,8 +356,14 @@ const menuItems = $derived<RowMenuItem[] & MenuItem[]>([
   ...(hasFeedSections
     ? [{ id: 'mark-all-read', label: 'Mark all read', icon: 'check-check', onSelect: markAllRead }]
     : []),
-  { id: 'move-up', label: 'Move up', disabled: !canMoveUp, onSelect: onMoveUp },
-  { id: 'move-down', label: 'Move down', disabled: !canMoveDown, onSelect: onMoveDown },
+  { id: 'move-up', label: 'Move up', icon: 'arrow-up', disabled: !canMoveUp, onSelect: onMoveUp },
+  {
+    id: 'move-down',
+    label: 'Move down',
+    icon: 'arrow-down',
+    disabled: !canMoveDown,
+    onSelect: onMoveDown,
+  },
   confirmingDelete
     ? {
         id: 'delete',
