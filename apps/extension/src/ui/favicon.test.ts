@@ -37,6 +37,11 @@ describe('faviconUrl', () => {
     expect(url.searchParams.get('size')).toBe('32');
   });
 
+  test('returns empty for an empty pageUrl (no doomed endpoint request)', () => {
+    expect(faviconUrl('')).toBe('');
+    expect(faviconUrl('', 16, 'abc123')).toBe('');
+  });
+
   test('appends a `v` cache-bust param only when one is provided', () => {
     // No bust → the plain (constant) endpoint URL, exactly as before.
     expect(new URL(faviconUrl('https://x/', 16)).searchParams.has('v')).toBe(false);
@@ -101,6 +106,10 @@ describe('faviconFor', () => {
   test('ignores an about: favIconUrl and uses the endpoint', () => {
     const result = faviconFor('https://example.com/', 'about:blank');
     expect(result.startsWith('chrome-extension://abc/_favicon/')).toBe(true);
+  });
+
+  test('an empty pageUrl with no favIconUrl yields empty (→ globe, no request)', () => {
+    expect(faviconFor('')).toBe('');
   });
 
   test('the plain-endpoint fallback (no favicon) carries no `v` bust', () => {
