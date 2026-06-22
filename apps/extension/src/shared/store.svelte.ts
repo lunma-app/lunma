@@ -1164,14 +1164,21 @@ export class LunmaStore {
     node.hideRead = hideRead;
   }
 
-  /** Prune the folder's read-state to the live feed window (design D3): drop any
-   * read id no longer present in the fetched set, so the slice can never exceed
-   * a folder's `maxItems`. Removes the folder's entry entirely once empty. */
-  pruneSmartReadState(folderId: FolderId, liveIds: string[]): void {
+  /** Prune ONE resolved section's read ids to its live feed window (design D3).
+   * The folder's read set spans every section (ids are namespaced
+   * `${sectionKey}:${nativeId}`), but each section fetches independently — so a
+   * fetch prunes only the ids carrying THIS section's `sectionKey` prefix,
+   * dropping those absent from `liveIds` and leaving every other section's read
+   * ids untouched (else a multi-section/OPML folder would wipe one section's
+   * read marks whenever a different section refreshes). Removes the folder's
+   * entry entirely once empty. For a single-section folder every id shares the
+   * prefix, so this reduces to the prior folder-wide prune. */
+  pruneSmartReadState(folderId: FolderId, sectionKey: string, liveIds: string[]): void {
     const read = this.state.smartReadState[folderId];
     if (read === undefined) return;
     const live = new Set(liveIds);
-    const kept = read.filter((id) => live.has(id));
+    const prefix = `${sectionKey}:`;
+    const kept = read.filter((id) => !id.startsWith(prefix) || live.has(id));
     if (kept.length === read.length) return;
     if (kept.length === 0) delete this.state.smartReadState[folderId];
     else this.state.smartReadState[folderId] = kept;

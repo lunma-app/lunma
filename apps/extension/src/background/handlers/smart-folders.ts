@@ -425,9 +425,11 @@ export function smartFolderHandlers(
       // — `pending`/`error` hold last-known items, so pruning against their
       // empty `items` would wrongly wipe the read set.
       if (runtime.state === 'ok') {
-        // Prune with namespaced ids so they match the keys used by markSmartItemRead.
+        // Prune only THIS section's read ids (namespaced to match the keys used
+        // by markSmartItemRead) — other sections prune on their own results.
         ctx.store.pruneSmartReadState(
           folderId,
+          sk,
           runtime.items.map((i) => `${sk}:${i.id}`),
         );
       }

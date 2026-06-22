@@ -369,9 +369,13 @@ export interface AppState {
    * `smartItemBindings`), NOT stripped like the ephemeral `smartFolders`
    * runtime — so read marks survive SW sleeps and Chrome restarts. **Ids only**
    * (never the item's title/URL — the reading-sensitive payload stays off
-   * disk). **Pruned to the live feed window** after every successful fetch
-   * (`pruneSmartReadState`), so the set can never exceed a folder's `maxItems`.
-   * Read-state is RSS-only in v1 — queue items self-resolve as you act on them.
+   * disk). Ids are namespaced `${sectionKey}:${nativeId}`, so a folder's read
+   * set spans all its sections. **Pruned per resolved section** after that
+   * section's successful fetch (`pruneSmartReadState`) — a section drops only
+   * its own absent ids, never another section's — so the set stays bounded by
+   * the sum of the folder's section windows without one section's refresh
+   * wiping another's read marks. Read-state is RSS-only in v1 — queue items
+   * self-resolve as you act on them.
    */
   smartReadState: { [folderId: FolderId]: string[] };
   /**
