@@ -61,6 +61,17 @@ let displayedSrc = $state<string | undefined>(undefined);
 // state (the `onload` event alone is not enough — see the effect).
 let preloadEl = $state<HTMLImageElement>();
 
+// Liveness latch. Removing an `<img>` from the DOM does NOT cancel an in-flight
+// request, so a slow/failing favicon load (e.g. WhatsApp's CORP-blocked icon, or
+// the `_favicon` endpoint for an empty pageUrl) can fire `onload`/`onerror` AFTER
+// this instance is destroyed — when a tile/row unmounts mid-load. Those handlers
+// read the `stage`/`candidate` deriveds; reading a derived whose parent effect is
+// already destroyed warns `derived_inert`. The latch makes the late event a no-op.
+let alive = true;
+$effect(() => () => {
+  alive = false;
+});
+
 // Reset the error flags whenever either source changes so a recycled instance
 // re-tries from the primary. `displayedSrc` is deliberately NOT reset here —
 // that is what holds the current icon across a live update until the new source
@@ -95,6 +106,7 @@ const candidate = $derived(
 
 // Preload resolved → promote the now-ready source to the painted one (the swap).
 function onPreloadLoad(): void {
+  if (!alive) return; // late event after teardown — see the liveness latch
   displayedSrc = candidate;
 }
 
@@ -119,6 +131,7 @@ $effect(() => {
 // recomputes (primary→fallback→globe). `displayedSrc` is LEFT untouched, so a
 // failed live update keeps the current icon rather than regressing to the globe.
 function onPreloadError(): void {
+  if (!alive) return; // late event after teardown — see the liveness latch
   if (stage === 'primary') primaryFailed = true;
   else if (stage === 'fallback') fallbackFailed = true;
 }
