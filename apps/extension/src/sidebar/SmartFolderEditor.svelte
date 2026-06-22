@@ -614,15 +614,18 @@ function confirm(): void {
                   testid="smart-source-url"
                 />
                 {#if s.source !== 'rss'}
-                  <div class="filter-pills" role="group" aria-label="Filters">
-                    {#each queryOptionsFor(s.source) as opt (opt.value)}
-                      <Chip
-                        label={opt.label}
-                        selected={s.queries.includes(opt.value)}
-                        onToggle={() => toggleQuery(i, opt.value)}
-                        testid="smart-filter-pill"
-                      />
-                    {/each}
+                  <div class="field">
+                    <span class="field-label">Filters</span>
+                    <div class="filter-pills" role="group" aria-label="Filters">
+                      {#each queryOptionsFor(s.source) as opt (opt.value)}
+                        <Chip
+                          label={opt.label}
+                          selected={s.queries.includes(opt.value)}
+                          onToggle={() => toggleQuery(i, opt.value)}
+                          testid="smart-filter-pill"
+                        />
+                      {/each}
+                    </div>
                   </div>
                 {/if}
               {/if}
