@@ -3,6 +3,9 @@ import type { Snippet } from 'svelte';
 
 interface Props {
   variant?: 'primary' | 'secondary' | 'ghost' | undefined;
+  /** Control density. `md` (default) is the standard control; `sm` is a compact
+   * variant for tertiary / inline affordances (smaller height + `--text-xs`). */
+  size?: 'sm' | 'md' | undefined;
   disabled?: boolean | undefined;
   type?: 'button' | 'submit' | undefined;
   onclick: () => void;
@@ -14,6 +17,7 @@ interface Props {
 
 const {
   variant = 'secondary',
+  size = 'md',
   disabled = false,
   type = 'button',
   onclick,
@@ -33,6 +37,7 @@ function handleClick(): void {
   {title}
   class="btn"
   data-variant={variant}
+  data-size={size}
   data-testid={testid}
   {disabled}
   onclick={handleClick}
@@ -54,6 +59,13 @@ function handleClick(): void {
     gap: var(--space-2);
     font: var(--weight-medium) var(--text-base) / 1 var(--font-sans);
     cursor: pointer;
+  }
+
+  /* Compact density for tertiary / inline affordances. */
+  .btn[data-size='sm'] {
+    height: var(--control-h-xs);
+    padding: 0 var(--space-2);
+    font: var(--weight-medium) var(--text-xs) / 1 var(--font-sans);
     transition:
       background var(--motion-fast) var(--ease-standard),
       color var(--motion-fast) var(--ease-standard),

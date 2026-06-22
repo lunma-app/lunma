@@ -597,6 +597,7 @@ export function onContextMenu(e: MouseEvent): void {
             {#if readCount > 0}
               <Button
                 variant="ghost"
+                size="sm"
                 onclick={() => toggleSectionRead(sourceKey(cfg))}
                 title={hidesRead ? 'Show recently read' : 'Hide read again'}
               >
@@ -606,6 +607,7 @@ export function onContextMenu(e: MouseEvent): void {
             <span class="controls-spacer"></span>
             <Button
               variant="ghost"
+              size="sm"
               onclick={openAll}
               title="Open the feed's website in a new tab"
             >
@@ -642,7 +644,7 @@ export function onContextMenu(e: MouseEvent): void {
 
 <style>
   .children {
-    padding-left: var(--space-4);
+    padding-left: var(--space-3);
     display: flex;
     flex-direction: column;
     animation: smart-open var(--motion-base) var(--ease-emphasised);
