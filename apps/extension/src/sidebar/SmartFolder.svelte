@@ -210,10 +210,18 @@ function feedWindowForSection(
   secItems.forEach((it, i) => {
     if (!readSet.has(`${sk}:${it.id}`)) unreadPositions.push(i);
   });
+  // The window must (a) span through the newest `maxItems` unread items (all of
+  // them when fewer) so every counted unread renders even when read rows sit
+  // ahead of them — slicing the first `maxItems` by POSITION drops unread that
+  // trail a run of read rows (you read the newest N) — AND (b) still cover at
+  // least the first `maxItems` rows so trailing read rows stay available for the
+  // "show read" peek. Hence the max of both bounds. No unread → just the peek.
+  const unreadBudget = Math.min(unreadPositions.length, node.maxItems);
+  const peekCutoff = Math.min(secItems.length, node.maxItems);
   const cutoff =
-    unreadPositions.length >= node.maxItems
-      ? (unreadPositions[node.maxItems - 1] as number) + 1
-      : Math.min(secItems.length, node.maxItems);
+    unreadBudget > 0
+      ? Math.max((unreadPositions[unreadBudget - 1] as number) + 1, peekCutoff)
+      : peekCutoff;
   return secItems.slice(0, cutoff);
 }
 
