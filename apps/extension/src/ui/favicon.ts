@@ -4,6 +4,11 @@
  * the manifest. Used by `TabRow` to render a tab's icon without fetching the
  * page directly.
  *
+ * An empty `pageUrl` yields `''` (not an endpoint URL): a tab with no URL has no
+ * favicon to resolve, and Chrome's `_favicon` endpoint net-errors on a blank
+ * `pageUrl` (`ERR_FAILED`). Returning empty lets the composing `Favicon` treat it
+ * as absent and render the globe directly — no doomed request.
+ *
  * @param pageUrl   the page whose favicon is wanted
  * @param size      requested square size in px (Chrome serves the nearest cached)
  * @param cacheBust optional token that changes the endpoint URL when the live
@@ -17,6 +22,7 @@
  *   ignores when resolving the favicon.
  */
 export function faviconUrl(pageUrl: string, size = 16, cacheBust?: string): string {
+  if (pageUrl === '') return ''; // no page → no favicon (a blank pageUrl net-errors)
   const url = new URL(chrome.runtime.getURL('/_favicon/'));
   url.searchParams.set('pageUrl', pageUrl);
   url.searchParams.set('size', String(size));
