@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { PinNode } from '../shared/types';
 import SmartFolderEditorHarness from './SmartFolderEditor.test.harness.svelte';
@@ -28,7 +29,9 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Helpers — the editor is Name-first + a list of in-place editable source cards
+// (no add-source sub-form). Each card carries its own Source `Select`, URL input,
+// and filter `Chip` pills; folder settings + a single Create/Save sit below.
 // ---------------------------------------------------------------------------
 
 const nameInput = (c: HTMLElement): HTMLInputElement =>
@@ -36,12 +39,26 @@ const nameInput = (c: HTMLElement): HTMLInputElement =>
 
 const confirmBtn = (c: HTMLElement): HTMLButtonElement =>
   [...c.querySelectorAll('button')].find((b) =>
-    /Add smart folder|Save/.test(b.textContent ?? ''),
+    /^(Create|Save)$/.test((b.textContent ?? '').trim()),
   ) as HTMLButtonElement;
 
-// The filter multi-select renders selectable `Chip` pills (buttons carrying
-// aria-pressed), not radios. Helpers below map a SmartQuery to its per-source
-// pill label and toggle pills to reach an exact selection.
+const addSourceBtn = (c: HTMLElement): HTMLButtonElement =>
+  c.querySelector('[data-testid="smart-add-source"]') as HTMLButtonElement;
+
+const cards = (c: HTMLElement): HTMLElement[] =>
+  [...c.querySelectorAll('[data-testid="smart-source-entry"]')] as HTMLElement[];
+
+const card = (c: HTMLElement, i = 0): HTMLElement => cards(c)[i] as HTMLElement;
+
+const removeSourceBtns = (c: HTMLElement): HTMLButtonElement[] =>
+  [...c.querySelectorAll('[data-testid="smart-source-remove"]')] as HTMLButtonElement[];
+
+const cardUrlInput = (cardEl: HTMLElement): HTMLInputElement =>
+  cardEl.querySelector('[data-testid="smart-source-url"]') as HTMLInputElement;
+
+const cardPills = (cardEl: HTMLElement): HTMLButtonElement[] =>
+  [...cardEl.querySelectorAll('[data-testid="smart-filter-pill"]')] as HTMLButtonElement[];
+
 type Query = 'authored' | 'assigned' | 'review-requested';
 const ALL_QUERIES: Query[] = ['authored', 'assigned', 'review-requested'];
 
@@ -51,77 +68,52 @@ function queryLabel(source: string, q: Query): string {
   return source === 'jira' ? 'Watching' : 'Reviewing';
 }
 
-const addFilterPills = (c: HTMLElement): HTMLButtonElement[] =>
-  [...c.querySelectorAll('[data-testid="smart-add-filter-pill"]')] as HTMLButtonElement[];
-
-const cardFilterPills = (c: HTMLElement): HTMLButtonElement[] =>
-  [...c.querySelectorAll('[data-testid="smart-filter-pill"]')] as HTMLButtonElement[];
-
 const pillByLabel = (pills: HTMLButtonElement[], label: string): HTMLButtonElement | undefined =>
   pills.find((p) => (p.textContent ?? '').trim() === label);
 
 const isPressed = (b: HTMLButtonElement): boolean => b.getAttribute('aria-pressed') === 'true';
 
-/** Toggle the add-form filter pills until the selection equals `queries`. */
-async function setAddFilters(c: HTMLElement, source: string, queries: Query[]): Promise<void> {
-  for (const q of ALL_QUERIES) {
-    const pill = pillByLabel(addFilterPills(c), queryLabel(source, q));
-    if (!pill) continue;
-    if (isPressed(pill) !== queries.includes(q)) await fireEvent.click(pill);
-  }
-}
-
-const trigger = (c: HTMLElement, testid: string): HTMLButtonElement =>
-  c.querySelector(`[data-testid="${testid}"]`) as HTMLButtonElement;
-
-/** The current value shown on a `Select` trigger. */
 const selectValue = (c: HTMLElement, testid: string): string | null =>
-  trigger(c, testid).getAttribute('data-value');
+  (c.querySelector(`[data-testid="${testid}"]`) as HTMLElement).getAttribute('data-value');
 
-/** Open a `Select` (by trigger testid) and pick the option carrying `value`. */
+const cardSourceValue = (cardEl: HTMLElement): string | null =>
+  (cardEl.querySelector('[data-testid="smart-source-type"]') as HTMLElement).getAttribute(
+    'data-value',
+  );
+
+/** Open a folder-level `Select` (cadence / max-items) and pick `value`. */
 async function pickSelect(c: HTMLElement, testid: string, value: string): Promise<void> {
-  const el = trigger(c, testid);
+  const el = c.querySelector(`[data-testid="${testid}"]`) as HTMLButtonElement;
   await fireEvent.click(el);
   const root = el.closest('.select') as HTMLElement;
   const option = root.querySelector(`[role="option"][data-value="${value}"]`) as HTMLButtonElement;
   await fireEvent.click(option);
 }
 
-// Add-source form helpers — testids live inside the inline add form.
-const addSourceOpenBtn = (c: HTMLElement): HTMLButtonElement =>
-  c.querySelector('[data-testid="smart-add-source-open"]') as HTMLButtonElement;
+/** Pick a source type on a specific card's `Select`. */
+async function pickCardSource(cardEl: HTMLElement, value: string): Promise<void> {
+  const trig = cardEl.querySelector('[data-testid="smart-source-type"]') as HTMLButtonElement;
+  await fireEvent.click(trig);
+  const root = trig.closest('.select') as HTMLElement;
+  const option = root.querySelector(`[role="option"][data-value="${value}"]`) as HTMLButtonElement;
+  await fireEvent.click(option);
+}
 
-const addSourceUrlInput = (c: HTMLElement): HTMLInputElement =>
-  c.querySelector('[data-testid="smart-add-source-url"]') as HTMLInputElement;
+async function setCardUrl(cardEl: HTMLElement, value: string): Promise<void> {
+  await fireEvent.input(cardUrlInput(cardEl), { target: { value } });
+}
 
-const addSourceConfirmBtn = (c: HTMLElement): HTMLButtonElement =>
-  c.querySelector('[data-testid="smart-add-source-confirm"]') as HTMLButtonElement;
-
-const sourceEntries = (c: HTMLElement): Element[] => [
-  ...c.querySelectorAll('[data-testid="smart-source-entry"]'),
-];
-
-const removeSourceBtns = (c: HTMLElement): HTMLButtonElement[] =>
-  [...c.querySelectorAll('[aria-label="Remove source"]')] as HTMLButtonElement[];
-
-/** Open the "Add source" inline form (no-op in create mode, where it auto-opens). */
-const openAddForm = async (c: HTMLElement): Promise<void> => {
-  const btn = addSourceOpenBtn(c);
-  if (btn) await fireEvent.click(btn);
-};
-
-/** Open the add form, optionally override source/URL/filters, then click Add. */
-async function fillAndAddSource(
-  c: HTMLElement,
-  opts: { source?: string; baseUrl?: string; queries?: Query[] } = {},
+/** Toggle a card's filter pills until the selection equals `queries`. */
+async function setCardFilters(
+  cardEl: HTMLElement,
+  source: string,
+  queries: Query[],
 ): Promise<void> {
-  await openAddForm(c);
-  if (opts.source) await pickSelect(c, 'smart-add-source-type', opts.source);
-  if (opts.baseUrl !== undefined) {
-    await fireEvent.input(addSourceUrlInput(c), { target: { value: opts.baseUrl } });
+  for (const q of ALL_QUERIES) {
+    const pill = pillByLabel(cardPills(cardEl), queryLabel(source, q));
+    if (!pill) continue;
+    if (isPressed(pill) !== queries.includes(q)) await fireEvent.click(pill);
   }
-  if (opts.queries) await setAddFilters(c, opts.source ?? 'gitlab', opts.queries);
-  await fireEvent.click(addSourceConfirmBtn(c));
 }
 
 function existingNode(overrides: Partial<SmartNode> = {}): SmartNode {
@@ -143,15 +135,18 @@ function existingNode(overrides: Partial<SmartNode> = {}): SmartNode {
 // ---------------------------------------------------------------------------
 
 describe('SmartFolderEditor — create mode', () => {
-  test('the add form defaults to gitlab, gitlab.com, and review-requested', async () => {
+  test('seeds one GitLab card (gitlab.com, Reviewing) and the primary action is enabled', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    // confirm is disabled until at least one source is added
-    expect(confirmBtn(container).disabled).toBe(true);
-    await openAddForm(container);
-    expect(selectValue(container, 'smart-add-source-type')).toBe('gitlab');
-    expect(addSourceUrlInput(container).value).toBe('https://gitlab.com');
-    const reviewing = pillByLabel(addFilterPills(container), 'Reviewing');
+    await tick();
+    expect(cards(container)).toHaveLength(1);
+    expect(cardSourceValue(card(container))).toBe('gitlab');
+    expect(cardUrlInput(card(container)).value).toBe('https://gitlab.com');
+    const reviewing = pillByLabel(cardPills(card(container)), 'Reviewing');
     expect(reviewing && isPressed(reviewing)).toBe(true);
+    // Fill-and-create: the seeded card is valid, so Create is enabled immediately.
+    expect(confirmBtn(container).disabled).toBe(false);
+    // A single card has no remove control.
+    expect(removeSourceBtns(container)).toHaveLength(0);
   });
 
   test('global cadence defaults to 10 min and cap defaults to 10 items', () => {
@@ -162,25 +157,20 @@ describe('SmartFolderEditor — create mode', () => {
     expect(selectValue(container, 'smart-folder-max-items')).toBe('10');
   });
 
-  test('adding the first source auto-suggests the name from the query', async () => {
+  test('the seeded card auto-suggests the name from its query', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await fillAndAddSource(container, { baseUrl: 'https://gitlab.com' }); // review-requested default
+    await tick();
     expect(nameInput(container).value).toBe('Review requests');
-    expect(sourceEntries(container)).toHaveLength(1);
-    expect(confirmBtn(container).disabled).toBe(false);
   });
 
   test('confirm dispatches createSmartFolder with the panel values (incl. maxItems) and calls onDone', async () => {
     const onDone = vi.fn();
-    const { container } = render(SmartFolderEditorHarness, {
-      props: { spaceId: 'work', onDone },
-    });
-    await fillAndAddSource(container, {
-      baseUrl: 'https://gitlab.example.com',
-      queries: ['authored'],
-    });
+    const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work', onDone } });
+    await setCardUrl(card(container), 'https://gitlab.example.com');
+    await setCardFilters(card(container), 'gitlab', ['authored']);
     await pickSelect(container, 'smart-folder-cadence', '30');
     await pickSelect(container, 'smart-folder-max-items', '50');
+    await tick();
     await fireEvent.click(confirmBtn(container));
 
     expect(sendMock).toHaveBeenCalledWith({
@@ -198,9 +188,10 @@ describe('SmartFolderEditor — create mode', () => {
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 
-  test('create dispatch carries the picked source (GitHub)', async () => {
+  test('create dispatch carries the picked source (GitHub) with the swapped default URL', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await fillAndAddSource(container, { source: 'github' }); // URL auto-swaps to github.com
+    await pickCardSource(card(container), 'github'); // URL auto-swaps to github.com
+    await tick();
     await fireEvent.click(confirmBtn(container));
 
     expect(sendMock).toHaveBeenCalledWith({
@@ -217,91 +208,83 @@ describe('SmartFolderEditor — create mode', () => {
     });
   });
 
-  test('the suggested name follows the first added source+query; a manual name sticks afterwards', async () => {
+  test('the suggested name follows the card source+query; a manual name sticks afterwards', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await fillAndAddSource(container, { queries: ['assigned'] });
+    await setCardFilters(card(container), 'gitlab', ['assigned']);
+    await tick();
     expect(nameInput(container).value).toBe('Assigned to me');
     // Manual input pins the name.
     await fireEvent.input(nameInput(container), { target: { value: 'My queue' } });
-    // Remove source and re-add with a different query — manual name must not be overwritten.
-    await fireEvent.click(removeSourceBtns(container)[0] as HTMLButtonElement);
-    await fillAndAddSource(container, { queries: ['authored'] });
+    // Change the filter again — manual name must not be overwritten.
+    await setCardFilters(card(container), 'gitlab', ['authored']);
+    await tick();
     expect(nameInput(container).value).toBe('My queue');
   });
 
-  test('an invalid URL in the add form disables the Add button', async () => {
+  test('an invalid URL on a card disables Create', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await openAddForm(container);
-    await fireEvent.input(addSourceUrlInput(container), { target: { value: 'not a url' } });
-    expect(addSourceConfirmBtn(container).disabled).toBe(true);
+    await setCardUrl(card(container), 'not a url');
+    await tick();
+    expect(confirmBtn(container).disabled).toBe(true);
   });
 
-  test('an empty URL and a non-http(s) scheme both disable Add', async () => {
+  test('an empty URL and a non-http(s) scheme both disable Create', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await openAddForm(container);
-    await fireEvent.input(addSourceUrlInput(container), { target: { value: '' } });
-    expect(addSourceConfirmBtn(container).disabled).toBe(true);
-    await fireEvent.input(addSourceUrlInput(container), { target: { value: 'ftp://gitlab.com' } });
-    expect(addSourceConfirmBtn(container).disabled).toBe(true);
+    await setCardUrl(card(container), '');
+    await tick();
+    expect(confirmBtn(container).disabled).toBe(true);
+    await setCardUrl(card(container), 'ftp://gitlab.com');
+    await tick();
+    expect(confirmBtn(container).disabled).toBe(true);
   });
 
-  test('the source picker in the add form holds all four sources and defaults to GitLab', async () => {
+  test('the card source picker holds all five sources and defaults to GitLab', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await openAddForm(container);
-    const sourceTrigger = trigger(container, 'smart-add-source-type');
-    expect(selectValue(container, 'smart-add-source-type')).toBe('gitlab');
-    // The source picker sits above the URL input in document order.
-    expect(
-      sourceTrigger.compareDocumentPosition(addSourceUrlInput(container)) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    // Open it and assert the five sources (gitlab, github, jira, rss, opml).
-    await fireEvent.click(sourceTrigger);
-    const root = sourceTrigger.closest('.select') as HTMLElement;
+    const trig = card(container).querySelector(
+      '[data-testid="smart-source-type"]',
+    ) as HTMLButtonElement;
+    expect(cardSourceValue(card(container))).toBe('gitlab');
+    await fireEvent.click(trig);
+    const root = trig.closest('.select') as HTMLElement;
     const values = [...root.querySelectorAll('[role="option"]')].map((o) =>
       o.getAttribute('data-value'),
     );
     expect(values).toEqual(['gitlab', 'github', 'jira', 'rss', 'opml']);
   });
 
-  test('picking GitHub in the add form swaps the default URL to github.com', async () => {
+  test('picking GitHub on a card swaps the default URL to github.com', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await openAddForm(container);
-    await pickSelect(container, 'smart-add-source-type', 'github');
-    expect(addSourceUrlInput(container).value).toBe('https://github.com');
+    await pickCardSource(card(container), 'github');
+    expect(cardUrlInput(card(container)).value).toBe('https://github.com');
   });
 
-  test('a custom URL is never clobbered by a source switch in the add form', async () => {
+  test('a custom URL is never clobbered by a source switch on the card', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await openAddForm(container);
-    await fireEvent.input(addSourceUrlInput(container), {
-      target: { value: 'https://gitlab.example.com' },
-    });
-    await pickSelect(container, 'smart-add-source-type', 'github');
-    expect(addSourceUrlInput(container).value).toBe('https://gitlab.example.com');
+    await setCardUrl(card(container), 'https://gitlab.example.com');
+    await pickCardSource(card(container), 'github');
+    expect(cardUrlInput(card(container)).value).toBe('https://gitlab.example.com');
   });
 
-  test('the hint reflects committed sources: per-source for one, generic for many', async () => {
+  test('the hint is per-source for one card and generic for many', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
     const hint = (): string =>
       container.querySelector('[data-testid="smart-folder-hint"]')?.textContent ?? '';
-    expect(hint()).toContain('Add at least one source');
-    await fillAndAddSource(container, {});
+    await tick();
     expect(hint()).toContain("Signed in to GitLab in this browser? That's enough.");
     expect(hint()).toContain('Settings → Connectors');
-    await fillAndAddSource(container, { source: 'github' });
+    await fireEvent.click(addSourceBtn(container));
+    await tick();
     expect(hint()).toContain('Each source fetches independently');
   });
 
-  test('switching to Jira in the add form swaps URL, the third-slot label to "Watching", and the hint after add', async () => {
+  test('switching a card to Jira swaps URL, relabels the third pill "Watching", and updates the hint', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await openAddForm(container);
-    await pickSelect(container, 'smart-add-source-type', 'jira');
-    expect(addSourceUrlInput(container).value).toBe('https://your-site.atlassian.net');
-    const watching = pillByLabel(addFilterPills(container), 'Watching');
+    await pickCardSource(card(container), 'jira');
+    await tick();
+    expect(cardUrlInput(card(container)).value).toBe('https://your-site.atlassian.net');
+    const watching = pillByLabel(cardPills(card(container)), 'Watching');
     expect(watching).toBeTruthy();
     expect(watching && isPressed(watching)).toBe(true);
-    await fireEvent.click(addSourceConfirmBtn(container));
     expect(container.querySelector('[data-testid="smart-folder-hint"]')?.textContent).toBe(
       "Signed in to Jira in this browser? That's enough.",
     );
@@ -309,7 +292,8 @@ describe('SmartFolderEditor — create mode', () => {
 
   test('create dispatch carries the picked source (Jira)', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await fillAndAddSource(container, { source: 'jira' });
+    await pickCardSource(card(container), 'jira');
+    await tick();
     await fireEvent.click(confirmBtn(container));
     expect(sendMock).toHaveBeenCalledWith({
       kind: 'createSmartFolder',
@@ -329,23 +313,21 @@ describe('SmartFolderEditor — create mode', () => {
     });
   });
 
-  test('the canonical-URL swap rule covers all four sources; a custom URL is left untouched', async () => {
+  test('the canonical-URL swap rule covers all sources; a custom URL is left untouched', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await openAddForm(container);
-    await pickSelect(container, 'smart-add-source-type', 'jira');
-    expect(addSourceUrlInput(container).value).toBe('https://your-site.atlassian.net');
-    await pickSelect(container, 'smart-add-source-type', 'github');
-    expect(addSourceUrlInput(container).value).toBe('https://github.com');
-    await pickSelect(container, 'smart-add-source-type', 'rss');
-    expect(addSourceUrlInput(container).value).toBe('');
-    await pickSelect(container, 'smart-add-source-type', 'gitlab');
-    expect(addSourceUrlInput(container).value).toBe('https://gitlab.com');
+    const c = card(container);
+    await pickCardSource(c, 'jira');
+    expect(cardUrlInput(c).value).toBe('https://your-site.atlassian.net');
+    await pickCardSource(c, 'github');
+    expect(cardUrlInput(c).value).toBe('https://github.com');
+    await pickCardSource(c, 'rss');
+    expect(cardUrlInput(c).value).toBe('');
+    await pickCardSource(c, 'gitlab');
+    expect(cardUrlInput(c).value).toBe('https://gitlab.com');
     // Custom URL survives a source switch.
-    await fireEvent.input(addSourceUrlInput(container), {
-      target: { value: 'https://jira.acme.dev' },
-    });
-    await pickSelect(container, 'smart-add-source-type', 'jira');
-    expect(addSourceUrlInput(container).value).toBe('https://jira.acme.dev');
+    await setCardUrl(c, 'https://jira.acme.dev');
+    await pickCardSource(c, 'jira');
+    expect(cardUrlInput(c).value).toBe('https://jira.acme.dev');
   });
 });
 
@@ -354,28 +336,18 @@ describe('SmartFolderEditor — create mode', () => {
 // ---------------------------------------------------------------------------
 
 describe('SmartFolderEditor — RSS adaptation (rss-connector)', () => {
-  test('picking RSS in the add form relabels the URL field, hides the query, shows the cap, and flips cadence to 30 after add', async () => {
+  test('a card set to RSS relabels the URL field, hides the filters, keeps the cap, and flips cadence to 30', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await openAddForm(container);
-    await pickSelect(container, 'smart-add-source-type', 'rss');
-
-    // "Feed URL" label, not "Instance URL".
+    await pickCardSource(card(container), 'rss');
+    await tick();
     expect(container.textContent).toContain('Feed URL');
     expect(container.textContent).not.toContain('Instance URL');
-    // The filter multi-select is hidden for a feed.
-    expect(addFilterPills(container)).toHaveLength(0);
-    // The "Show at most" cap is still rendered.
+    expect(cardPills(card(container))).toHaveLength(0);
     expect(container.querySelector('[data-testid="smart-folder-max-items"]')).not.toBeNull();
-
-    // Add a feed URL and commit — cadence should flip to 30.
-    await fireEvent.input(addSourceUrlInput(container), {
-      target: { value: 'https://news.ycombinator.com/rss' },
-    });
-    await fireEvent.click(addSourceConfirmBtn(container));
+    // Cadence flips to 30 for a feed (refresh untouched).
     expect(container.querySelector('[data-testid="smart-folder-cadence"]')?.textContent).toContain(
       'Every 30 minutes',
     );
-    // The no-sign-in hint.
     expect(container.querySelector('[data-testid="smart-folder-hint"]')?.textContent).toBe(
       'Public feed — no sign-in needed. Paste the feed URL.',
     );
@@ -384,14 +356,11 @@ describe('SmartFolderEditor — RSS adaptation (rss-connector)', () => {
   test('confirm dispatches createSmartFolder with source rss, the chosen maxItems, and NO query', async () => {
     const onDone = vi.fn();
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work', onDone } });
-    await openAddForm(container);
-    await pickSelect(container, 'smart-add-source-type', 'rss');
-    await fireEvent.input(addSourceUrlInput(container), {
-      target: { value: 'https://news.ycombinator.com/rss' },
-    });
-    await fireEvent.click(addSourceConfirmBtn(container));
+    await pickCardSource(card(container), 'rss');
+    await setCardUrl(card(container), 'https://news.ycombinator.com/rss');
     await fireEvent.input(nameInput(container), { target: { value: 'Hacker News' } });
     await pickSelect(container, 'smart-folder-max-items', '30');
+    await tick();
     await fireEvent.click(confirmBtn(container));
 
     expect(sendMock).toHaveBeenCalledWith({
@@ -407,12 +376,12 @@ describe('SmartFolderEditor — RSS adaptation (rss-connector)', () => {
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 
-  test('an empty feed URL keeps Add disabled (a feed has no canonical default)', async () => {
+  test('an empty feed URL keeps Create disabled (a feed has no canonical default)', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await openAddForm(container);
-    await pickSelect(container, 'smart-add-source-type', 'rss');
-    expect(addSourceUrlInput(container).value).toBe('');
-    expect(addSourceConfirmBtn(container).disabled).toBe(true);
+    await pickCardSource(card(container), 'rss');
+    await tick();
+    expect(cardUrlInput(card(container)).value).toBe('');
+    expect(confirmBtn(container).disabled).toBe(true);
   });
 });
 
@@ -421,21 +390,18 @@ describe('SmartFolderEditor — RSS adaptation (rss-connector)', () => {
 // ---------------------------------------------------------------------------
 
 describe('SmartFolderEditor — edit mode', () => {
-  test('pre-fills name, cap, and existing source in the list', () => {
+  test('pre-fills name, cap, and the existing source card', () => {
     const { container } = render(SmartFolderEditorHarness, {
       props: { spaceId: 'work', node: existingNode() },
     });
-    const entries = sourceEntries(container);
-    expect(entries).toHaveLength(1);
-    expect((entries[0] as HTMLElement).querySelector('.source-chip')?.textContent).toBe('GitLab');
-    expect((entries[0] as HTMLElement).querySelector('.source-url')?.textContent).toBe(
-      'gitlab.example.com',
-    );
+    expect(cards(container)).toHaveLength(1);
+    expect(cardSourceValue(card(container))).toBe('gitlab');
+    expect(cardUrlInput(card(container)).value).toBe('https://gitlab.example.com');
     expect(nameInput(container).value).toBe('Assigned to me');
     expect(selectValue(container, 'smart-folder-max-items')).toBe('20');
   });
 
-  test('a maxItems change confirms as updateSmartFolder carrying the new cap (the SW refetches)', async () => {
+  test('a maxItems change confirms as updateSmartFolder carrying the new cap', async () => {
     const { container } = render(SmartFolderEditorHarness, {
       props: { spaceId: 'work', node: existingNode() },
     });
@@ -457,16 +423,12 @@ describe('SmartFolderEditor — edit mode', () => {
     });
   });
 
-  test('removing existing source and re-adding with a new query dispatches updateSmartFolder (the SW refetches)', async () => {
+  test('editing a card filter in place dispatches updateSmartFolder with the new query', async () => {
     const onDone = vi.fn();
     const { container } = render(SmartFolderEditorHarness, {
       props: { spaceId: 'work', node: existingNode(), onDone },
     });
-    await fireEvent.click(removeSourceBtns(container)[0] as HTMLButtonElement);
-    await fillAndAddSource(container, {
-      baseUrl: 'https://gitlab.example.com',
-      queries: ['review-requested'],
-    });
+    await setCardFilters(card(container), 'gitlab', ['review-requested']);
     await fireEvent.click(confirmBtn(container));
 
     expect(sendMock).toHaveBeenCalledWith({
@@ -489,15 +451,12 @@ describe('SmartFolderEditor — edit mode', () => {
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 
-  test('removing existing source and re-adding with a different source dispatches updateSmartFolder', async () => {
+  test('changing a card source in place dispatches updateSmartFolder (URL preserved when non-default)', async () => {
     const { container } = render(SmartFolderEditorHarness, {
       props: { spaceId: 'work', node: existingNode() },
     });
-    await fireEvent.click(removeSourceBtns(container)[0] as HTMLButtonElement);
-    await fillAndAddSource(container, {
-      source: 'github',
-      baseUrl: 'https://gitlab.example.com',
-    });
+    await pickCardSource(card(container), 'github');
+    await tick();
     await fireEvent.click(confirmBtn(container));
 
     expect(sendMock).toHaveBeenCalledWith({
@@ -506,11 +465,7 @@ describe('SmartFolderEditor — edit mode', () => {
         spaceId: 'work',
         folderId: 'sf-1',
         sources: [
-          {
-            source: 'github',
-            baseUrl: 'https://gitlab.example.com',
-            queries: ['review-requested'],
-          },
+          { source: 'github', baseUrl: 'https://gitlab.example.com', queries: ['assigned'] },
         ],
         name: 'Assigned to me',
         maxItems: 20,
@@ -519,7 +474,7 @@ describe('SmartFolderEditor — edit mode', () => {
     });
   });
 
-  test('an edit-mode folder on a canonical default URL swaps to the new default on remove+re-add', async () => {
+  test('a card on a canonical default URL swaps to the new default on a source change', async () => {
     const { container } = render(SmartFolderEditorHarness, {
       props: {
         spaceId: 'work',
@@ -528,13 +483,11 @@ describe('SmartFolderEditor — edit mode', () => {
         }),
       },
     });
-    await fireEvent.click(removeSourceBtns(container)[0] as HTMLButtonElement);
-    await openAddForm(container);
-    await pickSelect(container, 'smart-add-source-type', 'github');
-    expect(addSourceUrlInput(container).value).toBe('https://github.com');
+    await pickCardSource(card(container), 'github');
+    expect(cardUrlInput(card(container)).value).toBe('https://github.com');
   });
 
-  test('editing an existing RSS folder pre-fills the source in the list and omits query on save', async () => {
+  test('editing an existing RSS folder pre-fills the card and omits query on save', async () => {
     const feed = existingNode({
       id: 'feed-1',
       sources: [{ source: 'rss', baseUrl: 'https://news.ycombinator.com/rss', queries: [] }],
@@ -546,11 +499,9 @@ describe('SmartFolderEditor — edit mode', () => {
     const { container } = render(SmartFolderEditorHarness, {
       props: { spaceId: 'work', node: feed },
     });
-    const entries = sourceEntries(container);
-    expect(entries).toHaveLength(1);
-    expect((entries[0] as HTMLElement).querySelector('.source-chip')?.textContent).toBe('RSS');
-    // No filter pills for a feed instance (rss has no filter axis).
-    expect(cardFilterPills(container)).toHaveLength(0);
+    expect(cards(container)).toHaveLength(1);
+    expect(cardSourceValue(card(container))).toBe('rss');
+    expect(cardPills(card(container))).toHaveLength(0);
     await fireEvent.click(confirmBtn(container));
     expect(sendMock).toHaveBeenCalledWith({
       kind: 'updateSmartFolder',
@@ -567,21 +518,15 @@ describe('SmartFolderEditor — edit mode', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Multi-filter (multi-filter-smart-connectors)
+// Multi-filter / multi-source (multi-filter-smart-connectors)
 // ---------------------------------------------------------------------------
 
-describe('SmartFolderEditor — multi-filter per instance', () => {
-  test('ticking a second filter on an instance card dispatches both filters', async () => {
+describe('SmartFolderEditor — multi-filter / multi-source', () => {
+  test('ticking a second filter on a card dispatches both filters', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    // Add a GitLab instance with Authored ticked.
-    await fillAndAddSource(container, {
-      baseUrl: 'https://gitlab.example.com',
-      queries: ['authored'],
-    });
-    // Tick "Reviewing" on the instance card too.
-    const reviewing = pillByLabel(cardFilterPills(container), 'Reviewing');
-    expect(reviewing).toBeTruthy();
-    await fireEvent.click(reviewing as HTMLButtonElement);
+    await setCardUrl(card(container), 'https://gitlab.example.com');
+    await setCardFilters(card(container), 'gitlab', ['authored', 'review-requested']);
+    await tick();
     await fireEvent.click(confirmBtn(container));
 
     expect(sendMock).toHaveBeenCalledWith(
@@ -600,21 +545,19 @@ describe('SmartFolderEditor — multi-filter per instance', () => {
     );
   });
 
-  test('re-adding an existing instance MERGES filter selections (no duplicate card)', async () => {
+  test('two cards on the same source:host MERGE filters on confirm (no duplicate entry)', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await fillAndAddSource(container, {
-      baseUrl: 'https://gitlab.example.com',
-      queries: ['authored'],
-    });
-    expect(sourceEntries(container)).toHaveLength(1);
-    // Re-add the SAME instance (gitlab + same host) with Reviewing ticked.
-    await fillAndAddSource(container, {
-      baseUrl: 'https://gitlab.example.com',
-      queries: ['review-requested'],
-    });
-    // Still ONE card; its filters are the union.
-    expect(sourceEntries(container)).toHaveLength(1);
+    await setCardUrl(card(container, 0), 'https://gitlab.example.com');
+    await setCardFilters(card(container, 0), 'gitlab', ['authored']);
+    // Add a second GitLab card on the same host with Reviewing.
+    await fireEvent.click(addSourceBtn(container));
+    await tick();
+    await setCardUrl(card(container, 1), 'https://gitlab.example.com');
+    await setCardFilters(card(container, 1), 'gitlab', ['review-requested']);
+    await tick();
+    expect(cards(container)).toHaveLength(2); // two cards in the UI…
     await fireEvent.click(confirmBtn(container));
+    // …but they merge into ONE instance on dispatch.
     expect(sendMock).toHaveBeenCalledWith(
       expect.objectContaining({
         payload: expect.objectContaining({
@@ -630,26 +573,51 @@ describe('SmartFolderEditor — multi-filter per instance', () => {
     );
   });
 
-  test('Confirm is blocked when a queue instance has zero filters selected', async () => {
+  test('Create is blocked when a queue card has zero filters selected', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await fillAndAddSource(container, {
-      baseUrl: 'https://gitlab.example.com',
-      queries: ['authored'],
-    });
+    await tick();
     expect(confirmBtn(container).disabled).toBe(false);
-    // Untick the only filter → the instance has zero filters → Confirm blocks.
-    const authored = pillByLabel(cardFilterPills(container), 'Authored');
-    await fireEvent.click(authored as HTMLButtonElement);
+    await setCardFilters(card(container), 'gitlab', []); // untick the only filter
+    await tick();
     expect(confirmBtn(container).disabled).toBe(true);
   });
 
   test('the cap label reads "per section" once there are ≥ 2 resolved sections', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await fillAndAddSource(container, {
-      baseUrl: 'https://gitlab.example.com',
-      queries: ['authored', 'review-requested'],
-    });
+    await setCardFilters(card(container), 'gitlab', ['authored', 'review-requested']);
+    await tick();
     expect(container.textContent).toContain('Show per section');
+  });
+
+  test('an OPML card imports and expands into deduped rss feed cards', async () => {
+    const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
+    await pickCardSource(card(container), 'opml');
+    await tick();
+    const opml = [
+      '<opml><body>',
+      '<outline type="rss" text="Alpha" xmlUrl="https://a.example.com/feed" />',
+      '<outline type="rss" text="Beta" xmlUrl="https://b.example.com/feed" />',
+      '<outline type="rss" text="Alpha dup" xmlUrl="https://a.example.com/feed" />',
+      '</body></opml>',
+    ].join('');
+    const file = new File([opml], 'feeds.opml', { type: 'text/xml' });
+    const input = container.querySelector(
+      '[data-testid="smart-opml-file-input"]',
+    ) as HTMLInputElement;
+    await fireEvent.change(input, { target: { files: [file] } });
+    await new Promise((r) => setTimeout(r, 0)); // let file.text() + parse settle
+    await tick();
+
+    // Two unique feeds (the duplicate host is dropped); the importer card is gone.
+    expect(cards(container)).toHaveLength(2);
+    expect(cardSourceValue(card(container, 0))).toBe('rss');
+    expect(cardSourceValue(card(container, 1))).toBe('rss');
+    expect(cardUrlInput(card(container, 0)).value).toBe('https://a.example.com/feed');
+    expect(container.querySelector('[data-testid="smart-folder-hint"]')?.textContent).toContain(
+      'fetches independently',
+    );
+    // The folder name auto-fills to "Feeds" for a multi-feed import.
+    expect(nameInput(container).value).toBe('Feeds');
   });
 });
 
@@ -660,7 +628,8 @@ describe('SmartFolderEditor — multi-filter per instance', () => {
 describe('SmartFolderEditor — host-permission request on confirm (least-privilege-permissions D4)', () => {
   test('confirming a new GitHub folder requests the api.github.com origin from the gesture', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
-    await fillAndAddSource(container, { source: 'github' });
+    await pickCardSource(card(container), 'github');
+    await tick();
     await fireEvent.click(confirmBtn(container));
     expect(permissionsRequestMock).toHaveBeenCalledWith({ origins: ['https://api.github.com/*'] });
   });
@@ -669,7 +638,8 @@ describe('SmartFolderEditor — host-permission request on confirm (least-privil
     permissionsRequestMock.mockResolvedValue(false);
     const onDone = vi.fn();
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work', onDone } });
-    await fillAndAddSource(container, { baseUrl: 'https://gitlab.example.com' });
+    await setCardUrl(card(container), 'https://gitlab.example.com');
+    await tick();
     await fireEvent.click(confirmBtn(container));
     expect(sendMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -701,12 +671,12 @@ describe('SmartFolderEditor — host-permission request on confirm (least-privil
     expect(permissionsRequestMock).not.toHaveBeenCalled();
   });
 
-  test('a URL-changing edit (remove + re-add) requests the new origins', async () => {
+  test('a URL-changing edit requests the new origins', async () => {
     const { container } = render(SmartFolderEditorHarness, {
       props: { spaceId: 'work', node: existingNode() },
     });
-    await fireEvent.click(removeSourceBtns(container)[0] as HTMLButtonElement);
-    await fillAndAddSource(container, { baseUrl: 'https://gitlab.other.com' });
+    await setCardUrl(card(container), 'https://gitlab.other.com');
+    await tick();
     await fireEvent.click(confirmBtn(container));
     expect(permissionsRequestMock).toHaveBeenCalledWith({
       origins: ['https://gitlab.other.com/*'],

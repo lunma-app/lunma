@@ -572,13 +572,17 @@ describe('SmartFolder — menu (Refresh now · Edit… · Move · Delete)', () =
     expect(document.querySelector('[data-testid="smart-folder-editor"]')).not.toBeNull();
     const back = document.querySelector('[data-testid="folder-row-menu-back"]');
     expect(back?.textContent).toContain('Edit smart folder');
-    // Pre-filled from the node — the new multi-source editor shows existing
-    // sources in the source list with a host chip.
+    // Pre-filled from the node — the editor shows the existing source as an
+    // in-place card (source Select + URL input).
     const sourceList = document.querySelector('[data-testid="smart-source-list"]');
     expect(sourceList).not.toBeNull();
-    expect(sourceList?.querySelector('[data-source="gitlab"]')?.textContent).toBe('GitLab');
-    const sourceUrl = sourceList?.querySelector('.source-url');
-    expect(sourceUrl?.textContent).toBe('gitlab.example.com');
+    expect(
+      sourceList?.querySelector('[data-testid="smart-source-type"]')?.getAttribute('data-value'),
+    ).toBe('gitlab');
+    const sourceUrl = sourceList?.querySelector(
+      '[data-testid="smart-source-url"]',
+    ) as HTMLInputElement;
+    expect(sourceUrl?.value).toBe('https://gitlab.example.com');
   });
 
   test('Save closes the kebab morph entirely — no action list remains open', async () => {

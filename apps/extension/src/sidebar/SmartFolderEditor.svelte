@@ -11,12 +11,11 @@ import TextInput from '../ui/TextInput.svelte';
 
 /**
  * Smart-folder config editor — the menu drill-in panel behind "New smart
- * folder…" and a smart row's Edit…. A per-**instance** list: each entry is one
- * connector instance (source + host) carrying a **filter multi-select** of
- * canned filters (selectable `Chip` pills; hidden for rss). An inline "Add
- * source" form appends instances; re-adding an existing instance MERGES its
- * filter selections rather than dropping the add (multi-filter-smart-connectors
- * design D6).
+ * folder…" and a smart row's Edit…. Name-first, then a list of in-place
+ * editable **source cards** (each = one connector instance: source + host +
+ * queue filter multi-select, or an OPML importer), then folder settings, then a
+ * single Create/Save action. Editing a card mutates `sources` directly; there is
+ * no separate add-source sub-form (redesign-smart-folder-editor).
  */
 
 type SmartNode = Extract<PinNode, { kind: 'smart' }>;
@@ -29,11 +28,15 @@ interface Props {
 
 const { spaceId, node, onDone }: Props = $props();
 
+type AddSourceType = SmartSource | 'opml';
+
 type DraftSource = {
   id: string;
-  source: SmartSource;
+  source: AddSourceType;
   baseUrl: string;
   queries: SmartQuery[];
+  /** Set (to a chosen File) only while an `opml` importer card awaits expansion. */
+  file: File | null;
 };
 
 /** Canonical filter order — keeps section order stable regardless of tick order. */
@@ -72,15 +75,6 @@ const HINT: Record<SmartSource, string> = {
   rss: 'Public feed — no sign-in needed. Paste the feed URL.',
 };
 
-const SOURCE_LABELS: Record<SmartSource, string> = {
-  gitlab: 'GitLab',
-  github: 'GitHub',
-  jira: 'Jira',
-  rss: 'RSS',
-};
-
-type AddSourceType = SmartSource | 'opml';
-
 const SOURCE_OPTIONS: Array<{ value: AddSourceType; label: string }> = [
   { value: 'gitlab', label: 'GitLab' },
   { value: 'github', label: 'GitHub' },
@@ -107,7 +101,7 @@ function isValidBaseUrl(raw: string): boolean {
   }
 }
 
-function draftSourceKey(s: { source: SmartSource; baseUrl: string }): string {
+function draftSourceKey(s: { source: AddSourceType; baseUrl: string }): string {
   try {
     return `${s.source}:${new URL(s.baseUrl).host}`;
   } catch {
@@ -127,15 +121,41 @@ function defaultRefreshForSources(srcs: DraftSource[]): number {
   return srcs.some((s) => s.source === 'rss') ? 30 : 10;
 }
 
+function newCard(source: AddSourceType): DraftSource {
+  return {
+    id: String(nextSourceId++),
+    source,
+    baseUrl: source === 'opml' || source === 'rss' ? '' : DEFAULT_BASE_URL[source],
+    queries:
+      source === 'gitlab' || source === 'github' || source === 'jira' ? ['review-requested'] : [],
+    file: null,
+  };
+}
+
+// svelte-ignore state_referenced_locally
+let nextSourceId = node?.sources.length ?? 1;
+
 // Capture config at mount — a live broadcast mid-edit must not clobber typing.
+// Create seeds one default card so a single-source folder is fill-and-create.
 // svelte-ignore state_referenced_locally
 let sources = $state<DraftSource[]>(
-  (node?.sources ?? []).map((cfg, i) => ({
-    id: String(i),
-    source: cfg.source,
-    baseUrl: cfg.baseUrl,
-    queries: [...cfg.queries],
-  })),
+  node
+    ? node.sources.map((cfg, i) => ({
+        id: String(i),
+        source: cfg.source,
+        baseUrl: cfg.baseUrl,
+        queries: [...cfg.queries],
+        file: null,
+      }))
+    : [
+        {
+          id: '0',
+          source: 'gitlab' as const,
+          baseUrl: DEFAULT_BASE_URL.gitlab,
+          queries: ['review-requested'] as SmartQuery[],
+          file: null,
+        },
+      ],
 );
 // svelte-ignore state_referenced_locally
 let name = $state(node?.name ?? '');
@@ -149,41 +169,41 @@ let refreshMinutes = $state(
 let nameTouched = $state(node !== undefined);
 // svelte-ignore state_referenced_locally
 let refreshTouched = $state(node !== undefined);
-
-// svelte-ignore state_referenced_locally
-let nextSourceId = node?.sources.length ?? 0;
-
-// "Add source" inline form state — open by default when creating a new folder
-// svelte-ignore state_referenced_locally
-let addingSource = $state(node === undefined);
-let addSource = $state<AddSourceType>('gitlab');
-let addBaseUrl = $state(DEFAULT_BASE_URL.gitlab);
-let addQueries = $state<SmartQuery[]>(['review-requested']);
-let addOpmlFile = $state<File | null>(null);
 let opmlImportNote = $state<string | null>(null);
 
-// Total resolved sections: rss → 1, queue → one per selected filter. Drives the
-// "per section" labels (≥ 2 sections) and matches the engine's section count.
+// Total resolved sections: rss → 1, queue → one per selected filter, opml → 0
+// (transient). Drives the "per section" labels and matches the engine's count.
 const resolvedSectionCount = $derived(
-  sources.reduce((n, s) => n + (s.source === 'rss' ? 1 : s.queries.length), 0),
+  sources.reduce(
+    (n, s) => n + (s.source === 'opml' ? 0 : s.source === 'rss' ? 1 : s.queries.length),
+    0,
+  ),
 );
 
-const canConfirm = $derived(
-  sources.length > 0 &&
-    sources.every((s) => isValidBaseUrl(s.baseUrl.trim())) &&
-    sources.every((s) => s.source === 'rss' || s.queries.length > 0),
-);
+function cardIncomplete(s: DraftSource): boolean {
+  if (s.source === 'opml') return true; // an un-expanded importer blocks confirm
+  if (!isValidBaseUrl(s.baseUrl.trim())) return true;
+  if (s.source !== 'rss' && s.queries.length === 0) return true;
+  return false;
+}
+
+const canConfirm = $derived(sources.length > 0 && sources.every((s) => !cardIncomplete(s)));
+
+const firstRealSource = $derived(sources.find((s) => s.source !== 'opml'));
 
 const hint = $derived.by(() => {
-  if (sources.length === 0) return 'Add at least one source.';
-  if (sources.length === 1 && sources[0]) return HINT[sources[0].source];
+  const opmlPending = sources.some((s) => s.source === 'opml');
+  if (opmlPending) return 'Choose an OPML file, or change the source.';
+  const real = sources.filter((s) => s.source !== 'opml');
+  if (real.length === 0) return 'Add at least one source.';
+  if (real.length === 1 && real[0]) return HINT[real[0].source as SmartSource];
   return 'Each source fetches independently. Grant access when prompted.';
 });
 
 const maxItemsLabel = $derived(
   resolvedSectionCount > 1
     ? 'Show per section'
-    : sources[0]?.source === 'rss'
+    : firstRealSource?.source === 'rss'
       ? 'Show up to'
       : 'Show at most',
 );
@@ -191,110 +211,78 @@ const maxItemsLabel = $derived(
 const maxItemsAriaLabel = $derived(
   resolvedSectionCount > 1
     ? 'Maximum items per section'
-    : sources[0]?.source === 'rss'
+    : firstRealSource?.source === 'rss'
       ? 'Unread to show'
       : 'Maximum items',
 );
 
 const maxItemsOptions = $derived(
   MAX_ITEMS_VALUES.map((value) => {
-    const isSingleFeed = resolvedSectionCount === 1 && sources[0]?.source === 'rss';
+    const isSingleFeed = resolvedSectionCount === 1 && firstRealSource?.source === 'rss';
     return { value, label: `${value} ${isSingleFeed ? 'unread' : 'items'}` };
   }),
 );
 
-/** Toggle a filter on an existing instance card; rebuild from canonical order. */
+// Suggested folder name for a single queue source — shown until the user types.
+const suggestedName = $derived.by(() => {
+  if (sources.length === 1 && sources[0]) {
+    const s = sources[0];
+    if (s.source !== 'rss' && s.source !== 'opml' && s.queries[0]) {
+      return SUGGESTED_QUEUE_NAME[s.source][s.queries[0]] ?? '';
+    }
+  }
+  return '';
+});
+
+$effect(() => {
+  if (nameTouched) return;
+  if (name !== suggestedName) name = suggestedName;
+});
+
+$effect(() => {
+  if (refreshTouched) return;
+  const next = String(defaultRefreshForSources(sources));
+  if (refreshMinutes !== next) refreshMinutes = next;
+});
+
+/** Toggle a queue filter on a card; rebuild from canonical order. */
 function toggleQuery(index: number, q: SmartQuery): void {
   const s = sources[index];
   if (!s) return;
-  const has = s.queries.includes(q);
   const next = new Set(s.queries);
-  if (has) next.delete(q);
+  if (next.has(q)) next.delete(q);
   else next.add(q);
   s.queries = QUERY_ORDER.filter((x) => next.has(x));
 }
 
-/** Toggle a filter in the add-source form's initial selection. */
-function toggleAddQuery(q: SmartQuery): void {
-  const next = new Set(addQueries);
-  if (next.has(q)) next.delete(q);
-  else next.add(q);
-  addQueries = QUERY_ORDER.filter((x) => next.has(x));
-}
-
-async function addSourceEntry(): Promise<void> {
-  if (addSource === 'opml') {
-    if (!addOpmlFile) return;
-    let text: string;
-    try {
-      text = await addOpmlFile.text();
-    } catch {
-      return;
-    }
-    const feeds = parseOpml(text);
-    let imported = 0;
-    for (const { name: feedName, feedUrl } of feeds) {
-      try {
-        new URL(feedUrl);
-      } catch {
-        continue;
-      }
-      const sk = `rss:${new URL(feedUrl).host}`;
-      if (sources.some((s) => draftSourceKey(s) === sk)) continue;
-      sources = [
-        ...sources,
-        { id: String(nextSourceId++), source: 'rss' as const, baseUrl: feedUrl, queries: [] },
-      ];
-      if (!nameTouched && sources.length === 1) name = feedName;
-      imported++;
-    }
-    if (!nameTouched && sources.length > 1) name = 'Feeds';
-    if (imported > 0 && !refreshTouched) refreshMinutes = '30';
-    opmlImportNote =
-      imported === 0
-        ? 'No feeds found'
-        : imported === 1
-          ? '1 feed imported'
-          : `${imported} feeds imported`;
-    addOpmlFile = null;
-    addingSource = false;
-    return;
-  }
-  const trimmedUrl = addBaseUrl.trim();
-  if (!isValidBaseUrl(trimmedUrl)) return;
-  const isQueue = addSource !== 'rss';
-  if (isQueue && addQueries.length === 0) return;
-  const newSk = draftSourceKey({ source: addSource, baseUrl: trimmedUrl });
-  // Merge into an existing instance (same source:host) rather than dropping —
-  // queue filters union; rss has no filter axis so a re-add is a no-op.
-  const existing = sources.find((s) => draftSourceKey(s) === newSk);
-  if (existing) {
-    if (isQueue) {
-      const merged = new Set([...existing.queries, ...addQueries]);
-      existing.queries = QUERY_ORDER.filter((q) => merged.has(q));
+/** Switch a card's source type; reset its URL/filters/file to that type's shape. */
+function changeCardSource(index: number, next: string): void {
+  const s = sources[index];
+  if (!s) return;
+  const nextSource = next as AddSourceType;
+  const trimmed = s.baseUrl.trim();
+  // Replace the URL only when it is still a default/empty (don't clobber a typed one).
+  if (nextSource !== 'opml') {
+    if ((Object.values(DEFAULT_BASE_URL) as string[]).includes(trimmed) || trimmed === '') {
+      s.baseUrl = DEFAULT_BASE_URL[nextSource];
     }
   } else {
-    sources = [
-      ...sources,
-      {
-        id: String(nextSourceId++),
-        source: addSource,
-        baseUrl: trimmedUrl,
-        queries: isQueue ? [...addQueries] : [],
-      },
-    ];
+    s.baseUrl = '';
   }
-  addingSource = false;
-  addBaseUrl = DEFAULT_BASE_URL[addSource];
-  if (!nameTouched && sources.length === 1 && isQueue) {
-    const first = addQueries[0];
-    if (first) {
-      name = SUGGESTED_QUEUE_NAME[addSource as Exclude<SmartSource, 'rss'>][first] ?? '';
-    }
-  }
-  if (!refreshTouched) {
-    refreshMinutes = String(defaultRefreshForSources(sources));
-  }
+  s.queries =
+    nextSource === 'gitlab' || nextSource === 'github' || nextSource === 'jira'
+      ? s.queries.length > 0
+        ? s.queries
+        : ['review-requested']
+      : [];
+  s.file = null;
+  s.source = nextSource;
+  opmlImportNote = null;
+}
+
+function addSourceCard(): void {
+  sources = [...sources, newCard('gitlab')];
+  opmlImportNote = null;
 }
 
 function moveSource(index: number, delta: -1 | 1): void {
@@ -309,18 +297,51 @@ function moveSource(index: number, delta: -1 | 1): void {
 
 function removeSource(index: number): void {
   sources = sources.filter((_, i) => i !== index);
+  opmlImportNote = null;
 }
 
-function onAddSourceChange(next: string): void {
-  const nextSource = next as AddSourceType;
-  addOpmlFile = null;
-  if (nextSource !== 'opml') {
-    const trimmed = addBaseUrl.trim();
-    if ((Object.values(DEFAULT_BASE_URL) as string[]).includes(trimmed) || trimmed === '') {
-      addBaseUrl = DEFAULT_BASE_URL[nextSource];
-    }
+/** Expand an OPML importer card into one rss card per feed (dedup by host). */
+async function pickOpml(index: number, file: File): Promise<void> {
+  let text: string;
+  try {
+    text = await file.text();
+  } catch {
+    return;
   }
-  addSource = nextSource;
+  const feeds = parseOpml(text);
+  const seen = new Set(sources.map((s) => draftSourceKey(s)));
+  const added: DraftSource[] = [];
+  let firstName = '';
+  for (const { name: feedName, feedUrl } of feeds) {
+    try {
+      new URL(feedUrl);
+    } catch {
+      continue;
+    }
+    const sk = `rss:${new URL(feedUrl).host}`;
+    if (seen.has(sk)) continue;
+    seen.add(sk);
+    if (added.length === 0) firstName = feedName;
+    added.push({
+      id: String(nextSourceId++),
+      source: 'rss',
+      baseUrl: feedUrl,
+      queries: [],
+      file: null,
+    });
+  }
+  if (added.length === 0) {
+    opmlImportNote = 'No feeds found';
+    return;
+  }
+  // Replace the importer card with the imported feed cards.
+  sources = [...sources.slice(0, index), ...added, ...sources.slice(index + 1)];
+  if (!nameTouched) {
+    name = sources.filter((s) => s.source === 'rss').length > 1 ? 'Feeds' : firstName;
+    nameTouched = true;
+  }
+  if (!refreshTouched) refreshMinutes = '30';
+  opmlImportNote = added.length === 1 ? '1 feed imported' : `${added.length} feeds imported`;
 }
 
 /** Order-independent equality of two origin-pattern sets. */
@@ -330,16 +351,35 @@ function sameOrigins(a: string[], b: string[]): boolean {
   return a.every((o) => setB.has(o));
 }
 
+/** Collapse duplicate source:host cards, unioning queue filters in canonical order. */
+function dedupedSources(): SmartSourceConfig[] {
+  const byKey = new Map<string, SmartSourceConfig>();
+  for (const s of sources) {
+    if (s.source === 'opml') continue;
+    const key = draftSourceKey(s);
+    const existing = byKey.get(key);
+    if (existing) {
+      if (s.source !== 'rss') {
+        const merged = new Set([...existing.queries, ...s.queries]);
+        existing.queries = QUERY_ORDER.filter((q) => merged.has(q));
+      }
+    } else {
+      byKey.set(key, {
+        source: s.source,
+        baseUrl: s.baseUrl.trim(),
+        queries: s.source === 'rss' ? [] : [...s.queries],
+      });
+    }
+  }
+  return [...byKey.values()];
+}
+
 function confirm(): void {
   if (!canConfirm) return;
-  const cleanSources: SmartSourceConfig[] = sources.map((s) => ({
-    source: s.source,
-    baseUrl: s.baseUrl.trim(),
-    queries: s.source === 'rss' ? [] : [...s.queries],
-  }));
+  const cleanSources = dedupedSources();
   const payloadBase = {
     spaceId,
-    name: name.trim() === '' ? 'Smart folder' : name.trim(),
+    name: name.trim() === '' ? suggestedName || 'Smart folder' : name.trim(),
     sources: cleanSources,
     maxItems: Number(maxItems),
     refreshMinutes: Number(refreshMinutes),
@@ -352,7 +392,6 @@ function confirm(): void {
     dispatch({ kind: 'createSmartFolder', payload: payloadBase });
   }
   // Request the union of all sub-source required origins from this user gesture.
-  // Origins are query-independent, so the union dedups per connector instance.
   // On a create, always request; on an edit, only when the origin set changed.
   const nextOrigins = [...new Set(cleanSources.flatMap((cfg) => requiredOriginsForConfig(cfg)))];
   const prevOrigins = node
@@ -366,148 +405,96 @@ function confirm(): void {
 </script>
 
 <div class="editor" data-testid="smart-folder-editor">
-  <!-- Per-instance list -->
-  {#if sources.length > 0}
+  <TextInput
+    label="Name"
+    bind:value={name}
+    placeholder={suggestedName || 'Smart folder'}
+    testid="smart-folder-name"
+    oninput={() => { nameTouched = true; }}
+    onenter={confirm}
+  />
+
+  <div class="field">
+    <span class="field-label">Sources</span>
     <div class="source-list" data-testid="smart-source-list">
       {#each sources as s, i (s.id)}
         {@const isFirst = i === 0}
         {@const isLast = i === sources.length - 1}
-        {@const displayHost = (() => { try { return new URL(s.baseUrl).host; } catch { return s.baseUrl || '—'; } })()}
-        <div class="source-entry" data-testid="smart-source-entry">
-          <div class="source-entry-top">
-            <span class="source-chip" data-source={s.source}>{SOURCE_LABELS[s.source]}</span>
-            <span class="source-url">{displayHost}</span>
+        <div class="source-card" data-testid="smart-source-entry" class:invalid={cardIncomplete(s) && s.source !== 'opml'}>
+          <div class="source-card-head">
+            <Select
+              options={SOURCE_OPTIONS}
+              value={s.source}
+              onchange={(v) => changeCardSource(i, v)}
+              ariaLabel="Source type"
+              testid="smart-source-type"
+            />
             <div class="source-actions">
-              <button
-                type="button"
-                class="icon-action"
-                disabled={isFirst}
-                aria-label="Move up"
-                onclick={() => moveSource(i, -1)}
-              >↑</button>
-              <button
-                type="button"
-                class="icon-action"
-                disabled={isLast}
-                aria-label="Move down"
-                onclick={() => moveSource(i, 1)}
-              >↓</button>
-              <button
-                type="button"
-                class="icon-action remove"
-                aria-label="Remove source"
-                onclick={() => removeSource(i)}
-              >×</button>
+              <button type="button" class="icon-action" disabled={isFirst} aria-label="Move up" onclick={() => moveSource(i, -1)}>↑</button>
+              <button type="button" class="icon-action" disabled={isLast} aria-label="Move down" onclick={() => moveSource(i, 1)}>↓</button>
+              {#if sources.length > 1}
+                <button type="button" class="icon-action remove" aria-label="Remove source" onclick={() => removeSource(i)} data-testid="smart-source-remove">×</button>
+              {/if}
             </div>
           </div>
-          {#if s.source !== 'rss'}
-            <div class="filter-pills" role="group" aria-label="Filters" data-testid="smart-filter-pills">
-              {#each queryOptionsFor(s.source) as opt (opt.value)}
-                <Chip
-                  label={opt.label}
-                  selected={s.queries.includes(opt.value)}
-                  onToggle={() => toggleQuery(i, opt.value)}
-                  testid="smart-filter-pill"
+
+          {#if s.source === 'opml'}
+            <label class="file-field">
+              <span class="field-label">File</span>
+              <span class="file-pick" class:has-file={!!s.file}>
+                <svg class="file-icon" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                  <path d="M2 1.5h5l3 3V10.5a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5v-9A.5.5 0 0 1 2 1.5Z" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+                  <path d="M7 1.5V5h3" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+                </svg>
+                <span class="file-name">{s.file ? s.file.name : 'No file chosen'}</span>
+                <span class="file-sep" aria-hidden="true"></span>
+                <span class="file-btn">Browse</span>
+                <input
+                  type="file"
+                  accept=".opml,.xml"
+                  class="sr-only"
+                  onchange={(e) => {
+                    const f = (e.currentTarget as HTMLInputElement).files?.[0] ?? null;
+                    (e.currentTarget as HTMLInputElement).value = '';
+                    s.file = f;
+                    if (f) void pickOpml(i, f);
+                  }}
+                  data-testid="smart-opml-file-input"
                 />
-              {/each}
-            </div>
+              </span>
+            </label>
+          {:else}
+            <TextInput
+              label={s.source === 'rss' ? 'Feed URL' : 'Instance URL'}
+              bind:value={s.baseUrl}
+              placeholder={s.source === 'rss' ? 'https://example.com/feed.xml' : DEFAULT_BASE_URL[s.source]}
+              testid="smart-source-url"
+            />
+            {#if s.source !== 'rss'}
+              <div class="filter-pills" role="group" aria-label="Filters">
+                {#each queryOptionsFor(s.source) as opt (opt.value)}
+                  <Chip
+                    label={opt.label}
+                    selected={s.queries.includes(opt.value)}
+                    onToggle={() => toggleQuery(i, opt.value)}
+                    testid="smart-filter-pill"
+                  />
+                {/each}
+              </div>
+            {/if}
           {/if}
         </div>
       {/each}
     </div>
-  {/if}
-
-  <!-- "Add source" inline form -->
-  {#if addingSource}
-    <div class="add-source-form" data-testid="smart-add-source-form">
-      <div class="field">
-        <span class="field-label">Source</span>
-        <Select
-          options={SOURCE_OPTIONS}
-          value={addSource}
-          onchange={onAddSourceChange}
-          ariaLabel="New source type"
-          testid="smart-add-source-type"
-        />
-      </div>
-      {#if addSource === 'opml'}
-        <label class="file-field">
-          <span class="field-label">File</span>
-          <span class="file-pick" class:has-file={!!addOpmlFile}>
-            <svg class="file-icon" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-              <path d="M2 1.5h5l3 3V10.5a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5v-9A.5.5 0 0 1 2 1.5Z" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
-              <path d="M7 1.5V5h3" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
-            </svg>
-            <span class="file-name">{addOpmlFile ? addOpmlFile.name : 'No file chosen'}</span>
-            <span class="file-sep" aria-hidden="true"></span>
-            <span class="file-btn">Browse</span>
-            <input
-              type="file"
-              accept=".opml,.xml"
-              class="sr-only"
-              onchange={(e) => {
-                addOpmlFile = (e.currentTarget as HTMLInputElement).files?.[0] ?? null;
-                (e.currentTarget as HTMLInputElement).value = '';
-              }}
-              data-testid="smart-opml-file-input"
-            />
-          </span>
-        </label>
-      {:else}
-        <TextInput
-          label={addSource === 'rss' ? 'Feed URL' : 'Instance URL'}
-          bind:value={addBaseUrl}
-          placeholder={addSource === 'rss' ? 'https://example.com/feed.xml' : DEFAULT_BASE_URL[addSource]}
-          testid="smart-add-source-url"
-        />
-        {#if addSource !== 'rss'}
-          <div class="field">
-            <span class="field-label">Filters</span>
-            <div class="filter-pills" role="group" aria-label="Filters" data-testid="smart-add-filter-pills">
-              {#each queryOptionsFor(addSource) as opt (opt.value)}
-                <Chip
-                  label={opt.label}
-                  selected={addQueries.includes(opt.value)}
-                  onToggle={() => toggleAddQuery(opt.value)}
-                  testid="smart-add-filter-pill"
-                />
-              {/each}
-            </div>
-          </div>
-        {/if}
-      {/if}
-      <div class="add-source-actions">
-        <Button variant="ghost" onclick={() => { addingSource = false; addOpmlFile = null; }}>Cancel</Button>
-        <Button
-          variant="primary"
-          disabled={addSource === 'opml'
-            ? addOpmlFile === null
-            : !isValidBaseUrl(addBaseUrl.trim()) || (addSource !== 'rss' && addQueries.length === 0)}
-          onclick={() => void addSourceEntry()}
-          testid="smart-add-source-confirm"
-        >
-          Add
-        </Button>
-      </div>
-    </div>
-  {:else}
     <div class="source-add-row">
-      <Button variant="ghost" onclick={() => { addingSource = true; opmlImportNote = null; }} testid="smart-add-source-open">
+      <Button variant="ghost" size="sm" onclick={addSourceCard} testid="smart-add-source">
         + Add source
       </Button>
       {#if opmlImportNote}
         <span class="opml-note">{opmlImportNote}</span>
       {/if}
     </div>
-  {/if}
-
-  <TextInput
-    label="Name"
-    bind:value={name}
-    testid="smart-folder-name"
-    oninput={() => { nameTouched = true; }}
-    onenter={confirm}
-  />
+  </div>
 
   <div class="field">
     <span class="field-label">{maxItemsLabel}</span>
@@ -531,11 +518,14 @@ function confirm(): void {
     />
   </div>
 
-  <p class="hint" data-testid="smart-folder-hint">{hint}</p>
-
   <div class="confirm-row">
+    <p class="hint" data-testid="smart-folder-hint">{hint}</p>
+    <span class="confirm-spacer"></span>
+    {#if onDone}
+      <Button variant="ghost" onclick={() => onDone?.()}>Cancel</Button>
+    {/if}
     <Button variant="primary" disabled={!canConfirm} onclick={confirm} testid="smart-folder-confirm">
-      {node ? 'Save' : 'Add smart folder'}
+      {node ? 'Save' : 'Create'}
     </Button>
   </div>
 </div>
@@ -544,7 +534,7 @@ function confirm(): void {
   .editor {
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
+    gap: var(--space-3);
     min-width: 216px;
   }
 
@@ -560,6 +550,7 @@ function confirm(): void {
   }
 
   .hint {
+    flex: 1;
     margin: 0;
     color: var(--text-faint);
     font: var(--weight-regular) var(--text-xs) / 1.4 var(--font-sans);
@@ -567,54 +558,48 @@ function confirm(): void {
 
   .confirm-row {
     display: flex;
-    justify-content: flex-end;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .confirm-spacer {
+    flex-shrink: 0;
   }
 
-  /* Per-instance list */
   .source-list {
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
+    gap: var(--space-2);
   }
 
-  .source-entry {
+  .source-card {
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
-    padding: var(--space-1) var(--space-2);
+    gap: var(--space-2);
+    padding: var(--space-2);
     background: var(--surface-2);
+    border: 1px solid transparent;
     border-radius: var(--r-md);
+    transition: border-color var(--motion-fast) var(--ease-standard);
+  }
+  .source-card.invalid {
+    border-color: color-mix(in oklch, var(--danger) 45%, transparent);
   }
 
-  .source-entry-top {
+  .source-card-head {
     display: flex;
     align-items: center;
     gap: var(--space-2);
   }
-
-  .source-chip {
-    flex-shrink: 0;
-    padding: 2px var(--space-1);
-    background: var(--space-c-soft);
-    border-radius: var(--r-sm);
-    font: var(--weight-medium) var(--text-xs) / 1 var(--font-sans);
-    color: var(--text);
-  }
-
-  .source-url {
+  .source-card-head :global(.select) {
     flex: 1;
     min-width: 0;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    font: var(--weight-regular) var(--text-xs) / 1 var(--font-sans);
-    color: var(--text-muted);
   }
 
   .source-actions {
     display: flex;
     align-items: center;
     gap: var(--space-1);
+    flex-shrink: 0;
   }
 
   .filter-pills {
@@ -627,12 +612,15 @@ function confirm(): void {
     appearance: none;
     border: 0;
     background: transparent;
-    color: var(--text-muted);
+    color: var(--text-dim);
     cursor: pointer;
     padding: 2px 4px;
     border-radius: var(--r-sm);
-    font-size: 12px;
+    font-size: var(--text-sm);
     line-height: 1;
+    transition:
+      background var(--motion-fast) var(--ease-standard),
+      color var(--motion-fast) var(--ease-standard);
   }
   .icon-action:hover:not(:disabled) {
     background: var(--surface-3);
@@ -642,24 +630,8 @@ function confirm(): void {
     opacity: 0.3;
     cursor: default;
   }
-  .icon-action.remove {
-    font-size: 14px;
-  }
-
-  /* "Add source" inline form */
-  .add-source-form {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding: var(--space-2);
-    background: var(--surface-2);
-    border-radius: var(--r-md);
-  }
-
-  .add-source-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-2);
+  .icon-action.remove:hover:not(:disabled) {
+    color: var(--danger);
   }
 
   .source-add-row {
@@ -679,19 +651,21 @@ function confirm(): void {
     display: flex;
     align-items: center;
     gap: 0;
-    height: 28px;
+    height: var(--control-h-sm);
     background: var(--surface-2);
     border: 1px solid transparent;
     border-radius: var(--r-md);
     cursor: pointer;
-    transition: border-color 150ms ease, background 150ms ease;
+    transition:
+      border-color var(--motion-fast) var(--ease-standard),
+      background var(--motion-fast) var(--ease-standard);
     overflow: hidden;
   }
   .file-pick:hover {
-    border-color: color-mix(in srgb, var(--text) 12%, transparent);
+    border-color: color-mix(in oklch, var(--text) 12%, transparent);
   }
   .file-pick:focus-within {
-    border-color: color-mix(in srgb, var(--text) 20%, transparent);
+    border-color: color-mix(in oklch, var(--text) 20%, transparent);
     outline: none;
   }
 
@@ -699,7 +673,6 @@ function confirm(): void {
     flex-shrink: 0;
     margin-inline: var(--space-2) 4px;
     color: var(--text-dim);
-    transition: color 150ms ease;
   }
   .file-pick:hover .file-icon,
   .file-pick.has-file .file-icon {
@@ -723,7 +696,7 @@ function confirm(): void {
     flex-shrink: 0;
     width: 1px;
     height: 16px;
-    background: color-mix(in srgb, var(--text) 10%, transparent);
+    background: color-mix(in oklch, var(--text) 10%, transparent);
     margin-inline: var(--space-2);
   }
 
@@ -732,7 +705,6 @@ function confirm(): void {
     padding-inline: var(--space-2);
     font: var(--weight-medium) var(--text-xs) / 1 var(--font-sans);
     color: var(--text-muted);
-    transition: color 150ms ease;
   }
   .file-pick:hover .file-btn {
     color: var(--text);
@@ -753,5 +725,13 @@ function confirm(): void {
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .source-card,
+    .icon-action,
+    .file-pick {
+      transition: none;
+    }
   }
 </style>
