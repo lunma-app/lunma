@@ -3,7 +3,9 @@ import { dispatch } from '../shared/bus';
 import { requiredOriginsForConfig } from '../shared/connector-origins';
 import { requestHostPermissions } from '../shared/permissions';
 import type {
+  AppState,
   PinNode,
+  SidebarLocalState,
   SmartFolderItem,
   SmartSectionRuntime,
   SmartSourceConfig,
@@ -68,6 +70,15 @@ const spaceColor = $derived(store.state.spaces.find((s) => s.id === spaceId)?.co
 // locally to respect the layer DAG (sidebar cannot import from background/).
 function sourceKey(cfg: SmartSourceConfig): string {
   return `${cfg.source}:${new URL(cfg.baseUrl).host}`;
+}
+
+// Per-section collapse read — `collapsedSmartSectionsByWindow` is augmented onto
+// the store by the sidebar (sidebar-local, never part of `AppState`), so read it
+// through the same structural cast `PinnedTabs` uses for `expandedFoldersByWindow`.
+// Absent entry ⇒ expanded.
+function isSectionCollapsed(folderId: string, sk: string): boolean {
+  const augmented = store.state as AppState & SidebarLocalState;
+  return augmented.collapsedSmartSectionsByWindow?.[windowId]?.[folderId]?.[sk] ?? false;
 }
 
 // Whether any source is a feed — gates the feed-only menu items and controls.
@@ -380,6 +391,8 @@ export function onContextMenu(e: MouseEvent): void {
       {@const isSectionFeed = cfg.source === 'rss'}
       {@const renderItems = isSectionFeed ? feedWindowForSection(cfg, secItems) : secItems}
       {@const emptyNote = sectionEmptyNote(cfg, renderItems, secItems, secState)}
+      {@const collapsed = isSectionCollapsed(node.id, sourceKey(cfg))}
+      {@const bodyId = `smart-section-body-${node.id}-${sourceKey(cfg)}`}
 
       {#if node.sources.length >= 2}
         {@const sectionCount = (() => {
@@ -391,9 +404,18 @@ export function onContextMenu(e: MouseEvent): void {
           }
           return secItems.length > 0 ? String(secItems.length) : undefined;
         })()}
-        <SmartSectionHeader {cfg} count={sectionCount} />
+        <SmartSectionHeader
+          {cfg}
+          count={sectionCount}
+          {collapsed}
+          controlsId={bodyId}
+          onToggle={() =>
+            store.setSmartSectionCollapsed(windowId, node.id, sourceKey(cfg), !collapsed)}
+        />
       {/if}
 
+      {#if !collapsed}
+      <div class="section-body" id={bodyId}>
       {#if secState === 'pending' && secItems.length === 0}
         <div class="ghost" data-testid="smart-ghost-row" aria-hidden="true"></div>
         <div class="ghost" data-testid="smart-ghost-row" aria-hidden="true"></div>
@@ -544,6 +566,8 @@ export function onContextMenu(e: MouseEvent): void {
           </div>
         {/if}
       {/if}
+      </div>
+      {/if}
     {/each}
   </div>
 {/if}
@@ -570,6 +594,17 @@ export function onContextMenu(e: MouseEvent): void {
 <style>
   .children {
     padding-left: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    animation: smart-open var(--motion-base) var(--ease-emphasised);
+  }
+
+  /* Section body wrapper (collapsible-smart-folder-sections). Adds NO padding or
+   * indent — header and rows keep their own padding, so the layout stays flat.
+   * Mirrors `.children`'s column flow and replays the `smart-open` entrance when
+   * a collapsed section is re-expanded (the wrapper is conditionally rendered,
+   * so a fresh mount re-triggers the animation). */
+  .section-body {
     display: flex;
     flex-direction: column;
     animation: smart-open var(--motion-base) var(--ease-emphasised);
@@ -812,6 +847,7 @@ export function onContextMenu(e: MouseEvent): void {
 
   @media (prefers-reduced-motion: reduce) {
     .children,
+    .section-body,
     .result-row {
       animation: none;
     }

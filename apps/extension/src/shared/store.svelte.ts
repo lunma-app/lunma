@@ -1215,6 +1215,33 @@ export class LunmaStore {
   }
 
   /**
+   * Sidebar-local, per-window per-section collapse state for multi-source smart
+   * folders (collapsible-smart-folder-sections). Like `setFolderExpanded`, the
+   * `collapsedSmartSectionsByWindow` field is augmented onto `state` by the
+   * sidebar and is NOT part of `AppState` — section open/closed is a property of
+   * "this window's view", never persisted/broadcast, so the same folder's
+   * section can be collapsed in one window and expanded in another. An absent
+   * leaf means expanded; `collapsed === true` means collapsed.
+   */
+  setSmartSectionCollapsed(
+    windowId: WindowId,
+    folderId: FolderId,
+    sourceKey: string,
+    collapsed: boolean,
+  ): void {
+    const augmented = this.state as AppState & SidebarLocalState;
+    if (!augmented.collapsedSmartSectionsByWindow) augmented.collapsedSmartSectionsByWindow = {};
+    if (!augmented.collapsedSmartSectionsByWindow[windowId]) {
+      augmented.collapsedSmartSectionsByWindow[windowId] = {};
+    }
+    const forWindow = augmented.collapsedSmartSectionsByWindow[windowId];
+    if (!forWindow) return;
+    if (!forWindow[folderId]) forWindow[folderId] = {};
+    const forFolder = forWindow[folderId];
+    if (forFolder) forFolder[sourceKey] = collapsed;
+  }
+
+  /**
    * Sidebar-local, per-window one-shot "open inline rename on the next
    * newly-created folder" flag (pin-temp-tab-into-folder). Armed when two tabs
    * are folded into a NEW folder — a temporary tab dropped onto a pinned tab,

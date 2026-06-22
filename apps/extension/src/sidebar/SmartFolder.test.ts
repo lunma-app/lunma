@@ -1037,3 +1037,132 @@ describe('SmartFolder — empty-state parity (rss-connector)', () => {
     expect(emptyNote(renderSmart(errored).container)).toBeUndefined();
   });
 });
+
+describe('SmartFolder — per-section collapse (collapsible-smart-folder-sections)', () => {
+  const GITLAB_KEY = 'gitlab:gitlab.example.com';
+  const GITHUB_KEY = 'github:github.com';
+  const GITLAB_BODY = `[id="smart-section-body-sf-1-${GITLAB_KEY}"]`;
+  const GITHUB_BODY = `[id="smart-section-body-sf-1-${GITHUB_KEY}"]`;
+
+  /** A two-source node (gitlab + github), both queue sources. */
+  function twoSourceNode(): SmartNode {
+    return smartNode({
+      sources: [
+        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+        { source: 'github', baseUrl: 'https://github.com', query: 'review-requested' },
+      ],
+    });
+  }
+
+  function ghItem(i: number): SmartFolderItem {
+    return { id: `gh-${i}`, title: `PR ${i}`, url: `https://github.com/o/r/pull/${i}` };
+  }
+
+  /** A store with a two-source folder: gitlab (`gl` items) + github (`gh` items). */
+  function makeTwoSourceStore(glItems: SmartFolderItem[], ghItems: SmartFolderItem[]): LunmaStore {
+    const node = twoSourceNode();
+    const store = new LunmaStore();
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.pinnedBySpace.work = [node];
+    store.state.smartFolders['sf-1'] = {
+      sections: {
+        [GITLAB_KEY]: { state: 'ok', items: glItems, fetchedAt: 1 },
+        [GITHUB_KEY]: { state: 'ok', items: ghItems, fetchedAt: 1 },
+      },
+    };
+    return store;
+  }
+
+  /** The section header buttons, in source order (gitlab, github). */
+  const headers = (c: HTMLElement): HTMLButtonElement[] =>
+    [...c.querySelectorAll('.section-header')] as HTMLButtonElement[];
+
+  test('a two-source folder renders one disclosure-button header per section', () => {
+    const store = makeTwoSourceStore([item(1)], [ghItem(1)]);
+    const { container } = renderSmart(store, { node: twoSourceNode() });
+    const hs = headers(container);
+    expect(hs).toHaveLength(2);
+    expect(hs[0]?.tagName).toBe('BUTTON');
+    expect(hs[0]?.getAttribute('aria-label')).toContain('gitlab.example.com section');
+    expect(hs[1]?.getAttribute('aria-label')).toContain('github.com section');
+  });
+
+  test('collapsing a section hides its body and keeps its header; the other section is untouched', async () => {
+    const store = makeTwoSourceStore([item(1), item(2)], [ghItem(1), ghItem(2), ghItem(3)]);
+    const { container } = renderSmart(store, { node: twoSourceNode() });
+    // Both bodies present, all five rows render.
+    expect(container.querySelector(GITLAB_BODY)).not.toBeNull();
+    expect(container.querySelectorAll('[data-testid="smart-result-row"]')).toHaveLength(5);
+
+    store.setSmartSectionCollapsed(100, 'sf-1', GITLAB_KEY, true);
+    await tick();
+
+    // The gitlab body is gone, but its header — with its count — stays.
+    expect(container.querySelector(GITLAB_BODY)).toBeNull();
+    expect(headers(container)).toHaveLength(2);
+    expect(headers(container)[0]?.getAttribute('aria-expanded')).toBe('false');
+    // The github section is unaffected — its body and three rows remain.
+    expect(container.querySelector(GITHUB_BODY)).not.toBeNull();
+    expect(container.querySelectorAll('[data-testid="smart-result-row"]')).toHaveLength(3);
+  });
+
+  test('the collapsed section header keeps showing its attention count', async () => {
+    const store = makeTwoSourceStore([item(1), item(2), item(3), item(4)], [ghItem(1)]);
+    const { container } = renderSmart(store, { node: twoSourceNode() });
+    store.setSmartSectionCollapsed(100, 'sf-1', GITLAB_KEY, true);
+    await tick();
+    const gitlabHeader = headers(container)[0];
+    expect(gitlabHeader?.getAttribute('aria-expanded')).toBe('false');
+    expect(gitlabHeader?.querySelector('.section-count')?.textContent).toBe('4');
+  });
+
+  test('clicking a section header dispatches the toggle through the store (collapse, then expand)', async () => {
+    const store = makeTwoSourceStore([item(1)], [ghItem(1)]);
+    const setSpy = vi.spyOn(store, 'setSmartSectionCollapsed');
+    const { container } = renderSmart(store, { node: twoSourceNode() });
+
+    await fireEvent.click(headers(container)[0] as HTMLButtonElement);
+    expect(setSpy).toHaveBeenLastCalledWith(100, 'sf-1', GITLAB_KEY, true);
+    await tick();
+    // Now collapsed → clicking again expands.
+    await fireEvent.click(headers(container)[0] as HTMLButtonElement);
+    expect(setSpy).toHaveBeenLastCalledWith(100, 'sf-1', GITLAB_KEY, false);
+  });
+
+  test('collapse is per-window: collapsed in window 100, expanded in window 200', () => {
+    const store = makeTwoSourceStore([item(1), item(2)], [ghItem(1)]);
+    store.setSmartSectionCollapsed(100, 'sf-1', GITLAB_KEY, true);
+
+    // Window 100 — gitlab collapsed (body absent).
+    const w100 = render(SmartFolderHarness, {
+      props: { store, windowId: 100, spaceId: 'work', node: twoSourceNode() },
+    });
+    expect(w100.container.querySelector(GITLAB_BODY)).toBeNull();
+    cleanup();
+
+    // Window 200 — same folder, no collapse entry → gitlab renders expanded.
+    const w200 = render(SmartFolderHarness, {
+      props: { store, windowId: 200, spaceId: 'work', node: twoSourceNode() },
+    });
+    expect(w200.container.querySelector(GITLAB_BODY)).not.toBeNull();
+    expect(w200.container.querySelectorAll('[data-testid="smart-result-row"]')).toHaveLength(3);
+  });
+
+  test('the folder badge is unchanged when a busy section is collapsed', async () => {
+    // gitlab 4 + github 2 = 6.
+    const store = makeTwoSourceStore([item(1), item(2), item(3), item(4)], [ghItem(1), ghItem(2)]);
+    const { container } = renderSmart(store, { node: twoSourceNode() });
+    expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('6');
+
+    store.setSmartSectionCollapsed(100, 'sf-1', GITLAB_KEY, true);
+    await tick();
+    // Collapse hides the body but the badge still sums every section.
+    expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('6');
+  });
+
+  test('a single-source folder renders no section header and no collapse control', () => {
+    const store = makeStore({ state: 'ok', items: [item(1)], fetchedAt: 1 });
+    const { container } = renderSmart(store);
+    expect(container.querySelector('.section-header')).toBeNull();
+  });
+});
