@@ -431,7 +431,7 @@ export function onContextMenu(e: MouseEvent): void {
     data-testid="smart-children"
     onpointerdown={(e) => e.stopPropagation()}
   >
-    {#each sections as cfg (sourceKey(cfg))}
+    {#each sections as cfg, sectionIndex (sourceKey(cfg))}
       {@const sec = sectionRuntime(cfg)}
       {@const secState = sec?.state ?? 'pending'}
       {@const secItems = displayItemsForSection(cfg)}
@@ -455,6 +455,7 @@ export function onContextMenu(e: MouseEvent): void {
           {cfg}
           count={sectionCount}
           {collapsed}
+          first={sectionIndex === 0}
           controlsId={bodyId}
           onToggle={() =>
             store.setSmartSectionCollapsed(windowId, node.id, sourceKey(cfg), !collapsed)}
@@ -731,6 +732,14 @@ export function onContextMenu(e: MouseEvent): void {
     width: var(--favicon-size);
     height: var(--favicon-size);
     color: var(--text-muted);
+    /* Recessed at rest so the title leads, not the bright source disc; full
+     * strength on hover / when active. */
+    opacity: 0.8;
+    transition: opacity var(--motion-fast) var(--ease-standard);
+  }
+  .row-wrap:hover .result-favicon,
+  .result-row.active .result-favicon {
+    opacity: 1;
   }
 
   .result-title {
@@ -902,7 +911,7 @@ export function onContextMenu(e: MouseEvent): void {
     .dot.unread,
     .row-wrap.feed,
     .result-row.feed .result-title,
-    .result-row.feed .result-favicon {
+    .result-favicon {
       transition: none;
     }
   }

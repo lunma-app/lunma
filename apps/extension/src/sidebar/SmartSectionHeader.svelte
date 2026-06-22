@@ -12,9 +12,11 @@ interface Props {
   onToggle: () => void;
   /** `id` of the section body this header discloses, for `aria-controls`. */
   controlsId?: string | undefined;
+  /** First section in the folder — suppresses the hairline separator above. */
+  first?: boolean | undefined;
 }
 
-const { cfg, count, collapsed, onToggle, controlsId }: Props = $props();
+const { cfg, count, collapsed, onToggle, controlsId, first = false }: Props = $props();
 
 const ICON_BY_SOURCE: Record<string, string> = {
   gitlab: 'folder-git-2',
@@ -58,16 +60,18 @@ const ariaLabel = $derived(
 <button
   type="button"
   class="section-header"
+  class:first
   aria-expanded={!collapsed}
   aria-controls={controlsId}
   aria-label={ariaLabel}
   onclick={onToggle}
 >
-  <span class="section-chevron" class:expanded={!collapsed} aria-hidden="true">
-    <Icon name="chevron-right" size={12} />
-  </span>
-  <span class="section-icon">
-    <Icon name={icon} size={16} />
+  <!-- One disclosure slot (the one-glyph restraint): the source icon at rest,
+       crossfading to a rotating chevron on hover / keyboard focus. Both glyphs
+       are stacked in the same 16px box so the swap never reflows. -->
+  <span class="section-disclosure" class:expanded={!collapsed} aria-hidden="true">
+    <span class="glyph glyph-type"><Icon name={icon} size={16} /></span>
+    <span class="glyph glyph-caret"><Icon name="chevron-right" size={14} /></span>
   </span>
   <span class="section-host">{hostLabel}</span>
   {#if count !== undefined}
@@ -87,19 +91,26 @@ const ariaLabel = $derived(
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    height: 12px;
-    padding: 4px var(--space-2) 0 var(--space-3);
+    min-height: 24px;
+    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
     margin-bottom: var(--row-gap);
     border-radius: var(--r-md);
     transition:
       background var(--motion-fast) var(--ease-standard),
       transform var(--motion-fast) var(--ease-standard);
   }
+  /* Hairline separator above every section header except the first, so each
+   * section reads as a discrete block (expanded or collapsed). */
+  .section-header:not(.first) {
+    margin-top: var(--space-1);
+    border-top: 1px solid color-mix(in oklch, var(--text-faint) 22%, transparent);
+    padding-top: calc(var(--space-1) + 1px);
+  }
   .section-header:hover {
     background: var(--surface-2);
   }
   .section-header:hover .section-host {
-    color: var(--text);
+    color: var(--text-2);
   }
   .section-header:active {
     transform: scale(var(--press-scale));
@@ -109,25 +120,38 @@ const ariaLabel = $derived(
     outline-offset: var(--focus-offset);
   }
 
-  .section-chevron {
+  /* One 16px slot; the two glyphs share the box and crossfade. */
+  .section-disclosure {
+    position: relative;
     flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-dim);
-    transition: transform var(--motion-fast) var(--ease-standard);
-  }
-  .section-chevron.expanded {
-    transform: rotate(90deg);
-  }
-
-  .section-icon {
-    flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
     width: var(--favicon-size);
+    height: var(--favicon-size);
+  }
+  .glyph {
+    position: absolute;
+    inset: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     color: var(--text-dim);
+    transition:
+      opacity var(--motion-fast) var(--ease-standard),
+      transform var(--motion-fast) var(--ease-standard);
+  }
+  .glyph-caret {
+    opacity: 0;
+  }
+  /* On intent (hover / keyboard focus) the type icon fades out, the chevron in. */
+  .section-header:hover .glyph-type,
+  .section-header:focus-visible .glyph-type {
+    opacity: 0;
+  }
+  .section-header:hover .glyph-caret,
+  .section-header:focus-visible .glyph-caret {
+    opacity: 1;
+  }
+  .section-disclosure.expanded .glyph-caret {
+    transform: rotate(90deg);
   }
 
   .section-host {
@@ -136,19 +160,19 @@ const ariaLabel = $derived(
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
-    font: var(--weight-regular) var(--font-size-xs, 11px) / 1 var(--font-sans);
-    color: var(--text-muted);
+    font: var(--weight-medium) var(--text-xs) / 1 var(--font-sans);
+    color: var(--text-dim);
     transition: color var(--motion-fast) var(--ease-standard);
   }
 
   .section-count {
     flex-shrink: 0;
-    font: var(--weight-semibold) var(--font-size-xs, 11px) / 1 var(--font-sans);
+    font: var(--weight-semibold) var(--text-xs) / 1 var(--font-sans);
     color: var(--text-dim);
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .section-chevron {
+    .glyph {
       transition: none;
     }
   }
