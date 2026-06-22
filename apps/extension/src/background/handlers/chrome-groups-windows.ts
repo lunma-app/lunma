@@ -6,6 +6,7 @@
 import { log } from '../../shared/logger';
 import { disambiguateSpaceName, normalizeSpaceName } from '../../shared/space-names';
 import { updateGroupTitleColor } from '../tab-groups';
+import { isManagedWindow } from '../window-types';
 import type { HandlersMap } from './context';
 import { findSpaceIdByGroupId } from './queries';
 
@@ -68,6 +69,10 @@ export function chromeGroupWindowHandlers(): Pick<
       ctx.markDirty();
     },
     'windows.onCreated': (ctx, event) => {
+      // Only normal windows host tab groups; ignore popups/app/devtools windows
+      // so they never gain an `activeSpaceByWindow` entry and the group
+      // orchestration never attempts a grouping Chrome would reject.
+      if (!isManagedWindow(event.payload.window)) return;
       const id = event.payload.window.id;
       if (id === undefined) return;
       ctx.store.onWindowOpened(id);

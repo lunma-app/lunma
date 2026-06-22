@@ -46,11 +46,14 @@ export function tabActivated(tabId: number, windowId: number): PendingEvent {
   };
 }
 
-export function windowCreated(id: number): PendingEvent {
+export function windowCreated(
+  id: number,
+  type: `${chrome.windows.WindowType}` = 'normal',
+): PendingEvent {
   return {
     source: 'chrome',
     kind: 'windows.onCreated',
-    payload: { window: { id } as chrome.windows.Window },
+    payload: { window: { id, type } as chrome.windows.Window },
   };
 }
 
