@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { assertMigrationsTerminal, type Migration, migrations, runMigrations } from './migrations';
-import { AppStateV9Schema, CURRENT_SCHEMA_VERSION } from './schemas';
+import { AppStateV10Schema, CURRENT_SCHEMA_VERSION } from './schemas';
 import { createInitialState } from './store.svelte';
 
 // Snapshot of the REAL migration chain, captured at module load (before the
@@ -8,8 +8,8 @@ import { createInitialState } from './store.svelte';
 const realMigrations = [...migrations];
 
 describe('the real migration chain', () => {
-  test('holds exactly the v2 through v9 entries', () => {
-    expect(realMigrations).toHaveLength(8);
+  test('holds exactly the v2 through v10 entries', () => {
+    expect(realMigrations).toHaveLength(9);
     expect(realMigrations[0]?.toVersion).toBe(2);
     expect(realMigrations[1]?.toVersion).toBe(3);
     expect(realMigrations[2]?.toVersion).toBe(4);
@@ -18,7 +18,8 @@ describe('the real migration chain', () => {
     expect(realMigrations[5]?.toVersion).toBe(7);
     expect(realMigrations[6]?.toVersion).toBe(8);
     expect(realMigrations[7]?.toVersion).toBe(9);
-    expect(CURRENT_SCHEMA_VERSION).toBe(9);
+    expect(realMigrations[8]?.toVersion).toBe(10);
+    expect(CURRENT_SCHEMA_VERSION).toBe(10);
     // v2–v6 are pass-throughs (see comment in migrations.ts). v7 is the
     // smart-tab-boundary real transformation; v8 is the multi-source wrap.
     const input = { schemaVersion: 1, pinnedBySpace: { work: [{ kind: 'tab', id: 'a' }] } };
@@ -29,7 +30,7 @@ describe('the real migration chain', () => {
     expect(realMigrations[4]?.migrate(input)).toBe(input);
   });
 
-  test('a v1 payload chains through all eight entries cleanly', () => {
+  test('a v1 payload chains through all nine entries cleanly', () => {
     // The file-level beforeEach clears the live array for the runner suites —
     // restore the real chain so this exercises it, not an empty list.
     migrations.push(...realMigrations);
@@ -67,7 +68,7 @@ describe('the real migration chain', () => {
     delete v5State.smartReadState; // the slice did not exist pre-v6
 
     const migrated = runMigrations(v5State, 5);
-    const parsed = AppStateV9Schema.parse(migrated);
+    const parsed = AppStateV10Schema.parse(migrated);
     const node = parsed.pinnedBySpace.work?.[0];
     expect(node?.kind).toBe('smart');
     if (node?.kind === 'smart') {
@@ -110,8 +111,8 @@ describe('v7 migration — smart-tab-boundary slot widening', () => {
     } as unknown as Record<string, unknown>;
 
     const migrated = runMigrations(v6State, 6);
-    // Parse against V9 since the full chain now ends at v9.
-    const parsed = AppStateV9Schema.parse(migrated);
+    // Parse against V10 since the full chain now ends at v10.
+    const parsed = AppStateV10Schema.parse(migrated);
     // v7 widened the slot; v8 namespaced the item id (`gitlab:gitlab.com:item-a`);
     // v9 inserted the per-filter axis from the node's single migrated filter.
     expect(parsed.smartItemBindings).toEqual({
@@ -128,11 +129,11 @@ describe('v7 migration — smart-tab-boundary slot widening', () => {
     } as unknown as Record<string, unknown>;
 
     const migrated = runMigrations(v6State, 6);
-    const parsed = AppStateV9Schema.parse(migrated);
+    const parsed = AppStateV10Schema.parse(migrated);
     expect(parsed.smartItemBindings).toEqual({});
   });
 
-  test('v1 envelope migrates through all eight entries cleanly (no smartItemBindings)', () => {
+  test('v1 envelope migrates through all nine entries cleanly (no smartItemBindings)', () => {
     migrations.push(...realMigrations);
     const v1State = {
       ...createInitialState(),
@@ -141,7 +142,7 @@ describe('v7 migration — smart-tab-boundary slot widening', () => {
     // No smartItemBindings or smart nodes in v1 — v7 and v8 migrations are both
     // no-ops; v8 schema default fills smartItemBindings with {}.
     const migrated = runMigrations(v1State, 1);
-    const parsed = AppStateV9Schema.parse(migrated);
+    const parsed = AppStateV10Schema.parse(migrated);
     expect(parsed.smartItemBindings).toEqual({});
     expect(parsed.schemaVersion).toBe(1); // the schema version field itself is from the state
   });
@@ -335,7 +336,7 @@ describe('v9 migration — multi-filter-smart-connectors queries[] rewrite + per
     expect(node.kind).toBe('tab');
   });
 
-  test('a full v1 → v9 chain validates against the v9 schema', () => {
+  test('a full v1 → v10 chain validates against the v10 schema', () => {
     migrations.push(...realMigrations);
     const v1State = {
       ...createInitialState(),
@@ -358,7 +359,7 @@ describe('v9 migration — multi-filter-smart-connectors queries[] rewrite + per
     delete v1State.smartReadState;
 
     const migrated = runMigrations(v1State, 1);
-    const parsed = AppStateV9Schema.parse(migrated);
+    const parsed = AppStateV10Schema.parse(migrated);
     const node = parsed.pinnedBySpace.s1?.[0];
     expect(node?.kind).toBe('smart');
     if (node?.kind === 'smart') {

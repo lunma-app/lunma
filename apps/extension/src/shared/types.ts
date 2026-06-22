@@ -161,6 +161,11 @@ export type SmartSourceConfig = {
   /** The set of canned filters this instance contributes — one section per
    * filter. Non-empty for queue sources; empty (`[]`) for feed sources. */
   queries: SmartQuery[];
+  /** Optional display name (smart-source-rename) — labels this source's
+   * section(s) in place of the host. Display-only; absent for an unnamed source.
+   * Typed `| undefined` to match the persisted schema's `.optional()` under
+   * `exactOptionalPropertyTypes`. */
+  name?: string | undefined;
 };
 
 /**
@@ -178,6 +183,9 @@ export type ResolvedSourceConfig = {
   /** The single canned query for this section. Present for queue sections,
    * absent for rss. */
   query?: SmartQuery | undefined;
+  /** The owning source's optional display name (smart-source-rename) — when set,
+   * labels this section in place of the host. */
+  name?: string | undefined;
 };
 
 /**

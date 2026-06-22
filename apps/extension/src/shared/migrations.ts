@@ -208,6 +208,13 @@ export const migrations: Migration[] = [
       return raw;
     },
   },
+  {
+    // v10 (smart-source-rename): additive — `SmartSourceConfig` gains an OPTIONAL
+    // `name`. Pre-v10 nodes simply lack it and remain valid, so there is nothing
+    // to transform; identity pass-through, present only to advance the version.
+    toVersion: 10,
+    migrate: (raw: unknown): unknown => raw,
+  },
 ];
 
 export function assertMigrationsTerminal(list: Migration[], currentVersion: number): void {

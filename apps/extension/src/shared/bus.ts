@@ -370,6 +370,8 @@ const SmartSourceConfigSchema = z.strictObject({
   source: SmartSourceSchema,
   baseUrl: z.string(),
   queries: z.array(SmartQuerySchema),
+  // Optional per-source display name (smart-source-rename).
+  name: z.string().optional(),
 });
 
 // A pinned-tab placement node — mirrors `PinNode` in `types.ts` (all three

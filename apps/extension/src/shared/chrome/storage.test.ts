@@ -345,7 +345,7 @@ describe('readPersistedState', () => {
     expect(chromeMock.set).not.toHaveBeenCalled();
   });
 
-  test('a v1 envelope chains through all eight entries and writes back as v9', async () => {
+  test('a v1 envelope chains through all nine entries and writes back as v10', async () => {
     // A faithful pre-smart-folders envelope: in-state schemaVersion 1, no
     // ephemeral slices on disk, no smartItemBindings / smartReadState (neither
     // existed yet), a Space with a pinned tab.
@@ -387,7 +387,7 @@ describe('readPersistedState', () => {
     // The envelope is written back at the current (v8) version.
     expect(chromeMock.set).toHaveBeenCalledWith({
       'lunma.state': {
-        schemaVersion: 9,
+        schemaVersion: 10,
         state: { ...persistable, smartItemBindings: {}, smartReadState: {} },
       },
     });
@@ -395,7 +395,7 @@ describe('readPersistedState', () => {
     expect(backupKey).toBeUndefined();
   });
 
-  test('a v2 envelope (gitlab smart node) migrates losslessly and writes back as v9', async () => {
+  test('a v2 envelope (gitlab smart node) migrates losslessly and writes back as v10', async () => {
     // A pre-github-connector envelope: in-state schemaVersion 2, a gitlab smart
     // node among the pins (the only smart source v2 admits). The node carries
     // the current v8 shape (the suite builds from `createInitialState`, then
@@ -440,13 +440,13 @@ describe('readPersistedState', () => {
       smartFolders: {},
     });
     expect(chromeMock.set).toHaveBeenCalledWith({
-      'lunma.state': { schemaVersion: 9, state: { ...persistable, smartItemBindings: {} } },
+      'lunma.state': { schemaVersion: 10, state: { ...persistable, smartItemBindings: {} } },
     });
     const backupKey = Object.keys(chromeMock.data).find((k) => k.startsWith('__corrupt_backup_'));
     expect(backupKey).toBeUndefined();
   });
 
-  test('a v3 envelope (no smartItemBindings field) migrates losslessly and writes back as v9', async () => {
+  test('a v3 envelope (no smartItemBindings field) migrates losslessly and writes back as v10', async () => {
     // A pre-bindings envelope: in-state schemaVersion 3, a smart node among the
     // pins, and no `smartItemBindings` key anywhere — the slice parses to its
     // `{}` default through the v4 pass-through.
@@ -486,7 +486,7 @@ describe('readPersistedState', () => {
       smartFolders: {},
     });
     expect(chromeMock.set).toHaveBeenCalledWith({
-      'lunma.state': { schemaVersion: 9, state: { ...persistable, smartItemBindings: {} } },
+      'lunma.state': { schemaVersion: 10, state: { ...persistable, smartItemBindings: {} } },
     });
     const backupKey = Object.keys(chromeMock.data).find((k) => k.startsWith('__corrupt_backup_'));
     expect(backupKey).toBeUndefined();
@@ -543,7 +543,7 @@ describe('readPersistedState', () => {
     expect(backupKey).toBeUndefined();
   });
 
-  test('a v4 envelope (github smart node) migrates losslessly and writes back as v9', async () => {
+  test('a v4 envelope (github smart node) migrates losslessly and writes back as v10', async () => {
     // A pre-jira-connector envelope: in-state schemaVersion 4, a github smart
     // node among the pins. The v5 + v6 pass-throughs change no content — the
     // node carries the current v8 shape (the suite builds from
@@ -576,7 +576,7 @@ describe('readPersistedState', () => {
     // in the parsed in-memory state (Zod default).
     expect(result.state).toEqual({ ...persistable, liveTabsById: {}, smartFolders: {} });
     expect(chromeMock.set).toHaveBeenCalledWith({
-      'lunma.state': { schemaVersion: 9, state: persistable },
+      'lunma.state': { schemaVersion: 10, state: persistable },
     });
     const backupKey = Object.keys(chromeMock.data).find((k) => k.startsWith('__corrupt_backup_'));
     expect(backupKey).toBeUndefined();

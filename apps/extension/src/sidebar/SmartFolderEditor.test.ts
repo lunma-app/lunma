@@ -613,8 +613,9 @@ describe('SmartFolderEditor — multi-filter / multi-source', () => {
     expect(cards(container)).toHaveLength(2);
     expect(card(container, 0).querySelector('[data-testid="smart-source-type"]')).toBeNull();
     expect(card(container, 1).querySelector('[data-testid="smart-source-type"]')).toBeNull();
-    expect(card(container, 0).querySelector('.source-identity')?.textContent).toBe('a.example.com');
-    expect(card(container, 1).querySelector('.source-identity')?.textContent).toBe('b.example.com');
+    // Imported feeds are named by their OPML title (smart-source-rename).
+    expect(card(container, 0).querySelector('.source-identity')?.textContent).toBe('Alpha');
+    expect(card(container, 1).querySelector('.source-identity')?.textContent).toBe('Beta');
     expect(container.querySelector('[data-testid="smart-folder-hint"]')?.textContent).toContain(
       'fetches independently',
     );
@@ -673,6 +674,35 @@ describe('SmartFolderEditor — multi-filter / multi-source', () => {
     await tick();
     expect(identityAt(0)).toBe('b.example.com');
     expect(identityAt(1)).toBe('a.example.com');
+  });
+
+  test('a per-source Name labels the source and is carried on confirm (blank omitted)', async () => {
+    const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
+    await tick();
+    const nameField = card(container).querySelector(
+      '[data-testid="smart-source-name"]',
+    ) as HTMLInputElement;
+    expect(nameField).not.toBeNull();
+    await fireEvent.input(nameField, { target: { value: 'My GitLab' } });
+    await tick();
+    // The card header identity reflects the name.
+    expect(card(container).querySelector('.source-identity')?.textContent).toBe('My GitLab');
+    await fireEvent.click(confirmBtn(container));
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'createSmartFolder',
+        payload: expect.objectContaining({
+          sources: [
+            {
+              source: 'gitlab',
+              baseUrl: 'https://gitlab.com',
+              queries: ['review-requested'],
+              name: 'My GitLab',
+            },
+          ],
+        }),
+      }),
+    );
   });
 });
 

@@ -1,6 +1,6 @@
 import { log } from '../logger';
 import { runMigrations } from '../migrations';
-import { type AppStateV9, AppStateV9Schema, CURRENT_SCHEMA_VERSION } from '../schemas';
+import { type AppStateV10, AppStateV10Schema, CURRENT_SCHEMA_VERSION } from '../schemas';
 import { createInitialState } from '../store.svelte';
 import type { AppState } from '../types';
 
@@ -22,15 +22,15 @@ export const READ_RETRY_ATTEMPTS = 2;
 // Loaded state is the persisted shape: the ephemeral `liveTabsById` and
 // `smartFolders` slices are stripped before write and never read back from
 // disk, so the parsed state may lack them (rebuilt at SW boot / by connector
-// polls). Hence `AppStateV9` (optional slices) rather than the full runtime
-// `AppState`. `AppStateV9Schema` is the current persisted schema; v1…v5
+// polls). Hence `AppStateV10` (optional slices) rather than the full runtime
+// `AppState`. `AppStateV10Schema` is the current persisted schema; v1…v5
 // envelopes reach it through the pass-through `toVersion: 2` … `toVersion: 6`
 // migrations (smart-folders, github-connector, smart-folder-item-bindings,
 // jira-connector, rss-connector). The persisted `smartReadState` slice
 // (rss-connector) is KEPT by `toPersistable` below, like `smartItemBindings` —
 // only the ephemeral `liveTabsById` / `smartFolders` are stripped.
 export type PersistedRead =
-  | { kind: 'ok'; state: AppStateV9 }
+  | { kind: 'ok'; state: AppStateV10 }
   | { kind: 'empty' }
   | { kind: 'corrupt' }
   // The read itself failed (every `get` attempt threw). Distinct from `empty`
@@ -38,9 +38,9 @@ export type PersistedRead =
   // on-disk state with a fresh Default — there may be real data we couldn't read.
   | { kind: 'unavailable' }
   // Whole-state validation failed but per-slice salvage recovered a valid
-  // `AppStateV9` (every individually-valid Space preserved). The raw payload was
+  // `AppStateV10` (every individually-valid Space preserved). The raw payload was
   // still quarantined; this state is written back to self-heal.
-  | { kind: 'salvaged'; state: AppStateV9 };
+  | { kind: 'salvaged'; state: AppStateV10 };
 
 /**
  * The exact persisted projection `persist` writes: the runtime `state` minus the
@@ -84,7 +84,7 @@ export async function persist(state: AppState): Promise<void> {
  * occurrence wins and ordering is preserved; valid non-duplicate ids are never
  * dropped — this de-duplicates, it does not validate against `savedTabs`.
  */
-export function dedupePersistedState(state: AppStateV9): { state: AppStateV9; changed: boolean } {
+export function dedupePersistedState(state: AppStateV10): { state: AppStateV10; changed: boolean } {
   let changed = false;
 
   const seenSpace = new Set<string>();
@@ -97,7 +97,7 @@ export function dedupePersistedState(state: AppStateV9): { state: AppStateV9; ch
     return true;
   });
 
-  const pinnedBySpace: AppStateV9['pinnedBySpace'] = {};
+  const pinnedBySpace: AppStateV10['pinnedBySpace'] = {};
   for (const [spaceId, nodes] of Object.entries(state.pinnedBySpace)) {
     const seen = new Set<string>();
     const out: typeof nodes = [];
@@ -126,7 +126,7 @@ export function dedupePersistedState(state: AppStateV9): { state: AppStateV9; ch
     pinnedBySpace[spaceId] = out;
   }
 
-  const spaceInstancesByWindow: AppStateV9['spaceInstancesByWindow'] = {};
+  const spaceInstancesByWindow: AppStateV10['spaceInstancesByWindow'] = {};
   for (const key of Object.keys(state.spaceInstancesByWindow)) {
     const wid = Number(key);
     const bySpace = state.spaceInstancesByWindow[wid];
@@ -136,7 +136,7 @@ export function dedupePersistedState(state: AppStateV9): { state: AppStateV9; ch
       // skip it rather than writing an explicit-undefined property back.
       continue;
     }
-    const nextBySpace: NonNullable<AppStateV9['spaceInstancesByWindow'][number]> = {};
+    const nextBySpace: NonNullable<AppStateV10['spaceInstancesByWindow'][number]> = {};
     for (const [spaceId, instance] of Object.entries(bySpace)) {
       const seen = new Set<number>();
       const tempTabIds: number[] = [];
@@ -159,7 +159,7 @@ export function dedupePersistedState(state: AppStateV9): { state: AppStateV9; ch
 }
 
 /**
- * Recover a valid `AppStateV9` from a payload that failed whole-state validation,
+ * Recover a valid `AppStateV10` from a payload that failed whole-state validation,
  * preserving as much real data as possible instead of discarding all of it
  * (design D4). Pure — no Chrome, no I/O.
  *
@@ -169,19 +169,19 @@ export function dedupePersistedState(state: AppStateV9): { state: AppStateV9; ch
  *     never costs the others. This is the guaranteed win (Space identity).
  *   - Every other top-level slice is salvaged **slice-wise**: kept when it
  *     validates against its own schema, otherwise reset to the empty default.
- *   - The assembled object is re-validated against `AppStateV9Schema`; on success
+ *   - The assembled object is re-validated against `AppStateV10Schema`; on success
  *     it is returned, otherwise `null`.
  *
  * Dangling references that result from a dropped Space/slice (e.g. a
  * `pinnedBySpace` entry pointing at a reset `savedTabs`) are tolerated by the
  * load-path dedupe and the sidebar projections (unbound ids drop at render).
  */
-export function salvagePersistedState(migrated: unknown): AppStateV9 | null {
+export function salvagePersistedState(migrated: unknown): AppStateV10 | null {
   if (typeof migrated !== 'object' || migrated === null || Array.isArray(migrated)) {
     return null;
   }
   const input = migrated as Record<string, unknown>;
-  const shape = AppStateV9Schema.shape;
+  const shape = AppStateV10Schema.shape;
 
   // Empty, current-version base — every slice starts at its valid default.
   const assembled: Record<string, unknown> = { ...createInitialState() };
@@ -217,13 +217,13 @@ export function salvagePersistedState(migrated: unknown): AppStateV9 | null {
     if (parsed.success) assembled[field] = parsed.data;
   }
 
-  const result = AppStateV9Schema.safeParse(assembled);
+  const result = AppStateV10Schema.safeParse(assembled);
   return result.success ? result.data : null;
 }
 
 /** Write the current-version envelope back to disk (self-heal). Best-effort: a
  * write failure is logged but never throws into the load path. */
-async function writeBackEnvelope(state: AppStateV9): Promise<void> {
+async function writeBackEnvelope(state: AppStateV10): Promise<void> {
   try {
     await chrome.storage.local.set({
       [STATE_STORAGE_KEY]: { schemaVersion: CURRENT_SCHEMA_VERSION, state: toPersistable(state) },
@@ -281,7 +281,7 @@ export async function readPersistedState(): Promise<PersistedRead> {
     return { kind: 'corrupt' };
   }
 
-  const parsed = AppStateV9Schema.safeParse(migrated);
+  const parsed = AppStateV10Schema.safeParse(migrated);
   if (!parsed.success) {
     // Per-slice salvage BEFORE the corrupt fallback (D4): recover every valid
     // Space (and any valid slice) instead of discarding the whole payload. The

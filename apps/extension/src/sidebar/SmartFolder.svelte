@@ -106,10 +106,10 @@ const sections = $derived.by<ResolvedSourceConfig[]>(() => {
   const out: ResolvedSourceConfig[] = [];
   for (const cfg of node.sources) {
     if (cfg.queries.length === 0) {
-      out.push({ source: cfg.source, baseUrl: cfg.baseUrl });
+      out.push({ source: cfg.source, baseUrl: cfg.baseUrl, name: cfg.name });
     } else {
       for (const query of cfg.queries) {
-        out.push({ source: cfg.source, baseUrl: cfg.baseUrl, query });
+        out.push({ source: cfg.source, baseUrl: cfg.baseUrl, query, name: cfg.name });
       }
     }
   }
