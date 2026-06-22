@@ -1222,7 +1222,7 @@ describe('PinnedTabs smart-folder node (smart-folders, design D13)', () => {
     name: 'Review requests',
     icon: 'folder-git-2',
     sources: [
-      { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+      { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['review-requested'] },
     ],
     maxItems: 20,
     hideRead: false,

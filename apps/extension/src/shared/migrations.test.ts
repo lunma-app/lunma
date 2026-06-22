@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { assertMigrationsTerminal, type Migration, migrations, runMigrations } from './migrations';
-import { AppStateV6Schema, AppStateV8Schema, CURRENT_SCHEMA_VERSION } from './schemas';
+import { AppStateV9Schema, CURRENT_SCHEMA_VERSION } from './schemas';
 import { createInitialState } from './store.svelte';
 
 // Snapshot of the REAL migration chain, captured at module load (before the
@@ -8,8 +8,8 @@ import { createInitialState } from './store.svelte';
 const realMigrations = [...migrations];
 
 describe('the real migration chain', () => {
-  test('holds exactly the v2, v3, v4, v5, v6, v7, and v8 entries', () => {
-    expect(realMigrations).toHaveLength(7);
+  test('holds exactly the v2 through v9 entries', () => {
+    expect(realMigrations).toHaveLength(8);
     expect(realMigrations[0]?.toVersion).toBe(2);
     expect(realMigrations[1]?.toVersion).toBe(3);
     expect(realMigrations[2]?.toVersion).toBe(4);
@@ -17,7 +17,8 @@ describe('the real migration chain', () => {
     expect(realMigrations[4]?.toVersion).toBe(6);
     expect(realMigrations[5]?.toVersion).toBe(7);
     expect(realMigrations[6]?.toVersion).toBe(8);
-    expect(CURRENT_SCHEMA_VERSION).toBe(8);
+    expect(realMigrations[7]?.toVersion).toBe(9);
+    expect(CURRENT_SCHEMA_VERSION).toBe(9);
     // v2–v6 are pass-throughs (see comment in migrations.ts). v7 is the
     // smart-tab-boundary real transformation; v8 is the multi-source wrap.
     const input = { schemaVersion: 1, pinnedBySpace: { work: [{ kind: 'tab', id: 'a' }] } };
@@ -28,7 +29,7 @@ describe('the real migration chain', () => {
     expect(realMigrations[4]?.migrate(input)).toBe(input);
   });
 
-  test('a v1 payload chains through all seven entries cleanly', () => {
+  test('a v1 payload chains through all eight entries cleanly', () => {
     // The file-level beforeEach clears the live array for the runner suites —
     // restore the real chain so this exercises it, not an empty list.
     migrations.push(...realMigrations);
@@ -66,22 +67,22 @@ describe('the real migration chain', () => {
     delete v5State.smartReadState; // the slice did not exist pre-v6
 
     const migrated = runMigrations(v5State, 5);
-    const parsed = AppStateV6Schema.parse(migrated);
+    const parsed = AppStateV9Schema.parse(migrated);
     const node = parsed.pinnedBySpace.work?.[0];
     expect(node?.kind).toBe('smart');
     if (node?.kind === 'smart') {
       expect(node.maxItems).toBe(20);
       // The draining-queue default: a feed's resting state hides read (drained).
       expect(node.hideRead).toBe(true);
-      // query moved to sources[0] by the v8 migration.
-      expect(node.sources?.[0]?.query).toBe('authored');
+      // query moved to sources[0] by v8, then rewritten to queries[] by v9.
+      expect(node.sources?.[0]?.queries).toEqual(['authored']);
     }
     expect(parsed.smartReadState).toEqual({});
   });
 });
 
 describe('v7 migration — smart-tab-boundary slot widening', () => {
-  test('v6 envelope with a numeric smartItemBindings slot migrates to { tabId, allowGlob: "" } and then v8 re-keys the item id', () => {
+  test('v6 envelope with a numeric smartItemBindings slot migrates to { tabId, allowGlob: "" } and then v8/v9 re-key the item id', () => {
     migrations.push(...realMigrations);
     const v6State = {
       ...createInitialState(),
@@ -109,11 +110,12 @@ describe('v7 migration — smart-tab-boundary slot widening', () => {
     } as unknown as Record<string, unknown>;
 
     const migrated = runMigrations(v6State, 6);
-    // Parse against V8 since the full chain now ends at v8.
-    const parsed = AppStateV8Schema.parse(migrated);
-    // v7 widened the slot; v8 re-keyed the item id with the sourceKey namespace.
+    // Parse against V9 since the full chain now ends at v9.
+    const parsed = AppStateV9Schema.parse(migrated);
+    // v7 widened the slot; v8 namespaced the item id (`gitlab:gitlab.com:item-a`);
+    // v9 inserted the per-filter axis from the node's single migrated filter.
     expect(parsed.smartItemBindings).toEqual({
-      f1: { 'gitlab:gitlab.com:item-a': { 100: { tabId: 42, allowGlob: '' } } },
+      f1: { 'gitlab:gitlab.com:authored:item-a': { 100: { tabId: 42, allowGlob: '' } } },
     });
   });
 
@@ -126,11 +128,11 @@ describe('v7 migration — smart-tab-boundary slot widening', () => {
     } as unknown as Record<string, unknown>;
 
     const migrated = runMigrations(v6State, 6);
-    const parsed = AppStateV8Schema.parse(migrated);
+    const parsed = AppStateV9Schema.parse(migrated);
     expect(parsed.smartItemBindings).toEqual({});
   });
 
-  test('v1 envelope migrates through all seven entries cleanly (no smartItemBindings)', () => {
+  test('v1 envelope migrates through all eight entries cleanly (no smartItemBindings)', () => {
     migrations.push(...realMigrations);
     const v1State = {
       ...createInitialState(),
@@ -139,14 +141,14 @@ describe('v7 migration — smart-tab-boundary slot widening', () => {
     // No smartItemBindings or smart nodes in v1 — v7 and v8 migrations are both
     // no-ops; v8 schema default fills smartItemBindings with {}.
     const migrated = runMigrations(v1State, 1);
-    const parsed = AppStateV8Schema.parse(migrated);
+    const parsed = AppStateV9Schema.parse(migrated);
     expect(parsed.smartItemBindings).toEqual({});
     expect(parsed.schemaVersion).toBe(1); // the schema version field itself is from the state
   });
 });
 
 describe('v8 migration — multi-source-smart-folders node wrap', () => {
-  const v8Migration = realMigrations.at(-1);
+  const v8Migration = realMigrations.find((m) => m.toVersion === 8);
   if (!v8Migration) throw new Error('expected v8 migration');
 
   const mkSmartNode = (id: string, source: string, baseUrl: string, query?: string) => ({
@@ -219,6 +221,149 @@ describe('v8 migration — multi-source-smart-folders node wrap', () => {
     const node = result.pinnedBySpace.s1[0] as Record<string, unknown>;
     expect(node.kind).toBe('tab');
     expect(node.sources).toBeUndefined();
+  });
+});
+
+describe('v9 migration — multi-filter-smart-connectors queries[] rewrite + per-filter re-key', () => {
+  const v9Migration = realMigrations.find((m) => m.toVersion === 9);
+  if (!v9Migration) throw new Error('expected v9 migration');
+
+  // A v8-shaped smart node: sources[] entries carry the flat `query?`.
+  const mkV8SmartNode = (id: string, source: string, baseUrl: string, query?: string) => ({
+    kind: 'smart',
+    id,
+    name: 'Test',
+    icon: 'folder-git-2',
+    sources: [{ source, baseUrl, ...(query ? { query } : {}) }],
+    maxItems: 20,
+    hideRead: false,
+    refreshMinutes: 10,
+  });
+
+  test('a queue source entry is rewritten { query } → { queries: [query] }', () => {
+    const state = {
+      pinnedBySpace: { s1: [mkV8SmartNode('f1', 'gitlab', 'https://gitlab.com', 'authored')] },
+      smartItemBindings: {},
+    };
+    const result = v9Migration.migrate(state) as typeof state;
+    const node = result.pinnedBySpace.s1[0] as Record<string, unknown>;
+    expect(node.sources).toEqual([
+      { source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored'] },
+    ]);
+  });
+
+  test('an rss source entry gains queries: []', () => {
+    const state = {
+      pinnedBySpace: { s1: [mkV8SmartNode('f1', 'rss', 'https://feeds.example.com/rss')] },
+      smartItemBindings: {},
+    };
+    const result = v9Migration.migrate(state) as typeof state;
+    const node = result.pinnedBySpace.s1[0] as Record<string, unknown>;
+    expect(node.sources).toEqual([
+      { source: 'rss', baseUrl: 'https://feeds.example.com/rss', queries: [] },
+    ]);
+  });
+
+  test('a v8 smartItemBindings key is re-keyed with the filter axis', () => {
+    const state = {
+      pinnedBySpace: { s1: [mkV8SmartNode('f1', 'gitlab', 'https://gitlab.com', 'authored')] },
+      smartItemBindings: { f1: { 'gitlab:gitlab.com:42': { 100: { tabId: 7, allowGlob: '' } } } },
+    };
+    const result = v9Migration.migrate(state) as typeof state;
+    expect(result.smartItemBindings).toEqual({
+      f1: { 'gitlab:gitlab.com:authored:42': { 100: { tabId: 7, allowGlob: '' } } },
+    });
+  });
+
+  test('an rss binding key is unchanged (rss carries no query axis)', () => {
+    const state = {
+      pinnedBySpace: { s1: [mkV8SmartNode('f1', 'rss', 'https://feeds.example.com/rss')] },
+      smartItemBindings: {
+        f1: { 'rss:feeds.example.com:item-9': { 100: { tabId: 7, allowGlob: '' } } },
+      },
+    };
+    const result = v9Migration.migrate(state) as typeof state;
+    expect(result.smartItemBindings).toEqual({
+      f1: { 'rss:feeds.example.com:item-9': { 100: { tabId: 7, allowGlob: '' } } },
+    });
+  });
+
+  test('an ambiguous binding key re-keys from the FIRST matching instance', () => {
+    const state = {
+      pinnedBySpace: {
+        s1: [
+          {
+            kind: 'smart',
+            id: 'f1',
+            name: 'Test',
+            icon: 'folder-git-2',
+            sources: [
+              { source: 'gitlab', baseUrl: 'https://gitlab.com', query: 'authored' },
+              { source: 'gitlab', baseUrl: 'https://gitlab.com', query: 'assigned' },
+            ],
+            maxItems: 20,
+            hideRead: false,
+            refreshMinutes: 10,
+          },
+        ],
+      },
+      smartItemBindings: { f1: { 'gitlab:gitlab.com:42': { 100: { tabId: 7, allowGlob: '' } } } },
+    };
+    const result = v9Migration.migrate(state) as typeof state;
+    expect(result.smartItemBindings).toEqual({
+      f1: { 'gitlab:gitlab.com:authored:42': { 100: { tabId: 7, allowGlob: '' } } },
+    });
+  });
+
+  test('an orphaned binding (no matching node) is dropped', () => {
+    const state = {
+      pinnedBySpace: { s1: [] },
+      smartItemBindings: { ghost: { 'gitlab:gitlab.com:1': { 1: { tabId: 1, allowGlob: '' } } } },
+    };
+    const result = v9Migration.migrate(state) as typeof state;
+    expect(result.smartItemBindings).toEqual({});
+  });
+
+  test('a v8 envelope with no smart nodes or bindings passes through cleanly', () => {
+    const state = {
+      pinnedBySpace: { s1: [{ kind: 'tab', id: 't1' }] },
+      smartItemBindings: {},
+    };
+    const result = v9Migration.migrate(state) as typeof state;
+    expect(result.smartItemBindings).toEqual({});
+    const node = result.pinnedBySpace.s1[0] as Record<string, unknown>;
+    expect(node.kind).toBe('tab');
+  });
+
+  test('a full v1 → v9 chain validates against the v9 schema', () => {
+    migrations.push(...realMigrations);
+    const v1State = {
+      ...createInitialState(),
+      schemaVersion: 1,
+      pinnedBySpace: {
+        s1: [
+          {
+            kind: 'smart',
+            id: 'f1',
+            name: 'My MRs',
+            icon: 'folder-git-2',
+            source: 'gitlab',
+            baseUrl: 'https://gitlab.com',
+            query: 'authored',
+            refreshMinutes: 10,
+          },
+        ],
+      },
+    } as unknown as Record<string, unknown>;
+    delete v1State.smartReadState;
+
+    const migrated = runMigrations(v1State, 1);
+    const parsed = AppStateV9Schema.parse(migrated);
+    const node = parsed.pinnedBySpace.s1?.[0];
+    expect(node?.kind).toBe('smart');
+    if (node?.kind === 'smart') {
+      expect(node.sources[0]?.queries).toEqual(['authored']);
+    }
   });
 });
 

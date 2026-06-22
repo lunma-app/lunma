@@ -265,8 +265,11 @@ const initial: AppState = {
                                //   PinNode = { kind:'tab'; id }
                                //           | { kind:'folder'; id; name; icon; color; children: savedTabId[] }
                                //           | { kind:'smart'; id; name; icon; sources: SmartSourceConfig[]; maxItems; hideRead; refreshMinutes }
-                               //               SmartSourceConfig = { source:'gitlab'|'github'|'jira'|'rss'; baseUrl; query? }
-                               //               — multi-source: one folder may aggregate several connector sources
+                               //               SmartSourceConfig = { source:'gitlab'|'github'|'jira'|'rss'; baseUrl; queries: SmartQuery[] }
+                               //               — one entry per connector INSTANCE (source+host); `queries` is its set of
+                               //                 canned filters (queue: non-empty; rss: []). The engine expands each entry
+                               //                 over `queries[]` into per-filter ResolvedSourceConfig = { source; baseUrl; query? }
+                               //                 (one fetch/section per filter) via resolvedConfigs(node).
                                //   single-level (folder children are tab ids, never nested folders);
                                //   a smart node is connector CONFIG only — its displayed children are
                                //   ephemeral query results in smartFolders, never persisted on the node
@@ -274,7 +277,7 @@ const initial: AppState = {
                                //   the ids whose SavedTab.spaceId === null (decoupled). Sibling to
                                //   pinnedBySpace, NOT keyed by Space; a record is in one XOR the other.
   smartItemBindings: {},       // { [folderId]: { [namespacedItemId]: { [windowId]: { tabId, allowGlob } } } }
-                               //   namespacedItemId = "${sourceKey}:${nativeId}" (e.g. "gitlab:gitlab.com:42")
+                               //   namespacedItemId = "${sourceKey}:${nativeId}" (e.g. "gitlab:gitlab.com:authored:42")
                                //   PERSISTED, IDS ONLY — work-sensitive payload stays off disk.
                                //   Heals SW restarts, prunes across browser restarts.
   liveTabsById: {},            // { [tabId]: LiveTab } — EPHEMERAL, stripped before persist
@@ -351,10 +354,13 @@ a tab list from the broadcast state alone.
   read back from disk.
 
 `AppState.smartFolders: { [folderId]: SmartFolderRuntime }` holds each smart
-folder's live query results and fetch state, sectioned by source key.
+folder's live query results and fetch state, sectioned by per-filter source key.
 
 - `SmartFolderRuntime = { sections: { [sourceKey]: SmartSectionRuntime } }` —
-  one entry per `sources[]` entry; `sourceKey = "${source}:${host}"`.
+  one entry per RESOLVED section (each `sources[]` instance × each of its
+  `queries[]`, or a single section for an rss feed);
+  `sourceKey = "${source}:${host}:${query}"` for a queue section,
+  `"${source}:${host}"` for an rss section.
 - `SmartSectionRuntime = { state: 'pending'|'ok'|'signed-out'|'error'|'needs-access'; items: SmartFolderItem[]; fetchedAt: number | null }`.
 - The coordinator drain writes it via `setSmartSectionRuntime(folderId, sourceKey, runtime)`.
 - `persist()` strips it alongside `liveTabsById`, so work-sensitive item titles
@@ -644,10 +650,10 @@ property, the foundation for a future user-customisable base colour.
 
 State is persisted to `chrome.storage.local` under the key `lunma.state` as a
 versioned envelope `{ schemaVersion, state }`. The current version is **schema
-v8** (`CURRENT_SCHEMA_VERSION = 8` in `apps/extension/src/shared/schemas.ts`),
-validated against `AppStateV8Schema` (type `AppStateV8`).
+v9** (`CURRENT_SCHEMA_VERSION = 9` in `apps/extension/src/shared/schemas.ts`),
+validated against `AppStateV9Schema` (type `AppStateV9`).
 
-The migration list (`apps/extension/src/shared/migrations.ts`) has seven entries.
+The migration list (`apps/extension/src/shared/migrations.ts`) has eight entries.
 Each migration is `{ toVersion: number; migrate: (raw: unknown) => unknown }`.
 Migrations to v2 through v6 are pure pass-throughs (`migrate: (raw) => raw`); the
 schema widened but old data needs no transformation:
@@ -661,6 +667,7 @@ schema widened but old data needs no transformation:
 | 6 | widened the smart node again |
 | 7 | reshaped each `smartItemBindings` slot from a bare `tabId` number into `{ tabId, allowGlob: '' }` |
 | 8 | replaced the flat `source`/`baseUrl`/`query?` on each smart node with `sources: [{ source, baseUrl, query }]`; re-keyed `smartItemBindings` item ids to `"${sourceKey}:${nativeId}"` |
+| 9 | rewrote each `sources[]` entry from the flat `query?` shape to `queries: SmartQuery[]` (queue → `[query]`, rss → `[]`); re-keyed `smartItemBindings` from `"${source}:${host}:${nativeId}"` to the per-filter `"${source}:${host}:${query}:${nativeId}"` (orphans dropped) |
 
 The v7 migration walks `smartItemBindings[folderId][itemId][windowId]` and
 rewrites any numeric slot to `{ tabId, allowGlob: '' }`. The v8 migration wraps

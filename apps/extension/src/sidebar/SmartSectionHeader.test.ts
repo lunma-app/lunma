@@ -1,9 +1,9 @@
 import { cleanup, fireEvent, render } from '@testing-library/svelte';
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import type { SmartSourceConfig } from '../shared/types';
+import type { ResolvedSourceConfig } from '../shared/types';
 import SmartSectionHeaderHarness from './SmartSectionHeader.test.harness.svelte';
 
-const gitlab: SmartSourceConfig = {
+const gitlab: ResolvedSourceConfig = {
   source: 'gitlab',
   baseUrl: 'https://gitlab.example.com',
   query: 'review-requested',
@@ -40,18 +40,18 @@ describe('SmartSectionHeader — disclosure control', () => {
     expect(container.querySelector('.section-chevron')?.classList).not.toContain('expanded');
   });
 
-  test('the accessible label names host, count, and the toggle action', () => {
+  test('the accessible label names the section (host · filter), count, and the toggle action', () => {
     const { container, rerender } = render(SmartSectionHeaderHarness, {
       props: { cfg: gitlab, count: '5', collapsed: false },
     });
     // Expanded → activating collapses.
     expect(header(container).getAttribute('aria-label')).toBe(
-      'gitlab.example.com section, 5 items, collapse',
+      'gitlab.example.com · reviewing section, 5 items, collapse',
     );
     // Collapsed → activating expands.
     rerender({ cfg: gitlab, count: '5', collapsed: true });
     expect(header(container).getAttribute('aria-label')).toBe(
-      'gitlab.example.com section, 5 items, expand',
+      'gitlab.example.com · reviewing section, 5 items, expand',
     );
   });
 

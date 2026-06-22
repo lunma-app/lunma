@@ -77,6 +77,7 @@ export const iconLoaders: Record<string, IconLoader> = {
   'chart-line': () => import('@lucide/svelte/icons/chart-line'),
   'chart-pie': () => import('@lucide/svelte/icons/chart-pie'),
   'chart-scatter': () => import('@lucide/svelte/icons/chart-scatter'),
+  check: () => import('@lucide/svelte/icons/check'),
   'check-check': () => import('@lucide/svelte/icons/check-check'),
   'chef-hat': () => import('@lucide/svelte/icons/chef-hat'),
   cherry: () => import('@lucide/svelte/icons/cherry'),

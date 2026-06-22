@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import type { SmartSourceConfig } from '../../shared/types';
+import type { ResolvedSourceConfig } from '../../shared/types';
 import { parseFeed, resetRssListingCache, rssConnector } from './rss';
 
 // ── test plumbing ──────────────────────────────────────────────────────────────
@@ -46,7 +46,7 @@ function latin1FeedResponse(xml: string): unknown {
   };
 }
 
-function node(overrides: Partial<SmartSourceConfig> = {}): SmartSourceConfig {
+function node(overrides: Partial<ResolvedSourceConfig> = {}): ResolvedSourceConfig {
   return {
     source: 'rss',
     baseUrl: 'https://news.example.com/rss',

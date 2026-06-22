@@ -299,7 +299,7 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
     payload: {
       spaceId: 'sp',
       sources: [
-        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['review-requested'] },
       ],
       name: 'Review requests',
       maxItems: 20,
@@ -311,7 +311,7 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
     payload: {
       spaceId: 'sp',
       folderId: 'sf',
-      sources: [{ source: 'github', baseUrl: 'https://github.com', query: 'assigned' }],
+      sources: [{ source: 'github', baseUrl: 'https://github.com', queries: ['assigned'] }],
       name: 'Assigned to me',
       maxItems: 30,
       refreshMinutes: 30,
@@ -508,7 +508,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
         kind: 'createSmartFolder',
         payload: {
           spaceId: 'sp',
-          sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', query: 'merged-by-me' }],
+          sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['merged-by-me'] }],
           name: 'X',
           maxItems: 20,
           refreshMinutes: 10,
@@ -557,7 +557,9 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
         kind: 'createSmartFolder',
         payload: {
           spaceId: 'sp',
-          sources: [{ source, baseUrl: 'https://forge.example.com', query: 'authored' as const }],
+          sources: [
+            { source, baseUrl: 'https://forge.example.com', queries: ['authored'] as const },
+          ],
           name: 'X',
           maxItems: 20,
           refreshMinutes: 10,
@@ -582,8 +584,8 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
       payload: {
         spaceId: 'sp',
         sources: [
-          { source: 'gitlab', baseUrl: 'https://gitlab.com', query: 'authored' as const },
-          { source: 'rss', baseUrl: 'https://hnrss.org/frontpage' },
+          { source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored'] as const },
+          { source: 'rss', baseUrl: 'https://hnrss.org/frontpage', queries: [] },
         ],
         name: 'Work + News',
         maxItems: 20,
@@ -600,7 +602,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
       kind: 'createSmartFolder',
       payload: {
         spaceId: 'sp',
-        sources: [{ source: 'rss', baseUrl: 'https://news.ycombinator.com/rss' }],
+        sources: [{ source: 'rss', baseUrl: 'https://news.ycombinator.com/rss', queries: [] }],
         name: 'Hacker News',
         maxItems: 30,
         refreshMinutes: 30,
@@ -620,7 +622,11 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
             spaceId: 'sp',
             ...(kind === 'updateSmartFolder' ? { folderId: 'sf-1' } : {}),
             sources: [
-              { source: 'bitbucket', baseUrl: 'https://bitbucket.example.com', query: 'authored' },
+              {
+                source: 'bitbucket',
+                baseUrl: 'https://bitbucket.example.com',
+                queries: ['authored'],
+              },
             ],
             name: 'X',
             maxItems: 20,
@@ -655,7 +661,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
         payload: {
           spaceId: 'sp',
           folderId: 'sf-1',
-          sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', query: 'authored' }],
+          sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored'] }],
           name: 'X',
           maxItems: 20,
           refreshMinutes: 10,
@@ -670,7 +676,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
         kind: 'updateSmartFolder',
         payload: {
           spaceId: 'sp',
-          sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', query: 'authored' }],
+          sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored'] }],
           name: 'X',
           maxItems: 20,
           refreshMinutes: 10,
@@ -686,7 +692,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
       name: 'Review requests',
       icon: 'folder-git-2',
       sources: [
-        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['review-requested'] },
       ],
       maxItems: 20,
       hideRead: false,
@@ -720,8 +726,8 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
             name: 'Work + News',
             icon: 'layers',
             sources: [
-              { source: 'github', baseUrl: 'https://github.com', query: 'authored' },
-              { source: 'rss', baseUrl: 'https://hnrss.org/frontpage' },
+              { source: 'github', baseUrl: 'https://github.com', queries: ['authored'] },
+              { source: 'rss', baseUrl: 'https://hnrss.org/frontpage', queries: [] },
             ],
             maxItems: 20,
             hideRead: false,
@@ -746,7 +752,9 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
             id: 'sf-jira',
             name: 'My reported issues',
             icon: 'folder-kanban',
-            sources: [{ source: 'jira', baseUrl: 'https://acme.atlassian.net', query: 'authored' }],
+            sources: [
+              { source: 'jira', baseUrl: 'https://acme.atlassian.net', queries: ['authored'] },
+            ],
             maxItems: 20,
             hideRead: false,
             refreshMinutes: 10,
@@ -770,7 +778,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
             id: 'feed-1',
             name: 'Hacker News',
             icon: 'rss',
-            sources: [{ source: 'rss', baseUrl: 'https://news.ycombinator.com/rss' }],
+            sources: [{ source: 'rss', baseUrl: 'https://news.ycombinator.com/rss', queries: [] }],
             maxItems: 30,
             hideRead: true,
             refreshMinutes: 30,
@@ -799,7 +807,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
                 {
                   source: 'bitbucket',
                   baseUrl: 'https://bitbucket.example.com',
-                  query: 'authored',
+                  queries: ['authored'],
                 },
               ],
               maxItems: 20,

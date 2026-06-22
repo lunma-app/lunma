@@ -138,25 +138,45 @@ export type SmartQuery = 'authored' | 'assigned' | 'review-requested';
  * registry in `background/smart-folders.ts` holds exactly these four; widening
  * it is a schema-version bump (the v2→v3, v4→v5, then v5→v6 precedent). `rss`
  * is the first FEED source (a public address, no identity, no canned query),
- * which is why `query` is source-optional on each `SmartSourceConfig` entry.
+ * which is why a feed entry carries an empty `queries` array.
  */
 export type SmartSource = 'gitlab' | 'github' | 'jira' | 'rss';
 
 /**
- * One connector sub-source within a smart folder (multi-source-smart-folders).
- * Each entry carries its own `source`, `baseUrl`, and optional `query`; the
- * folder-level fields (`maxItems`, `hideRead`, `refreshMinutes`) apply across
- * all entries. Queue sources (`gitlab`/`github`/`jira`) carry a `query`; feed
- * sources (`rss`) omit it. Typed `| undefined` to match the persisted schema's
- * `.optional()` inference under `exactOptionalPropertyTypes`.
+ * One connector **instance** within a smart folder (multi-filter-smart-
+ * connectors). Each entry is one connector instance (source + host); its
+ * `queries` array is the set of canned filters that instance contributes. A
+ * **queue** source (`gitlab`/`github`/`jira`) carries a NON-EMPTY `queries`
+ * (one section per filter); a **feed** source (`rss`) carries `queries: []`
+ * (rss has no filter axis — its feed URL is the selector). The folder-level
+ * fields (`maxItems`, `hideRead`, `refreshMinutes`) apply across all entries.
+ * The engine expands each entry over its `queries[]` into per-section
+ * {@link ResolvedSourceConfig}s before dispatch.
  */
 export type SmartSourceConfig = {
   source: SmartSource;
   /** Absolute http(s) instance URL, stored without a trailing slash. For a
    * feed source (`rss`) this IS the feed URL. */
   baseUrl: string;
-  /** The canned queue query. OPTIONAL: queue sources carry one; feed sources
-   * omit it. Typed `| undefined` for `exactOptionalPropertyTypes` parity. */
+  /** The set of canned filters this instance contributes — one section per
+   * filter. Non-empty for queue sources; empty (`[]`) for feed sources. */
+  queries: SmartQuery[];
+};
+
+/**
+ * The per-**section** connector unit (multi-filter-smart-connectors), produced
+ * by expanding a {@link SmartSourceConfig} over its `queries[]` (one resolved
+ * config per filter; a single resolved config for a feed entry). This is the
+ * unit a connector fetches, the unit `sourceKey` is derived from, and the unit
+ * the `smartItemBindings` namespace keys on. Shape-identical to the pre-v9
+ * `SmartSourceConfig`: a single optional `query`, present for queue sources,
+ * absent for rss. Typed `| undefined` to match `exactOptionalPropertyTypes`.
+ */
+export type ResolvedSourceConfig = {
+  source: SmartSource;
+  baseUrl: string;
+  /** The single canned query for this section. Present for queue sections,
+   * absent for rss. */
   query?: SmartQuery | undefined;
 };
 
@@ -227,7 +247,8 @@ export interface SmartSectionRuntime {
 
 /**
  * A smart folder's ephemeral runtime (multi-source-smart-folders): a map of
- * per-section runtimes keyed by `sourceKey` (`${source}:${host}`). Lives only
+ * per-section runtimes keyed by `sourceKey` (`${source}:${host}:${query}` for
+ * queue sections, `${source}:${host}` for rss). Lives only
  * in the broadcast `AppState.smartFolders` slice — stripped in `persist()` like
  * `liveTabsById`, rebuilt by connector polls after a SW restart.
  */

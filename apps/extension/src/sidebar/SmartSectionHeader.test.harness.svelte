@@ -1,9 +1,9 @@
 <script lang="ts">
-import type { SmartSourceConfig } from '../shared/types';
+import type { ResolvedSourceConfig } from '../shared/types';
 import SmartSectionHeader from './SmartSectionHeader.svelte';
 
 interface Props {
-  cfg: SmartSourceConfig;
+  cfg: ResolvedSourceConfig;
   count?: string | undefined;
   collapsed?: boolean;
   onToggle?: () => void;

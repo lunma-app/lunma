@@ -5,10 +5,10 @@ import { requestHostPermissions } from '../shared/permissions';
 import type {
   AppState,
   PinNode,
+  ResolvedSourceConfig,
   SidebarLocalState,
   SmartFolderItem,
   SmartSectionRuntime,
-  SmartSourceConfig,
   SpaceId,
   TabId,
   WindowId,
@@ -30,10 +30,11 @@ import { useStore } from './store-context.svelte';
 
 /**
  * A smart folder in the pinned tree: the same folder-row chrome (`ui/FolderRow`)
- * with live connector results as children, now rendered in per-source sections.
- * Each source in `node.sources` produces one section; when the folder has ≥2
- * sources a `SmartSectionHeader` divides them. Single-source folders render
- * identically to before (no section header, no regression).
+ * with live connector results as children, rendered in per-RESOLVED-SECTION
+ * blocks. Each `sources[]` instance expands over its `queries[]` into one
+ * section per filter (one section for an rss feed); when the folder has ≥2
+ * resolved sections a `SmartSectionHeader` divides them. Single-section folders
+ * render identically to before (no section header, no regression).
  */
 
 type SmartNode = Extract<PinNode, { kind: 'smart' }>;
@@ -66,10 +67,12 @@ const store = useStore();
 
 const spaceColor = $derived(store.state.spaces.find((s) => s.id === spaceId)?.color ?? 'gray');
 
-// Section identity key — same formula as background/smart-folders.ts but defined
-// locally to respect the layer DAG (sidebar cannot import from background/).
-function sourceKey(cfg: SmartSourceConfig): string {
-  return `${cfg.source}:${new URL(cfg.baseUrl).host}`;
+// Per-filter section identity key — same formula as background/smart-folders.ts
+// but defined locally to respect the layer DAG (sidebar cannot import from
+// background/): `${source}:${host}:${query}` for queue, `${source}:${host}` for rss.
+function sourceKey(cfg: ResolvedSourceConfig): string {
+  const base = `${cfg.source}:${new URL(cfg.baseUrl).host}`;
+  return cfg.query !== undefined ? `${base}:${cfg.query}` : base;
 }
 
 // Per-section collapse read — `collapsedSmartSectionsByWindow` is augmented onto
@@ -81,6 +84,23 @@ function isSectionCollapsed(folderId: string, sk: string): boolean {
   return augmented.collapsedSmartSectionsByWindow?.[windowId]?.[folderId]?.[sk] ?? false;
 }
 
+// Expand the per-instance sources[] over each instance's queries[] into per-
+// filter resolved sections (one section, no query, for an rss feed). The single
+// derivation the render, badge, and identity all key on (sources × queries order).
+const sections = $derived.by<ResolvedSourceConfig[]>(() => {
+  const out: ResolvedSourceConfig[] = [];
+  for (const cfg of node.sources) {
+    if (cfg.queries.length === 0) {
+      out.push({ source: cfg.source, baseUrl: cfg.baseUrl });
+    } else {
+      for (const query of cfg.queries) {
+        out.push({ source: cfg.source, baseUrl: cfg.baseUrl, query });
+      }
+    }
+  }
+  return out;
+});
+
 // Whether any source is a feed — gates the feed-only menu items and controls.
 const hasFeedSections = $derived(node.sources.some((cfg) => cfg.source === 'rss'));
 
@@ -90,7 +110,7 @@ const readSet = $derived(new Set(store.state.smartReadState[node.id] ?? []));
 // Sectioned runtime — absent before the first fetch.
 const folderRuntime = $derived(store.state.smartFolders[node.id]);
 
-function sectionRuntime(cfg: SmartSourceConfig): SmartSectionRuntime | undefined {
+function sectionRuntime(cfg: ResolvedSourceConfig): SmartSectionRuntime | undefined {
   return folderRuntime?.sections[sourceKey(cfg)];
 }
 
@@ -102,7 +122,7 @@ const busy = $derived(
 // in-flight reloads so rows stay activatable while loading.
 let heldItemsBySection = $state<Record<string, SmartFolderItem[]>>({});
 $effect(() => {
-  for (const cfg of node.sources) {
+  for (const cfg of sections) {
     const sk = sourceKey(cfg);
     const sec = folderRuntime?.sections[sk];
     const secItems = sec?.items ?? [];
@@ -138,24 +158,24 @@ $effect(() => {
 const folderBindings = $derived(store.state.smartItemBindings[node.id] ?? {});
 
 /** Live tab bound to this item in this window, by namespaced id. */
-function boundTabIdFor(cfg: SmartSourceConfig, item: SmartFolderItem): TabId | undefined {
+function boundTabIdFor(cfg: ResolvedSourceConfig, item: SmartFolderItem): TabId | undefined {
   return folderBindings[`${sourceKey(cfg)}:${item.id}`]?.[windowId]?.tabId;
 }
 
-function isActiveItem(cfg: SmartSourceConfig, item: SmartFolderItem): boolean {
+function isActiveItem(cfg: ResolvedSourceConfig, item: SmartFolderItem): boolean {
   const tabId = boundTabIdFor(cfg, item);
   if (tabId === undefined) return false;
   const live = store.state.liveTabsById[tabId];
   return live !== undefined && live.windowId === windowId && live.active;
 }
 
-function closeBoundTab(cfg: SmartSourceConfig, item: SmartFolderItem): void {
+function closeBoundTab(cfg: ResolvedSourceConfig, item: SmartFolderItem): void {
   const tabId = boundTabIdFor(cfg, item);
   if (tabId !== undefined) dispatch({ kind: 'closeTab', payload: { tabId } });
 }
 
 /** Live items + held items during reloads + binding-held rows per section. */
-function displayItemsForSection(cfg: SmartSourceConfig): SmartFolderItem[] {
+function displayItemsForSection(cfg: ResolvedSourceConfig): SmartFolderItem[] {
   const sk = sourceKey(cfg);
   const sec = folderRuntime?.sections[sk];
   const items = sec?.items ?? [];
@@ -181,7 +201,7 @@ function displayItemsForSection(cfg: SmartSourceConfig): SmartFolderItem[] {
 /** Feed windowing: newest N unread + interleaved read rows (identical to the
  * single-source draining-queue model, applied per section). */
 function feedWindowForSection(
-  cfg: SmartSourceConfig,
+  cfg: ResolvedSourceConfig,
   secItems: SmartFolderItem[],
 ): SmartFolderItem[] {
   if (cfg.source !== 'rss') return secItems;
@@ -198,7 +218,7 @@ function feedWindowForSection(
 }
 
 function sectionEmptyNote(
-  cfg: SmartSourceConfig,
+  cfg: ResolvedSourceConfig,
   renderItems: SmartFolderItem[],
   secItems: SmartFolderItem[],
   secState: SmartSectionRuntime['state'],
@@ -221,28 +241,32 @@ function sectionEmptyNote(
   return secItems.length === 0 ? 'Nothing here right now.' : undefined;
 }
 
-/** Badge: sum per-section attention counts across all sources.
+/** Badge: sum per-RESOLVED-SECTION attention counts (an item in two filter
+ * sections counts in each). `N+` when any section has hit its `maxItems` cap.
  * When folderRuntime is absent (SW restart), compute from held items so the
  * badge doesn't disappear during the reload window. */
 const badge = $derived.by<string | undefined>(() => {
   let total = 0;
   let anyCapped = false;
-  for (const cfg of node.sources) {
+  for (const cfg of sections) {
     const sk = sourceKey(cfg);
-    const sec = folderRuntime?.sections[sk];
     const secItems = displayItemsForSection(cfg);
     if (cfg.source === 'rss') {
-      const unread = secItems.filter((i) => !readSet.has(`${sk}:${i.id}`)).length;
-      total += unread;
+      // Feed: the true unread count (maxItems is a display budget, not a count
+      // cap — the buffer holds them all), so the badge is never `N+` for a feed.
+      total += secItems.filter((i) => !readSet.has(`${sk}:${i.id}`)).length;
     } else {
+      // Queue: the connector already slices to maxItems, so a full section is at
+      // cap and the true upstream count may be higher → `N+`.
       total += secItems.length;
+      if (secItems.length >= node.maxItems) anyCapped = true;
     }
   }
   if (total === 0) return undefined;
-  return String(total);
+  return anyCapped ? `${total}+` : String(total);
 });
 
-function openItem(cfg: SmartSourceConfig, item: SmartFolderItem): void {
+function openItem(cfg: ResolvedSourceConfig, item: SmartFolderItem): void {
   dispatch({
     kind: 'openSmartItem',
     payload: { spaceId, folderId: node.id, itemId: `${sourceKey(cfg)}:${item.id}`, windowId },
@@ -276,7 +300,7 @@ function openConnectorsSettings(): void {
   void openOptionsAt('#connectors');
 }
 
-function itemAria(cfg: SmartSourceConfig, item: SmartFolderItem, read: boolean): string {
+function itemAria(cfg: ResolvedSourceConfig, item: SmartFolderItem, read: boolean): string {
   if (cfg.source === 'rss') return `${item.title} — ${read ? 'read' : 'unread'}`;
   return item.status ? `${item.title} — ${item.status.label}` : item.title;
 }
@@ -384,7 +408,7 @@ export function onContextMenu(e: MouseEvent): void {
     data-testid="smart-children"
     onpointerdown={(e) => e.stopPropagation()}
   >
-    {#each node.sources as cfg (sourceKey(cfg))}
+    {#each sections as cfg (sourceKey(cfg))}
       {@const sec = sectionRuntime(cfg)}
       {@const secState = sec?.state ?? 'pending'}
       {@const secItems = displayItemsForSection(cfg)}
@@ -394,7 +418,7 @@ export function onContextMenu(e: MouseEvent): void {
       {@const collapsed = isSectionCollapsed(node.id, sourceKey(cfg))}
       {@const bodyId = `smart-section-body-${node.id}-${sourceKey(cfg)}`}
 
-      {#if node.sources.length >= 2}
+      {#if sections.length >= 2}
         {@const sectionCount = (() => {
           const secItems = displayItemsForSection(cfg);
           const sk = sourceKey(cfg);

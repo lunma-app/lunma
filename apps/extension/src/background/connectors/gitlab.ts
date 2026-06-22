@@ -2,10 +2,10 @@ import { z } from 'zod';
 import { requiredOriginsForConfig } from '../../shared/connector-origins';
 import { readConnectors } from '../../shared/connectors';
 import type {
+  ResolvedSourceConfig,
   SmartFolderItem,
   SmartQuery,
   SmartSectionRuntime,
-  SmartSourceConfig,
 } from '../../shared/types';
 import { boundedFetch, type ConnectorCaches, type SourceConnector } from './connector';
 
@@ -197,7 +197,7 @@ function usablePipelineStatus(mr: Mr): string | undefined {
  * runtime state. The engine reaches this via `CONNECTORS.gitlab.fetchRuntime`.
  */
 async function fetchRuntime(
-  cfg: SmartSourceConfig,
+  cfg: ResolvedSourceConfig,
   maxItems: number,
   caches: ConnectorCaches = new Map(),
 ): Promise<SmartSectionRuntime> {
@@ -277,7 +277,7 @@ async function fetchRuntime(
 /** The full listing on the instance (rss-connector design D6, "open all in a
  * tab"): GitLab's cross-project merge-requests dashboard — the canonical
  * "MRs that involve me" page, independent of the folder's canned query. */
-function listingUrl(cfg: SmartSourceConfig): string {
+function listingUrl(cfg: ResolvedSourceConfig): string {
   return `${cfg.baseUrl}/dashboard/merge_requests`;
 }
 
@@ -285,7 +285,7 @@ function listingUrl(cfg: SmartSourceConfig): string {
  * GitLab fetches same-origin under `{baseUrl}/api/v4`. Delegates to the shared
  * {@link requiredOriginsForConfig} so the SW gate and the surfaces share one
  * derivation. */
-function requiredOrigins(cfg: SmartSourceConfig): string[] {
+function requiredOrigins(cfg: ResolvedSourceConfig): string[] {
   return requiredOriginsForConfig(cfg);
 }
 

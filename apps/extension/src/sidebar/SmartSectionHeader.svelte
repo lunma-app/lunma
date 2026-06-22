@@ -1,9 +1,10 @@
 <script lang="ts">
-import type { SmartSourceConfig } from '../shared/types';
+import type { ResolvedSourceConfig, SmartQuery } from '../shared/types';
 import Icon from '../ui/Icon.svelte';
 
 interface Props {
-  cfg: SmartSourceConfig;
+  /** The RESOLVED section config (one filter, or none for rss). */
+  cfg: ResolvedSourceConfig;
   count?: string | undefined;
   /** Whether this section is collapsed (chevron points right, body hidden). */
   collapsed: boolean;
@@ -22,6 +23,14 @@ const ICON_BY_SOURCE: Record<string, string> = {
   rss: 'rss',
 };
 
+// Per-source filter label for the `host · filter` header (multi-filter-smart-
+// connectors design D8). Jira re-skins review-requested to "Watching".
+function filterLabel(source: string, query: SmartQuery): string {
+  if (query === 'authored') return 'authored';
+  if (query === 'assigned') return 'assigned';
+  return source === 'jira' ? 'Watching' : 'reviewing';
+}
+
 const icon = $derived(ICON_BY_SOURCE[cfg.source] ?? 'folder');
 const host = $derived.by(() => {
   try {
@@ -30,14 +39,19 @@ const host = $derived.by(() => {
     return cfg.baseUrl;
   }
 });
+// `host · filter` for a queue section, plain `host` for rss (no filter axis).
+const hostLabel = $derived(
+  cfg.query !== undefined ? `${host} · ${filterLabel(cfg.source, cfg.query)}` : host,
+);
 
-// The trailing verb is written inside the two template branches (not a quoted
+// The accessible label names the section, its count, and the toggle action. The
+// trailing verb is written inside the two template branches (not a quoted
 // ternary) so the icon-loader generator never mistakes the word "expand" — a
 // real lucide icon name — for a reachable icon literal.
-const label = $derived(
+const ariaLabel = $derived(
   collapsed
-    ? `${host} section, ${count ?? '0'} items, expand`
-    : `${host} section, ${count ?? '0'} items, collapse`,
+    ? `${hostLabel} section, ${count ?? '0'} items, expand`
+    : `${hostLabel} section, ${count ?? '0'} items, collapse`,
 );
 </script>
 
@@ -46,7 +60,7 @@ const label = $derived(
   class="section-header"
   aria-expanded={!collapsed}
   aria-controls={controlsId}
-  aria-label={label}
+  aria-label={ariaLabel}
   onclick={onToggle}
 >
   <span class="section-chevron" class:expanded={!collapsed} aria-hidden="true">
@@ -55,7 +69,7 @@ const label = $derived(
   <span class="section-icon">
     <Icon name={icon} size={16} />
   </span>
-  <span class="section-host">{host}</span>
+  <span class="section-host">{hostLabel}</span>
   {#if count !== undefined}
     <span class="section-count">{count}</span>
   {/if}

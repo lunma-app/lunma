@@ -44,7 +44,7 @@ function smartNode(overrides: Partial<SmartNode> = {}): SmartNode {
     name: 'Review requests',
     icon: 'folder-git-2',
     sources: [
-      { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
+      { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['review-requested'] },
     ],
     maxItems: 20,
     hideRead: false,
@@ -59,7 +59,7 @@ function feedNode(overrides: Partial<SmartNode> = {}): SmartNode {
     id: 'feed-1',
     name: 'Hacker News',
     icon: 'rss',
-    sources: [{ source: 'rss', baseUrl: 'https://news.ycombinator.com/rss' }],
+    sources: [{ source: 'rss', baseUrl: 'https://news.ycombinator.com/rss', queries: [] }],
     maxItems: 30,
     hideRead: false,
     ...overrides,
@@ -103,7 +103,9 @@ function makeStore(section?: SmartSectionRuntime): LunmaStore {
   store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
   store.state.pinnedBySpace.work = [smartNode()];
   if (section)
-    store.state.smartFolders['sf-1'] = { sections: { 'gitlab:gitlab.example.com': section } };
+    store.state.smartFolders['sf-1'] = {
+      sections: { 'gitlab:gitlab.example.com:review-requested': section },
+    };
   return store;
 }
 
@@ -122,6 +124,65 @@ function renderSmart(
     props: { store, windowId: 100, spaceId: 'work', node: smartNode(), ...props },
   });
 }
+
+describe('SmartFolder — multi-filter sections (multi-filter-smart-connectors)', () => {
+  // One gitlab instance carrying two filters → two distinct, collision-free
+  // sections rendered flat with `host · filter` headers.
+  const twoFilterNode = (): SmartNode =>
+    smartNode({
+      sources: [
+        {
+          source: 'gitlab',
+          baseUrl: 'https://gitlab.example.com',
+          queries: ['authored', 'review-requested'],
+        },
+      ],
+    });
+
+  function makeTwoFilterStore(): LunmaStore {
+    const node = twoFilterNode();
+    const store = new LunmaStore();
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.pinnedBySpace.work = [node];
+    store.state.smartFolders['sf-1'] = {
+      sections: {
+        'gitlab:gitlab.example.com:authored': {
+          state: 'ok',
+          items: [item(1), item(2), item(3), item(4), item(5), item(6), item(7)],
+          fetchedAt: 1,
+        },
+        'gitlab:gitlab.example.com:review-requested': {
+          state: 'ok',
+          items: [item(8), item(9), item(10)],
+          fetchedAt: 1,
+        },
+      },
+    };
+    return store;
+  }
+
+  test('two filters of one instance render as two flat sections with host · filter headers', () => {
+    const store = makeTwoFilterStore();
+    const { container } = renderSmart(store, { node: twoFilterNode() });
+    const headers = [...container.querySelectorAll('.section-host')].map((h) => h.textContent);
+    expect(headers).toEqual(['gitlab.example.com · authored', 'gitlab.example.com · reviewing']);
+  });
+
+  test('the two sections are identity-collision-free (each keyed by its filter)', () => {
+    const store = makeTwoFilterStore();
+    const sections = store.state.smartFolders['sf-1']?.sections ?? {};
+    expect(Object.keys(sections).sort()).toEqual([
+      'gitlab:gitlab.example.com:authored',
+      'gitlab:gitlab.example.com:review-requested',
+    ]);
+  });
+
+  test('the badge sums per-section attention counts (7 + 3 = 10)', () => {
+    const store = makeTwoFilterStore();
+    const { container } = renderSmart(store, { node: twoFilterNode() });
+    expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('10');
+  });
+});
 
 describe('SmartFolder — populated render + one-glyph restraint', () => {
   test('renders one row per item with at most ONE status dot, full phrase in the ARIA label', () => {
@@ -166,24 +227,24 @@ describe('SmartFolder — count badge', () => {
     expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('7');
   });
 
-  test('renders the item count (no artificial cap)', () => {
+  test('a queue section at its maxItems cap shows N+ (multi-filter design 5.3)', () => {
     const store = makeStore({
       state: 'ok',
       items: Array.from({ length: 20 }, (_, i) => item(i)),
       fetchedAt: 1,
     });
-    const { container } = renderSmart(store);
-    expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('20');
+    const { container } = renderSmart(store); // default maxItems 20 → at cap
+    expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('20+');
   });
 
-  test('badge shows exact count regardless of maxItems', () => {
+  test('badge shows the section count with the at-cap marker', () => {
     const node = smartNode({ maxItems: 30 });
     const store = new LunmaStore();
     store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
     store.state.pinnedBySpace.work = [node];
     store.state.smartFolders['sf-1'] = {
       sections: {
-        'gitlab:gitlab.example.com': {
+        'gitlab:gitlab.example.com:review-requested': {
           state: 'ok',
           items: Array.from({ length: 30 }, (_, i) => item(i)),
           fetchedAt: 1,
@@ -191,7 +252,7 @@ describe('SmartFolder — count badge', () => {
       },
     };
     const { container } = renderSmart(store, { node });
-    expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('30');
+    expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('30+');
   });
 
   test('renders no badge before the first fetch lands', () => {
@@ -213,7 +274,7 @@ describe('SmartFolder — pinned-tab activation (smart-folder-item-bindings)', (
       payload: {
         spaceId: 'work',
         folderId: 'sf-1',
-        itemId: 'gitlab:gitlab.example.com:mr-42',
+        itemId: 'gitlab:gitlab.example.com:review-requested:mr-42',
         windowId: 100,
       },
     });
@@ -222,7 +283,7 @@ describe('SmartFolder — pinned-tab activation (smart-folder-item-bindings)', (
   test("a bound row whose tab is the window's focused tab takes the active treatment", () => {
     const store = makeStore({ state: 'ok', items: [item(1), item(2)], fetchedAt: 1 });
     store.state.smartItemBindings['sf-1'] = {
-      'gitlab:gitlab.example.com:mr-1': { 100: { tabId: 7, allowGlob: '' } },
+      'gitlab:gitlab.example.com:review-requested:mr-1': { 100: { tabId: 7, allowGlob: '' } },
     };
     store.state.liveTabsById[7] = {
       tabId: 7,
@@ -246,7 +307,7 @@ describe('SmartFolder — pinned-tab activation (smart-folder-item-bindings)', (
   test('a bound-but-unfocused row reads as a normal row (no active wash)', () => {
     const store = makeStore({ state: 'ok', items: [item(1)], fetchedAt: 1 });
     store.state.smartItemBindings['sf-1'] = {
-      'gitlab:gitlab.example.com:mr-1': { 100: { tabId: 7, allowGlob: '' } },
+      'gitlab:gitlab.example.com:review-requested:mr-1': { 100: { tabId: 7, allowGlob: '' } },
     };
     store.state.liveTabsById[7] = {
       tabId: 7,
@@ -265,7 +326,7 @@ describe('SmartFolder — pinned-tab activation (smart-folder-item-bindings)', (
   test('a binding for ANOTHER window carries no treatment here', () => {
     const store = makeStore({ state: 'ok', items: [item(1)], fetchedAt: 1 });
     store.state.smartItemBindings['sf-1'] = {
-      'gitlab:gitlab.example.com:mr-1': { 200: { tabId: 7, allowGlob: '' } },
+      'gitlab:gitlab.example.com:review-requested:mr-1': { 200: { tabId: 7, allowGlob: '' } },
     }; // window 200, not 100
     const { container } = renderSmart(store);
     const row = container.querySelector('[data-testid="smart-result-row"]');
@@ -280,7 +341,7 @@ describe('SmartFolder — pinned-tab activation (smart-folder-item-bindings)', (
       fetchedAt: 1,
     });
     store.state.smartItemBindings['sf-1'] = {
-      'gitlab:gitlab.example.com:mr-1': { 100: { tabId: 7, allowGlob: '' } },
+      'gitlab:gitlab.example.com:review-requested:mr-1': { 100: { tabId: 7, allowGlob: '' } },
     };
     const { container } = renderSmart(store);
 
@@ -307,7 +368,7 @@ describe('SmartFolder — binding-held rows (open work holds its row)', () => {
   test('a bound item dropped from an ok result keeps rendering, and evaporates on unbind', async () => {
     const store = makeStore({ state: 'ok', items: [item(1), item(2)], fetchedAt: 1 });
     store.state.smartItemBindings['sf-1'] = {
-      'gitlab:gitlab.example.com:mr-1': { 100: { tabId: 7, allowGlob: '' } },
+      'gitlab:gitlab.example.com:review-requested:mr-1': { 100: { tabId: 7, allowGlob: '' } },
     };
     const { container } = renderSmart(store);
     await tick();
@@ -316,7 +377,13 @@ describe('SmartFolder — binding-held rows (open work holds its row)', () => {
     // The next ok poll no longer lists mr-1 (merged) — its binding lives, so
     // the row holds, rendered from component memory with its bound treatment.
     store.state.smartFolders['sf-1'] = {
-      sections: { 'gitlab:gitlab.example.com': { state: 'ok', items: [item(2)], fetchedAt: 2 } },
+      sections: {
+        'gitlab:gitlab.example.com:review-requested': {
+          state: 'ok',
+          items: [item(2)],
+          fetchedAt: 2,
+        },
+      },
     };
     await tick();
     let rows = container.querySelectorAll('[data-testid="smart-result-row"]');
@@ -335,13 +402,15 @@ describe('SmartFolder — binding-held rows (open work holds its row)', () => {
   test('an honest ok-empty result keeps ONLY binding-held rows', async () => {
     const store = makeStore({ state: 'ok', items: [item(1), item(2)], fetchedAt: 1 });
     store.state.smartItemBindings['sf-1'] = {
-      'gitlab:gitlab.example.com:mr-1': { 100: { tabId: 7, allowGlob: '' } },
+      'gitlab:gitlab.example.com:review-requested:mr-1': { 100: { tabId: 7, allowGlob: '' } },
     };
     const { container } = renderSmart(store);
     await tick();
 
     store.state.smartFolders['sf-1'] = {
-      sections: { 'gitlab:gitlab.example.com': { state: 'ok', items: [], fetchedAt: 2 } },
+      sections: {
+        'gitlab:gitlab.example.com:review-requested': { state: 'ok', items: [], fetchedAt: 2 },
+      },
     };
     await tick();
     const rows = container.querySelectorAll('[data-testid="smart-result-row"]');
@@ -577,11 +646,13 @@ describe('SmartFolder — calm states (design D7)', () => {
 
   test('a signed-out github folder points at Connectors via the options deep-link, never the bus', async () => {
     const ghNode = smartNode({
-      sources: [{ source: 'github', baseUrl: 'https://github.com', query: 'review-requested' }],
+      sources: [{ source: 'github', baseUrl: 'https://github.com', queries: ['review-requested'] }],
     });
     const store = makeStore();
     store.state.smartFolders['sf-1'] = {
-      sections: { 'github:github.com': { state: 'signed-out', items: [], fetchedAt: 1 } },
+      sections: {
+        'github:github.com:review-requested': { state: 'signed-out', items: [], fetchedAt: 1 },
+      },
     };
     store.state.pinnedBySpace.work = [ghNode];
     const { container } = renderSmart(store, { node: ghNode });
@@ -596,12 +667,14 @@ describe('SmartFolder — calm states (design D7)', () => {
 
   test('a signed-out jira folder shows "Sign in to ⟨host⟩" and opens the instance, never the options path', async () => {
     const jiraNode = smartNode({
-      sources: [{ source: 'jira', baseUrl: 'https://acme.atlassian.net' }],
+      sources: [{ source: 'jira', baseUrl: 'https://acme.atlassian.net', queries: ['assigned'] }],
       icon: 'folder-kanban',
     });
     const store = makeStore();
     store.state.smartFolders['sf-1'] = {
-      sections: { 'jira:acme.atlassian.net': { state: 'signed-out', items: [], fetchedAt: 1 } },
+      sections: {
+        'jira:acme.atlassian.net:assigned': { state: 'signed-out', items: [], fetchedAt: 1 },
+      },
     };
     store.state.pinnedBySpace.work = [jiraNode];
     const { container } = renderSmart(store, { node: jiraNode });
@@ -642,11 +715,13 @@ describe('SmartFolder — calm states (design D7)', () => {
 
   test('a needs-access github.com folder requests the api.github.com origin (D8)', async () => {
     const ghNode = smartNode({
-      sources: [{ source: 'github', baseUrl: 'https://github.com', query: 'review-requested' }],
+      sources: [{ source: 'github', baseUrl: 'https://github.com', queries: ['review-requested'] }],
     });
     const store = makeStore();
     store.state.smartFolders['sf-1'] = {
-      sections: { 'github:github.com': { state: 'needs-access', items: [], fetchedAt: 1 } },
+      sections: {
+        'github:github.com:review-requested': { state: 'needs-access', items: [], fetchedAt: 1 },
+      },
     };
     store.state.pinnedBySpace.work = [ghNode];
     const { container } = renderSmart(store, { node: ghNode });
@@ -699,7 +774,7 @@ describe('SmartFolder — calm states (design D7)', () => {
       payload: {
         spaceId: 'work',
         folderId: 'sf-1',
-        itemId: 'gitlab:gitlab.example.com:mr-1',
+        itemId: 'gitlab:gitlab.example.com:review-requested:mr-1',
         windowId: 100,
       },
     });
@@ -712,14 +787,22 @@ describe('SmartFolder — calm states (design D7)', () => {
 
     // The queue genuinely empties.
     store.state.smartFolders['sf-1'] = {
-      sections: { 'gitlab:gitlab.example.com': { state: 'ok', items: [], fetchedAt: 2 } },
+      sections: {
+        'gitlab:gitlab.example.com:review-requested': { state: 'ok', items: [], fetchedAt: 2 },
+      },
     };
     await tick();
     expect(container.querySelectorAll('[data-testid="smart-result-row"]')).toHaveLength(0);
 
     // A later reload shows ghosts, not the long-gone items.
     store.state.smartFolders['sf-1'] = {
-      sections: { 'gitlab:gitlab.example.com': { state: 'pending', items: [], fetchedAt: null } },
+      sections: {
+        'gitlab:gitlab.example.com:review-requested': {
+          state: 'pending',
+          items: [],
+          fetchedAt: null,
+        },
+      },
     };
     await tick();
     expect(container.querySelectorAll('[data-testid="smart-result-row"]')).toHaveLength(0);
@@ -1039,17 +1122,18 @@ describe('SmartFolder — empty-state parity (rss-connector)', () => {
 });
 
 describe('SmartFolder — per-section collapse (collapsible-smart-folder-sections)', () => {
-  const GITLAB_KEY = 'gitlab:gitlab.example.com';
-  const GITHUB_KEY = 'github:github.com';
+  // Resolved section keys include the query for queue sections (multi-filter).
+  const GITLAB_KEY = 'gitlab:gitlab.example.com:review-requested';
+  const GITHUB_KEY = 'github:github.com:review-requested';
   const GITLAB_BODY = `[id="smart-section-body-sf-1-${GITLAB_KEY}"]`;
   const GITHUB_BODY = `[id="smart-section-body-sf-1-${GITHUB_KEY}"]`;
 
-  /** A two-source node (gitlab + github), both queue sources. */
+  /** A two-instance node (gitlab + github), each one queue filter → two sections. */
   function twoSourceNode(): SmartNode {
     return smartNode({
       sources: [
-        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'review-requested' },
-        { source: 'github', baseUrl: 'https://github.com', query: 'review-requested' },
+        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['review-requested'] },
+        { source: 'github', baseUrl: 'https://github.com', queries: ['review-requested'] },
       ],
     });
   }
@@ -1083,8 +1167,8 @@ describe('SmartFolder — per-section collapse (collapsible-smart-folder-section
     const hs = headers(container);
     expect(hs).toHaveLength(2);
     expect(hs[0]?.tagName).toBe('BUTTON');
-    expect(hs[0]?.getAttribute('aria-label')).toContain('gitlab.example.com section');
-    expect(hs[1]?.getAttribute('aria-label')).toContain('github.com section');
+    expect(hs[0]?.getAttribute('aria-label')).toContain('gitlab.example.com · reviewing section');
+    expect(hs[1]?.getAttribute('aria-label')).toContain('github.com · reviewing section');
   });
 
   test('collapsing a section hides its body and keeps its header; the other section is untouched', async () => {
