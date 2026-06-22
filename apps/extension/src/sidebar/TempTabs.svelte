@@ -271,12 +271,14 @@ function tabMenuItems(item: TempItem): MenuItem[] {
     {
       id: 'move-up',
       label: 'Move up',
+      icon: 'arrow-up',
       disabled: !bounds.up,
       onSelect: () => moveTemp(item, -1),
     },
     {
       id: 'move-down',
       label: 'Move down',
+      icon: 'arrow-down',
       disabled: !bounds.down,
       onSelect: () => moveTemp(item, 1),
     },

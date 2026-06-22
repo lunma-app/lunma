@@ -19,6 +19,7 @@ export const iconLoaders: Record<string, IconLoader> = {
   archive: () => import('@lucide/svelte/icons/archive'),
   armchair: () => import('@lucide/svelte/icons/armchair'),
   'arrow-down': () => import('@lucide/svelte/icons/arrow-down'),
+  'arrow-up': () => import('@lucide/svelte/icons/arrow-up'),
   'arrow-up-right': () => import('@lucide/svelte/icons/arrow-up-right'),
   atom: () => import('@lucide/svelte/icons/atom'),
   'audio-lines': () => import('@lucide/svelte/icons/audio-lines'),

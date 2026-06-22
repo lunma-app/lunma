@@ -743,12 +743,14 @@ function tabMenuItems(row: TabView): MenuItem[] {
     {
       id: 'move-up',
       label: 'Move up',
+      icon: 'arrow-up',
       disabled: !bounds.up,
       onSelect: () => moveNode(row.id, -1),
     },
     {
       id: 'move-down',
       label: 'Move down',
+      icon: 'arrow-down',
       disabled: !bounds.down,
       onSelect: () => moveNode(row.id, 1),
     },
