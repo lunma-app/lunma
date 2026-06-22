@@ -732,18 +732,46 @@ function confirm(): void {
     transform: rotate(90deg);
   }
 
+  /* Expanded = a clearly-bordered box so the Select + URL + filters read as one
+   * contained editor (the "glue"); collapsed = a clean, borderless list row. */
   .source-card {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
     padding: var(--space-2);
     background: var(--surface-2);
-    border: 1px solid transparent;
+    border: 1px solid color-mix(in oklch, var(--text-faint) 16%, transparent);
     border-radius: var(--r-md);
-    transition: border-color var(--motion-fast) var(--ease-standard);
+    transition:
+      border-color var(--motion-fast) var(--ease-standard),
+      background var(--motion-fast) var(--ease-standard);
+    animation: source-card-in var(--motion-base) var(--ease-emphasised);
+  }
+  .source-card.collapsed {
+    padding: var(--space-1) var(--space-2);
+    background: transparent;
+    border-color: transparent;
+    animation: none;
+  }
+  .source-card.collapsed:hover {
+    background: var(--surface-2);
+    border-color: color-mix(in oklch, var(--text-faint) 12%, transparent);
   }
   .source-card.invalid {
     border-color: color-mix(in oklch, var(--danger) 45%, transparent);
+  }
+
+  /* The body grows in beneath the head when a card expands, so the open box
+   * reads as continuous with its summary rather than snapping in. */
+  @keyframes source-card-in {
+    from {
+      opacity: 0;
+      transform: translateY(-2px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
   .source-card-head {
@@ -894,6 +922,9 @@ function confirm(): void {
     .file-pick,
     .disclosure {
       transition: none;
+    }
+    .source-card {
+      animation: none;
     }
   }
 </style>
