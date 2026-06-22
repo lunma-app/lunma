@@ -526,6 +526,15 @@ describe('nextUnreadFeedItemAfterClose', () => {
     seedFeedSection('sf-feed', SK, ['a', 'b', 'c', 'd']);
   });
 
+  test('returns undefined when the closing item was already read (consume=close, no runaway advance)', () => {
+    store.bindSmartItem('sf-feed', `${SK}:a`, W, 10, '');
+    // The drain marked 'a' read BEFORE closing its tab — this is a consume, not
+    // a manual close of an unread reading tab, so it must NOT auto-advance
+    // (else consume → open next → consume → … drains the whole section).
+    store.markSmartItemRead('sf-feed', `${SK}:a`);
+    expect(store.nextUnreadFeedItemAfterClose(10, W)).toBeUndefined();
+  });
+
   test('returns the first unread item after the closing one', () => {
     store.bindSmartItem('sf-feed', `${SK}:a`, W, 10, '');
     const result = store.nextUnreadFeedItemAfterClose(10, W);

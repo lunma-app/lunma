@@ -1578,7 +1578,17 @@ export class LunmaStore {
    * Find the next unread, unbound feed item to auto-open after `closedTabId`
    * is removed from a feed folder. Must be called BEFORE `onTabRemoved` so the
    * closing item's binding is still visible. Returns undefined when the window
-   * is closing, the tab wasn't a feed item, or no next item exists.
+   * is closing, the tab wasn't a feed item, the closing item was ALREADY READ
+   * (a consume=close, see below), or no next item exists.
+   *
+   * Auto-advance is for the reading flow: closing the UNREAD tab you're reading
+   * opens the next unread so you keep going. But a consume=close (you navigated
+   * away → the store marked the item read in `markConsumedFeedItems`, THEN the
+   * SW closed its now-inactive tab) also reaches `onTabRemoved`. Advancing on
+   * that would chase the consume into a runaway drain (consume → open next →
+   * consume → …, emptying the whole section). The closing item being already
+   * read is exactly the signal that this was a consume, not a manual close — so
+   * we suppress the advance in that case.
    */
   nextUnreadFeedItemAfterClose(
     closedTabId: TabId,
@@ -1598,6 +1608,12 @@ export class LunmaStore {
     }
     if (!targetFolderId || !closingNamespacedId) return undefined;
     if (!this.isFeedFolder(targetFolderId)) return undefined;
+    // Consume=close guard: an already-read closing item means the drain marked
+    // it read and is now clearing its tab — not a manual close of an unread
+    // reading tab. Advancing here would loop the consume into a runaway drain.
+    if ((this.state.smartReadState[targetFolderId] ?? []).includes(closingNamespacedId)) {
+      return undefined;
+    }
 
     // Extract sourceKey: first two colon-delimited segments of the namespaced id.
     const firstColon = closingNamespacedId.indexOf(':');
