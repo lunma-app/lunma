@@ -907,10 +907,12 @@ export class LunmaStore {
   }
 
   /**
-   * Edit a smart folder's config in place (smart-folders, design D12). A
-   * `sources` or `maxItems` change invalidates all sections' runtime
-   * `fetchedAt` (results belong to the OLD sources/cap), making the folder
-   * immediately due — the coordinator triggers the refetch.
+   * Edit a smart folder's config in place (smart-folders, design D12;
+   * multi-filter-smart-connectors design D6). Runtime sections whose resolved
+   * key is no longer in the new `sources × queries` set (a removed filter or
+   * instance) are DROPPED. A `maxItems` change additionally invalidates every
+   * remaining section's `fetchedAt` (the cap changed for all), making them due;
+   * the coordinator handler refetches added sections (and all on a cap change).
    */
   updateSmartFolder(
     spaceId: SpaceId,
@@ -928,21 +930,40 @@ export class LunmaStore {
       log.error('updateSmartFolder: unknown smart folder', { spaceId, folderId });
       return;
     }
-    // A sources/maxItems change invalidates all section results → immediate
-    // refetch. `hideRead` is owned by `setSmartFolderHideRead`, not the
-    // editor's update, so it is preserved.
-    const resultsInvalidated =
-      JSON.stringify(node.sources) !== JSON.stringify(config.sources) ||
-      node.maxItems !== config.maxItems;
+    // `hideRead` is owned by `setSmartFolderHideRead`, not the editor's update,
+    // so it is preserved.
+    const maxItemsChanged = node.maxItems !== config.maxItems;
     node.name = config.name;
     node.icon = config.icon;
     node.sources = config.sources;
     node.maxItems = config.maxItems;
     node.refreshMinutes = config.refreshMinutes;
     const runtime = this.state.smartFolders[folderId];
-    if (resultsInvalidated && runtime) {
-      for (const section of Object.values(runtime.sections)) {
-        section.fetchedAt = null;
+    if (runtime) {
+      // Drop sections no longer in the resolved set (removed filters/instances).
+      const validKeys = new Set<string>();
+      for (const cfg of config.sources) {
+        let host: string;
+        try {
+          host = new URL(cfg.baseUrl).host;
+        } catch {
+          continue;
+        }
+        const base = `${cfg.source}:${host}`;
+        if (cfg.queries.length === 0) {
+          validKeys.add(base);
+        } else {
+          for (const q of cfg.queries) validKeys.add(`${base}:${q}`);
+        }
+      }
+      for (const key of Object.keys(runtime.sections)) {
+        if (!validKeys.has(key)) delete runtime.sections[key];
+      }
+      // A cap change invalidates every remaining section's results → refetch.
+      if (maxItemsChanged) {
+        for (const section of Object.values(runtime.sections)) {
+          section.fetchedAt = null;
+        }
       }
     }
   }

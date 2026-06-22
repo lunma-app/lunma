@@ -49,6 +49,46 @@ describe('Chip', () => {
     );
   });
 
+  // ── selectable toggle pill (multi-filter-smart-connectors) ────────────────
+  test('with onToggle, the chip root is a button carrying aria-pressed', () => {
+    const { container } = render(ChipHarness, {
+      props: { label: 'Authored', onToggle: vi.fn(), selected: false },
+    });
+    const pill = container.querySelector('[data-testid="chip"]') as HTMLButtonElement;
+    expect(pill.tagName).toBe('BUTTON');
+    expect(pill.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  test('a selected pill reflects aria-pressed=true and shows the leading check', () => {
+    const { container } = render(ChipHarness, {
+      props: { label: 'Authored', onToggle: vi.fn(), selected: true },
+    });
+    const pill = container.querySelector('[data-testid="chip"]') as HTMLButtonElement;
+    expect(pill.getAttribute('aria-pressed')).toBe('true');
+    expect(pill.classList.contains('selected')).toBe(true);
+    expect(pill.querySelector('.chip-check')).not.toBeNull();
+  });
+
+  test('clicking a toggle pill invokes onToggle', async () => {
+    const onToggle = vi.fn();
+    const { container } = render(ChipHarness, {
+      props: { label: 'Assigned', onToggle, selected: false },
+    });
+    await fireEvent.click(container.querySelector('[data-testid="chip"]') as HTMLButtonElement);
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
+  test('a disabled toggle pill is disabled and does not fire onToggle', async () => {
+    const onToggle = vi.fn();
+    const { container } = render(ChipHarness, {
+      props: { label: 'Assigned', onToggle, disabled: true },
+    });
+    const pill = container.querySelector('[data-testid="chip"]') as HTMLButtonElement;
+    expect(pill.disabled).toBe(true);
+    await fireEvent.click(pill);
+    expect(onToggle).not.toHaveBeenCalled();
+  });
+
   test('renders a leading icon when iconUrl is given (and none otherwise)', () => {
     const without = render(ChipHarness, { props: { label: 'x.com' } });
     expect(without.container.querySelector('.chip-icon')).toBeNull();

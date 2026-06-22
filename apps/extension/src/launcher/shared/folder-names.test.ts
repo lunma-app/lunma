@@ -16,7 +16,7 @@ const smart = (id: string, name: string): PinNode => ({
   id,
   name,
   icon: 'git-pull-request',
-  sources: [{ source: 'github', baseUrl: 'https://github.com', query: 'authored' }],
+  sources: [{ source: 'github', baseUrl: 'https://github.com', queries: ['authored'] }],
   maxItems: 20,
   hideRead: false,
   refreshMinutes: 10,

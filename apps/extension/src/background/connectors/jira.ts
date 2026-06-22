@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import { requiredOriginsForConfig } from '../../shared/connector-origins';
 import type {
+  ResolvedSourceConfig,
   SmartFolderItem,
   SmartQuery,
   SmartSectionRuntime,
-  SmartSourceConfig,
 } from '../../shared/types';
 import { boundedFetch, type ConnectorCaches, type SourceConnector } from './connector';
 
@@ -129,7 +129,7 @@ const SearchResponseSchema = z.object({ issues: z.array(z.unknown()) });
  * status read inline from the search response.
  */
 async function fetchRuntime(
-  cfg: SmartSourceConfig,
+  cfg: ResolvedSourceConfig,
   maxItems: number,
   _caches?: ConnectorCaches,
 ): Promise<SmartSectionRuntime> {
@@ -190,7 +190,7 @@ async function fetchRuntime(
  * tab"): the Jira issue navigator opened on the folder's own JQL — the "JQL
  * view" of exactly what the folder queues. The query is source-optional only
  * for feeds, so a queue node always supplies one (defaulted defensively). */
-function listingUrl(cfg: SmartSourceConfig): string {
+function listingUrl(cfg: ResolvedSourceConfig): string {
   return `${cfg.baseUrl}/issues/?jql=${encodeURIComponent(jqlFor(cfg.query ?? 'assigned'))}`;
 }
 
@@ -198,7 +198,7 @@ function listingUrl(cfg: SmartSourceConfig): string {
  * Jira fetches same-origin under `{baseUrl}/rest/api/3`. Delegates to the shared
  * {@link requiredOriginsForConfig} so the SW gate and the surfaces share one
  * derivation. */
-function requiredOrigins(cfg: SmartSourceConfig): string[] {
+function requiredOrigins(cfg: ResolvedSourceConfig): string[] {
   return requiredOriginsForConfig(cfg);
 }
 

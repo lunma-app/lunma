@@ -16,6 +16,18 @@ interface Props {
   /** Accessible label / tooltip for the remove button. Defaults to
    * `Remove <label>`. */
   removeLabel?: string | undefined;
+  /**
+   * When provided, the chip becomes a **toggle pill** (multi-filter-smart-
+   * connectors): the chip root renders as a `<button>` carrying `aria-pressed`,
+   * and clicking it calls `onToggle`. Composes selectable filter pills (the
+   * editor's filter multi-select). Mutually exclusive with `onRemove`. */
+  onToggle?: (() => void) | undefined;
+  /** Toggle pressed state — drives `aria-pressed`, the `--space-c-soft` selected
+   * fill, and the leading check glyph. Only meaningful with `onToggle`. */
+  selected?: boolean | undefined;
+  /** Disables the toggle pill (e.g. a filter not applicable to a source):
+   * `--text-dim`, no press, `aria-disabled`. Only meaningful with `onToggle`. */
+  disabled?: boolean | undefined;
   /** `data-testid` for the chip root. Default `'chip'`. */
   testid?: string | undefined;
 }
@@ -26,28 +38,51 @@ const {
   iconUrl,
   onRemove,
   removeLabel,
+  onToggle,
+  selected = false,
+  disabled = false,
   testid = 'chip',
 }: Props = $props();
 </script>
 
-<span class="chip" data-tone={tone} data-testid={testid}>
-  {#if iconUrl}
-    <img class="chip-icon" src={iconUrl} alt="" width="14" height="14" />
-  {/if}
-  <span class="chip-label">{label}</span>
-  {#if onRemove}
-    <button
-      type="button"
-      class="chip-remove"
-      aria-label={removeLabel ?? `Remove ${label}`}
-      title={removeLabel ?? `Remove ${label}`}
-      data-testid="chip-remove"
-      onclick={() => onRemove?.()}
-    >
-      <Icon name="x" size={12} />
-    </button>
-  {/if}
-</span>
+{#if onToggle}
+  <button
+    type="button"
+    class="chip chip-toggle"
+    class:selected
+    data-tone={tone}
+    data-testid={testid}
+    aria-pressed={selected}
+    {disabled}
+    onclick={() => {
+      if (!disabled) onToggle?.();
+    }}
+  >
+    {#if selected}
+      <span class="chip-check" aria-hidden="true"><Icon name="check" size={12} /></span>
+    {/if}
+    <span class="chip-label">{label}</span>
+  </button>
+{:else}
+  <span class="chip" data-tone={tone} data-testid={testid}>
+    {#if iconUrl}
+      <img class="chip-icon" src={iconUrl} alt="" width="14" height="14" />
+    {/if}
+    <span class="chip-label">{label}</span>
+    {#if onRemove}
+      <button
+        type="button"
+        class="chip-remove"
+        aria-label={removeLabel ?? `Remove ${label}`}
+        title={removeLabel ?? `Remove ${label}`}
+        data-testid="chip-remove"
+        onclick={() => onRemove?.()}
+      >
+        <Icon name="x" size={12} />
+      </button>
+    {/if}
+  </span>
+{/if}
 
 <style>
   .chip {
@@ -75,6 +110,49 @@ const {
   }
   .chip[data-tone='accent']:hover {
     background: oklch(from var(--accent) l c h / 0.28);
+  }
+
+  /* Toggle pill (multi-filter-smart-connectors): a selectable filter chip. The
+   * <button> resets its native chrome and inherits the .chip look; the selected
+   * state fills with the Space-hue soft fill + a leading check glyph. */
+  .chip-toggle {
+    appearance: none;
+    border: 0;
+    cursor: pointer;
+    transition:
+      background var(--motion-fast) var(--ease-standard),
+      color var(--motion-fast) var(--ease-standard),
+      opacity var(--motion-fast) var(--ease-standard),
+      transform var(--motion-fast) var(--ease-standard);
+  }
+  .chip-toggle:hover:not(:disabled) {
+    background: var(--surface-3);
+  }
+  .chip-toggle:active:not(:disabled) {
+    transform: scale(var(--press-scale));
+  }
+  .chip-toggle:focus-visible {
+    outline: var(--focus-width) solid var(--focus-color);
+    outline-offset: var(--focus-offset);
+  }
+  .chip-toggle:disabled {
+    color: var(--text-dim);
+    cursor: default;
+  }
+  .chip-toggle.selected {
+    background: var(--space-c-soft);
+    color: var(--text);
+  }
+  .chip-toggle.selected:hover:not(:disabled) {
+    background: oklch(from var(--space-c-soft) l c h / 0.85);
+  }
+
+  .chip-check {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text);
   }
 
   .chip-icon {
@@ -122,5 +200,17 @@ const {
   .chip-remove:focus-visible {
     outline: var(--focus-width) solid var(--focus-color);
     outline-offset: var(--focus-offset);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .chip,
+    .chip-toggle,
+    .chip-remove {
+      transition: none;
+    }
+    .chip-toggle:active:not(:disabled),
+    .chip-remove:active {
+      transform: none;
+    }
   }
 </style>

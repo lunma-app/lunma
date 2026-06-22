@@ -1,4 +1,4 @@
-import type { SmartSectionRuntime, SmartSource, SmartSourceConfig } from '../../shared/types';
+import type { ResolvedSourceConfig, SmartSectionRuntime, SmartSource } from '../../shared/types';
 
 /**
  * The connector contract (github-connector, design D1) — a fetch-contract, not
@@ -53,11 +53,13 @@ export interface SourceConnector {
    * malformed `baseUrl` yields an empty pattern (treated as ungranted) rather
    * than throwing.
    */
-  requiredOrigins(cfg: SmartSourceConfig): string[];
+  requiredOrigins(cfg: ResolvedSourceConfig): string[];
   /** Bounded, never throws; resolves every failure to a runtime state. Slices
-   * its normalized results to `maxItems` (rss-connector design D5). */
+   * its normalized results to `maxItems` (rss-connector design D5). Receives a
+   * RESOLVED single-query config — the engine expands `queries[]` before
+   * dispatch, so a connector never sees a `queries[]` array. */
   fetchRuntime(
-    cfg: SmartSourceConfig,
+    cfg: ResolvedSourceConfig,
     maxItems: number,
     caches?: ConnectorCaches,
   ): Promise<SmartSectionRuntime>;
@@ -68,7 +70,7 @@ export interface SourceConnector {
    * (falling back to the feed URL when the channel link is not yet known). NO
    * network I/O — a synchronous, pure resolution.
    */
-  listingUrl(cfg: SmartSourceConfig): string;
+  listingUrl(cfg: ResolvedSourceConfig): string;
 }
 
 /**

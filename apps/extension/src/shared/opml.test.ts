@@ -119,7 +119,7 @@ function node(
     id: 'sf-1',
     name: 'HN',
     icon: 'rss',
-    sources: sources ?? [{ source: 'rss', baseUrl: 'https://hnrss.org/frontpage' }],
+    sources: sources ?? [{ source: 'rss', baseUrl: 'https://hnrss.org/frontpage', queries: [] }],
     maxItems: 10,
     hideRead: false,
     refreshMinutes: 30,
@@ -143,8 +143,8 @@ describe('buildOpml', () => {
     const mixed = node({
       name: 'Work',
       sources: [
-        { source: 'rss', baseUrl: 'https://hnrss.org/frontpage' },
-        { source: 'gitlab', baseUrl: 'https://gitlab.com', query: 'authored' },
+        { source: 'rss', baseUrl: 'https://hnrss.org/frontpage', queries: [] },
+        { source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored'] },
       ],
     });
     const output = buildOpml([mixed]);
@@ -158,8 +158,8 @@ describe('buildOpml', () => {
     const dual = node({
       name: 'Feeds',
       sources: [
-        { source: 'rss', baseUrl: 'https://hnrss.org/frontpage' },
-        { source: 'rss', baseUrl: 'https://lobste.rs/rss' },
+        { source: 'rss', baseUrl: 'https://hnrss.org/frontpage', queries: [] },
+        { source: 'rss', baseUrl: 'https://lobste.rs/rss', queries: [] },
       ],
     });
     const output = buildOpml([dual]);
@@ -173,7 +173,7 @@ describe('buildOpml', () => {
   test('folder with only non-rss sources emits no outlines', () => {
     const githubOnly = node({
       name: 'GH',
-      sources: [{ source: 'github', baseUrl: 'https://api.github.com', query: 'assigned' }],
+      sources: [{ source: 'github', baseUrl: 'https://api.github.com', queries: ['assigned'] }],
     });
     const output = buildOpml([githubOnly]);
     expect(output).not.toContain('<outline');
@@ -182,7 +182,7 @@ describe('buildOpml', () => {
 
   test('htmlUrl equals baseUrl', () => {
     const output = buildOpml([
-      node({ sources: [{ source: 'rss', baseUrl: 'https://example.com/feed' }] }),
+      node({ sources: [{ source: 'rss', baseUrl: 'https://example.com/feed', queries: [] }] }),
     ]);
     expect(output).toContain('xmlUrl="https://example.com/feed"');
     expect(output).toContain('htmlUrl="https://example.com/feed"');
@@ -192,7 +192,7 @@ describe('buildOpml', () => {
     const output = buildOpml([
       node({
         name: 'A & B',
-        sources: [{ source: 'rss', baseUrl: 'https://example.com/feed?a=1&b=2' }],
+        sources: [{ source: 'rss', baseUrl: 'https://example.com/feed?a=1&b=2', queries: [] }],
       }),
     ]);
     expect(output).toContain('text="A &amp; B"');

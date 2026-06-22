@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import type { SmartSourceConfig } from '../../shared/types';
+import type { ResolvedSourceConfig } from '../../shared/types';
 import type { ConnectorCaches } from './connector';
 import { gitlabConnector, pipelineStatus } from './gitlab';
 
@@ -53,7 +53,7 @@ function htmlResponse(status = 200): unknown {
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
-function node(overrides: Partial<SmartSourceConfig> = {}): SmartSourceConfig {
+function node(overrides: Partial<ResolvedSourceConfig> = {}): ResolvedSourceConfig {
   return {
     source: 'gitlab',
     baseUrl: 'https://gitlab.example.com',

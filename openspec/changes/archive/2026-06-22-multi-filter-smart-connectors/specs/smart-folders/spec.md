@@ -295,26 +295,6 @@ cap triggers when any section has hit its `maxItems` cap. Migrated nodes default
 - **GIVEN** a folder with exactly one resolved section and `maxItems: 20` returning 25 items
 - **THEN** the section renders 20 items and the badge reads `20+`
 
-### Requirement: `SmartSourceConfig` is the per-instance connector unit
-
-`SmartSourceConfig` (`{ source: SmartSource; baseUrl: string; queries: SmartQuery[] }`) SHALL be
-exported from `apps/extension/src/shared/types.ts` as the per-**instance** entry type for
-`sources[]` on a smart `PinNode`. The per-**section** unit SHALL be `ResolvedSourceConfig`
-(`{ source: SmartSource; baseUrl: string; query?: SmartQuery }`), produced by expanding a
-`SmartSourceConfig` over its `queries[]`. `ResolvedSourceConfig` is the parameter type for
-`SourceConnector.fetchRuntime`, `SourceConnector.requiredOrigins`, `SourceConnector.listingUrl`,
-and `requiredOriginsForConfig` in `shared/connector-origins.ts`.
-
-#### Scenario: SmartSourceConfig round-trips through the schema
-
-- **WHEN** a `SmartSourceConfig` `{ source: 'rss', baseUrl: 'https://feeds.example.com/rss', queries: [] }` is persisted and loaded
-- **THEN** it SHALL parse cleanly under `SmartSourceConfigSchema` with an empty `queries`
-
-#### Scenario: A queue SmartSourceConfig expands to one ResolvedSourceConfig per filter
-
-- **WHEN** `resolvedConfigs` expands `{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored', 'assigned'] }`
-- **THEN** it yields two `ResolvedSourceConfig`s `{ source: 'gitlab', baseUrl: 'https://gitlab.com', query: 'authored' }` and `{ …, query: 'assigned' }`
-
 ### Requirement: Source key derivation is pure and stable
 
 `sourceKey(cfg: ResolvedSourceConfig): string` in `background/smart-folders.ts` SHALL return
@@ -432,3 +412,42 @@ unchanged.
 - **WHEN** the folder is expanded
 - **THEN** the `gitlab:gitlab.com:authored` section renders its 5 items normally
 - **AND** the `github:github.com:authored` section renders one muted "Lunma needs access to api.github.com" row with a "Grant access" control
+
+## ADDED Requirements
+
+### Requirement: `SmartSourceConfig` is the per-instance connector unit
+
+`SmartSourceConfig` (`{ source: SmartSource; baseUrl: string; queries: SmartQuery[] }`) SHALL be
+exported from `apps/extension/src/shared/types.ts` as the per-**instance** entry type for
+`sources[]` on a smart `PinNode`. The per-**section** unit SHALL be `ResolvedSourceConfig`
+(`{ source: SmartSource; baseUrl: string; query?: SmartQuery }`), produced by expanding a
+`SmartSourceConfig` over its `queries[]`. `ResolvedSourceConfig` is the parameter type for
+`SourceConnector.fetchRuntime`, `SourceConnector.requiredOrigins`, `SourceConnector.listingUrl`,
+and `requiredOriginsForConfig` in `shared/connector-origins.ts`.
+
+#### Scenario: SmartSourceConfig round-trips through the schema
+
+- **WHEN** a `SmartSourceConfig` `{ source: 'rss', baseUrl: 'https://feeds.example.com/rss', queries: [] }` is persisted and loaded
+- **THEN** it SHALL parse cleanly under `SmartSourceConfigSchema` with an empty `queries`
+
+#### Scenario: A queue SmartSourceConfig expands to one ResolvedSourceConfig per filter
+
+- **WHEN** `resolvedConfigs` expands `{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored', 'assigned'] }`
+- **THEN** it yields two `ResolvedSourceConfig`s `{ source: 'gitlab', baseUrl: 'https://gitlab.com', query: 'authored' }` and `{ …, query: 'assigned' }`
+
+## REMOVED Requirements
+
+### Requirement: `SmartSourceConfig` is the per-section connector unit
+
+**Reason**: Renamed and reframed by multi-filter-smart-connectors. `SmartSourceConfig` is no
+longer the per-section fetch unit — it becomes the per-**instance** entry type
+(`{ source, baseUrl, queries: SmartQuery[] }`), and a new `ResolvedSourceConfig`
+(`{ source, baseUrl, query? }`) is the per-**section** unit produced by expanding an instance over
+its `queries[]`. Replaced by the ADDED requirement "`SmartSourceConfig` is the per-instance
+connector unit".
+
+**Migration**: The v9 storage migration rewrites each persisted `sources[]` entry from the flat
+`{ …, query? }` shape to `{ …, queries: SmartQuery[] }` (queue → `[query]`, rss → `[]`); connector
+signatures (`fetchRuntime`/`requiredOrigins`/`listingUrl`/`requiredOriginsForConfig`) narrow from
+`SmartSourceConfig` to `ResolvedSourceConfig`. No consumer keeps the old per-section meaning of
+`SmartSourceConfig`.

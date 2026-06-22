@@ -1,6 +1,10 @@
 import { SaxesParser } from 'saxes';
 import { requiredOriginsForConfig } from '../../shared/connector-origins';
-import type { SmartFolderItem, SmartSectionRuntime, SmartSourceConfig } from '../../shared/types';
+import type {
+  ResolvedSourceConfig,
+  SmartFolderItem,
+  SmartSectionRuntime,
+} from '../../shared/types';
 import { boundedFetch, type ConnectorCaches, type SourceConnector } from './connector';
 
 /**
@@ -230,7 +234,7 @@ function decodeXmlBuffer(buf: ArrayBuffer, contentType: string): string {
  * draining-queue model) — the buffer bounds memory + read-state.
  */
 async function fetchRuntime(
-  cfg: SmartSourceConfig,
+  cfg: ResolvedSourceConfig,
   _maxItems: number,
   _caches?: ConnectorCaches,
 ): Promise<SmartSectionRuntime> {
@@ -281,7 +285,7 @@ async function fetchRuntime(
 
 /** The feed's listing URL: the channel website link captured during the last
  * successful parse, falling back to the feed URL (design D6). No network I/O. */
-function listingUrl(cfg: SmartSourceConfig): string {
+function listingUrl(cfg: ResolvedSourceConfig): string {
   return channelLinkByFeed.get(cfg.baseUrl) ?? cfg.baseUrl;
 }
 
@@ -290,7 +294,7 @@ function listingUrl(cfg: SmartSourceConfig): string {
  * (an ungranted feed shows `needs-access`, not `error`). Delegates to the shared
  * {@link requiredOriginsForConfig} so the SW gate and the surfaces share one
  * derivation. */
-function requiredOrigins(cfg: SmartSourceConfig): string[] {
+function requiredOrigins(cfg: ResolvedSourceConfig): string[] {
   return requiredOriginsForConfig(cfg);
 }
 

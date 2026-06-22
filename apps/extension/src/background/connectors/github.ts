@@ -2,10 +2,10 @@ import { z } from 'zod';
 import { requiredOriginsForConfig } from '../../shared/connector-origins';
 import { readConnectors } from '../../shared/connectors';
 import type {
+  ResolvedSourceConfig,
   SmartFolderItem,
   SmartQuery,
   SmartSectionRuntime,
-  SmartSourceConfig,
 } from '../../shared/types';
 import { boundedFetch, type ConnectorCaches, type SourceConnector } from './connector';
 
@@ -214,7 +214,7 @@ async function enrich(
  * rate-limit kind).
  */
 async function fetchRuntime(
-  cfg: SmartSourceConfig,
+  cfg: ResolvedSourceConfig,
   maxItems: number,
   _caches?: ConnectorCaches,
 ): Promise<SmartSectionRuntime> {
@@ -286,7 +286,7 @@ async function fetchRuntime(
  * tab"): GitHub's pull-requests dashboard — the canonical "PRs that involve me"
  * page (github.com AND GHE both serve `/pulls`), independent of the canned
  * query. */
-function listingUrl(cfg: SmartSourceConfig): string {
+function listingUrl(cfg: ResolvedSourceConfig): string {
   return `${cfg.baseUrl}/pulls`;
 }
 
@@ -296,7 +296,7 @@ function listingUrl(cfg: SmartSourceConfig): string {
  * same-origin. Delegates to the shared {@link requiredOriginsForConfig} so the
  * SW gate and the surfaces' grant request share one derivation.
  */
-function requiredOrigins(cfg: SmartSourceConfig): string[] {
+function requiredOrigins(cfg: ResolvedSourceConfig): string[] {
   return requiredOriginsForConfig(cfg);
 }
 

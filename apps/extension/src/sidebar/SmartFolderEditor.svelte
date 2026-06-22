@@ -5,15 +5,18 @@ import { parseOpml } from '../shared/opml';
 import { requestHostPermissions } from '../shared/permissions';
 import type { PinNode, SmartQuery, SmartSource, SmartSourceConfig, SpaceId } from '../shared/types';
 import Button from '../ui/Button.svelte';
-import SegmentedControl from '../ui/SegmentedControl.svelte';
+import Chip from '../ui/Chip.svelte';
 import Select from '../ui/Select.svelte';
 import TextInput from '../ui/TextInput.svelte';
 
 /**
  * Smart-folder config editor — the menu drill-in panel behind "New smart
- * folder…" and a smart row's Edit…. Replaced the single source/URL/query form
- * with a sub-source list: each entry shows a source chip + host label + reorder
- * controls + remove button. An inline "Add source" form appends entries.
+ * folder…" and a smart row's Edit…. A per-**instance** list: each entry is one
+ * connector instance (source + host) carrying a **filter multi-select** of
+ * canned filters (selectable `Chip` pills; hidden for rss). An inline "Add
+ * source" form appends instances; re-adding an existing instance MERGES its
+ * filter selections rather than dropping the add (multi-filter-smart-connectors
+ * design D6).
  */
 
 type SmartNode = Extract<PinNode, { kind: 'smart' }>;
@@ -30,8 +33,11 @@ type DraftSource = {
   id: string;
   source: SmartSource;
   baseUrl: string;
-  query?: SmartQuery | undefined;
+  queries: SmartQuery[];
 };
+
+/** Canonical filter order — keeps section order stable regardless of tick order. */
+const QUERY_ORDER: SmartQuery[] = ['authored', 'assigned', 'review-requested'];
 
 const DEFAULT_BASE_URL: Record<SmartSource, string> = {
   gitlab: 'https://gitlab.com',
@@ -113,7 +119,7 @@ function queryOptionsFor(s: SmartSource): Array<{ value: SmartQuery; label: stri
   return [
     { value: 'authored', label: 'Authored' },
     { value: 'assigned', label: 'Assigned' },
-    { value: 'review-requested', label: s === 'jira' ? 'Watching' : 'Review' },
+    { value: 'review-requested', label: s === 'jira' ? 'Watching' : 'Reviewing' },
   ];
 }
 
@@ -124,7 +130,12 @@ function defaultRefreshForSources(srcs: DraftSource[]): number {
 // Capture config at mount — a live broadcast mid-edit must not clobber typing.
 // svelte-ignore state_referenced_locally
 let sources = $state<DraftSource[]>(
-  (node?.sources ?? []).map((cfg, i) => ({ ...cfg, id: String(i) })),
+  (node?.sources ?? []).map((cfg, i) => ({
+    id: String(i),
+    source: cfg.source,
+    baseUrl: cfg.baseUrl,
+    queries: [...cfg.queries],
+  })),
 );
 // svelte-ignore state_referenced_locally
 let name = $state(node?.name ?? '');
@@ -147,12 +158,20 @@ let nextSourceId = node?.sources.length ?? 0;
 let addingSource = $state(node === undefined);
 let addSource = $state<AddSourceType>('gitlab');
 let addBaseUrl = $state(DEFAULT_BASE_URL.gitlab);
-let addQuery = $state<SmartQuery>('review-requested');
+let addQueries = $state<SmartQuery[]>(['review-requested']);
 let addOpmlFile = $state<File | null>(null);
 let opmlImportNote = $state<string | null>(null);
 
+// Total resolved sections: rss → 1, queue → one per selected filter. Drives the
+// "per section" labels (≥ 2 sections) and matches the engine's section count.
+const resolvedSectionCount = $derived(
+  sources.reduce((n, s) => n + (s.source === 'rss' ? 1 : s.queries.length), 0),
+);
+
 const canConfirm = $derived(
-  sources.length > 0 && sources.every((s) => isValidBaseUrl(s.baseUrl.trim())),
+  sources.length > 0 &&
+    sources.every((s) => isValidBaseUrl(s.baseUrl.trim())) &&
+    sources.every((s) => s.source === 'rss' || s.queries.length > 0),
 );
 
 const hint = $derived.by(() => {
@@ -162,7 +181,7 @@ const hint = $derived.by(() => {
 });
 
 const maxItemsLabel = $derived(
-  sources.length > 1
+  resolvedSectionCount > 1
     ? 'Show per section'
     : sources[0]?.source === 'rss'
       ? 'Show up to'
@@ -170,7 +189,7 @@ const maxItemsLabel = $derived(
 );
 
 const maxItemsAriaLabel = $derived(
-  sources.length > 1
+  resolvedSectionCount > 1
     ? 'Maximum items per section'
     : sources[0]?.source === 'rss'
       ? 'Unread to show'
@@ -179,10 +198,29 @@ const maxItemsAriaLabel = $derived(
 
 const maxItemsOptions = $derived(
   MAX_ITEMS_VALUES.map((value) => {
-    const isSingleFeed = sources.length === 1 && sources[0]?.source === 'rss';
+    const isSingleFeed = resolvedSectionCount === 1 && sources[0]?.source === 'rss';
     return { value, label: `${value} ${isSingleFeed ? 'unread' : 'items'}` };
   }),
 );
+
+/** Toggle a filter on an existing instance card; rebuild from canonical order. */
+function toggleQuery(index: number, q: SmartQuery): void {
+  const s = sources[index];
+  if (!s) return;
+  const has = s.queries.includes(q);
+  const next = new Set(s.queries);
+  if (has) next.delete(q);
+  else next.add(q);
+  s.queries = QUERY_ORDER.filter((x) => next.has(x));
+}
+
+/** Toggle a filter in the add-source form's initial selection. */
+function toggleAddQuery(q: SmartQuery): void {
+  const next = new Set(addQueries);
+  if (next.has(q)) next.delete(q);
+  else next.add(q);
+  addQueries = QUERY_ORDER.filter((x) => next.has(x));
+}
 
 async function addSourceEntry(): Promise<void> {
   if (addSource === 'opml') {
@@ -205,7 +243,7 @@ async function addSourceEntry(): Promise<void> {
       if (sources.some((s) => draftSourceKey(s) === sk)) continue;
       sources = [
         ...sources,
-        { id: String(nextSourceId++), source: 'rss' as const, baseUrl: feedUrl },
+        { id: String(nextSourceId++), source: 'rss' as const, baseUrl: feedUrl, queries: [] },
       ];
       if (!nameTouched && sources.length === 1) name = feedName;
       imported++;
@@ -224,20 +262,34 @@ async function addSourceEntry(): Promise<void> {
   }
   const trimmedUrl = addBaseUrl.trim();
   if (!isValidBaseUrl(trimmedUrl)) return;
+  const isQueue = addSource !== 'rss';
+  if (isQueue && addQueries.length === 0) return;
   const newSk = draftSourceKey({ source: addSource, baseUrl: trimmedUrl });
-  if (sources.some((s) => draftSourceKey(s) === newSk)) return;
-  const cfg: DraftSource = {
-    id: String(nextSourceId++),
-    source: addSource,
-    baseUrl: trimmedUrl,
-    ...(addSource !== 'rss' ? { query: addQuery } : {}),
-  };
-  sources = [...sources, cfg];
+  // Merge into an existing instance (same source:host) rather than dropping —
+  // queue filters union; rss has no filter axis so a re-add is a no-op.
+  const existing = sources.find((s) => draftSourceKey(s) === newSk);
+  if (existing) {
+    if (isQueue) {
+      const merged = new Set([...existing.queries, ...addQueries]);
+      existing.queries = QUERY_ORDER.filter((q) => merged.has(q));
+    }
+  } else {
+    sources = [
+      ...sources,
+      {
+        id: String(nextSourceId++),
+        source: addSource,
+        baseUrl: trimmedUrl,
+        queries: isQueue ? [...addQueries] : [],
+      },
+    ];
+  }
   addingSource = false;
   addBaseUrl = DEFAULT_BASE_URL[addSource];
-  if (!nameTouched && sources.length === 1) {
-    if (addSource !== 'rss' && addQuery) {
-      name = SUGGESTED_QUEUE_NAME[addSource as Exclude<SmartSource, 'rss'>][addQuery] ?? '';
+  if (!nameTouched && sources.length === 1 && isQueue) {
+    const first = addQueries[0];
+    if (first) {
+      name = SUGGESTED_QUEUE_NAME[addSource as Exclude<SmartSource, 'rss'>][first] ?? '';
     }
   }
   if (!refreshTouched) {
@@ -283,7 +335,7 @@ function confirm(): void {
   const cleanSources: SmartSourceConfig[] = sources.map((s) => ({
     source: s.source,
     baseUrl: s.baseUrl.trim(),
-    ...(s.query !== undefined ? { query: s.query } : {}),
+    queries: s.source === 'rss' ? [] : [...s.queries],
   }));
   const payloadBase = {
     spaceId,
@@ -300,6 +352,7 @@ function confirm(): void {
     dispatch({ kind: 'createSmartFolder', payload: payloadBase });
   }
   // Request the union of all sub-source required origins from this user gesture.
+  // Origins are query-independent, so the union dedups per connector instance.
   // On a create, always request; on an edit, only when the origin set changed.
   const nextOrigins = [...new Set(cleanSources.flatMap((cfg) => requiredOriginsForConfig(cfg)))];
   const prevOrigins = node
@@ -313,7 +366,7 @@ function confirm(): void {
 </script>
 
 <div class="editor" data-testid="smart-folder-editor">
-  <!-- Sub-source list -->
+  <!-- Per-instance list -->
   {#if sources.length > 0}
     <div class="source-list" data-testid="smart-source-list">
       {#each sources as s, i (s.id)}
@@ -321,30 +374,44 @@ function confirm(): void {
         {@const isLast = i === sources.length - 1}
         {@const displayHost = (() => { try { return new URL(s.baseUrl).host; } catch { return s.baseUrl || '—'; } })()}
         <div class="source-entry" data-testid="smart-source-entry">
-          <span class="source-chip" data-source={s.source}>{SOURCE_LABELS[s.source]}</span>
-          <span class="source-url">{displayHost}</span>
-          <div class="source-actions">
-            <button
-              type="button"
-              class="icon-action"
-              disabled={isFirst}
-              aria-label="Move up"
-              onclick={() => moveSource(i, -1)}
-            >↑</button>
-            <button
-              type="button"
-              class="icon-action"
-              disabled={isLast}
-              aria-label="Move down"
-              onclick={() => moveSource(i, 1)}
-            >↓</button>
-            <button
-              type="button"
-              class="icon-action remove"
-              aria-label="Remove source"
-              onclick={() => removeSource(i)}
-            >×</button>
+          <div class="source-entry-top">
+            <span class="source-chip" data-source={s.source}>{SOURCE_LABELS[s.source]}</span>
+            <span class="source-url">{displayHost}</span>
+            <div class="source-actions">
+              <button
+                type="button"
+                class="icon-action"
+                disabled={isFirst}
+                aria-label="Move up"
+                onclick={() => moveSource(i, -1)}
+              >↑</button>
+              <button
+                type="button"
+                class="icon-action"
+                disabled={isLast}
+                aria-label="Move down"
+                onclick={() => moveSource(i, 1)}
+              >↓</button>
+              <button
+                type="button"
+                class="icon-action remove"
+                aria-label="Remove source"
+                onclick={() => removeSource(i)}
+              >×</button>
+            </div>
           </div>
+          {#if s.source !== 'rss'}
+            <div class="filter-pills" role="group" aria-label="Filters" data-testid="smart-filter-pills">
+              {#each queryOptionsFor(s.source) as opt (opt.value)}
+                <Chip
+                  label={opt.label}
+                  selected={s.queries.includes(opt.value)}
+                  onToggle={() => toggleQuery(i, opt.value)}
+                  testid="smart-filter-pill"
+                />
+              {/each}
+            </div>
+          {/if}
         </div>
       {/each}
     </div>
@@ -395,15 +462,17 @@ function confirm(): void {
         />
         {#if addSource !== 'rss'}
           <div class="field">
-            <span class="field-label">Show</span>
-            <SegmentedControl
-              name={`smart-add-query-${spaceId}-${node?.id ?? 'new'}`}
-              options={queryOptionsFor(addSource)}
-              value={addQuery}
-              ariaLabel="Show"
-              onchange={(v) => { addQuery = v as SmartQuery; }}
-              block
-            />
+            <span class="field-label">Filters</span>
+            <div class="filter-pills" role="group" aria-label="Filters" data-testid="smart-add-filter-pills">
+              {#each queryOptionsFor(addSource) as opt (opt.value)}
+                <Chip
+                  label={opt.label}
+                  selected={addQueries.includes(opt.value)}
+                  onToggle={() => toggleAddQuery(opt.value)}
+                  testid="smart-add-filter-pill"
+                />
+              {/each}
+            </div>
           </div>
         {/if}
       {/if}
@@ -411,7 +480,9 @@ function confirm(): void {
         <Button variant="ghost" onclick={() => { addingSource = false; addOpmlFile = null; }}>Cancel</Button>
         <Button
           variant="primary"
-          disabled={addSource === 'opml' ? addOpmlFile === null : !isValidBaseUrl(addBaseUrl.trim())}
+          disabled={addSource === 'opml'
+            ? addOpmlFile === null
+            : !isValidBaseUrl(addBaseUrl.trim()) || (addSource !== 'rss' && addQueries.length === 0)}
           onclick={() => void addSourceEntry()}
           testid="smart-add-source-confirm"
         >
@@ -499,7 +570,7 @@ function confirm(): void {
     justify-content: flex-end;
   }
 
-  /* Sub-source list */
+  /* Per-instance list */
   .source-list {
     display: flex;
     flex-direction: column;
@@ -508,11 +579,17 @@ function confirm(): void {
 
   .source-entry {
     display: flex;
-    align-items: center;
-    gap: var(--space-2);
+    flex-direction: column;
+    gap: var(--space-1);
     padding: var(--space-1) var(--space-2);
     background: var(--surface-2);
     border-radius: var(--r-md);
+  }
+
+  .source-entry-top {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
   }
 
   .source-chip {
@@ -537,6 +614,12 @@ function confirm(): void {
   .source-actions {
     display: flex;
     align-items: center;
+    gap: var(--space-1);
+  }
+
+  .filter-pills {
+    display: flex;
+    flex-wrap: wrap;
     gap: var(--space-1);
   }
 

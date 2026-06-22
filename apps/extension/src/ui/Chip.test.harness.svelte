@@ -7,9 +7,21 @@ interface Props {
   iconUrl?: string;
   onRemove?: (() => void) | undefined;
   removeLabel?: string;
+  onToggle?: (() => void) | undefined;
+  selected?: boolean;
+  disabled?: boolean;
 }
 
-const { label = 'example.com', tone, iconUrl, onRemove, removeLabel }: Props = $props();
+const {
+  label = 'example.com',
+  tone,
+  iconUrl,
+  onRemove,
+  removeLabel,
+  onToggle,
+  selected,
+  disabled,
+}: Props = $props();
 </script>
 
-<Chip {label} {tone} {iconUrl} {onRemove} {removeLabel} />
+<Chip {label} {tone} {iconUrl} {onRemove} {removeLabel} {onToggle} {selected} {disabled} />

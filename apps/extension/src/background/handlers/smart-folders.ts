@@ -5,14 +5,16 @@
 // itself lives in `../smart-folders.ts` — fetches always run OFF the drain.
 
 import { log } from '../../shared/logger';
-import type { FolderId, SmartSourceConfig, SpaceId } from '../../shared/types';
+import type { FolderId, SmartFolderItem, SmartSourceConfig, SpaceId } from '../../shared/types';
 import { pageGlob } from '../../shared/url-boundary';
 import {
   CONNECTORS,
   normalizeBaseUrl,
   REFRESH_MINUTES_FLOOR,
+  resolvedConfigs,
   type SmartFolderDeps,
   type SmartFolderNode,
+  sourceKey,
   startSmartFolderRefresh,
   syncSmartFoldersAlarm,
 } from '../smart-folders';
@@ -23,6 +25,30 @@ import { spaceExists } from './queries';
 /** Clamp a requested cadence to the floor of 5 minutes (rate-limit kindness). */
 function clampRefreshMinutes(minutes: number): number {
   return Math.max(REFRESH_MINUTES_FLOOR, Math.floor(minutes));
+}
+
+/**
+ * Normalize + validate each entry's `baseUrl` (throws on a non-http(s) URL) and
+ * enforce the per-source `queries` rule (multi-filter-smart-connectors): a queue
+ * source (gitlab/github/jira) entry SHALL carry a NON-EMPTY `queries`; a feed
+ * source (rss) entry SHALL carry `queries: []`. Throws on a violation so the ack
+ * carries the error and no node is persisted/updated.
+ */
+function normalizeAndValidateSources(
+  sources: SmartSourceConfig[],
+  command: string,
+): SmartSourceConfig[] {
+  return sources.map((cfg) => {
+    const baseUrl = normalizeBaseUrl(cfg.baseUrl);
+    if (cfg.source === 'rss') {
+      if (cfg.queries.length > 0) {
+        throw new Error(`${command}: rss source '${baseUrl}' must carry an empty queries array`);
+      }
+    } else if (cfg.queries.length === 0) {
+      throw new Error(`${command}: queue source '${cfg.source}' requires at least one query`);
+    }
+    return { ...cfg, baseUrl };
+  });
 }
 
 /** The smart node addressed by `{ spaceId, folderId }`, with the same error
@@ -69,14 +95,11 @@ export function smartFolderHandlers(
         throw new Error(`createSmartFolder: unknown spaceId '${spaceId}'`);
       }
       // SW-minted identity (D12): handler mints the node. Validate + normalize
-      // each source's baseUrl (throws on invalid → error ack, no node). Icon
-      // comes from the first-source connector when all sources share a kind;
-      // 'layers' for a mixed multi-source folder. hideRead starts TRUE —
-      // a feed's resting state is the drained unread queue.
-      const normalizedSources: SmartSourceConfig[] = sources.map((cfg) => ({
-        ...cfg,
-        baseUrl: normalizeBaseUrl(cfg.baseUrl),
-      }));
+      // each source's baseUrl + per-source queries rule (throws on invalid →
+      // error ack, no node). Icon comes from the first-source connector when all
+      // sources share a kind; 'layers' for a mixed multi-source folder. hideRead
+      // starts TRUE — a feed's resting state is the drained unread queue.
+      const normalizedSources = normalizeAndValidateSources(sources, 'createSmartFolder');
       const firstSource = normalizedSources[0]?.source;
       const icon =
         firstSource && normalizedSources.every((s) => s.source === firstSource)
@@ -106,21 +129,15 @@ export function smartFolderHandlers(
     updateSmartFolder: (ctx, event) => {
       const { spaceId, folderId, sources, name, maxItems, refreshMinutes } = event.payload;
       const node = requireSmartNode(ctx, 'updateSmartFolder', spaceId, folderId);
-      const normalizedSources: SmartSourceConfig[] = sources.map((cfg) => ({
-        ...cfg,
-        baseUrl: normalizeBaseUrl(cfg.baseUrl),
-      }));
-      // A sources/maxItems change invalidates the results (the store mutator
-      // also nulls per-section fetchedAt) → immediate refetch for changed sections.
-      const sourcesChanged =
-        node.sources.length !== normalizedSources.length ||
-        node.sources.some(
-          (s, i) =>
-            s.source !== normalizedSources[i]?.source ||
-            s.baseUrl !== normalizedSources[i]?.baseUrl ||
-            s.query !== normalizedSources[i]?.query,
-        );
-      const resultsInvalidated = sourcesChanged || node.maxItems !== maxItems;
+      const normalizedSources = normalizeAndValidateSources(sources, 'updateSmartFolder');
+      // Capture the resolved-section keys BEFORE the store mutates `node.sources`,
+      // so the diff finds added/removed sections (multi-filter-smart-connectors
+      // design D2/D6). A maxItems change invalidates EVERY section's cap → refetch
+      // all; a sources-only change refetches only the ADDED resolved sections and
+      // the store prunes the REMOVED ones.
+      const oldKeys = new Set(resolvedConfigs(node).map(sourceKey));
+      const maxItemsChanged = node.maxItems !== maxItems;
+      const sourcesChanged = JSON.stringify(node.sources) !== JSON.stringify(normalizedSources);
       const firstSource = normalizedSources[0]?.source;
       const newIcon =
         firstSource && normalizedSources.every((s) => s.source === firstSource)
@@ -135,13 +152,26 @@ export function smartFolderHandlers(
       });
       ctx.markDirty();
       ctx.runSideEffect(() => syncSmartFoldersAlarm(ctx.store));
-      if (resultsInvalidated) {
-        const updated = requireSmartNode(ctx, 'updateSmartFolder', spaceId, folderId);
-        const { completion } = startSmartFolderRefresh(
-          { store: ctx.store, enqueue: deps.enqueue },
-          { ...updated },
-        );
+      const updated = requireSmartNode(ctx, 'updateSmartFolder', spaceId, folderId);
+      const refreshDeps = { store: ctx.store, enqueue: deps.enqueue };
+      if (maxItemsChanged) {
+        // Cap changed for every section — refetch the whole folder so each
+        // section re-slices to the new maximum.
+        const { completion } = startSmartFolderRefresh(refreshDeps, { ...updated });
         ctx.runSideEffect(() => completion);
+      } else if (sourcesChanged) {
+        // Refetch only the newly-added resolved sections (the store has already
+        // dropped the removed ones; unchanged sections keep their results).
+        const added = resolvedConfigs(updated).filter((cfg) => !oldKeys.has(sourceKey(cfg)));
+        if (added.length > 0) {
+          const { completion } = startSmartFolderRefresh(
+            refreshDeps,
+            { ...updated },
+            undefined,
+            added,
+          );
+          ctx.runSideEffect(() => completion);
+        }
       }
     },
     deleteSmartFolder: (ctx, event) => {
@@ -188,16 +218,22 @@ export function smartFolderHandlers(
         return;
       }
       // Open-if-dormant: resolve the item from the SW's own runtime slice.
-      // itemId is namespaced: "${sourceKey}:${nativeId}" — extract the sourceKey
-      // (first two colon-delimited segments) and look up the section + native id.
-      const firstColon = itemId.indexOf(':');
-      const secondColon = firstColon !== -1 ? itemId.indexOf(':', firstColon + 1) : -1;
-      const sk = secondColon !== -1 ? itemId.slice(0, secondColon) : '';
-      const nativeId = secondColon !== -1 ? itemId.slice(secondColon + 1) : itemId;
-      const section = ctx.store.state.smartFolders[folderId]?.sections[sk];
-      // The itemId lookup key is safe, but item.url is RSS-feed-controlled data
-      // and could carry a non-http(s) scheme — validate it before tabs.create.
-      const item = section?.items.find((i) => i.id === nativeId);
+      // itemId is namespaced "${sourceKey}:${nativeId}" where sourceKey is the
+      // per-filter section key (3 segments for queue, 2 for rss) — find the
+      // section whose key prefixes itemId and holds the trailing native id.
+      // (Valid section keys never prefix each other, so the match is unambiguous;
+      // item.url is RSS-feed-controlled and scheme-validated below before create.)
+      const folderSections = ctx.store.state.smartFolders[folderId]?.sections ?? {};
+      let item: SmartFolderItem | undefined;
+      for (const sk of Object.keys(folderSections)) {
+        if (!itemId.startsWith(`${sk}:`)) continue;
+        const nativeId = itemId.slice(sk.length + 1);
+        const candidate = folderSections[sk]?.items.find((i) => i.id === nativeId);
+        if (candidate) {
+          item = candidate;
+          break;
+        }
+      }
       if (!item) {
         throw new Error(
           `openSmartItem: item '${itemId}' is neither bound nor listed in folder '${folderId}'`,
@@ -343,7 +379,7 @@ export function smartFolderHandlers(
       for (const { name, feedUrl } of feeds) {
         try {
           const baseUrl = normalizeBaseUrl(feedUrl);
-          validEntries.push({ name, cfg: { source: 'rss', baseUrl } });
+          validEntries.push({ name, cfg: { source: 'rss', baseUrl, queries: [] } });
         } catch (err) {
           log.warn('importOpml: skipping invalid feed entry', { name, feedUrl, err });
           skipped++;
