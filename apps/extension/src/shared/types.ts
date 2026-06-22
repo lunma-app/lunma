@@ -453,4 +453,17 @@ export interface SidebarLocalState {
    * consumed by the active `PinnedTabs` the moment it opens the editor.
    */
   autoRenameNextFolderByWindow?: { [windowId: WindowId]: boolean };
+  /**
+   * Per-window per-section collapse state for multi-source smart folders
+   * (collapsible-smart-folder-sections). Keyed by `folderId` then by the
+   * section's `sourceKey` (`${source}:${host}`). Like `expandedFoldersByWindow`
+   * it is sidebar-local, per-window, NEVER persisted and NEVER broadcast — the
+   * same folder's section can be collapsed in one window and expanded in
+   * another. An ABSENT leaf means **expanded**; `true` means collapsed, so a
+   * freshly rendered folder (and any folder after an SW restart) shows all
+   * sections.
+   */
+  collapsedSmartSectionsByWindow?: {
+    [windowId: WindowId]: { [folderId: FolderId]: { [sourceKey: string]: boolean } };
+  };
 }
