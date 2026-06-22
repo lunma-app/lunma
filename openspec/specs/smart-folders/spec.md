@@ -792,6 +792,12 @@ action — **Create** (new) or **Save** (edit) — with a **Cancel** ghost besid
 and the validation hint read alongside them. There is no separate inline
 "add-source" sub-form and no second confirm button.
 
+The **Sources list SHALL be height-bounded and scroll independently**
+(`overflow-y: auto`) while **Name** stays pinned above it and the folder settings
++ primary action stay pinned below — so the primary **Create / Save** action is
+reachable regardless of how many sources the list holds (e.g. after an OPML
+import of many feeds). The list SHALL never push the action out of the panel.
+
 Each **source card** SHALL show the source `Select`, the per-source URL field
 (labelled "Feed URL" for rss, "Instance URL" for a queue source), and — for a
 queue source — a **filter multi-select** (selectable chips for authored /
@@ -803,6 +809,14 @@ source-adaptive behaviour (URL label, filters hidden for rss, hint line, refresh
 default, name auto-suggest) applies per card. On create, the list SHALL seed one
 default card so a single-source folder is fill-and-create. An `+ Add source`
 ghost `Button` below the list SHALL append another card.
+
+A card SHALL be **collapsible to a summary row** (the source glyph + host + a
+queue filter summary) with its reorder/remove controls and a disclosure chevron;
+activating the summary expands the full editable card. A **sole** card and any
+**incomplete** card (invalid URL, queue with no filters, or an unresolved OPML
+card) SHALL always render **expanded** so the folder can always be completed or
+fixed; a **newly added** card SHALL open expanded; **OPML-imported** feed cards
+SHALL land **collapsed**.
 
 **OPML** SHALL be a selectable source type on a card: choosing it shows a file
 picker (no URL/filter fields); selecting a file SHALL parse the OPML and
@@ -829,6 +843,23 @@ sections to find added/removed/changed ones).
 
 - **WHEN** the user opens "New smart folder…" and the seeded card is valid (default GitLab + a filter)
 - **THEN** the primary action is enabled immediately — there is no inner "Add source" button to press first
+
+#### Scenario: The action stays reachable with many sources
+
+- **GIVEN** an OPML import has produced many feed cards
+- **THEN** the Sources list scrolls within a bounded height and the Create / Save action remains visible and reachable (it is never pushed out of the panel)
+
+#### Scenario: Imported feed cards land collapsed; a card expands on demand
+
+- **WHEN** an OPML import expands into several feed cards
+- **THEN** those cards render as collapsed summary rows (source + host)
+- **AND WHEN** the user activates one summary
+- **THEN** it expands into the full editable card
+
+#### Scenario: An incomplete card always renders expanded
+
+- **GIVEN** a card that is incomplete (e.g. a queue card with no filters, or an invalid URL)
+- **THEN** it renders expanded (never collapsed), so it can be fixed, and the primary action is disabled
 
 #### Scenario: Confirming a queue card with no filters is blocked
 

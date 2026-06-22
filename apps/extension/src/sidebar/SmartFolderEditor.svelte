@@ -6,6 +6,7 @@ import { requestHostPermissions } from '../shared/permissions';
 import type { PinNode, SmartQuery, SmartSource, SmartSourceConfig, SpaceId } from '../shared/types';
 import Button from '../ui/Button.svelte';
 import Chip from '../ui/Chip.svelte';
+import Icon from '../ui/Icon.svelte';
 import Select from '../ui/Select.svelte';
 import TextInput from '../ui/TextInput.svelte';
 
@@ -73,6 +74,15 @@ const HINT: Record<SmartSource, string> = {
   github: 'GitHub needs an access token — add one in Settings → Connectors.',
   jira: "Signed in to Jira in this browser? That's enough.",
   rss: 'Public feed — no sign-in needed. Paste the feed URL.',
+};
+
+/** Collapsed-summary glyph per source (same family as the section headers). */
+const SOURCE_GLYPH: Record<AddSourceType, string> = {
+  gitlab: 'folder-git-2',
+  github: 'folder-git-2',
+  jira: 'folder-kanban',
+  rss: 'rss',
+  opml: 'rss',
 };
 
 const SOURCE_OPTIONS: Array<{ value: AddSourceType; label: string }> = [
@@ -280,8 +290,43 @@ function changeCardSource(index: number, next: string): void {
   opmlImportNote = null;
 }
 
+// Per-card expand state: a card is editable (expanded) when it is the sole card,
+// when it is incomplete (so it can always be fixed), or when the user opened it.
+// Collapsible cards default to a scannable summary row (OPML-imported feeds, the
+// non-active cards) until clicked.
+let userExpanded = $state<Set<string>>(new Set());
+
+function isExpanded(s: DraftSource): boolean {
+  return sources.length === 1 || cardIncomplete(s) || userExpanded.has(s.id);
+}
+function collapsible(s: DraftSource): boolean {
+  return sources.length > 1 && !cardIncomplete(s);
+}
+function toggleExpand(id: string): void {
+  const next = new Set(userExpanded);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  userExpanded = next;
+}
+function cardHost(s: DraftSource): string {
+  try {
+    return new URL(s.baseUrl).host;
+  } catch {
+    return s.baseUrl.trim() || '—';
+  }
+}
+function filterSummary(s: DraftSource): string {
+  if (s.source === 'rss' || s.source === 'opml') return '';
+  return queryOptionsFor(s.source)
+    .filter((o) => s.queries.includes(o.value))
+    .map((o) => o.label)
+    .join(', ');
+}
+
 function addSourceCard(): void {
-  sources = [...sources, newCard('gitlab')];
+  const c = newCard('gitlab');
+  sources = [...sources, c];
+  userExpanded = new Set(userExpanded).add(c.id); // open the new card for editing
   opmlImportNote = null;
 }
 
@@ -420,8 +465,53 @@ function confirm(): void {
       {#each sources as s, i (s.id)}
         {@const isFirst = i === 0}
         {@const isLast = i === sources.length - 1}
-        <div class="source-card" data-testid="smart-source-entry" class:invalid={cardIncomplete(s) && s.source !== 'opml'}>
+        {@const expanded = isExpanded(s)}
+        {#snippet rowActions()}
+          <div class="source-actions">
+            <button type="button" class="icon-action" disabled={isFirst} aria-label="Move up" onclick={() => moveSource(i, -1)}>↑</button>
+            <button type="button" class="icon-action" disabled={isLast} aria-label="Move down" onclick={() => moveSource(i, 1)}>↓</button>
+            {#if sources.length > 1}
+              <button type="button" class="icon-action remove" aria-label="Remove source" onclick={() => removeSource(i)} data-testid="smart-source-remove">×</button>
+            {/if}
+          </div>
+        {/snippet}
+        <div
+          class="source-card"
+          data-testid="smart-source-entry"
+          class:invalid={cardIncomplete(s) && s.source !== 'opml'}
+          class:collapsed={!expanded}
+        >
+          {#if !expanded}
+            <div class="source-summary-row">
+              <button
+                type="button"
+                class="source-summary"
+                aria-expanded="false"
+                onclick={() => toggleExpand(s.id)}
+                data-testid="smart-source-summary"
+              >
+                <span class="summary-glyph"><Icon name={SOURCE_GLYPH[s.source]} size={16} /></span>
+                <span class="summary-host">{cardHost(s)}</span>
+                {#if filterSummary(s)}
+                  <span class="summary-filters">{filterSummary(s)}</span>
+                {/if}
+                <span class="summary-chevron" aria-hidden="true"><Icon name="chevron-right" size={14} /></span>
+              </button>
+              {@render rowActions()}
+            </div>
+          {:else}
           <div class="source-card-head">
+            {#if collapsible(s)}
+              <button
+                type="button"
+                class="disclosure expanded"
+                aria-label="Collapse source"
+                aria-expanded="true"
+                onclick={() => toggleExpand(s.id)}
+              >
+                <Icon name="chevron-right" size={14} />
+              </button>
+            {/if}
             <Select
               options={SOURCE_OPTIONS}
               value={s.source}
@@ -429,13 +519,7 @@ function confirm(): void {
               ariaLabel="Source type"
               testid="smart-source-type"
             />
-            <div class="source-actions">
-              <button type="button" class="icon-action" disabled={isFirst} aria-label="Move up" onclick={() => moveSource(i, -1)}>↑</button>
-              <button type="button" class="icon-action" disabled={isLast} aria-label="Move down" onclick={() => moveSource(i, 1)}>↓</button>
-              {#if sources.length > 1}
-                <button type="button" class="icon-action remove" aria-label="Remove source" onclick={() => removeSource(i)} data-testid="smart-source-remove">×</button>
-              {/if}
-            </div>
+            {@render rowActions()}
           </div>
 
           {#if s.source === 'opml'}
@@ -482,6 +566,7 @@ function confirm(): void {
                 {/each}
               </div>
             {/if}
+          {/if}
           {/if}
         </div>
       {/each}
@@ -569,6 +654,82 @@ function confirm(): void {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
+    /* Bounded + scrollable so the list never pushes the primary action out of
+     * the panel, however many sources (e.g. a big OPML import). Name stays above
+     * and the settings + actions stay below — both outside this scroll region. */
+    max-height: min(46vh, 420px);
+    overflow-y: auto;
+    /* Room for the scrollbar so it never overlaps the card content. */
+    padding-right: var(--space-1);
+  }
+
+  /* Collapsed summary row — a scannable one-line digest; click to expand+edit. */
+  .source-summary-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+  .source-summary {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    appearance: none;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    padding: 2px 0;
+    color: var(--text);
+  }
+  .summary-glyph {
+    flex-shrink: 0;
+    display: inline-flex;
+    color: var(--text-dim);
+  }
+  .summary-host {
+    flex-shrink: 0;
+    max-width: 55%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font: var(--weight-medium) var(--text-sm) / 1 var(--font-sans);
+  }
+  .summary-filters {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font: var(--weight-regular) var(--text-xs) / 1 var(--font-sans);
+    color: var(--text-dim);
+  }
+  .summary-chevron {
+    flex-shrink: 0;
+    display: inline-flex;
+    color: var(--text-dim);
+  }
+
+  /* Disclosure caret in an expanded card's head (collapse back to summary). */
+  .disclosure {
+    flex-shrink: 0;
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    padding: 2px;
+    border-radius: var(--r-sm);
+    transition: transform var(--motion-fast) var(--ease-standard);
+  }
+  .disclosure:hover {
+    color: var(--text);
+  }
+  .disclosure.expanded {
+    transform: rotate(90deg);
   }
 
   .source-card {
@@ -730,7 +891,8 @@ function confirm(): void {
   @media (prefers-reduced-motion: reduce) {
     .source-card,
     .icon-action,
-    .file-pick {
+    .file-pick,
+    .disclosure {
       transition: none;
     }
   }

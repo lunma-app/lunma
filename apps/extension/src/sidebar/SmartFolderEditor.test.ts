@@ -608,16 +608,48 @@ describe('SmartFolderEditor — multi-filter / multi-source', () => {
     await new Promise((r) => setTimeout(r, 0)); // let file.text() + parse settle
     await tick();
 
-    // Two unique feeds (the duplicate host is dropped); the importer card is gone.
+    // Two unique feeds (the duplicate host is dropped); the importer card is
+    // gone and the feeds land COLLAPSED as scannable summary rows.
     expect(cards(container)).toHaveLength(2);
-    expect(cardSourceValue(card(container, 0))).toBe('rss');
-    expect(cardSourceValue(card(container, 1))).toBe('rss');
-    expect(cardUrlInput(card(container, 0)).value).toBe('https://a.example.com/feed');
+    const summaries = [
+      ...container.querySelectorAll('[data-testid="smart-source-summary"]'),
+    ] as HTMLElement[];
+    expect(summaries).toHaveLength(2);
+    expect(summaries[0]?.textContent).toContain('a.example.com');
+    expect(summaries[1]?.textContent).toContain('b.example.com');
     expect(container.querySelector('[data-testid="smart-folder-hint"]')?.textContent).toContain(
       'fetches independently',
     );
     // The folder name auto-fills to "Feeds" for a multi-feed import.
     expect(nameInput(container).value).toBe('Feeds');
+  });
+
+  test('cards collapse to summaries; sole/new/incomplete stay expanded; click expands', async () => {
+    const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
+    await tick();
+    // Sole card: expanded (editable Select present, no summary).
+    expect(card(container).querySelector('[data-testid="smart-source-type"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="smart-source-summary"]')).toBeNull();
+
+    // Add a second card → it opens expanded; the first (valid) card collapses.
+    await fireEvent.click(addSourceBtn(container));
+    await tick();
+    expect(cards(container)).toHaveLength(2);
+    expect(card(container, 0).querySelector('[data-testid="smart-source-summary"]')).not.toBeNull();
+    expect(card(container, 1).querySelector('[data-testid="smart-source-type"]')).not.toBeNull();
+
+    // Clicking the first card's summary expands it back to the editable form.
+    await fireEvent.click(
+      card(container, 0).querySelector('[data-testid="smart-source-summary"]') as HTMLButtonElement,
+    );
+    await tick();
+    expect(card(container, 0).querySelector('[data-testid="smart-source-type"]')).not.toBeNull();
+
+    // Make the second card incomplete (untick its only filter) → it can't collapse.
+    await setCardFilters(card(container, 1), 'gitlab', []);
+    await tick();
+    expect(confirmBtn(container).disabled).toBe(true);
+    expect(card(container, 1).querySelector('[data-testid="smart-source-type"]')).not.toBeNull();
   });
 });
 
