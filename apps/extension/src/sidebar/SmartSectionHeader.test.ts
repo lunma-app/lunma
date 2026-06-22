@@ -104,4 +104,21 @@ describe('SmartSectionHeader — disclosure control', () => {
     });
     expect(container.querySelector('.section-count')?.textContent).toBe('7');
   });
+
+  test('a custom name labels the section in place of the host (queue keeps the filter axis)', () => {
+    const { container } = render(SmartSectionHeaderHarness, {
+      props: { cfg: { ...gitlab, name: 'Work' } },
+    });
+    // gitlab cfg carries query 'review-requested' → "Work · reviewing", not the host.
+    expect(container.querySelector('.section-host')?.textContent).toBe('Work · reviewing');
+  });
+
+  test('a blank name falls back to the host label', () => {
+    const { container } = render(SmartSectionHeaderHarness, {
+      props: { cfg: { ...gitlab, name: '  ' } },
+    });
+    expect(container.querySelector('.section-host')?.textContent).toBe(
+      'gitlab.example.com · reviewing',
+    );
+  });
 });

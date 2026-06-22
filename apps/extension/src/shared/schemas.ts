@@ -20,7 +20,7 @@ import type { AppState, BackupEnvelope, SpaceColor } from './types';
 // connectors) rewrites each `sources[]` entry from the flat `query?` shape to
 // `queries: SmartQuery[]` and re-keys `smartItemBindings` with the per-filter
 // axis. Each bump is deliberate: it makes a downgrade detectable.
-export const CURRENT_SCHEMA_VERSION = 9;
+export const CURRENT_SCHEMA_VERSION = 10;
 
 const SpaceInstanceSchema = z.strictObject({
   spaceId: z.string(),
@@ -113,6 +113,9 @@ const SmartSourceConfigSchema = z.strictObject({
   source: z.enum(['gitlab', 'github', 'jira', 'rss']),
   baseUrl: z.string(),
   queries: z.array(z.enum(['authored', 'assigned', 'review-requested'])),
+  // Optional display name (smart-source-rename, v10): labels the source's
+  // section(s) in place of the host. Display-only — absent for an unnamed source.
+  name: z.string().optional(),
 });
 
 // Historical (v6–v8) per-entry connector sub-source — the flat `query?` shape
@@ -333,7 +336,7 @@ export const AppStateV8Schema = z.strictObject({
 // current `PinNodeSchema`. `smartItemBindings` item keys gain the per-filter
 // `${source}:${host}:${query}:${nativeId}` axis, but they remain arbitrary
 // strings so `SmartItemBindingsV7Schema` is unchanged.
-export const AppStateV9Schema = z.strictObject({
+export const AppStateV10Schema = z.strictObject({
   schemaVersion: z.number(),
   spaces: z.array(SpaceSchema),
   activeSpaceByWindow: z.record(z.coerce.number(), z.string().nullable()),
@@ -357,19 +360,19 @@ export const AppStateV9Schema = z.strictObject({
 
 export const EnvelopeSchema = z.strictObject({
   schemaVersion: z.number(),
-  state: AppStateV9Schema,
+  state: AppStateV10Schema,
 });
 
 export type AppStateV6 = z.infer<typeof AppStateV6Schema>;
 export type AppStateV7 = z.infer<typeof AppStateV7Schema>;
 export type AppStateV8 = z.infer<typeof AppStateV8Schema>;
-export type AppStateV9 = z.infer<typeof AppStateV9Schema>;
+export type AppStateV10 = z.infer<typeof AppStateV10Schema>;
 export type Envelope = z.infer<typeof EnvelopeSchema>;
 
 type AssertEqual<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
-const _schemaMatchesAppState: AssertEqual<AppStateV9, AppState> = true;
+const _schemaMatchesAppState: AssertEqual<AppStateV10, AppState> = true;
 void _schemaMatchesAppState;
 
 // ── Data-backup: BackupEnvelopeSchema ────────────────────────────────────────

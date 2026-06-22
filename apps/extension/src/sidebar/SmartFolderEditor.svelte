@@ -36,6 +36,8 @@ type DraftSource = {
   source: AddSourceType;
   baseUrl: string;
   queries: SmartQuery[];
+  /** Optional display name (smart-source-rename); '' when unnamed. */
+  name: string;
   /** Set (to a chosen File) only while an `opml` importer card awaits expansion. */
   file: File | null;
 };
@@ -138,6 +140,7 @@ function newCard(source: AddSourceType): DraftSource {
     baseUrl: source === 'opml' || source === 'rss' ? '' : DEFAULT_BASE_URL[source],
     queries:
       source === 'gitlab' || source === 'github' || source === 'jira' ? ['review-requested'] : [],
+    name: '',
     file: null,
   };
 }
@@ -155,6 +158,7 @@ let sources = $state<DraftSource[]>(
         source: cfg.source,
         baseUrl: cfg.baseUrl,
         queries: [...cfg.queries],
+        name: cfg.name ?? '',
         file: null,
       }))
     : [
@@ -163,6 +167,7 @@ let sources = $state<DraftSource[]>(
           source: 'gitlab' as const,
           baseUrl: DEFAULT_BASE_URL.gitlab,
           queries: ['review-requested'] as SmartQuery[],
+          name: '',
           file: null,
         },
       ],
@@ -310,8 +315,10 @@ function toggleExpand(id: string): void {
   else next.add(id);
   userExpanded = next;
 }
-/** The header's identity label: the host, else a friendly placeholder. */
+/** The header's identity label: the custom name if set, else the host, else a
+ * friendly placeholder. */
 function identity(s: DraftSource): string {
+  if (s.name.trim()) return s.name.trim();
   try {
     return new URL(s.baseUrl).host;
   } catch {
@@ -319,6 +326,14 @@ function identity(s: DraftSource): string {
   }
   if (s.source === 'opml') return 'OPML file';
   return s.baseUrl.trim() || 'New source';
+}
+/** The source's host (for the Name field placeholder), or '' when unparseable. */
+function sourceHost(s: DraftSource): string {
+  try {
+    return new URL(s.baseUrl).host;
+  } catch {
+    return '';
+  }
 }
 function filterSummary(s: DraftSource): string {
   if (s.source === 'rss' || s.source === 'opml') return '';
@@ -422,6 +437,9 @@ async function pickOpml(index: number, file: File): Promise<void> {
       source: 'rss',
       baseUrl: feedUrl,
       queries: [],
+      // Name each imported feed by its OPML title so the sidebar shows friendly
+      // names, not a wall of hosts (blank title falls back to the host label).
+      name: (feedName ?? '').trim(),
       file: null,
     });
   }
@@ -463,6 +481,8 @@ function dedupedSources(): SmartSourceConfig[] {
         source: s.source,
         baseUrl: s.baseUrl.trim(),
         queries: s.source === 'rss' ? [] : [...s.queries],
+        // Carry a custom name only when set, so an unnamed source persists no key.
+        ...(s.name.trim() ? { name: s.name.trim() } : {}),
       });
     }
   }
@@ -628,6 +648,13 @@ function confirm(): void {
                     </div>
                   </div>
                 {/if}
+                <!-- Optional friendly label, last: configure the source, then name it. -->
+                <TextInput
+                  label="Name"
+                  bind:value={s.name}
+                  placeholder={sourceHost(s) || 'Optional name'}
+                  testid="smart-source-name"
+                />
               {/if}
             </div>
           {/if}

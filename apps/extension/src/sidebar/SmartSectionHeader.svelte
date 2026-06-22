@@ -41,9 +41,12 @@ const host = $derived.by(() => {
     return cfg.baseUrl;
   }
 });
-// `host · filter` for a queue section, plain `host` for rss (no filter axis).
+// The source's custom name (smart-source-rename) labels the section in place of
+// the host when set; otherwise the host.
+const identity = $derived(cfg.name?.trim() || host);
+// `identity · filter` for a queue section, plain `identity` for rss.
 const hostLabel = $derived(
-  cfg.query !== undefined ? `${host} · ${filterLabel(cfg.source, cfg.query)}` : host,
+  cfg.query !== undefined ? `${identity} · ${filterLabel(cfg.source, cfg.query)}` : identity,
 );
 
 // The accessible label names the section, its count, and the toggle action. The
