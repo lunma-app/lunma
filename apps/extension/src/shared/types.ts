@@ -470,4 +470,17 @@ export interface SidebarLocalState {
   collapsedSmartSectionsByWindow?: {
     [windowId: WindowId]: { [folderId: FolderId]: { [sourceKey: string]: boolean } };
   };
+  /**
+   * Per-window per-section "reveal recently read" peek for feed sections
+   * (collapsible-smart-folder-sections). Keyed by `folderId` then by the
+   * section's `sourceKey`. Sidebar-local, per-window, NEVER persisted/broadcast
+   * — like the collapse state above, revealing one feed's read rows in this
+   * window is independent of every other feed and window. An ABSENT leaf means
+   * NOT revealed (the folder's drained `hideRead` default holds); `true` reveals
+   * that one section's read rows. Ephemeral by design (a peek): it resets on
+   * reload, leaving the folder back at its resting drained state.
+   */
+  revealedReadSmartSectionsByWindow?: {
+    [windowId: WindowId]: { [folderId: FolderId]: { [sourceKey: string]: boolean } };
+  };
 }

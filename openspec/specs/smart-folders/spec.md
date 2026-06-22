@@ -908,11 +908,15 @@ open next → consume → …, emptying the whole section). `nextUnreadFeedItemA
 therefore SHALL return nothing when the closing item is already read.
 
 The feed's resting state SHALL be **drained** — read rows hidden (the node's
-`hideRead` defaults `true`). The sidebar SHALL expose, on a feed folder: a
-**"Show recently read"** peek toggled via
-`setSmartFolderHideRead { spaceId, folderId, hideRead }` (persisted; `hideRead:
-false` reveals read rows in place), and a **"Mark all read"** action via
-`markAllSmartItemsRead { spaceId, folderId }` (drains the whole folder). The
+`hideRead` defaults `true`, the persisted folder-level resting preference). The
+**"Show recently read"** peek SHALL be **per resolved feed section** and
+**sidebar-local, per-window** (`setSmartSectionRevealRead`, keyed by
+`windowId → folderId → sourceKey`, never persisted/broadcast — mirroring the
+per-section collapse state): revealing one feed's read rows in one window leaves
+every other feed and window drained, and the peek resets on reload. The folder's
+`hideRead` default still governs a section unless this window has revealed it.
+The sidebar SHALL also expose a folder-level **"Mark all read"** action via
+`markAllSmartItemsRead { spaceId, folderId }` (drains the whole folder); the
 `markSmartItemRead { folderId, itemId }` command also exists for an explicit
 single mark. Read-state behaviour SHALL apply to **feed sources only**; queue
 items carry no read-state.
@@ -937,12 +941,12 @@ items carry no read-state.
 - **WHEN** `onTabRemoved` fires for that already-read tab
 - **THEN** `nextUnreadFeedItemAfterClose` returns nothing and no next item is opened — so consuming one item never cascades into draining the section
 
-#### Scenario: The resting state is drained; "Show recently read" reveals
+#### Scenario: The resting state is drained; per-section "Show recently read" reveals only that feed
 
-- **GIVEN** a feed folder with read and unread items (`hideRead: true`, the default)
-- **THEN** only the unread rows render (the read rows are collapsed)
-- **WHEN** the user selects "Show recently read"
-- **THEN** `setSmartFolderHideRead` persists `hideRead: false` and the read rows are revealed in place
+- **GIVEN** a folder with two feed sections, each holding read and unread items (`hideRead: true`, the default)
+- **THEN** only the unread rows of each section render (the read rows are collapsed)
+- **WHEN** the user selects "Show recently read" on the FIRST section
+- **THEN** `setSmartSectionRevealRead` records the reveal for that window + folder + section key, the first section's read rows are revealed in place, and the second section stays drained
 
 #### Scenario: Mark all read empties the unread count
 
