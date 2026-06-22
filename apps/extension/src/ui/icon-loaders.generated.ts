@@ -179,6 +179,7 @@ export const iconLoaders: Record<string, IconLoader> = {
   goal: () => import('@lucide/svelte/icons/goal'),
   'graduation-cap': () => import('@lucide/svelte/icons/graduation-cap'),
   grape: () => import('@lucide/svelte/icons/grape'),
+  'grip-vertical': () => import('@lucide/svelte/icons/grip-vertical'),
   guitar: () => import('@lucide/svelte/icons/guitar'),
   hamburger: () => import('@lucide/svelte/icons/hamburger'),
   hammer: () => import('@lucide/svelte/icons/hammer'),

@@ -290,16 +290,18 @@ function changeCardSource(index: number, next: string): void {
   opmlImportNote = null;
 }
 
-// Per-card expand state: a card is editable (expanded) when it is the sole card,
+// Per-card expand state. A card is editable (expanded) when it is the sole card,
 // when it is incomplete (so it can always be fixed), or when the user opened it.
-// Collapsible cards default to a scannable summary row (OPML-imported feeds, the
-// non-active cards) until clicked.
+// Adding a card opens the new one and lets the others collapse to header-only;
+// OPML-imported feeds land collapsed. The body toggles beneath a header that is
+// the same in both states.
 let userExpanded = $state<Set<string>>(new Set());
 
 function isExpanded(s: DraftSource): boolean {
   return sources.length === 1 || cardIncomplete(s) || userExpanded.has(s.id);
 }
-function collapsible(s: DraftSource): boolean {
+/** A card can be collapsed only when it isn't the sole card and is complete. */
+function canCollapse(s: DraftSource): boolean {
   return sources.length > 1 && !cardIncomplete(s);
 }
 function toggleExpand(id: string): void {
@@ -308,12 +310,15 @@ function toggleExpand(id: string): void {
   else next.add(id);
   userExpanded = next;
 }
-function cardHost(s: DraftSource): string {
+/** The header's identity label: the host, else a friendly placeholder. */
+function identity(s: DraftSource): string {
   try {
     return new URL(s.baseUrl).host;
   } catch {
-    return s.baseUrl.trim() || '—';
+    /* fall through */
   }
+  if (s.source === 'opml') return 'OPML file';
+  return s.baseUrl.trim() || 'New source';
 }
 function filterSummary(s: DraftSource): string {
   if (s.source === 'rss' || s.source === 'opml') return '';
@@ -321,6 +326,51 @@ function filterSummary(s: DraftSource): string {
     .filter((o) => s.queries.includes(o.value))
     .map((o) => o.label)
     .join(', ');
+}
+
+// Reorder: pointer drag-and-drop on the grip handle, plus Arrow-key reorder when
+// the handle is focused (the keyed {#each} moves the same node, so focus follows).
+let dragIndex = $state<number | null>(null);
+let overIndex = $state<number | null>(null);
+
+function reorder(from: number, to: number): void {
+  if (from === to || from < 0 || to < 0 || from >= sources.length || to >= sources.length) return;
+  const next = [...sources];
+  const [moved] = next.splice(from, 1);
+  if (moved) next.splice(to, 0, moved);
+  sources = next;
+}
+function onDragStart(e: DragEvent, i: number): void {
+  dragIndex = i;
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(i));
+  }
+}
+function onDragOver(e: DragEvent, i: number): void {
+  if (dragIndex === null) return;
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+  overIndex = i;
+}
+function onDrop(e: DragEvent, i: number): void {
+  e.preventDefault();
+  if (dragIndex !== null) reorder(dragIndex, i);
+  dragIndex = null;
+  overIndex = null;
+}
+function onDragEnd(): void {
+  dragIndex = null;
+  overIndex = null;
+}
+function onGripKeydown(e: KeyboardEvent, i: number): void {
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    moveSource(i, -1);
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    moveSource(i, 1);
+  }
 }
 
 function addSourceCard(): void {
@@ -463,110 +513,120 @@ function confirm(): void {
     <span class="field-label">Sources</span>
     <div class="source-list" data-testid="smart-source-list">
       {#each sources as s, i (s.id)}
-        {@const isFirst = i === 0}
-        {@const isLast = i === sources.length - 1}
         {@const expanded = isExpanded(s)}
-        {#snippet rowActions()}
-          <div class="source-actions">
-            <button type="button" class="icon-action" disabled={isFirst} aria-label="Move up" onclick={() => moveSource(i, -1)}>↑</button>
-            <button type="button" class="icon-action" disabled={isLast} aria-label="Move down" onclick={() => moveSource(i, 1)}>↓</button>
-            {#if sources.length > 1}
-              <button type="button" class="icon-action remove" aria-label="Remove source" onclick={() => removeSource(i)} data-testid="smart-source-remove">×</button>
-            {/if}
-          </div>
-        {/snippet}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
           class="source-card"
           data-testid="smart-source-entry"
-          class:invalid={cardIncomplete(s) && s.source !== 'opml'}
+          class:expanded
           class:collapsed={!expanded}
+          class:invalid={cardIncomplete(s) && s.source !== 'opml'}
+          class:dragging={dragIndex === i}
+          class:drag-over={overIndex === i && dragIndex !== null && dragIndex !== i}
+          ondragover={(e) => onDragOver(e, i)}
+          ondrop={(e) => onDrop(e, i)}
         >
-          {#if !expanded}
-            <div class="source-summary-row">
+          <!-- Persistent header — identical collapsed or expanded; only the body
+               below it toggles. -->
+          <div class="card-header">
+            <button
+              type="button"
+              class="header-toggle"
+              aria-expanded={expanded}
+              aria-label={expanded ? 'Collapse source' : 'Expand source'}
+              disabled={!canCollapse(s)}
+              onclick={() => toggleExpand(s.id)}
+            >
+              <span class="disclosure-chevron"><Icon name="chevron-right" size={14} /></span>
+              <span class="source-glyph"><Icon name={SOURCE_GLYPH[s.source]} size={16} /></span>
+              <span class="source-identity">{identity(s)}</span>
+              {#if !expanded && filterSummary(s)}
+                <span class="identity-filters">{filterSummary(s)}</span>
+              {/if}
+            </button>
+            <button
+              type="button"
+              class="icon-action grip"
+              draggable="true"
+              aria-label="Reorder source (drag, or use arrow keys)"
+              ondragstart={(e) => onDragStart(e, i)}
+              ondragend={onDragEnd}
+              onkeydown={(e) => onGripKeydown(e, i)}
+              data-testid="smart-source-grip"
+            >
+              <Icon name="grip-vertical" size={14} />
+            </button>
+            {#if sources.length > 1}
               <button
                 type="button"
-                class="source-summary"
-                aria-expanded="false"
-                onclick={() => toggleExpand(s.id)}
-                data-testid="smart-source-summary"
+                class="icon-action remove"
+                aria-label="Remove source"
+                onclick={() => removeSource(i)}
+                data-testid="smart-source-remove"
               >
-                <span class="summary-glyph"><Icon name={SOURCE_GLYPH[s.source]} size={16} /></span>
-                <span class="summary-host">{cardHost(s)}</span>
-                {#if filterSummary(s)}
-                  <span class="summary-filters">{filterSummary(s)}</span>
-                {/if}
-                <span class="summary-chevron" aria-hidden="true"><Icon name="chevron-right" size={14} /></span>
-              </button>
-              {@render rowActions()}
-            </div>
-          {:else}
-          <div class="source-card-head">
-            {#if collapsible(s)}
-              <button
-                type="button"
-                class="disclosure expanded"
-                aria-label="Collapse source"
-                aria-expanded="true"
-                onclick={() => toggleExpand(s.id)}
-              >
-                <Icon name="chevron-right" size={14} />
+                <Icon name="x" size={14} />
               </button>
             {/if}
-            <Select
-              options={SOURCE_OPTIONS}
-              value={s.source}
-              onchange={(v) => changeCardSource(i, v)}
-              ariaLabel="Source type"
-              testid="smart-source-type"
-            />
-            {@render rowActions()}
           </div>
 
-          {#if s.source === 'opml'}
-            <label class="file-field">
-              <span class="field-label">File</span>
-              <span class="file-pick" class:has-file={!!s.file}>
-                <svg class="file-icon" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                  <path d="M2 1.5h5l3 3V10.5a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5v-9A.5.5 0 0 1 2 1.5Z" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
-                  <path d="M7 1.5V5h3" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
-                </svg>
-                <span class="file-name">{s.file ? s.file.name : 'No file chosen'}</span>
-                <span class="file-sep" aria-hidden="true"></span>
-                <span class="file-btn">Browse</span>
-                <input
-                  type="file"
-                  accept=".opml,.xml"
-                  class="sr-only"
-                  onchange={(e) => {
-                    const f = (e.currentTarget as HTMLInputElement).files?.[0] ?? null;
-                    (e.currentTarget as HTMLInputElement).value = '';
-                    s.file = f;
-                    if (f) void pickOpml(i, f);
-                  }}
-                  data-testid="smart-opml-file-input"
+          {#if expanded}
+            <div class="card-body">
+              <div class="field">
+                <span class="field-label">Source</span>
+                <Select
+                  options={SOURCE_OPTIONS}
+                  value={s.source}
+                  onchange={(v) => changeCardSource(i, v)}
+                  ariaLabel="Source type"
+                  testid="smart-source-type"
                 />
-              </span>
-            </label>
-          {:else}
-            <TextInput
-              label={s.source === 'rss' ? 'Feed URL' : 'Instance URL'}
-              bind:value={s.baseUrl}
-              placeholder={s.source === 'rss' ? 'https://example.com/feed.xml' : DEFAULT_BASE_URL[s.source]}
-              testid="smart-source-url"
-            />
-            {#if s.source !== 'rss'}
-              <div class="filter-pills" role="group" aria-label="Filters">
-                {#each queryOptionsFor(s.source) as opt (opt.value)}
-                  <Chip
-                    label={opt.label}
-                    selected={s.queries.includes(opt.value)}
-                    onToggle={() => toggleQuery(i, opt.value)}
-                    testid="smart-filter-pill"
-                  />
-                {/each}
               </div>
-            {/if}
-          {/if}
+              {#if s.source === 'opml'}
+                <label class="file-field">
+                  <span class="field-label">File</span>
+                  <span class="file-pick" class:has-file={!!s.file}>
+                    <svg class="file-icon" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                      <path d="M2 1.5h5l3 3V10.5a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5v-9A.5.5 0 0 1 2 1.5Z" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+                      <path d="M7 1.5V5h3" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+                    </svg>
+                    <span class="file-name">{s.file ? s.file.name : 'No file chosen'}</span>
+                    <span class="file-sep" aria-hidden="true"></span>
+                    <span class="file-btn">Browse</span>
+                    <input
+                      type="file"
+                      accept=".opml,.xml"
+                      class="sr-only"
+                      onchange={(e) => {
+                        const f = (e.currentTarget as HTMLInputElement).files?.[0] ?? null;
+                        (e.currentTarget as HTMLInputElement).value = '';
+                        s.file = f;
+                        if (f) void pickOpml(i, f);
+                      }}
+                      data-testid="smart-opml-file-input"
+                    />
+                  </span>
+                </label>
+              {:else}
+                <TextInput
+                  label={s.source === 'rss' ? 'Feed URL' : 'Instance URL'}
+                  bind:value={s.baseUrl}
+                  placeholder={s.source === 'rss' ? 'https://example.com/feed.xml' : DEFAULT_BASE_URL[s.source]}
+                  testid="smart-source-url"
+                />
+                {#if s.source !== 'rss'}
+                  <div class="filter-pills" role="group" aria-label="Filters">
+                    {#each queryOptionsFor(s.source) as opt (opt.value)}
+                      <Chip
+                        label={opt.label}
+                        selected={s.queries.includes(opt.value)}
+                        onToggle={() => toggleQuery(i, opt.value)}
+                        testid="smart-filter-pill"
+                      />
+                    {/each}
+                  </div>
+                {/if}
+              {/if}
+            </div>
           {/if}
         </div>
       {/each}
@@ -663,13 +723,13 @@ function confirm(): void {
     padding-right: var(--space-1);
   }
 
-  /* Collapsed summary row — a scannable one-line digest; click to expand+edit. */
-  .source-summary-row {
+  /* Persistent header — identical collapsed or expanded; only the body toggles. */
+  .card-header {
     display: flex;
     align-items: center;
-    gap: var(--space-1);
+    gap: var(--space-2);
   }
-  .source-summary {
+  .header-toggle {
     flex: 1;
     min-width: 0;
     display: flex;
@@ -683,21 +743,36 @@ function confirm(): void {
     padding: 2px 0;
     color: var(--text);
   }
-  .summary-glyph {
+  .header-toggle:disabled {
+    cursor: default;
+  }
+  .disclosure-chevron {
+    flex-shrink: 0;
+    display: inline-flex;
+    color: var(--text-dim);
+    transition: transform var(--motion-fast) var(--ease-standard);
+  }
+  .header-toggle[aria-expanded='true'] .disclosure-chevron {
+    transform: rotate(90deg);
+  }
+  .header-toggle:disabled .disclosure-chevron {
+    opacity: 0.35;
+  }
+  .source-glyph {
     flex-shrink: 0;
     display: inline-flex;
     color: var(--text-dim);
   }
-  .summary-host {
-    flex-shrink: 0;
-    max-width: 55%;
+  .source-identity {
+    flex-shrink: 1;
+    min-width: 0;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
     font: var(--weight-medium) var(--text-sm) / 1 var(--font-sans);
   }
-  .summary-filters {
-    flex: 1;
+  .identity-filters {
+    flex-shrink: 1;
     min-width: 0;
     overflow: hidden;
     white-space: nowrap;
@@ -705,31 +780,19 @@ function confirm(): void {
     font: var(--weight-regular) var(--text-xs) / 1 var(--font-sans);
     color: var(--text-dim);
   }
-  .summary-chevron {
-    flex-shrink: 0;
-    display: inline-flex;
-    color: var(--text-dim);
+
+  .card-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    animation: source-card-in var(--motion-base) var(--ease-emphasised);
   }
 
-  /* Disclosure caret in an expanded card's head (collapse back to summary). */
-  .disclosure {
-    flex-shrink: 0;
-    appearance: none;
-    border: 0;
-    background: transparent;
-    color: var(--text-dim);
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    padding: 2px;
-    border-radius: var(--r-sm);
-    transition: transform var(--motion-fast) var(--ease-standard);
+  .grip {
+    cursor: grab;
   }
-  .disclosure:hover {
-    color: var(--text);
-  }
-  .disclosure.expanded {
-    transform: rotate(90deg);
+  .grip:active {
+    cursor: grabbing;
   }
 
   /* Expanded = a clearly-bordered box so the Select + URL + filters read as one
@@ -744,14 +807,14 @@ function confirm(): void {
     border-radius: var(--r-md);
     transition:
       border-color var(--motion-fast) var(--ease-standard),
-      background var(--motion-fast) var(--ease-standard);
-    animation: source-card-in var(--motion-base) var(--ease-emphasised);
+      background var(--motion-fast) var(--ease-standard),
+      opacity var(--motion-fast) var(--ease-standard);
   }
+  /* Collapsed differs ONLY in fill — same padding + border width as expanded so
+   * the header never shifts position when a card opens/closes (no relayout). */
   .source-card.collapsed {
-    padding: var(--space-1) var(--space-2);
     background: transparent;
     border-color: transparent;
-    animation: none;
   }
   .source-card.collapsed:hover {
     background: var(--surface-2);
@@ -759,6 +822,14 @@ function confirm(): void {
   }
   .source-card.invalid {
     border-color: color-mix(in oklch, var(--danger) 45%, transparent);
+  }
+  /* Reorder feedback: the dragged card dims; the card under the pointer shows an
+   * insertion line at its top edge. */
+  .source-card.dragging {
+    opacity: 0.45;
+  }
+  .source-card.drag-over {
+    box-shadow: inset 0 2px 0 0 var(--space-c);
   }
 
   /* The body grows in beneath the head when a card expands, so the open box
@@ -772,23 +843,6 @@ function confirm(): void {
       opacity: 1;
       transform: translateY(0);
     }
-  }
-
-  .source-card-head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .source-card-head :global(.select) {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .source-actions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    flex-shrink: 0;
   }
 
   .filter-pills {
@@ -920,10 +974,10 @@ function confirm(): void {
     .source-card,
     .icon-action,
     .file-pick,
-    .disclosure {
+    .disclosure-chevron {
       transition: none;
     }
-    .source-card {
+    .card-body {
       animation: none;
     }
   }

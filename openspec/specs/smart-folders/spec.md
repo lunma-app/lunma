@@ -798,24 +798,32 @@ The **Sources list SHALL be height-bounded and scroll independently**
 reachable regardless of how many sources the list holds (e.g. after an OPML
 import of many feeds). The list SHALL never push the action out of the panel.
 
-Each **source card** SHALL show the source `Select`, the per-source URL field
-(labelled "Feed URL" for rss, "Instance URL" for a queue source), and — for a
-queue source — a **filter multi-select** (selectable chips for authored /
-assigned / review-requested, hidden for rss). A card SHALL carry a remove `×`
-control (hidden when only one card remains) and move up / move down controls for
-reordering (keyboard-reachable). Editing a card SHALL mutate the
-folder's `sources` directly (no intermediate Add step); the existing
-source-adaptive behaviour (URL label, filters hidden for rss, hint line, refresh
-default, name auto-suggest) applies per card. On create, the list SHALL seed one
-default card so a single-source folder is fill-and-create. An `+ Add source`
-ghost `Button` below the list SHALL append another card.
+Each **source card** SHALL present a **persistent header row** that is identical
+whether the card is collapsed or expanded: a disclosure chevron (rotated when
+expanded), the source glyph, the host identity (and, when collapsed, a queue
+filter summary), then the card's reorder + remove controls. When **expanded**, a
+**body** SHALL appear **beneath** that header carrying the source `Select` (which
+changes the card's type), the per-source URL field (labelled "Feed URL" for rss,
+"Instance URL" for a queue source), and — for a queue source — the **filter
+multi-select** (selectable chips for authored / assigned / review-requested,
+hidden for rss). The header never swaps shape between states; expanding reveals
+the body in place. Editing a card SHALL mutate the folder's `sources` directly
+(no intermediate Add step); the existing source-adaptive behaviour (URL label,
+filters hidden for rss, hint line, refresh default, name auto-suggest) applies
+per card. On create, the list SHALL seed one default card so a single-source
+folder is fill-and-create. An `+ Add source` ghost `Button` below the list SHALL
+append another card.
 
-A card SHALL be **collapsible to a summary row** (the source glyph + host + a
-queue filter summary) with its reorder/remove controls and a disclosure chevron;
-activating the summary expands the full editable card. A **sole** card and any
-**incomplete** card (invalid URL, queue with no filters, or an unresolved OPML
-card) SHALL always render **expanded** so the folder can always be completed or
-fixed; a **newly added** card SHALL open expanded; **OPML-imported** feed cards
+Cards SHALL be **reorderable**: each card carries a **grip handle** supporting
+pointer **drag-and-drop** (with a drop indicator) AND keyboard reorder (focus the
+handle, **Arrow Up / Arrow Down** move the card) — there are no separate move
+up/down buttons. A card SHALL carry a remove `×` control hidden when only one
+card remains.
+
+A card SHALL be **collapsible to its header row alone** via the disclosure
+chevron; an **incomplete** card (invalid URL, queue with no filters, or an
+unresolved OPML card) SHALL NOT be collapsible (it stays expanded so it can be
+fixed); a **newly added** card SHALL open expanded; **OPML-imported** feed cards
 SHALL land **collapsed**.
 
 **OPML** SHALL be a selectable source type on a card: choosing it shows a file
@@ -832,6 +840,18 @@ with no file chosen). A `baseUrl`, `source`, or `queries` change on an existing
 folder's card triggers an immediate refetch of the affected sections only
 (`updateSmartFolder` carries the full new `sources[]`; the engine diffs resolved
 sections to find added/removed/changed ones).
+
+#### Scenario: The card header is identical collapsed and expanded
+
+- **GIVEN** a source card
+- **THEN** its header row (disclosure chevron + source glyph + host identity + controls) is present whether collapsed or expanded
+- **AND** expanding reveals the body (Source select + URL + filters) beneath that same header — the header is not replaced by the Source select
+
+#### Scenario: Reordering by grip — drag or arrow keys
+
+- **GIVEN** a folder with two or more source cards
+- **WHEN** the user drags a card's grip handle onto another position (or focuses the grip and presses Arrow Up / Arrow Down)
+- **THEN** the card moves to the new position in `sources` and keyboard focus stays on the moved card's grip
 
 #### Scenario: Creating a multi-filter folder from the header menu
 
@@ -852,14 +872,14 @@ sections to find added/removed/changed ones).
 #### Scenario: Imported feed cards land collapsed; a card expands on demand
 
 - **WHEN** an OPML import expands into several feed cards
-- **THEN** those cards render as collapsed summary rows (source + host)
-- **AND WHEN** the user activates one summary
-- **THEN** it expands into the full editable card
+- **THEN** those cards render collapsed (header row only)
+- **AND WHEN** the user activates one card's disclosure chevron
+- **THEN** its body expands beneath the header
 
-#### Scenario: An incomplete card always renders expanded
+#### Scenario: An incomplete card cannot be collapsed
 
 - **GIVEN** a card that is incomplete (e.g. a queue card with no filters, or an invalid URL)
-- **THEN** it renders expanded (never collapsed), so it can be fixed, and the primary action is disabled
+- **THEN** it stays expanded (its disclosure chevron is disabled) so it can be fixed, and the primary action is disabled
 
 #### Scenario: Confirming a queue card with no filters is blocked
 
