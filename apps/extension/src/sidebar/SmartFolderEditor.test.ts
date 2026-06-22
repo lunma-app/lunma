@@ -609,14 +609,12 @@ describe('SmartFolderEditor — multi-filter / multi-source', () => {
     await tick();
 
     // Two unique feeds (the duplicate host is dropped); the importer card is
-    // gone and the feeds land COLLAPSED as scannable summary rows.
+    // gone and the feeds land COLLAPSED — header identity only, no body.
     expect(cards(container)).toHaveLength(2);
-    const summaries = [
-      ...container.querySelectorAll('[data-testid="smart-source-summary"]'),
-    ] as HTMLElement[];
-    expect(summaries).toHaveLength(2);
-    expect(summaries[0]?.textContent).toContain('a.example.com');
-    expect(summaries[1]?.textContent).toContain('b.example.com');
+    expect(card(container, 0).querySelector('[data-testid="smart-source-type"]')).toBeNull();
+    expect(card(container, 1).querySelector('[data-testid="smart-source-type"]')).toBeNull();
+    expect(card(container, 0).querySelector('.source-identity')?.textContent).toBe('a.example.com');
+    expect(card(container, 1).querySelector('.source-identity')?.textContent).toBe('b.example.com');
     expect(container.querySelector('[data-testid="smart-folder-hint"]')?.textContent).toContain(
       'fetches independently',
     );
@@ -624,32 +622,57 @@ describe('SmartFolderEditor — multi-filter / multi-source', () => {
     expect(nameInput(container).value).toBe('Feeds');
   });
 
-  test('cards collapse to summaries; sole/new/incomplete stay expanded; click expands', async () => {
+  test('the header (glyph + host) shows in both states; body toggles beneath it', async () => {
     const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
     await tick();
-    // Sole card: expanded (editable Select present, no summary).
-    expect(card(container).querySelector('[data-testid="smart-source-type"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="smart-source-summary"]')).toBeNull();
+    const c0 = () => card(container, 0);
+    // Seeded card: expanded → header identity + body Select both present.
+    expect(c0().querySelector('.source-identity')?.textContent).toBe('gitlab.com');
+    expect(c0().querySelector('[data-testid="smart-source-type"]')).not.toBeNull();
 
-    // Add a second card → it opens expanded; the first (valid) card collapses.
+    // Add a second card → it opens expanded; the first (valid) card collapses to
+    // header-only (identity stays; body Select gone).
     await fireEvent.click(addSourceBtn(container));
     await tick();
     expect(cards(container)).toHaveLength(2);
-    expect(card(container, 0).querySelector('[data-testid="smart-source-summary"]')).not.toBeNull();
+    expect(c0().querySelector('.source-identity')?.textContent).toBe('gitlab.com');
+    expect(c0().querySelector('[data-testid="smart-source-type"]')).toBeNull();
     expect(card(container, 1).querySelector('[data-testid="smart-source-type"]')).not.toBeNull();
 
-    // Clicking the first card's summary expands it back to the editable form.
-    await fireEvent.click(
-      card(container, 0).querySelector('[data-testid="smart-source-summary"]') as HTMLButtonElement,
-    );
+    // Clicking the first card's header re-expands its body.
+    await fireEvent.click(c0().querySelector('.header-toggle') as HTMLButtonElement);
     await tick();
-    expect(card(container, 0).querySelector('[data-testid="smart-source-type"]')).not.toBeNull();
+    expect(c0().querySelector('[data-testid="smart-source-type"]')).not.toBeNull();
 
-    // Make the second card incomplete (untick its only filter) → it can't collapse.
+    // An incomplete card can't be collapsed (its header toggle is disabled).
     await setCardFilters(card(container, 1), 'gitlab', []);
     await tick();
     expect(confirmBtn(container).disabled).toBe(true);
+    expect((card(container, 1).querySelector('.header-toggle') as HTMLButtonElement).disabled).toBe(
+      true,
+    );
     expect(card(container, 1).querySelector('[data-testid="smart-source-type"]')).not.toBeNull();
+  });
+
+  test('Arrow keys on the grip reorder the cards', async () => {
+    const { container } = render(SmartFolderEditorHarness, { props: { spaceId: 'work' } });
+    await setCardUrl(card(container, 0), 'https://a.example.com');
+    await fireEvent.click(addSourceBtn(container));
+    await tick();
+    await setCardUrl(card(container, 1), 'https://b.example.com');
+    await tick();
+    const identityAt = (i: number) =>
+      card(container, i).querySelector('.source-identity')?.textContent;
+    expect(identityAt(0)).toBe('a.example.com');
+    expect(identityAt(1)).toBe('b.example.com');
+    // Focus the second card's grip and press Arrow Up → it moves to the top.
+    const grip = card(container, 1).querySelector(
+      '[data-testid="smart-source-grip"]',
+    ) as HTMLElement;
+    await fireEvent.keyDown(grip, { key: 'ArrowUp' });
+    await tick();
+    expect(identityAt(0)).toBe('b.example.com');
+    expect(identityAt(1)).toBe('a.example.com');
   });
 });
 
