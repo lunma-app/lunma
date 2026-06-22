@@ -119,14 +119,24 @@ const {
     appearance: none;
     border: 0;
     cursor: pointer;
+    /* Symmetric padding (no trailing remove button on a toggle pill). */
+    padding: 0 var(--space-2);
+    /* Unselected = an outlined ghost so selected (filled) reads as clearly
+     * distinct, not a second shade of the same fill. The ring is an inset
+     * box-shadow so toggling never changes the chip's box size. */
+    background: transparent;
+    color: var(--text-muted);
+    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--text-faint) 28%, transparent);
     transition:
       background var(--motion-fast) var(--ease-standard),
+      box-shadow var(--motion-fast) var(--ease-standard),
       color var(--motion-fast) var(--ease-standard),
       opacity var(--motion-fast) var(--ease-standard),
       transform var(--motion-fast) var(--ease-standard);
   }
   .chip-toggle:hover:not(:disabled) {
-    background: var(--surface-3);
+    background: var(--surface-2);
+    color: var(--text);
   }
   .chip-toggle:active:not(:disabled) {
     transform: scale(var(--press-scale));
@@ -142,6 +152,7 @@ const {
   .chip-toggle.selected {
     background: var(--space-c-soft);
     color: var(--text);
+    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--space-c) 45%, transparent);
   }
   .chip-toggle.selected:hover:not(:disabled) {
     background: oklch(from var(--space-c-soft) l c h / 0.85);
@@ -152,7 +163,9 @@ const {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: var(--text);
+    /* The check is only rendered when selected — tint it the Space accent so the
+     * selected state reads at a glance. */
+    color: var(--space-c);
   }
 
   .chip-icon {
