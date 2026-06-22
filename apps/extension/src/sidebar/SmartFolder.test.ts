@@ -2,7 +2,13 @@ import { cleanup, fireEvent, render } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { LunmaStore } from '../shared/store.svelte';
-import type { PinNode, SmartFolderItem, SmartSectionRuntime } from '../shared/types';
+import type {
+  AppState,
+  PinNode,
+  SidebarLocalState,
+  SmartFolderItem,
+  SmartSectionRuntime,
+} from '../shared/types';
 import SmartFolderHarness from './SmartFolder.test.harness.svelte';
 
 type SmartNode = Extract<PinNode, { kind: 'smart' }>;
@@ -922,21 +928,34 @@ describe('SmartFolder — the reading nook (rss-connector)', () => {
     ).toContain('Show 1 read');
   });
 
-  test('the footer hide/show toggle dispatches setSmartFolderHideRead', async () => {
-    const node = feedNode();
+  test('the footer toggle reveals THIS section in place (sidebar-local, no folder-wide dispatch)', async () => {
+    const node = feedNode({ hideRead: true });
     const store = makeFeedStore(node, { state: 'ok', items: [post(1), post(2)], fetchedAt: 1 }, [
       'rss:news.ycombinator.com:post-2',
     ]);
     const { container } = renderSmart(store, { node });
+    const readWrap = () =>
+      [...container.querySelectorAll('[data-testid="smart-row-wrap"]')].find(
+        (w) => w.getAttribute('data-read') === 'true',
+      );
+    // Drained: the read row is collapsed; the footer offers the peek.
+    expect(readWrap()?.classList).toContain('collapsed');
     const footer = container.querySelector('[data-testid="smart-reading-controls"]') as HTMLElement;
-    const hideBtn = [...footer.querySelectorAll('button')].find((b) =>
-      /Hide \d+ read/.test(b.textContent ?? ''),
+    const showBtn = [...footer.querySelectorAll('button')].find((b) =>
+      /Show \d+ read/.test(b.textContent ?? ''),
     ) as HTMLButtonElement;
-    await fireEvent.click(hideBtn);
-    expect(sendMock).toHaveBeenCalledWith({
-      kind: 'setSmartFolderHideRead',
-      payload: { spaceId: 'work', folderId: 'feed-1', hideRead: true },
-    });
+    await fireEvent.click(showBtn);
+    // Revealed in place — no folder-wide command dispatched; the override is
+    // sidebar-local, per-window, per-section.
+    expect(readWrap()?.classList).not.toContain('collapsed');
+    expect(sendMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'setSmartFolderHideRead' }),
+    );
+    expect(
+      (store.state as AppState & SidebarLocalState).revealedReadSmartSectionsByWindow?.[100]?.[
+        'feed-1'
+      ]?.['rss:news.ycombinator.com'],
+    ).toBe(true);
   });
 
   test('the footer is absent of a hide toggle when nothing is read, and Open all dispatches the listing', async () => {
@@ -1027,10 +1046,15 @@ describe('SmartFolder — the draining queue (rss-connector, maxItems = unread b
       /Show \d+ read/.test(b.textContent ?? ''),
     ) as HTMLButtonElement;
     await fireEvent.click(showBtn);
-    expect(sendMock).toHaveBeenCalledWith({
-      kind: 'setSmartFolderHideRead',
-      payload: { spaceId: 'work', folderId: 'feed-1', hideRead: false },
-    });
+    // The read row reveals in place (no folder-wide dispatch); the footer flips
+    // to the "Hide" affordance.
+    expect(visibleLabels(container)).toContain('Post 3 — read');
+    expect(
+      container.querySelector('[data-testid="smart-reading-controls"]')?.textContent,
+    ).toContain('Hide 1 read');
+    expect(sendMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'setSmartFolderHideRead' }),
+    );
   });
 
   test('revealing read (hideRead OFF) un-collapses the read row inline', () => {
@@ -1077,6 +1101,39 @@ describe('SmartFolder — the draining queue (rss-connector, maxItems = unread b
     const { container } = renderSmart(store, { node });
     expect(visibleLabels(container)).toEqual(['Post 2 — unread', 'Post 1 — unread']);
     expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('2');
+  });
+
+  test('revealing one feed section leaves the others drained (per-window, per-section)', async () => {
+    const node = feedNode({
+      hideRead: true,
+      sources: [
+        { source: 'rss', baseUrl: 'https://a.example.com/feed', queries: [] },
+        { source: 'rss', baseUrl: 'https://b.example.com/feed', queries: [] },
+      ],
+    });
+    const store = new LunmaStore();
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.pinnedBySpace.work = [node];
+    store.state.smartFolders['feed-1'] = {
+      sections: {
+        'rss:a.example.com': { state: 'ok', items: [post(1), post(2)], fetchedAt: 1 },
+        'rss:b.example.com': { state: 'ok', items: [post(1), post(2)], fetchedAt: 1 },
+      },
+    };
+    store.state.smartReadState['feed-1'] = ['rss:a.example.com:post-2', 'rss:b.example.com:post-2'];
+    const { container } = renderSmart(store, { node });
+    // Both sections drained → each footer offers its own "Show 1 read".
+    const showButtons = [...container.querySelectorAll('[data-testid="smart-reading-controls"]')]
+      .flatMap((f) => [...f.querySelectorAll('button')])
+      .filter((b) => /Show \d+ read/.test(b.textContent ?? ''));
+    expect(showButtons).toHaveLength(2);
+
+    await fireEvent.click(showButtons[0] as HTMLButtonElement);
+    // Only section A is revealed; B stays drained.
+    const revealed = (store.state as AppState & SidebarLocalState)
+      .revealedReadSmartSectionsByWindow?.[100]?.['feed-1'];
+    expect(revealed?.['rss:a.example.com']).toBe(true);
+    expect(revealed?.['rss:b.example.com'] ?? false).toBe(false);
   });
 });
 

@@ -1270,6 +1270,35 @@ export class LunmaStore {
   }
 
   /**
+   * Sidebar-local, per-window per-section "reveal recently read" peek for feed
+   * sections (collapsible-smart-folder-sections). Mirrors
+   * {@link setSmartSectionCollapsed}: augmented onto `state`, NOT part of
+   * `AppState`, never persisted/broadcast — revealing one feed's read rows in
+   * this window is independent of every other feed and window. An absent leaf
+   * means NOT revealed (the folder's drained `hideRead` default holds);
+   * `revealed === true` reveals that one section's read rows for this window.
+   */
+  setSmartSectionRevealRead(
+    windowId: WindowId,
+    folderId: FolderId,
+    sourceKey: string,
+    revealed: boolean,
+  ): void {
+    const augmented = this.state as AppState & SidebarLocalState;
+    if (!augmented.revealedReadSmartSectionsByWindow) {
+      augmented.revealedReadSmartSectionsByWindow = {};
+    }
+    if (!augmented.revealedReadSmartSectionsByWindow[windowId]) {
+      augmented.revealedReadSmartSectionsByWindow[windowId] = {};
+    }
+    const forWindow = augmented.revealedReadSmartSectionsByWindow[windowId];
+    if (!forWindow) return;
+    if (!forWindow[folderId]) forWindow[folderId] = {};
+    const forFolder = forWindow[folderId];
+    if (forFolder) forFolder[sourceKey] = revealed;
+  }
+
+  /**
    * Sidebar-local, per-window one-shot "open inline rename on the next
    * newly-created folder" flag (pin-temp-tab-into-folder). Armed when two tabs
    * are folded into a NEW folder — a temporary tab dropped onto a pinned tab,

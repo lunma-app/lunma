@@ -84,6 +84,21 @@ function isSectionCollapsed(folderId: string, sk: string): boolean {
   return augmented.collapsedSmartSectionsByWindow?.[windowId]?.[folderId]?.[sk] ?? false;
 }
 
+// Per-section "reveal recently read" peek — sidebar-local, per-window (same
+// structural cast + absent ⇒ not revealed). The folder's `hideRead` is the
+// drained resting default; revealing one feed's read rows here overrides it for
+// THAT section only, so the peek never spills across feeds or windows.
+function isSectionReadRevealed(folderId: string, sk: string): boolean {
+  const augmented = store.state as AppState & SidebarLocalState;
+  return augmented.revealedReadSmartSectionsByWindow?.[windowId]?.[folderId]?.[sk] ?? false;
+}
+
+/** Effective hide-read for a feed section: the folder default, unless this
+ * window has revealed that section's read rows. */
+function sectionHidesRead(sk: string): boolean {
+  return node.hideRead && !isSectionReadRevealed(node.id, sk);
+}
+
 // Expand the per-instance sources[] over each instance's queries[] into per-
 // filter resolved sections (one section, no query, for an rss feed). The single
 // derivation the render, badge, and identity all key on (sources × queries order).
@@ -236,7 +251,7 @@ function sectionEmptyNote(
   // empty list when every item is read and hideRead is on.
   const sk = sourceKey(cfg);
   const visibleItems =
-    cfg.source === 'rss' && node.hideRead
+    cfg.source === 'rss' && sectionHidesRead(sk)
       ? renderItems.filter((i) => !readSet.has(`${sk}:${i.id}`))
       : renderItems;
   if (visibleItems.length > 0) return undefined;
@@ -289,11 +304,11 @@ function markAllRead(): void {
   dispatch({ kind: 'markAllSmartItemsRead', payload: { spaceId, folderId: node.id } });
 }
 
-function toggleHideRead(): void {
-  dispatch({
-    kind: 'setSmartFolderHideRead',
-    payload: { spaceId, folderId: node.id, hideRead: !node.hideRead },
-  });
+// Toggle THIS section's read-rows peek (sidebar-local, per-window) — never the
+// folder-wide `hideRead`, so revealing one feed's read rows leaves the others
+// drained.
+function toggleSectionRead(sk: string): void {
+  store.setSmartSectionRevealRead(windowId, node.id, sk, !isSectionReadRevealed(node.id, sk));
 }
 
 function refreshNow(): void {
@@ -485,7 +500,7 @@ export function onContextMenu(e: MouseEvent): void {
           {@const bound = boundTabIdFor(cfg, item) !== undefined}
           {@const active = isActiveItem(cfg, item)}
           {@const read = isSectionFeed && readSet.has(`${sourceKey(cfg)}:${item.id}`)}
-          {@const collapsed = isSectionFeed && node.hideRead && read}
+          {@const collapsed = isSectionFeed && sectionHidesRead(sourceKey(cfg)) && read}
           {@const itemFavSrc = isSectionFeed
             ? (() => { try { return faviconFor(new URL(item.url).origin); } catch { return faviconFor(cfg.baseUrl); } })()
             : faviconFor(cfg.baseUrl)}
@@ -576,14 +591,15 @@ export function onContextMenu(e: MouseEvent): void {
 
         {#if isSectionFeed}
           {@const readCount = renderItems.filter((i) => readSet.has(`${sourceKey(cfg)}:${i.id}`)).length}
+          {@const hidesRead = sectionHidesRead(sourceKey(cfg))}
           <div class="reading-controls" data-testid="smart-reading-controls">
             {#if readCount > 0}
               <Button
                 variant="ghost"
-                onclick={toggleHideRead}
-                title={node.hideRead ? 'Show recently read' : 'Hide read again'}
+                onclick={() => toggleSectionRead(sourceKey(cfg))}
+                title={hidesRead ? 'Show recently read' : 'Hide read again'}
               >
-                {node.hideRead ? `Show ${readCount} read` : `Hide ${readCount} read`}
+                {hidesRead ? `Show ${readCount} read` : `Hide ${readCount} read`}
               </Button>
             {/if}
             <span class="controls-spacer"></span>
