@@ -1062,6 +1062,22 @@ describe('SmartFolder — the draining queue (rss-connector, maxItems = unread b
     expect(container.querySelector('[data-testid="folder-row-badge"]')).toBeNull();
     expect(visibleLabels(container)).toEqual([]);
   });
+
+  test('unread that trail a run of read items still render (read-newest, fewer unread than budget)', () => {
+    // You read the newest three; two older items remain unread. With the budget
+    // (3) ≥ the 2 unread, slicing the first `maxItems` by position would show
+    // only the three read rows (all collapsed) and HIDE both unread — the badge
+    // would say 2 with nothing on screen. The window must span to the unread.
+    const node = feedNode({ maxItems: 3, hideRead: true });
+    const store = makeFeedStore(node, { state: 'ok', items: fiveUnread(), fetchedAt: 1 }, [
+      'rss:news.ycombinator.com:post-5',
+      'rss:news.ycombinator.com:post-4',
+      'rss:news.ycombinator.com:post-3',
+    ]);
+    const { container } = renderSmart(store, { node });
+    expect(visibleLabels(container)).toEqual(['Post 2 — unread', 'Post 1 — unread']);
+    expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('2');
+  });
 });
 
 describe('SmartFolder — empty-state parity (rss-connector)', () => {
