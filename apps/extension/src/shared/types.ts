@@ -238,6 +238,17 @@ export interface SmartFolderItem {
   title: string;
   url: string;
   status?: { tone: 'ok' | 'pending' | 'warn' | 'fail'; label: string } | undefined;
+  // Optional richer-content fields (smart-folder-page). Populated by connectors
+  // that have them — today the RSS connector (description, thumbnail, pubdate);
+  // queue connectors leave them absent. They ride the ephemeral runtime slice
+  // (never persisted → no schema migration), and the sidebar projection ignores
+  // them: only the full-page projection (`launcher/folderpage`) renders them.
+  /** Plain-text summary (HTML stripped, clamped) — the feed entry description. */
+  excerpt?: string | undefined;
+  /** Thumbnail/hero image URL (feed media/enclosure or first inline image). */
+  imageUrl?: string | undefined;
+  /** Publication time as epoch ms (RSS pubDate / Atom published|updated). */
+  publishedAt?: number | undefined;
 }
 
 /**

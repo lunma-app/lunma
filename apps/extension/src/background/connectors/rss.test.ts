@@ -142,6 +142,103 @@ describe('parseFeed', () => {
   });
 });
 
+// ── parseFeed: richer content (smart-folder-page) ────────────────────────────────
+
+describe('parseFeed rich content', () => {
+  test('RSS: description → plain-text excerpt, media:content → image, pubDate → publishedAt', () => {
+    const xml = `<?xml version="1.0"?>
+      <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+        <channel>
+          <item>
+            <title>Hello</title>
+            <link>https://news.example.com/a</link>
+            <description><![CDATA[<p>A <b>bold</b> summary &amp; more.</p>]]></description>
+            <media:content url="https://img.example.com/a.jpg" medium="image" />
+            <pubDate>Wed, 02 Oct 2024 13:00:00 GMT</pubDate>
+          </item>
+        </channel>
+      </rss>`;
+    const { items } = parseFeed(xml);
+    expect(items).toHaveLength(1);
+    const item = items[0];
+    expect(item?.excerpt).toBe('A bold summary & more.'); // tags stripped, entity decoded
+    expect(item?.imageUrl).toBe('https://img.example.com/a.jpg');
+    expect(item?.publishedAt).toBe(Date.parse('Wed, 02 Oct 2024 13:00:00 GMT'));
+  });
+
+  test('image falls back to the first inline <img> in the description', () => {
+    const xml = `<?xml version="1.0"?>
+      <rss version="2.0">
+        <channel>
+          <item>
+            <link>https://news.example.com/b</link>
+            <description><![CDATA[<img src="https://img.example.com/inline.png"> text]]></description>
+          </item>
+        </channel>
+      </rss>`;
+    const { items } = parseFeed(xml);
+    expect(items[0]?.imageUrl).toBe('https://img.example.com/inline.png');
+  });
+
+  test('enclosure image and media:thumbnail are recognized', () => {
+    const encl = parseFeed(`<rss><channel><item>
+      <link>https://news.example.com/c</link>
+      <enclosure url="https://img.example.com/c.jpg" type="image/jpeg" />
+    </item></channel></rss>`);
+    expect(encl.items[0]?.imageUrl).toBe('https://img.example.com/c.jpg');
+
+    const thumb = parseFeed(`<rss xmlns:media="http://search.yahoo.com/mrss/"><channel><item>
+      <link>https://news.example.com/d</link>
+      <media:thumbnail url="https://img.example.com/d.jpg" />
+    </item></channel></rss>`);
+    expect(thumb.items[0]?.imageUrl).toBe('https://img.example.com/d.jpg');
+  });
+
+  test('Atom: summary → excerpt, published → publishedAt', () => {
+    const xml = `<?xml version="1.0"?>
+      <feed xmlns="http://www.w3.org/2005/Atom">
+        <entry>
+          <title>Atom post</title>
+          <link rel="alternate" href="https://news.example.com/e" />
+          <id>urn:e</id>
+          <summary>Just a short summary.</summary>
+          <published>2024-10-02T13:00:00Z</published>
+        </entry>
+      </feed>`;
+    const { items } = parseFeed(xml);
+    expect(items[0]?.excerpt).toBe('Just a short summary.');
+    expect(items[0]?.publishedAt).toBe(Date.parse('2024-10-02T13:00:00Z'));
+  });
+
+  test('a plain item carries no rich fields (queue parity — keys omitted)', () => {
+    const { items } = parseFeed(
+      `<rss><channel><item><link>https://news.example.com/f</link></item></channel></rss>`,
+    );
+    expect(items[0]).toEqual({
+      id: 'https://news.example.com/f',
+      title: 'https://news.example.com/f',
+      url: 'https://news.example.com/f',
+    });
+  });
+
+  test('HTML entities in a CDATA title are decoded (numeric + named)', () => {
+    const xml = `<?xml version="1.0"?>
+      <rss version="2.0"><channel><item>
+        <title><![CDATA[Amflow&#8217;s e-bike &amp; the &#x201C;eSUV&#x201D; &mdash; ready]]></title>
+        <link>https://news.example.com/h</link>
+      </item></channel></rss>`;
+    const { items } = parseFeed(xml);
+    expect(items[0]?.title).toBe('Amflow’s e-bike & the “eSUV” — ready');
+  });
+
+  test('an unparseable date is omitted, not stored as NaN', () => {
+    const { items } = parseFeed(
+      `<rss><channel><item><link>https://news.example.com/g</link><pubDate>not a date</pubDate></item></channel></rss>`,
+    );
+    expect(items[0]?.publishedAt).toBeUndefined();
+  });
+});
+
 // ── fetchRuntime ─────────────────────────────────────────────────────────────────
 
 describe('fetchRuntime', () => {
