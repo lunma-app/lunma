@@ -34,3 +34,25 @@ export function isNewTabUrl(url: string | undefined): boolean {
   }
   return false;
 }
+
+/** The smart-folder full-page view (smart-folder-page). */
+export const FOLDERPAGE_PATH = 'src/launcher/folderpage/index.html';
+
+/**
+ * Is `url` a smart-folder page? Like a home tab, a folder-page tab is a
+ * Lunma-managed extension page — grouped with its Space but **never listed as a
+ * temporary tab** (the user summons it from the smart folder; it is not a
+ * browsing tab to accumulate). Matches the resolved extension URL plus its
+ * `?folderId=…` query (`startsWith` tolerates the query/hash); chrome.runtime
+ * unavailable (unit tests without a stub) degrades to a path-suffix check.
+ */
+export function isFolderPageUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  try {
+    const resolved = chrome?.runtime?.getURL?.(FOLDERPAGE_PATH);
+    if (resolved && url.startsWith(resolved)) return true;
+  } catch {
+    // chrome.runtime unavailable — fall through to the path check.
+  }
+  return url.split('?')[0]?.endsWith(FOLDERPAGE_PATH) ?? false;
+}
