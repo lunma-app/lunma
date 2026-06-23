@@ -85,6 +85,7 @@ export function smartFolderHandlers(
   | 'markAllSmartItemsRead'
   | 'setSmartFolderHideRead'
   | 'openSmartFolderListing'
+  | 'openSmartFolderPage'
   | 'importOpml'
   | 'smartFolders.result'
 > {
@@ -365,6 +366,49 @@ export function smartFolderHandlers(
         return;
       }
       await chrome.tabs.create({ url, windowId });
+    },
+    // Open-or-focus the smart folder's full-page view (smart-folder-page, design
+    // D2). The page is an extension page (chrome-extension:// URL) carrying the
+    // target folderId as a query param. Reuse is by tab-query dedupe — NOT a
+    // persisted binding: the open tab is its own registry, so reuse self-heals
+    // across SW restarts. NOT openUrl: that handler drops the non-http(s) URL.
+    openSmartFolderPage: async (ctx, event) => {
+      const { spaceId, folderId, windowId } = event.payload;
+      requireSmartNode(ctx, 'openSmartFolderPage', spaceId, folderId);
+      const pageBase = chrome.runtime.getURL('src/launcher/folderpage/index.html');
+      const url = `${pageBase}?folderId=${encodeURIComponent(folderId)}`;
+      // Dedupe: a tab in THIS window already showing this folder's page (match on
+      // the stable path + the folderId param only; extra params are ignored). The
+      // page tab is the registry — no SW state to consult, so restart-safe.
+      const tabs = await chrome.tabs.query({ windowId });
+      const existing = tabs.find((t) => {
+        if (t.url === undefined) return false;
+        // Compare the pre-query string directly — `chrome-extension://` URLs have
+        // an opaque origin (`URL.origin` is "null"), so origin+pathname would
+        // never match; `searchParams` still parses fine for the folderId check.
+        if (t.url.split('?')[0] !== pageBase) return false;
+        let parsed: URL;
+        try {
+          parsed = new URL(t.url);
+        } catch {
+          return false;
+        }
+        return parsed.searchParams.get('folderId') === folderId;
+      });
+      if (existing?.id !== undefined) {
+        const tab = await chrome.tabs.update(existing.id, { active: true });
+        if (tab?.windowId !== undefined) {
+          await chrome.windows.update(tab.windowId, { focused: true });
+        }
+        return;
+      }
+      const tab = await chrome.tabs.create({ url, windowId });
+      if (tab.id === undefined) {
+        throw new Error('openSmartFolderPage: opened tab has no id');
+      }
+      // The page tab belongs to its Space's Chrome group, like an opened pinned
+      // tab (floated off the critical path — a forbidden/odd page is benign).
+      await ctx.groups.addTabToSpaceGroup(windowId, spaceId, tab.id);
     },
     // OPML bulk-import (multi-source-smart-folders): collect all valid feed
     // entries as SmartSourceConfig[], then create ONE smart folder with N sources.

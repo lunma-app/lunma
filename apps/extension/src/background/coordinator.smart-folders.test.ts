@@ -1006,3 +1006,107 @@ describe('feed read-state handlers', () => {
     expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'c1', result: 'ok' });
   });
 });
+
+describe('openSmartFolderPage handler (smart-folder-page)', () => {
+  const PAGE_BASE = 'chrome-extension://abc/src/launcher/folderpage/index.html';
+
+  /** Extend the activation stub with the page handler's extra Chrome surface:
+   * `runtime.getURL` (the page URL) and `tabs.query` (the dedupe lookup). */
+  function installPageChrome(openTabs: chrome.tabs.Tab[]): ActivationChromeStub {
+    const stub = installActivationChrome();
+    (stub.tabs as unknown as { query: ReturnType<typeof vi.fn> }).query = vi.fn(
+      async () => openTabs,
+    );
+    (stub.runtime as unknown as { getURL: (p: string) => string }).getURL = (p) =>
+      `chrome-extension://abc/${p}`;
+    return stub;
+  }
+
+  function dispatchOpenPage(coordinator: ReturnType<typeof makeWithSpace>['coordinator']): void {
+    coordinator.enqueue(
+      sidebar(
+        {
+          kind: 'openSmartFolderPage',
+          payload: { spaceId: 'work', folderId: 'sf-1', windowId: 100 },
+        },
+        'c1',
+      ),
+    );
+  }
+
+  test('first open creates the page tab carrying ?folderId and groups it', async () => {
+    const stub = installPageChrome([]); // no existing page tab
+    const { coordinator, store, emitAck } = makeWithSpace();
+    seedWindowInstance(store);
+    store.state.pinnedBySpace.work = [smartNode()];
+
+    dispatchOpenPage(coordinator);
+    await coordinator.idle();
+
+    expect(stub.tabs.create).toHaveBeenCalledWith({
+      url: `${PAGE_BASE}?folderId=sf-1`,
+      windowId: 100,
+    });
+    expect(stub.tabs.group).toHaveBeenCalled(); // joined the Space's Chrome group
+    expect(stub.tabs.update).not.toHaveBeenCalled();
+    expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'c1', result: 'ok' });
+  });
+
+  test('reopen focuses the existing page tab — no duplicate, no persisted binding', async () => {
+    // The open tab IS the registry (no smartItemBindings, restart-safe): a query
+    // match focuses it.
+    const existing = { id: 7, windowId: 100, url: `${PAGE_BASE}?folderId=sf-1` } as chrome.tabs.Tab;
+    const stub = installPageChrome([existing]);
+    const { coordinator, store, emitAck } = makeWithSpace();
+    seedWindowInstance(store);
+    store.state.pinnedBySpace.work = [smartNode()];
+
+    dispatchOpenPage(coordinator);
+    await coordinator.idle();
+
+    expect(stub.tabs.update).toHaveBeenCalledWith(7, { active: true });
+    expect(stub.windows.update).toHaveBeenCalledWith(100, { focused: true });
+    expect(stub.tabs.create).not.toHaveBeenCalled();
+    expect(store.state.smartItemBindings).toEqual({}); // nothing persisted for the page tab
+    expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'c1', result: 'ok' });
+  });
+
+  test('the match ignores extra query params (path + folderId only)', async () => {
+    const existing = {
+      id: 8,
+      windowId: 100,
+      url: `${PAGE_BASE}?folderId=sf-1&theme=dark`,
+    } as chrome.tabs.Tab;
+    const stub = installPageChrome([existing]);
+    const { coordinator, store } = makeWithSpace();
+    seedWindowInstance(store);
+    store.state.pinnedBySpace.work = [smartNode()];
+
+    dispatchOpenPage(coordinator);
+    await coordinator.idle();
+
+    expect(stub.tabs.update).toHaveBeenCalledWith(8, { active: true });
+    expect(stub.tabs.create).not.toHaveBeenCalled();
+  });
+
+  test("another folder's open page is not reused (folderId must match)", async () => {
+    const otherFolderPage = {
+      id: 9,
+      windowId: 100,
+      url: `${PAGE_BASE}?folderId=other`,
+    } as chrome.tabs.Tab;
+    const stub = installPageChrome([otherFolderPage]);
+    const { coordinator, store } = makeWithSpace();
+    seedWindowInstance(store);
+    store.state.pinnedBySpace.work = [smartNode()];
+
+    dispatchOpenPage(coordinator);
+    await coordinator.idle();
+
+    expect(stub.tabs.create).toHaveBeenCalledWith({
+      url: `${PAGE_BASE}?folderId=sf-1`,
+      windowId: 100,
+    });
+    expect(stub.tabs.update).not.toHaveBeenCalled();
+  });
+});
