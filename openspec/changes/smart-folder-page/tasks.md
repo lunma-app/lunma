@@ -52,7 +52,13 @@
 - [x] 8.2 Extend the RSS connector (`background/connectors/rss.ts`) to parse, from the already-fetched body: description/summary → clamped plain-text `excerpt`; `media:content`/`media:thumbnail`/`enclosure`/first inline `<img>` → `imageUrl`; `pubDate`/`published`/`updated` → `publishedAt` (epoch ms). Omit each when absent/unparseable. Tests cover all paths.
 - [x] 8.3 `FolderPageItem` renders the hero image (`loading="lazy"`, `referrerpolicy="no-referrer"`), excerpt (clamped), and a relative date; feed sections use a full-width magazine grid. `FolderPage` maps feed item fields → `rich` + `dateLabel`.
 
-## 9. Docs, artifact lockstep & verify
+## 9. Reading controls (feed sections)
 
-- [x] 9.1 Update `docs/architecture.md`: add the smart-folder-page surface (DAG tree + Surfaces table + the `FolderRow` `onActivate` gesture split + rollupOptions.input note). `docs/tech-stack.md` needs no change (no new dependency). Proposal/design/specs updated for the rich-RSS scope expansion.
-- [ ] 9.2 Run `pnpm verify` at the workspace root (tsc, biome incl. layer DAG, svelte-check, lint:styles, vitest) all green; extend + run the Playwright smoke (`pnpm test:e2e`) to open the page and assert it loads a section.
+- [x] 9a.1 Add the `markSmartItemUnread { folderId, itemId }` command (bus union/kinds/exhaustiveness/schema/array, coordinator coalescing, context variant, handler + return Pick, bus.test sample) and `LunmaStore.markSmartItemUnread` (removes the id from `smartReadState`, drops the folder entry when empty). Handler test covers it.
+- [x] 9a.2 `FolderPageItem`: render a hover/focus-revealed read-toggle as a SIBLING of the card button (`.card-wrap`); `check` (mark read) / `rotate-ccw` (mark unread) by `read`. Feed-only (`onToggleRead`). Reduced-motion covered.
+- [x] 9a.3 `FolderPage`: page-local `revealedRead` + `limits` (keyed by sourceKey); `displayItems` shows unread at rest, all when revealed, capped to the window; `FEED_PAGE_DEFAULT = 24` (decoupled from `maxItems`); "Show more" pages by that; "Show N read" / "Hide read" reveal toggle; per-card `toggleRead` dispatches mark read/unread. Component tests cover reveal, show-more, and the toggle dispatch.
+
+## 10. Docs, artifact lockstep & verify
+
+- [x] 10.1 Update `docs/architecture.md`: add the smart-folder-page surface (DAG tree + Surfaces table + the `FolderRow` `onActivate` gesture split + rollupOptions.input note). `docs/tech-stack.md` needs no change (no new dependency). Proposal/design/specs updated for the rich-RSS + reading-controls scope.
+- [x] 10.2 `pnpm verify` at the workspace root green; the Playwright smoke (`e2e/smart-folder-page.spec.ts`) opens the page and asserts it loads the folder section + card.

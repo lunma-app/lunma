@@ -155,6 +155,39 @@ Activating a result card on the page SHALL dispatch `openSmartItem` (the same co
 - **WHEN** an `ok` runtime carrying items with `excerpt`/`imageUrl`/`publishedAt` is persisted
 - **THEN** the persisted envelope carries no `smartFolders` slice (it is stripped before persist), so no migration is needed for the new fields
 
+### Requirement: The smart-folder page offers per-feed reading controls
+
+The page SHALL provide reading controls for each **feed** section (queue sections have none):
+
+- **Read hidden at rest.** A feed section SHALL render only its **unread** items by default; read items are hidden until revealed. This is **page-local** state (component state, per section) — NOT persisted and NOT the sidebar's per-window reveal slice (a separate surface). It resets on reload.
+- **Show / hide read.** When a section's buffer holds read items, the page SHALL show a **"Show N read"** control that reveals the read items in place (rendered with the read treatment); activating it again **"Hide read"** re-drains them. The count N is the number of read items in the section buffer.
+- **Show more.** The page's feed display window SHALL default to a page-appropriate count that is **independent of the folder's `maxItems`** (the sidebar budget), so the magazine grid fills out rather than inheriting the cramped sidebar cap. When more items remain in the buffer beyond the current window, a **"Show more"** control SHALL extend it by the same page increment. Queue sections are not paged (the connector already capped them).
+- **Toggle read/unread per item.** Each feed card SHALL expose a hover/focus-revealed control that marks the item **read** (when unread) or **unread** (when read), dispatching `markSmartItemRead` / `markSmartItemUnread` `{ folderId, itemId }`. The control is a sibling of the card's activation button (never nested). `markSmartItemUnread` is a new command added by this change; it removes the id from the folder's `smartReadState` set (folder-keyed; no refetch), mirroring `markSmartItemRead`.
+
+#### Scenario: Read items are hidden until revealed, then re-drained
+
+- **GIVEN** a feed section with two unread and one read item
+- **WHEN** the page renders the section
+- **THEN** only the two unread cards render and a "Show 1 read" control is present
+- **AND WHEN** the user activates it
+- **THEN** all three cards render and the control reads "Hide read"
+
+#### Scenario: The page window exceeds the sidebar budget and pages with Show more
+
+- **GIVEN** a feed folder with `maxItems: 10` whose buffer holds 30 unread items
+- **WHEN** the page renders the section
+- **THEN** it renders the page default window (more than 10) and a "Show more" control
+- **AND WHEN** the user activates "Show more"
+- **THEN** the section renders more items (up to the buffer)
+
+#### Scenario: A per-item toggle marks read, then unread
+
+- **GIVEN** a feed card for an unread item
+- **WHEN** the user activates its read toggle
+- **THEN** `markSmartItemRead { folderId, itemId }` is dispatched
+- **AND WHEN** the user activates the toggle on a read item
+- **THEN** `markSmartItemUnread { folderId, itemId }` is dispatched and the id leaves the read set
+
 ## MODIFIED Requirements
 
 ### Requirement: The RSS connector fetches and parses public feeds
