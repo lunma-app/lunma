@@ -928,6 +928,72 @@ describe('feed read-state handlers', () => {
     expect(store.state.smartReadState['feed-1']).toEqual([`${FEED_SK}:post-1`]);
   });
 
+  // Auto-advance suppression when the folder page is open (smart-folder-page):
+  // reading from the page → closing returns to the page, not the next item.
+  function seedTwoItemFeed(): {
+    coordinator: ReturnType<typeof makeWithSpace>['coordinator'];
+    store: ReturnType<typeof makeWithSpace>['store'];
+    stub: ActivationChromeStub;
+  } {
+    const stub = installActivationChrome();
+    (stub.runtime as unknown as { getURL: (p: string) => string }).getURL = (p) =>
+      `chrome-extension://abc/${p}`;
+    const { coordinator, store } = makeWithSpace();
+    seedWindowInstance(store);
+    store.state.pinnedBySpace.work = [feedNode()];
+    store.state.smartFolders['feed-1'] = {
+      sections: {
+        [FEED_SK]: {
+          state: 'ok',
+          items: [
+            { id: 'post-1', title: 'A post', url: 'https://news.example.com/p/1' },
+            { id: 'post-2', title: 'Next post', url: 'https://news.example.com/p/2' },
+          ],
+          fetchedAt: 1,
+        },
+      },
+    };
+    store.bindSmartItem('feed-1', `${FEED_SK}:post-1`, 100, 999, '');
+    stub.tabs.create.mockClear();
+    return { coordinator, store, stub };
+  }
+
+  test('closing an unread feed item auto-advances when NO folder page is open', async () => {
+    const { coordinator, stub } = seedTwoItemFeed();
+    coordinator.enqueue({
+      source: 'chrome',
+      kind: 'tabs.onRemoved',
+      payload: { tabId: 999, info: { windowId: 100, isWindowClosing: false } },
+    });
+    await coordinator.idle();
+    // The next unread item (post-2) opens in a new tab.
+    expect(stub.tabs.create).toHaveBeenCalledWith({
+      url: 'https://news.example.com/p/2',
+      windowId: 100,
+    });
+  });
+
+  test('closing an unread feed item does NOT auto-advance when the folder page is open', async () => {
+    const { coordinator, store, stub } = seedTwoItemFeed();
+    // The folder's page is open in window 100 — the user reads from it.
+    store.syncLiveTab({
+      id: 777,
+      windowId: 100,
+      title: 'Feeds',
+      url: 'chrome-extension://abc/src/launcher/folderpage/index.html?folderId=feed-1',
+      active: false,
+      status: 'complete',
+    });
+    coordinator.enqueue({
+      source: 'chrome',
+      kind: 'tabs.onRemoved',
+      payload: { tabId: 999, info: { windowId: 100, isWindowClosing: false } },
+    });
+    await coordinator.idle();
+    // No next item opened — the close returns to the page instead.
+    expect(stub.tabs.create).not.toHaveBeenCalled();
+  });
+
   test('markAllSmartItemsRead marks every currently-listed item read', async () => {
     installActivationChrome();
     const { coordinator, store, emitAck } = makeWithSpace();

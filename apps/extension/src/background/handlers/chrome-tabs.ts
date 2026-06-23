@@ -7,6 +7,7 @@
 import { TAB_DEDUP_FLASH } from '../../shared/bus';
 import { log } from '../../shared/logger';
 import { isNewTabUrl } from '../../shared/new-tab';
+import type { AppState, FolderId, WindowId } from '../../shared/types';
 import { resolveBoundaryAllow } from '../../shared/url-boundary';
 import { closeTab } from '../tab-groups';
 import { activateSpaceInWindow } from './activation';
@@ -17,6 +18,28 @@ import {
   savedTabIdForBoundTab,
   spaceOwningTab,
 } from './queries';
+
+/**
+ * Whether the folder's full-page view (smart-folder-page) is open in `windowId`.
+ * Reads `liveTabsById` (no chrome query). When the page is open, the user has a
+ * reading surface to return to, so closing a feed item should NOT auto-advance to
+ * the next item — it should fall back to Chrome's natural focus (the page). The
+ * SW cannot see sidebar visibility / folder-expanded state (sidebar-local), so an
+ * open folder page is the reliable proxy for "reading from the page, not the
+ * sidebar".
+ */
+function folderPageOpenInWindow(state: AppState, windowId: WindowId, folderId: FolderId): boolean {
+  const base = chrome.runtime.getURL('src/launcher/folderpage/index.html');
+  for (const tab of Object.values(state.liveTabsById)) {
+    if (tab.windowId !== windowId || tab.url.split('?')[0] !== base) continue;
+    try {
+      if (new URL(tab.url).searchParams.get('folderId') === folderId) return true;
+    } catch {
+      // Unparseable URL — not a match.
+    }
+  }
+  return false;
+}
 
 export function chromeTabHandlers(): Pick<
   HandlersMap,
@@ -66,8 +89,11 @@ export function chromeTabHandlers(): Pick<
       });
       ctx.store.removeLiveTab(tabId);
       ctx.markDirty();
-      // Auto-advance: open the next unread feed item in the same section.
-      if (advance) {
+      // Auto-advance: open the next unread feed item in the same section — but
+      // ONLY when the folder's page is NOT open in this window. If the page is
+      // open, the user is reading from it (not the sidebar), so closing an item
+      // should return to the page, not chase the next item (smart-folder-page).
+      if (advance && !folderPageOpenInWindow(ctx.store.state, info.windowId, advance.folderId)) {
         ctx.enqueue({
           source: 'sidebar',
           kind: 'openSmartItem',
