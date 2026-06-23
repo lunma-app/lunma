@@ -46,13 +46,32 @@ There SHALL be **no persisted binding** for the page tab and **no schema migrati
 - **WHEN** `openSmartFolderPage { folderId: 'f1', windowId: 100 }` is dispatched after boot
 - **THEN** the tab query finds the still-open page tab and focuses it rather than creating a duplicate
 
+### Requirement: The folder page is a managed view, not a Temporary tab
+
+The folder-page tab SHALL be treated like the new-tab **home** page, not a browsing tab: it is grouped with its Space but **never adopted into the Space's Temporary list** (the user summons it from the smart folder; it is not a tab to accumulate). The `tabs.onCreated` and `tabs.onUpdated` handlers SHALL recognize the folder-page URL via `isFolderPageUrl` (`shared/new-tab.ts`, mirroring `isNewTabUrl`) and skip Temporary adoption for it, exactly as they do for a home tab. Because `openSmartFolderPage` already groups the tab into the folder's Space, `tabs.onCreated` SHALL NOT regroup it into the (possibly different) active Space.
+
+The page SHALL set the **browser tab title** to the folder's name (e.g. `Feeds · Lunma`) via `<svelte:head>`, so the tab strip reads the folder name rather than a static fallback.
+
+#### Scenario: A folder-page tab is not listed as Temporary
+
+- **WHEN** a folder-page tab is created (`tabs.onCreated` with the folder-page URL)
+- **THEN** it is NOT added to the active Space's `tempTabIds`
+- **AND** a later `tabs.onUpdated` for that tab does not adopt it into Temporary either
+
+#### Scenario: The tab title is the folder name
+
+- **GIVEN** the page resolves folder `f1` named "Feeds"
+- **WHEN** it renders
+- **THEN** the document title is `Feeds · Lunma`
+
 ### Requirement: Smart-folder page entry points
 
-The page SHALL be reachable from the sidebar in three ways, all dispatching `openSmartFolderPage`:
+The page SHALL be reachable from the sidebar in two ways, both dispatching `openSmartFolderPage`:
 
 1. **Header menu** — the smart folder's kebab menu SHALL carry an `"Open as page"` item (`id: 'open-page'`, icon `external-link`), beside `"Open all in a tab"`.
-2. **Folder activation (gesture split)** — on a smart folder header, the **disclosure region** SHALL toggle the folder's sidebar expand/collapse (unchanged), while **activating the folder's label/body** (icon + name) SHALL open the page. To keep regular (non-smart) folders unchanged, `FolderRow` SHALL accept an **optional** `onActivate` callback: when present (smart folders) the body click calls `onActivate` and the disclosure slot calls `onToggle`; when absent (every other folder) the whole header falls back to `onToggle` exactly as today.
-3. **Explicit affordance** — the smart folder header SHALL present a hover/focus-revealed `"open as page"` icon button (composed from `Button`/`Icon`) with an accessible label, so the open action is discoverable and keyboard-reachable independent of the body-click gesture.
+2. **Header "open as page" icon** — the smart folder header SHALL present a hover/focus-revealed icon button (composed from the `IconButton` primitive, icon `maximize-2`, with an accessible label) that opens the page. `FolderRow` SHALL accept an **optional** `onOpenPage` callback (+ `openPageLabel`): when present (smart folders) the icon renders in the trailing cluster; when absent (every regular folder) no icon renders.
+
+The smart folder header's **row body and disclosure chevron keep their normal expand/collapse behavior** — activating the row (or the chevron) toggles the folder open/closed exactly like any folder; only the "open as page" icon and the kebab item open the page. (An earlier draft split the header so the body opened the page; that was reverted as too surprising — body-click on a folder should expand it.)
 
 A launcher result that opens the page is **out of scope** for this change; it is the deferred follow-up `smart-folder-page-launcher`, which will dispatch the `openSmartFolderPage` command this change introduces.
 
@@ -61,19 +80,19 @@ A launcher result that opens the page is **out of scope** for this change; it is
 - **WHEN** the user selects `"Open as page"` from a smart folder's kebab menu in window 100
 - **THEN** `openSmartFolderPage { spaceId, folderId, windowId: 100 }` is dispatched
 
-#### Scenario: Disclosure toggles, body opens
+#### Scenario: The header icon opens the page; the body toggles expand
 
 - **GIVEN** a smart folder in the sidebar
-- **WHEN** the user activates the disclosure region
+- **WHEN** the user activates the row body (or its chevron)
 - **THEN** the folder's sidebar expand/collapse toggles and no page opens
-- **AND WHEN** the user activates the folder's label/body
+- **AND WHEN** the user activates the header's "open as page" icon
 - **THEN** `openSmartFolderPage` is dispatched and the sidebar expand state is unchanged
 
-#### Scenario: Regular folders are unaffected by the split
+#### Scenario: Regular folders show no open-as-page icon
 
-- **GIVEN** a regular (non-smart) folder whose `FolderRow` receives no `onActivate`
-- **WHEN** the user activates anywhere on its header
-- **THEN** it toggles expand/collapse exactly as before (no page behavior)
+- **GIVEN** a regular (non-smart) folder whose `FolderRow` receives no `onOpenPage`
+- **WHEN** its header renders
+- **THEN** no open-as-page icon is present and the whole header toggles expand/collapse exactly as before
 
 ### Requirement: The page renders all resolved sections
 
@@ -187,6 +206,24 @@ The page SHALL provide reading controls for each **feed** section (queue section
 - **THEN** `markSmartItemRead { folderId, itemId }` is dispatched
 - **AND WHEN** the user activates the toggle on a read item
 - **THEN** `markSmartItemUnread { folderId, itemId }` is dispatched and the id leaves the read set
+
+### Requirement: Feed auto-advance is suppressed when the folder page is open
+
+The feed reading queue's **auto-advance** (closing the tab of an unread feed item opens the next unread item in the same section) is a sidebar reading-flow affordance: it assumes the reader has no reading surface to return to. When the folder's **full page is open in the same window**, the reader is reading from the page, so closing an item SHALL return to the page (Chrome's natural focus) rather than auto-advancing.
+
+The `tabs.onRemoved` handler SHALL therefore suppress auto-advance when a folder-page tab for the closing item's folder is open in that window — detected by scanning `liveTabsById` for a tab whose URL is the folder-page path with a matching `folderId` query param (no chrome query). The service worker cannot observe sidebar visibility or folder-expanded state (both are sidebar-local, never broadcast), so an open folder page is the reliable proxy for "reading from the page, not the sidebar". All other auto-advance rules (consume=close never advances; only an unread manual close advances) are unchanged.
+
+#### Scenario: Closing an unread item auto-advances when no page is open
+
+- **GIVEN** a feed section with unread items and no folder page open in the window
+- **WHEN** the user closes the unread reading tab
+- **THEN** the next unread item in the section opens (auto-advance, unchanged)
+
+#### Scenario: Closing an unread item does not auto-advance when the page is open
+
+- **GIVEN** the folder's page is open in the same window and an unread feed item's tab is open
+- **WHEN** the user closes that tab
+- **THEN** no next item opens — focus returns toward the page
 
 ## MODIFIED Requirements
 

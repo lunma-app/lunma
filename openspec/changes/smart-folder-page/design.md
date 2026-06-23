@@ -14,7 +14,7 @@ Key constraints discovered while mapping integration points:
 
 **Goals:**
 - A spacious, immersive, single-folder page that renders **all** of the folder's resolved sections at once, reusing the sidebar's per-kind semantics (queue = status dots; feed = unread marks) and calm per-section states (`pending` / `error` / `signed-out` / `needs-access` / empty).
-- Three sidebar reach paths: header-menu action, folder activation (gesture-split from collapse), and a **reused page tab per window** (no duplicate tabs). A fourth reach — a launcher result — is deferred to the follow-up change `smart-folder-page-launcher` (it reverses the launcher's "folders not emitted as rows" rule); this change ships `openSmartFolderPage`, which that follow-up will dispatch.
+- Two sidebar reach paths: a header **"open as page" icon** and the **kebab-menu** item (the row body + chevron keep normal expand/collapse), plus a **reused page tab per window** (no duplicate tabs). A third reach — a launcher result — is deferred to the follow-up change `smart-folder-page-launcher` (it reverses the launcher's "folders not emitted as rows" rule); this change ships `openSmartFolderPage`, which that follow-up will dispatch.
 - Build the per-item unit as a **card with optional slots** so a future, separately-proposed `smart-folder-page-rich-content` change can fill richer content **purely additively** — the B-seam — with no surface rewrite.
 - Land at Lunma's visual bar from first sight (Visual language section below).
 
@@ -42,17 +42,16 @@ A new SW command `openSmartFolderPage { spaceId, folderId, windowId }` (handler 
 
 This delivers the "bound, reused tab per window" behavior the proposal asks for **without** a persisted binding slot — the open tab *is* its own registry, self-healing across SW restarts (a query always finds the live page tab). Consequently **`storage-and-migrations` is untouched** and there is no schema bump. (Alternatives considered: reuse `smartItemBindings` with a synthetic itemId — rejected, it pollutes a persisted, pruned, migration-versioned structure for an ephemeral convenience; a new persisted `smartFolderPageTabs` slice — rejected, it needs a schema migration and boot-time pruning for a fact the tab list already holds.) The proposal's conditional `storage-and-migrations` modification is therefore dropped.
 
-Because `openUrl` drops non-http(s) URLs (scheme hardening, intentionally untouched), the menu action and the gesture both dispatch `openSmartFolderPage`, never `openUrl`. (The deferred `smart-folder-page-launcher` follow-up will likewise dispatch `openSmartFolderPage` for its result.)
+Because `openUrl` drops non-http(s) URLs (scheme hardening, intentionally untouched), the menu action and the header icon both dispatch `openSmartFolderPage`, never `openUrl`. (The deferred `smart-folder-page-launcher` follow-up will likewise dispatch `openSmartFolderPage` for its result.)
 
-### D3 — The gesture split (collapse vs open), scoped to smart folders
-The smart-folder header resolves the open-vs-collapse ambiguity by **splitting the hit targets**:
-- The **disclosure region** (the chevron/disclosure slot) toggles the folder's sidebar expand/collapse — unchanged behavior, unchanged affordance.
-- **Activating the folder's label/body** (icon + name) dispatches `openSmartFolderPage`.
-- A **hover/focus-revealed "open as page" icon button** in the header makes the open affordance explicit and keyboard-reachable, and the **kebab menu** carries an `"Open as page"` item (`id: 'open-page'`, icon `external-link`) beside `"Open all in a tab"`.
+### D3 — Opening the page: icon + menu, NOT a body-click split
+The page opens from two sidebar affordances, both dispatching `openSmartFolderPage`:
+- A **hover/focus-revealed "open as page" icon button** in the smart folder header (icon `maximize-2` — "open out to a full view"; `external-link`/↗ was rejected as it implies leaving the app for the web).
+- The **kebab menu** `"Open as page"` item (`id: 'open-page'`).
 
-This is a deliberate **divergence from a regular folder row**, whose body-click toggles expand. To keep regular folders byte-for-byte unchanged, `FolderRow` gains an **optional** `onActivate` callback: when provided (smart folders only) the body click calls `onActivate` while the disclosure slot calls `onToggle`; when absent (every regular folder) the whole header falls back to `onToggle` exactly as today. (Alternatives considered: **body-click keeps expand, open only via icon+menu+launcher** — lower divergence and arguably least surprising, recorded as the fallback in Open Questions Q1; **double-click to open** — rejected, undiscoverable and bad for a11y/touch.)
+The smart folder header's **row body and chevron keep their normal expand/collapse behavior** — exactly like any folder. `FolderRow` gains an **optional** `onOpenPage` callback (+ `openPageLabel`) that ONLY renders the trailing icon button; regular folders pass none and are byte-for-byte unchanged. (Earlier draft + reversal: the header first *split* the hit targets — chevron toggled, body opened the page — but body-click opening a page reads as surprising when every other folder expands on body-click. The user chose the lower-surprise model: body always toggles, the icon opens. The split and its `onActivate` prop were removed; this is the Q1 fallback, now adopted.)
 
-`docs/architecture.md` is updated to note the smart-folder-page surface and the `FolderRow` `onActivate` split.
+`docs/architecture.md` notes the surface and the `FolderRow` `onOpenPage` affordance.
 
 ### D4 — The item card with optional slots (the B-seam)
 The page's result unit is a **card** feature component (`FolderPageItem`, local to `folderpage/`) whose layout **reserves regions** for future richer content even though Phase A renders none of it:
@@ -98,6 +97,16 @@ The page brings the sidebar's reading-queue affordances to a roomier surface:
 - **The page window decouples from `maxItems`.** `maxItems` is tuned for the ~300px sidebar; the page has far more room, so the feed window defaults to `FEED_PAGE_DEFAULT = 24` (grid-friendly — divisible by 2/3/4/6 so the magazine rows fill at common column counts) rather than the folder's `maxItems`. "Show more" pages by `FEED_PAGE_DEFAULT` through the connector's existing 200-item buffer — no new fetch. (Alternative considered: measuring the live column count to pad the last row exactly — rejected as over-engineering; a grid-friendly constant fills rows well enough without a ResizeObserver.)
 - **Per-item read toggle needs a new command.** `markSmartItemRead` exists (consume-on-open), but un-marking did not. This change adds `markSmartItemUnread { folderId, itemId }` (bus → coordinator → handler → `LunmaStore.markSmartItemUnread`, which removes the id from `smartReadState`, dropping the folder entry when it empties). It is folder-keyed and triggers no refetch, mirroring `markSmartItemRead`. The toggle control is rendered as a **sibling** of the card's activation `<button>` inside a `.card-wrap` (button-in-button is invalid), revealed on hover/focus.
 
+### D10 — Auto-advance defers to an open folder page
+Feed auto-advance (close an unread item → open the next) is a sidebar reading-flow affordance — it keeps you moving when the sidebar is your only reading surface. From the **page** it backfires: you Cmd+W an item expecting to land back on the page, and instead the next article opens. So `tabs.onRemoved` suppresses auto-advance when the closing item's **folder page is open in that window** (Chrome's natural focus then returns to the page).
+
+The honest signal would be "was this item opened from the page vs the sidebar," but the SW can't see that without threading origin through `openSmartItem` (a strict-schema command) or persisting it on the binding. The SW also **cannot** see "sidebar visible / folder expanded" — both are sidebar-local state, never broadcast (the user suggested gating on them; it isn't available in the background). An **open folder-page tab in the window** is the reliable, SW-knowable proxy, detected by scanning `liveTabsById` for the folder-page URL + `folderId` (no chrome query). (Alternatives considered: record per-item open-origin — heavier, schema/binding churn for a small UX nicety; a sidebar→SW visibility heartbeat — out of proportion. The page-open proxy fixes exactly the reported case and degrades safely: with no page open, auto-advance is unchanged.)
+
+### D11 — The page tab is a managed view (not Temporary), with a proper title
+A folder-page tab is a Lunma-managed extension page, the same category as the new-tab **home** page — you summon it from the smart folder, you don't accumulate it. So it is **excluded from the Space's Temporary list**: `tabs.onCreated` / `tabs.onUpdated` recognize the folder-page URL via a new `isFolderPageUrl` helper (`shared/new-tab.ts`, mirroring `isNewTabUrl`) and skip the temp-adoption they apply to ordinary tabs, exactly as they already do for `isHome`. Grouping stays with `openSmartFolderPage` (which knows the folder's owning Space), so `onCreated` does not regroup it into the active Space. It still exists in Chrome's tab strip (an extension page must be a tab) and rides its Space's group — but Lunma's sidebar never lists it as a Temporary tab, which is what "don't show it as a new tab" means in Lunma's model. The SW cannot see sidebar visibility, but it doesn't need to here — URL recognition is enough.
+
+The page sets its **browser tab title** to the folder name (`<svelte:head><title>{folder} · Lunma</title>`), so the strip reads "Feeds · Lunma" rather than the static `index.html` fallback. (Alternative considered: opening the page in-place / not as a tab — rejected, an extension page must be a tab, and replacing the current tab would destroy the user's context.)
+
 ## Visual language
 
 The page is the "command-center" moment — the one surface where a folder gets to feel like a *place*. It channels a bold, atmospheric, editorial ambition strictly **through Lunma's pinned recipes** (no new aesthetic, no hard-coded values; all colour from the `--text-*` ramp and the active Space hue tokens).
@@ -114,13 +123,13 @@ Primitives composed (no re-roll): `Aurora`, `Surface`, `Icon`, `FaviconTile` + f
 ## Risks / Trade-offs
 
 - **Dedupe-by-query misses an existing page tab** (e.g. URL rewritten) → a duplicate page tab opens. *Mitigation:* match on the stable path + `folderId` param only (ignore other params); the page never rewrites its own URL. Worst case is one extra tab, not a broken state.
-- **Gesture split surprises users** who expect a folder body-click to expand (regular-folder muscle memory). *Mitigation:* the explicit hover "open as page" icon + menu item make the action discoverable; `aria` labels name it; and Q1 records the lower-risk fallback if testing shows confusion.
+- **Discoverability of the open-as-page icon** — it's hover/focus-revealed, so a pure-pointer user might not notice it. *Mitigation:* it sits beside the always-discoverable kebab `"Open as page"` item, and reveals on keyboard focus for a11y. (The earlier body-click gesture was reverted as too surprising — see D3 / Q1.)
 - **Card-with-slots looks empty/over-built in A** if slots aren't truly zero-height when unfilled. *Mitigation:* slots are conditionally rendered (`{#if item.excerpt}`…), not reserved whitespace; A must visually read as a finished link card, verified against the sidebar's density.
 - **Build/manifest wiring for a non-override page** is the least-trodden path here. *Mitigation:* `rollupOptions.input` + `web_accessible_resources` is the standard crxjs recipe for extension-owned pages; verified by the page actually loading at its URL in `pnpm test:e2e` smoke.
 - **Feed item opened from the page drains read-state** (consume = close). This is correct (same as the sidebar) but means the page's own list will change under the user as they read. *Mitigation:* it mirrors the sidebar exactly; the page re-renders from the broadcast like any consumer. Documented, not "fixed."
 
 ## Open Questions
 
-- **Q1 (gesture, needs confirmation before specs lock):** Body-click **opens the page** (D3, recommended — honors the chosen "activate folder" entry point) **vs.** body-click **keeps expand/collapse** and the page opens only via the explicit icon + menu + launcher (lowest divergence, lowest surprise). Recommendation: D3 as written, with the explicit icon affordance carrying the discoverability. If you prefer the lower-risk variant, the only spec change is dropping the "label/body opens the page" clause.
+- **Q1 (gesture) — RESOLVED.** The body-click-opens-page split was shipped, then reverted at the user's request to the lower-surprise model: body + chevron toggle expand/collapse; the page opens via the header "open as page" icon (`maximize-2`) + the kebab item. See D3.
 - **Q2:** Should the page header offer a **"back to sidebar"/reveal-in-sidebar** affordance, or is closing the tab enough? (Lean: none in A — the sidebar is always present; revisit if users ask.)
 - **Q3:** Wide-viewport column count — purely token-driven `minmax` auto-fill (recommended) vs. a capped max columns for very wide monitors so cards don't get too sparse. (Lean: auto-fill with a sensible `minmax` min; cap only if it looks sparse in review.)

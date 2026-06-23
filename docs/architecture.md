@@ -87,10 +87,10 @@ that mutate the store. Everything else is read-only or settings-only.
 The smart folder page is opened/focused (one reused tab per window) by the
 `openSmartFolderPage` SW command, which dedupes by querying tabs for the page
 URL + `folderId` — no persisted binding. It is reached from the sidebar smart
-folder header: the disclosure chevron toggles expand/collapse while activating
-the folder's label/body opens the page (a gesture split — `ui/FolderRow` gains
-an optional `onActivate`; regular folders, which pass none, keep their whole-row
-toggle). It renders feed entries as rich magazine cards (title + excerpt +
+folder header: the row body + chevron keep normal expand/collapse, and a
+hover/focus-revealed "open as page" icon (`ui/FolderRow` gains an optional
+`onOpenPage`; regular folders pass none) + the kebab item open the page. It
+renders feed entries as rich magazine cards (title + excerpt +
 thumbnail + date) from the optional `SmartFolderItem` fields the RSS connector
 now parses; queue items stay compact. It is registered as a vite
 `rollupOptions.input` entry (not `web_accessible_resources` — least privilege).
