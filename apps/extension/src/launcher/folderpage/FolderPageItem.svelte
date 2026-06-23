@@ -57,9 +57,17 @@ const {
   dateLabel,
 }: Props = $props();
 
-// A card "leads with media" (magazine layout) when it has a hero image — the
-// image sits above the title; otherwise it's a compact head-first row.
-const hasHero = $derived(rich?.imageUrl !== undefined && rich.imageUrl !== '');
+// Feed cards always lead with a hero of one fixed ratio so titles align across
+// the magazine grid: a real image when the entry has one, else a generated cover
+// (the title's initial set in the serif over a hue wash). Queue cards have no
+// hero — they stay compact head-first rows.
+const hasImage = $derived(rich?.imageUrl !== undefined && rich.imageUrl !== '');
+const hasHero = $derived(feed);
+// The cover initial — the first letter/character of the title, else a quiet dot.
+const initial = $derived.by(() => {
+  const ch = title.trim().match(/[\p{L}\p{N}]/u)?.[0];
+  return ch ? ch.toUpperCase() : '·';
+});
 </script>
 
 <button
@@ -74,13 +82,19 @@ const hasHero = $derived(rich?.imageUrl !== undefined && rich.imageUrl !== '');
   aria-label={ariaLabel}
   onclick={onactivate}
 >
-  <!-- Hero leads the magazine card when present (feed entries). Lazy so it only
-       fetches when scrolled into view, and no-referrer so opening the folder
-       leaks no referrer to the publisher (the residual cost is IP-on-load). -->
+  <!-- Hero leads the magazine card (feed entries). A real image loads lazily and
+       referrer-free; a cover-less entry gets a generated cover (serif initial on a
+       hue wash) at the SAME ratio, so titles stay aligned across the grid row. -->
   {#if hasHero}
-    <span class="hero" data-testid="folderpage-hero" aria-hidden="true">
-      <img src={rich?.imageUrl} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" />
-    </span>
+    {#if hasImage}
+      <span class="hero" data-testid="folderpage-hero" aria-hidden="true">
+        <img src={rich?.imageUrl} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" />
+      </span>
+    {:else}
+      <span class="hero placeholder" data-testid="folderpage-hero-placeholder" aria-hidden="true">
+        <span class="initial">{initial}</span>
+      </span>
+    {/if}
   {/if}
 
   <span class="head">
@@ -244,6 +258,28 @@ const hasHero = $derived(rich?.imageUrl !== undefined && rich.imageUrl !== '');
     transform: scale(1.03);
   }
 
+  /* Generated cover for a picture-less entry — the title's initial in the serif
+   * over a soft Space-hue wash. Same 16/9 box as a real hero, so the grid aligns.
+   * A subtle top sheen + a faint hairline keep it from reading as a flat block. */
+  .hero.placeholder {
+    display: grid;
+    place-items: center;
+    background:
+      radial-gradient(120% 80% at 30% 0%, var(--space-c-soft), transparent 70%),
+      linear-gradient(150deg, color-mix(in oklch, var(--space-c) 14%, var(--surface-2)), var(--surface-2));
+    box-shadow: inset 0 -1px 0 color-mix(in oklch, var(--text-faint) 18%, transparent);
+  }
+  .hero.placeholder .initial {
+    font-family: var(--font-display);
+    font-size: clamp(2.5rem, 7vw, 3.75rem);
+    line-height: 1;
+    color: color-mix(in oklch, var(--space-c) 55%, var(--text-faint));
+    transition: transform var(--motion-base) var(--ease-standard);
+  }
+  .card:hover .hero.placeholder .initial {
+    transform: scale(1.06);
+  }
+
   .excerpt {
     color: var(--text-muted);
     font: var(--weight-regular) var(--text-sm) / 1.45 var(--font-sans);
@@ -277,11 +313,13 @@ const hasHero = $derived(rich?.imageUrl !== undefined && rich.imageUrl !== '');
     .card,
     .favicon,
     .dot,
-    .hero img {
+    .hero img,
+    .hero.placeholder .initial {
       transition: none;
     }
     .card:hover,
-    .card:hover .hero img {
+    .card:hover .hero img,
+    .card:hover .hero.placeholder .initial {
       transform: none;
     }
   }

@@ -49,6 +49,33 @@ describe('FolderPageItem (smart-folder-page B-seam)', () => {
     expect(container.querySelector('.excerpt')).not.toBeNull();
   });
 
+  test('a feed card with no image renders a generated cover (serif initial)', () => {
+    const withImage = render(FolderPageItem, {
+      props: { ...base, feed: true, rich: { imageUrl: 'https://img.example.com/x.jpg' } },
+    });
+    expect(withImage.container.querySelector('[data-testid="folderpage-hero"]')).not.toBeNull();
+    expect(
+      withImage.container.querySelector('[data-testid="folderpage-hero-placeholder"]'),
+    ).toBeNull();
+
+    const noImage = render(FolderPageItem, {
+      props: { ...base, title: 'Entre a sede', feed: true },
+    });
+    const placeholder = noImage.container.querySelector(
+      '[data-testid="folderpage-hero-placeholder"]',
+    );
+    expect(placeholder).not.toBeNull();
+    expect(placeholder?.querySelector('.initial')?.textContent).toBe('E');
+  });
+
+  test('a queue card has no hero region at all', () => {
+    const { container } = render(FolderPageItem, {
+      props: { ...base, status: { tone: 'ok' as const, label: 'Checks passed' } },
+    });
+    expect(container.querySelector('[data-testid="folderpage-hero"]')).toBeNull();
+    expect(container.querySelector('[data-testid="folderpage-hero-placeholder"]')).toBeNull();
+  });
+
   test('clicking the card fires onactivate', async () => {
     const onactivate = vi.fn();
     const { container } = render(FolderPageItem, { props: { ...base, onactivate } });
