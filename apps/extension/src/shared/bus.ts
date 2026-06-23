@@ -118,6 +118,7 @@ export type SidebarCommand =
   // also marks read SW-side), mark every current item read, toggle the persisted
   // hide-read preference, and open the source's full listing in a tab.
   | { kind: 'markSmartItemRead'; payload: { folderId: FolderId; itemId: string } }
+  | { kind: 'markSmartItemUnread'; payload: { folderId: FolderId; itemId: string } }
   | { kind: 'markAllSmartItemsRead'; payload: { spaceId: SpaceId; folderId: FolderId } }
   | {
       kind: 'setSmartFolderHideRead';
@@ -234,6 +235,7 @@ export const SIDEBAR_COMMAND_KINDS: ReadonlySet<SidebarCommandKind> = new Set<Si
   'refreshSmartFolder',
   'openSmartItem',
   'markSmartItemRead',
+  'markSmartItemUnread',
   'markAllSmartItemsRead',
   'setSmartFolderHideRead',
   'openSmartFolderListing',
@@ -293,6 +295,7 @@ const _kindExhaustiveness = {
   refreshSmartFolder: true,
   openSmartItem: true,
   markSmartItemRead: true,
+  markSmartItemUnread: true,
   markAllSmartItemsRead: true,
   setSmartFolderHideRead: true,
   openSmartFolderListing: true,
@@ -589,6 +592,10 @@ const COMMAND_SCHEMAS = {
     kind: z.literal('markSmartItemRead'),
     payload: z.strictObject({ folderId: z.string(), itemId: z.string() }),
   }),
+  markSmartItemUnread: z.strictObject({
+    kind: z.literal('markSmartItemUnread'),
+    payload: z.strictObject({ folderId: z.string(), itemId: z.string() }),
+  }),
   markAllSmartItemsRead: z.strictObject({
     kind: z.literal('markAllSmartItemsRead'),
     payload: z.strictObject({ spaceId: z.string(), folderId: z.string() }),
@@ -758,6 +765,7 @@ export const SidebarCommandSchema = z.discriminatedUnion('kind', [
   COMMAND_SCHEMAS.refreshSmartFolder,
   COMMAND_SCHEMAS.openSmartItem,
   COMMAND_SCHEMAS.markSmartItemRead,
+  COMMAND_SCHEMAS.markSmartItemUnread,
   COMMAND_SCHEMAS.markAllSmartItemsRead,
   COMMAND_SCHEMAS.setSmartFolderHideRead,
   COMMAND_SCHEMAS.openSmartFolderListing,

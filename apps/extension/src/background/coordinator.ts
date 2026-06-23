@@ -140,6 +140,7 @@ export const EventPolicy: Record<PendingEventKind, EventPolicyEntry> = {
   // Feed read-state (rss-connector): each is a distinct intent — per-item marks,
   // a mark-all, a hide-read toggle, an open-all. No coalescing.
   markSmartItemRead: {},
+  markSmartItemUnread: {},
   markAllSmartItemsRead: {},
   setSmartFolderHideRead: {},
   openSmartFolderListing: {},
