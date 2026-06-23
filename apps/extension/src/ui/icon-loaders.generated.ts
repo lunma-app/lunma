@@ -307,6 +307,7 @@ export const iconLoaders: Record<string, IconLoader> = {
   scooter: () => import('@lucide/svelte/icons/scooter'),
   scroll: () => import('@lucide/svelte/icons/scroll'),
   search: () => import('@lucide/svelte/icons/search'),
+  section: () => import('@lucide/svelte/icons/section'),
   server: () => import('@lucide/svelte/icons/server'),
   settings: () => import('@lucide/svelte/icons/settings'),
   shapes: () => import('@lucide/svelte/icons/shapes'),
