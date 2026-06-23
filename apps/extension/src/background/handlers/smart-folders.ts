@@ -411,11 +411,19 @@ export function smartFolderHandlers(
         return parsed.searchParams.get('folderId') === folderId;
       });
       if (existing?.id !== undefined) {
-        const tab = await chrome.tabs.update(existing.id, { active: true });
-        if (tab?.windowId !== undefined) {
-          await chrome.windows.update(tab.windowId, { focused: true });
+        // Focus the existing page tab. Guarded: between the query and the update
+        // the tab can vanish (the user closed it) — a benign race that must NOT
+        // throw the handler (which would log HANDLER_THREW + a rejected ack). On
+        // failure fall through to opening a fresh page tab.
+        try {
+          const tab = await chrome.tabs.update(existing.id, { active: true });
+          if (tab?.windowId !== undefined) {
+            await chrome.windows.update(tab.windowId, { focused: true });
+          }
+          return;
+        } catch (err) {
+          log.debug('openSmartFolderPage: existing tab gone, reopening', { folderId, err });
         }
-        return;
       }
       const tab = await chrome.tabs.create({ url, windowId });
       if (tab.id === undefined) {

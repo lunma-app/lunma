@@ -1,7 +1,6 @@
 <script lang="ts">
 import { onMount } from 'svelte';
 import { flip } from 'svelte/animate';
-import { fade } from 'svelte/transition';
 import { dispatch } from '../../shared/bus';
 import { requiredOriginsForConfig } from '../../shared/connector-origins';
 import { log } from '../../shared/logger';
@@ -525,13 +524,15 @@ const pageTitle = $derived(node ? `${node.name} · Lunma` : 'Smart folder · Lun
                     <div class="card-grid" class:feed={isFeed}>
                       {#each items as item (item.id)}
                         {@const read = isFeed && readSet.has(`${sourceKey(cfg)}:${item.id}`)}
-                        <!-- The cell is the keyed/animated box: FLIP repositions it
-                             when the list changes; fade carries enter/leave. -->
-                        <div
-                          class="card-cell"
-                          animate:flip={{ duration: CARD_MOTION_MS }}
-                          transition:fade={{ duration: CARD_MOTION_MS }}
-                        >
+                        <!-- The cell is the keyed/animated box: FLIP repositions the
+                             SURVIVING cards when the list changes. We deliberately
+                             do NOT add an out-`transition` here: a leave transition
+                             keeps a destroyed card's DOM (and its `Favicon`, which
+                             holds `$derived`) alive through the outro, and reading
+                             that derived post-teardown trips Svelte's `derived_inert`
+                             warning. Removing a card immediately (flip-only) avoids
+                             that window while still animating the reflow. -->
+                        <div class="card-cell" animate:flip={{ duration: CARD_MOTION_MS }}>
                           <FolderPageItem
                             title={item.title}
                             faviconSrc={itemFavicon(cfg, item)}
