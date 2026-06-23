@@ -127,23 +127,67 @@ function sectionItems(cfg: ResolvedSourceConfig): SmartFolderItem[] {
   return sectionRuntime(cfg)?.items ?? [];
 }
 
-/** Feed window: newest `maxItems` unread + interleaved read rows (the sidebar's
- * draining-queue model, per section). Queue sections pass through unsliced (the
- * connector already capped them at maxItems). */
-function feedWindow(cfg: ResolvedSourceConfig, secItems: SmartFolderItem[]): SmartFolderItem[] {
-  if (cfg.source !== 'rss' || !node) return secItems;
+// --- Reading controls (smart-folder-page), per feed section, PAGE-LOCAL --------
+// Reveal-read and the display limit live in component state — not persisted, and
+// not the sidebar's per-window slice (this is a separate surface). They reset on
+// reload, like a peek. Reassigned (not mutated) so the runes pick up the change.
+let revealedRead = $state<Record<string, boolean>>({});
+let limits = $state<Record<string, number>>({});
+
+// The page has far more room than the cramped sidebar, so it does NOT inherit the
+// folder's `maxItems` budget — it shows a fuller first page. 24 is grid-friendly
+// (divisible by 2/3/4/6), so the magazine rows fill out at common column counts;
+// "Show more" pages by the same amount through the 200-item feed buffer.
+const FEED_PAGE_DEFAULT = 24;
+
+function sectionLimit(sk: string): number {
+  return limits[sk] ?? FEED_PAGE_DEFAULT;
+}
+function isRevealed(sk: string): boolean {
+  return revealedRead[sk] ?? false;
+}
+
+/** The items a feed section renders: unread only at rest (drained), or all when
+ * read is revealed — capped to the section's display limit ("Show more" raises
+ * it). Queue sections pass through (the connector already capped them). */
+function displayItems(cfg: ResolvedSourceConfig): SmartFolderItem[] {
+  const all = sectionItems(cfg);
+  if (cfg.source !== 'rss') return all;
   const sk = sourceKey(cfg);
-  const unreadPositions: number[] = [];
-  secItems.forEach((it, i) => {
-    if (!readSet.has(`${sk}:${it.id}`)) unreadPositions.push(i);
-  });
-  const unreadBudget = Math.min(unreadPositions.length, node.maxItems);
-  const peekCutoff = Math.min(secItems.length, node.maxItems);
-  const cutoff =
-    unreadBudget > 0
-      ? Math.max((unreadPositions[unreadBudget - 1] as number) + 1, peekCutoff)
-      : peekCutoff;
-  return secItems.slice(0, cutoff);
+  const pool = isRevealed(sk) ? all : all.filter((i) => !readSet.has(`${sk}:${i.id}`));
+  return pool.slice(0, sectionLimit(sk));
+}
+
+/** More items remain in the pool beyond the current limit (drives "Show more"). */
+function hasMore(cfg: ResolvedSourceConfig): boolean {
+  if (cfg.source !== 'rss') return false;
+  const sk = sourceKey(cfg);
+  const all = sectionItems(cfg);
+  const poolLen = isRevealed(sk)
+    ? all.length
+    : all.filter((i) => !readSet.has(`${sk}:${i.id}`)).length;
+  return poolLen > sectionLimit(sk);
+}
+
+/** Read items held in a section's buffer (drives "Show N read"). */
+function readCount(cfg: ResolvedSourceConfig): number {
+  const sk = sourceKey(cfg);
+  return sectionItems(cfg).filter((i) => readSet.has(`${sk}:${i.id}`)).length;
+}
+
+function showMore(sk: string): void {
+  limits = { ...limits, [sk]: sectionLimit(sk) + FEED_PAGE_DEFAULT };
+}
+function toggleReveal(sk: string): void {
+  revealedRead = { ...revealedRead, [sk]: !isRevealed(sk) };
+}
+
+/** Toggle a feed item's read state via the bus (mark read / mark unread). */
+function toggleRead(cfg: ResolvedSourceConfig, item: SmartFolderItem): void {
+  if (!node) return;
+  const itemId = `${sourceKey(cfg)}:${item.id}`;
+  const kind = readSet.has(itemId) ? 'markSmartItemUnread' : 'markSmartItemRead';
+  dispatch({ kind, payload: { folderId: node.id, itemId } });
 }
 
 /** Per-section attention count (unread for feeds, item count for queues). */
@@ -336,7 +380,7 @@ async function openConnectorsSettings(): Promise<void> {
           {@const sec = sectionRuntime(cfg)}
           {@const secState = sec?.state ?? 'pending'}
           {@const isFeed = cfg.source === 'rss'}
-          {@const items = feedWindow(cfg, sectionItems(cfg))}
+          {@const items = displayItems(cfg)}
           {@const count = sectionCount(cfg)}
           {@const note = emptyNote(cfg)}
           <!-- Staggered entrance: each panel rises in turn (CSS reads --i). -->
@@ -410,6 +454,7 @@ async function openConnectorsSettings(): Promise<void> {
                           rich={richFor(cfg, item)}
                           dateLabel={isFeed ? dateLabel(item) : undefined}
                           onactivate={() => openItem(cfg, item)}
+                          onToggleRead={isFeed ? () => toggleRead(cfg, item) : undefined}
                         />
                       {/each}
                     </div>
@@ -421,6 +466,28 @@ async function openConnectorsSettings(): Promise<void> {
                     <p class="note-row" data-testid="folderpage-error-note">
                       Couldn't reach {hostOf(cfg)}
                     </p>
+                  {/if}
+                  <!-- Reading controls (feed sections): reveal/hide read + show more. -->
+                  {#if isFeed && (hasMore(cfg) || readCount(cfg) > 0)}
+                    {@const sk = sourceKey(cfg)}
+                    <div class="reading-controls" data-testid="folderpage-reading-controls">
+                      {#if hasMore(cfg)}
+                        <Button variant="ghost" size="sm" onclick={() => showMore(sk)}>
+                          <span>Show more</span>
+                        </Button>
+                      {/if}
+                      <span class="controls-spacer"></span>
+                      {#if readCount(cfg) > 0}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onclick={() => toggleReveal(sk)}
+                          title={isRevealed(sk) ? 'Hide read items' : 'Show read items'}
+                        >
+                          {isRevealed(sk) ? 'Hide read' : `Show ${readCount(cfg)} read`}
+                        </Button>
+                      {/if}
+                    </div>
                   {/if}
                 {/if}
               </div>

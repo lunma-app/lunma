@@ -22,6 +22,7 @@ export interface RichSlots {
 <script lang="ts">
 import type { SmartFolderItem } from '../../shared/types';
 import Favicon from '../../ui/Favicon.svelte';
+import Icon from '../../ui/Icon.svelte';
 
 interface Props {
   title: string;
@@ -42,6 +43,9 @@ interface Props {
   rich?: RichSlots | undefined;
   /** Pre-formatted publication date (the page formats epoch ms → a label). */
   dateLabel?: string | undefined;
+  /** Feed-only: toggle this item's read state (mark read / mark unread). When
+   * provided, a hover-revealed control renders; absent for queue items. */
+  onToggleRead?: (() => void) | undefined;
 }
 
 const {
@@ -55,6 +59,7 @@ const {
   onactivate,
   rich,
   dateLabel,
+  onToggleRead,
 }: Props = $props();
 
 // Feed cards always lead with a hero of one fixed ratio so titles align across
@@ -70,6 +75,9 @@ const initial = $derived.by(() => {
 });
 </script>
 
+<!-- A wrapper so the read/unread toggle is a SIBLING of the card button, not
+     nested inside it (button-in-button is invalid). -->
+<div class="card-wrap" class:feed>
 <button
   type="button"
   class="card"
@@ -120,7 +128,69 @@ const initial = $derived.by(() => {
   {/if}
 </button>
 
+{#if onToggleRead}
+  <button
+    type="button"
+    class="mark"
+    data-testid="folderpage-mark-read"
+    aria-label={read ? 'Mark as unread' : 'Mark as read'}
+    title={read ? 'Mark as unread' : 'Mark as read'}
+    onclick={onToggleRead}
+  >
+    <Icon name={read ? 'rotate-ccw' : 'check'} size={14} />
+  </button>
+{/if}
+</div>
+
 <style>
+  .card-wrap {
+    position: relative;
+    display: flex;
+  }
+  .card-wrap .card {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Read/unread toggle — a quiet circular control revealed on hover/focus, top
+   * right. A sibling of the card button (never nested). */
+  .mark {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-2);
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-pill);
+    background: color-mix(in oklch, var(--surface) 70%, transparent);
+    backdrop-filter: blur(8px);
+    color: var(--text-2);
+    cursor: pointer;
+    opacity: 0;
+    transition:
+      opacity var(--motion-fast) var(--ease-standard),
+      background var(--motion-fast) var(--ease-standard),
+      color var(--motion-fast) var(--ease-standard);
+  }
+  .card-wrap:hover .mark,
+  .card-wrap:focus-within .mark {
+    opacity: 1;
+  }
+  .mark:hover {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+  .mark:focus-visible {
+    opacity: 1;
+    outline: var(--focus-width) solid var(--focus-color);
+    outline-offset: var(--focus-offset);
+  }
+
   .card {
     appearance: none;
     border: 0;
@@ -314,7 +384,8 @@ const initial = $derived.by(() => {
     .favicon,
     .dot,
     .hero img,
-    .hero.placeholder .initial {
+    .hero.placeholder .initial,
+    .mark {
       transition: none;
     }
     .card:hover,
