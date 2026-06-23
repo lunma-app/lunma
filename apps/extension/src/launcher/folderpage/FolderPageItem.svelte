@@ -137,7 +137,10 @@ const initial = $derived.by(() => {
     title={read ? 'Mark as unread' : 'Mark as read'}
     onclick={onToggleRead}
   >
-    <Icon name={read ? 'rotate-ccw' : 'check'} size={14} />
+    <!-- Envelope state (smart-folder-page): open = read, sealed = unread. The
+         universal read/unread metaphor; doesn't clash with the Show/Hide-read
+         visibility control (which would read as an eye). -->
+    <Icon name={read ? 'mail-open' : 'mail'} size={14} />
   </button>
 {/if}
 </div>

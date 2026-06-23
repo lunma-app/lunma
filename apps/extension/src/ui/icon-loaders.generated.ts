@@ -225,6 +225,7 @@ export const iconLoaders: Record<string, IconLoader> = {
   luggage: () => import('@lucide/svelte/icons/luggage'),
   magnet: () => import('@lucide/svelte/icons/magnet'),
   mail: () => import('@lucide/svelte/icons/mail'),
+  'mail-open': () => import('@lucide/svelte/icons/mail-open'),
   map: () => import('@lucide/svelte/icons/map'),
   'map-pin': () => import('@lucide/svelte/icons/map-pin'),
   'map-pin-house': () => import('@lucide/svelte/icons/map-pin-house'),
