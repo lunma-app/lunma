@@ -99,7 +99,7 @@ The page's result unit SHALL be a card feature component (`FolderPageItem`, loca
 
 This requirement is **descriptive, not prohibitive**: it describes what the card renders given the optional fields present on `SmartFolderItem` and SHALL NOT forbid connectors from carrying additional optional item fields in a future change. In this change the **RSS connector** populates `excerpt`, `imageUrl`, and `publishedAt` (see "The RSS connector fetches and parses public feeds"); queue connectors leave them absent. A future change MAY fill the same slots for queue items (e.g. diff stat, CI detail) additively, with no rewrite of this surface and no schema migration (results are ephemeral). `FolderPageItem` is a feature component composing existing `ui/` primitives (`Icon`, `Favicon`, `Surface`); it SHALL NOT re-roll primitives or hard-code design values.
 
-A **feed** card carrying an `imageUrl` SHALL lead with a hero image, then title, then excerpt (clamped), then a footer carrying the relative publication date. The hero image SHALL be loaded with `loading="lazy"` and `referrerpolicy="no-referrer"` (no referrer leaked to the publisher; the residual IP-on-load cost is accepted — see design D8). Feed sections SHALL render their cards as a full-width responsive magazine grid; queue sections render compact cards.
+Every **feed** card SHALL lead with a hero of one fixed aspect ratio so titles align across the magazine grid row: a real hero image when the entry carries an `imageUrl` (loaded with `loading="lazy"` and `referrerpolicy="no-referrer"` — no referrer leaked to the publisher; the residual IP-on-load cost is accepted, see design D8), otherwise a **generated cover** — the title's first letter/character set in the display serif over a soft Space-hue wash, at the same ratio. Below the hero: title, excerpt (clamped), then a footer carrying the relative publication date. **Queue** cards have no hero and render compact. Feed sections SHALL render their cards as a full-width responsive magazine grid; queue sections render compact cards.
 
 #### Scenario: A queue card renders compact, full-title, no empty regions
 
@@ -112,6 +112,13 @@ A **feed** card carrying an `imageUrl` SHALL lead with a hero image, then title,
 - **GIVEN** a feed `SmartFolderItem` carrying `excerpt`, `imageUrl`, and `publishedAt`
 - **WHEN** `FolderPageItem` renders it
 - **THEN** the hero image renders (with `loading="lazy"` and `referrerpolicy="no-referrer"`), the full title, the clamped excerpt, and a relative date label — and the feed section uses the magazine grid
+
+#### Scenario: A cover-less feed card renders a generated cover
+
+- **GIVEN** a feed `SmartFolderItem` with no `imageUrl`
+- **WHEN** `FolderPageItem` renders it
+- **THEN** it renders a generated cover (the title's initial in the display serif over a Space-hue wash) at the same ratio as a real hero, so its title aligns with image cards in the same row
+- **AND** a queue item renders no hero at all
 
 #### Scenario: The title is never truncated
 
