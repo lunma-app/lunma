@@ -32,3 +32,28 @@ if (typeof Element !== 'undefined' && typeof Element.prototype.getAnimations !==
     value: () => [],
   });
 }
+
+// jsdom also lacks `Element.animate` (the rest of the Web Animations API). Svelte
+// 5's `animate:` directive (FLIP) calls it to play the position tween, so a test
+// that mutates a keyed list using `animate:flip` (e.g. the folder page's card
+// grid) throws "element.animate is not a function". Return a no-op Animation
+// whose `finished` resolves immediately so Svelte's cleanup proceeds (no real
+// motion in the headless DOM).
+if (typeof Element !== 'undefined' && typeof Element.prototype.animate !== 'function') {
+  Object.defineProperty(Element.prototype, 'animate', {
+    writable: true,
+    configurable: true,
+    value: () => ({
+      cancel: () => undefined,
+      finish: () => undefined,
+      play: () => undefined,
+      pause: () => undefined,
+      finished: Promise.resolve(),
+      onfinish: null,
+      oncancel: null,
+      currentTime: 0,
+      startTime: 0,
+      playState: 'finished',
+    }),
+  });
+}

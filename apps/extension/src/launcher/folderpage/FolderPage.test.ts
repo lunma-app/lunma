@@ -1,4 +1,5 @@
-import { cleanup, fireEvent, render } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createInitialState } from '../../shared/store.svelte';
 import type { AppState, PinNode, SmartSectionRuntime, Space } from '../../shared/types';
@@ -7,18 +8,42 @@ import FolderPage from './FolderPage.svelte';
 type SmartNode = Extract<PinNode, { kind: 'smart' }>;
 
 let sendMessage: ReturnType<typeof vi.fn>;
+/** The `onStateBroadcast` listener the page registered, captured so a test can
+ * simulate a live `state-broadcast` (exercises read-while-open lingering). */
+let broadcastListener: ((raw: unknown) => void) | undefined;
 
 function installChrome(): void {
   sendMessage = vi.fn(() => Promise.resolve());
+  broadcastListener = undefined;
   (globalThis as unknown as { chrome: unknown }).chrome = {
     runtime: {
       sendMessage,
       getURL: (path: string) => `chrome-extension://test/${path}`,
-      onMessage: { addListener: vi.fn(), removeListener: vi.fn() },
+      onMessage: {
+        addListener: vi.fn((cb: (raw: unknown) => void) => {
+          broadcastListener = cb;
+        }),
+        removeListener: vi.fn(),
+      },
     },
     tabs: { query: vi.fn(() => Promise.resolve([])), create: vi.fn(), update: vi.fn() },
     windows: { update: vi.fn() },
   };
+  // Report reduced motion so the card FLIP/fade runs at duration 0 — the layout
+  // settles instantly, which keeps these DOM-count assertions deterministic
+  // (jsdom doesn't advance Svelte's rAF-driven transitions otherwise).
+  (window as unknown as { matchMedia: (q: string) => MediaQueryList }).matchMedia = (q: string) =>
+    ({
+      matches: q.includes('reduce'),
+      media: q,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }) as unknown as MediaQueryList;
+}
+
+/** Fire a `state-broadcast` to the page's listener (a live SW update). */
+function broadcast(state: AppState): void {
+  broadcastListener?.({ type: 'lunma/state-broadcast', method: 'test', state });
 }
 
 /** The most recent bus command dispatched via chrome.runtime.sendMessage. */
@@ -242,6 +267,44 @@ describe('FolderPage (smart-folder-page)', () => {
       kind: 'markSmartItemUnread',
       payload: { folderId: 'sf-1', itemId: `${SK}:r1` },
     });
+  });
+
+  test('an item read while the page is open lingers (dimmed), then Clear read drains it', async () => {
+    const node: SmartNode = {
+      kind: 'smart',
+      id: 'sf-1',
+      name: 'Reading',
+      icon: 'rss',
+      sources: [{ source: 'rss', baseUrl: 'https://news.example.com/rss', queries: [] }],
+      maxItems: 10,
+      hideRead: true,
+      refreshMinutes: 30,
+    };
+    const SK = 'rss:news.example.com';
+    const items = [
+      { id: 'u1', title: 'Unread one', url: 'https://news.example.com/u1' },
+      { id: 'u2', title: 'Unread two', url: 'https://news.example.com/u2' },
+    ];
+    const initialState = stateWith(node, { [SK]: { state: 'ok', items, fetchedAt: 1 } });
+    const { container, getByText } = render(FolderPage, {
+      props: { windowId: 100, folderId: 'sf-1', initialState, tint: 'vivid' as const },
+    });
+    expect(container.querySelectorAll('[data-testid="folderpage-item"]')).toHaveLength(2);
+
+    // u1 becomes read WHILE the page is open (a live broadcast) — it lingers,
+    // staying visible (dimmed), not vanishing.
+    const afterRead = stateWith(node, { [SK]: { state: 'ok', items, fetchedAt: 1 } });
+    afterRead.smartReadState['sf-1'] = [`${SK}:u1`];
+    broadcast(afterRead);
+    await tick();
+    expect(container.querySelectorAll('[data-testid="folderpage-item"]')).toHaveLength(2);
+
+    // Clear read drains the lingering item; only u2 remains (await the leave
+    // transition — the card fades out before it's removed).
+    await fireEvent.click(getByText('Clear read'));
+    await waitFor(() =>
+      expect(container.querySelectorAll('[data-testid="folderpage-item"]')).toHaveLength(1),
+    );
   });
 
   test('the page shows more than the sidebar budget and pages with Show more', async () => {

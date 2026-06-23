@@ -1,5 +1,7 @@
 <script lang="ts">
 import { onMount } from 'svelte';
+import { flip } from 'svelte/animate';
+import { fade } from 'svelte/transition';
 import { dispatch } from '../../shared/bus';
 import { requiredOriginsForConfig } from '../../shared/connector-origins';
 import { log } from '../../shared/logger';
@@ -54,6 +56,16 @@ const { windowId, folderId = null, initialState = null, tint = 'vivid' }: Props 
 // `state` (collides with the `$state` rune). `appState` prefers the live broadcast.
 let liveState = $state<AppState | null>(null);
 const appState = $derived<AppState | null>(liveState ?? initialState);
+
+// Card layout animation (smart-folder-page): cards FLIP to their new positions —
+// and fade in/out — as entries are added or removed (Clear read drains lingering
+// items, a refresh brings new ones, Show more reveals more). Collapses to instant
+// under `prefers-reduced-motion` so the layout still settles, just without motion.
+const prefersReducedMotion =
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    : false;
+const CARD_MOTION_MS = prefersReducedMotion ? 0 : 220;
 
 onMount(() => {
   // Read-only live mirror. A host-permission grant from the needs-access
@@ -119,6 +131,46 @@ const sections = $derived.by<ResolvedSourceConfig[]>(() => {
 const folderRuntime = $derived(node ? appState?.smartFolders[node.id] : undefined);
 const readSet = $derived(new Set(node ? (appState?.smartReadState[node.id] ?? []) : []));
 
+// Lingering read (smart-folder-page): an item read WHILE this page is open does
+// NOT vanish — it stays in place (dimmed, with its undo toggle) for the session.
+// Items read BEFORE the page opened are "drained" (hidden at rest, behind "Show
+// read"); the next reopen makes today's reads drained too. We detect the
+// open→read transition by diffing the broadcast read set against the previous
+// one: ids that newly appear are linger; ids that leave (un-read) stop lingering.
+// `prevRead === null` on the first run captures the baseline (prior reads stay
+// drained). Page-local + ephemeral — resets on reload, which is the drain point.
+let lingeringRead = $state<Set<string>>(new Set());
+let prevRead: Set<string> | null = null;
+$effect(() => {
+  const cur = readSet;
+  if (prevRead === null) {
+    prevRead = new Set(cur);
+    return;
+  }
+  let changed = false;
+  const next = new Set(lingeringRead);
+  for (const id of cur) {
+    if (!prevRead.has(id) && !next.has(id)) {
+      next.add(id); // newly read while open → linger
+      changed = true;
+    }
+  }
+  for (const id of lingeringRead) {
+    if (!cur.has(id)) {
+      next.delete(id); // un-read → stop lingering
+      changed = true;
+    }
+  }
+  prevRead = new Set(cur);
+  if (changed) lingeringRead = next;
+});
+
+/** A read item is "drained" (hidden at rest) when it was read before this page
+ * session — i.e. read but not lingering. Lingering reads stay visible. */
+function isDrained(key: string): boolean {
+  return readSet.has(key) && !lingeringRead.has(key);
+}
+
 function sectionRuntime(cfg: ResolvedSourceConfig): SmartSectionRuntime | undefined {
   return folderRuntime?.sections[sourceKey(cfg)];
 }
@@ -147,14 +199,15 @@ function isRevealed(sk: string): boolean {
   return revealedRead[sk] ?? false;
 }
 
-/** The items a feed section renders: unread only at rest (drained), or all when
- * read is revealed — capped to the section's display limit ("Show more" raises
- * it). Queue sections pass through (the connector already capped them). */
+/** The items a feed section renders: at rest, unread + lingering (just-read this
+ * session); drained reads are hidden until "Show read" reveals them. Capped to
+ * the section's display limit ("Show more" raises it). Queue sections pass
+ * through (the connector already capped them). */
 function displayItems(cfg: ResolvedSourceConfig): SmartFolderItem[] {
   const all = sectionItems(cfg);
   if (cfg.source !== 'rss') return all;
   const sk = sourceKey(cfg);
-  const pool = isRevealed(sk) ? all : all.filter((i) => !readSet.has(`${sk}:${i.id}`));
+  const pool = isRevealed(sk) ? all : all.filter((i) => !isDrained(`${sk}:${i.id}`));
   return pool.slice(0, sectionLimit(sk));
 }
 
@@ -165,14 +218,20 @@ function hasMore(cfg: ResolvedSourceConfig): boolean {
   const all = sectionItems(cfg);
   const poolLen = isRevealed(sk)
     ? all.length
-    : all.filter((i) => !readSet.has(`${sk}:${i.id}`)).length;
+    : all.filter((i) => !isDrained(`${sk}:${i.id}`)).length;
   return poolLen > sectionLimit(sk);
 }
 
-/** Read items held in a section's buffer (drives "Show N read"). */
-function readCount(cfg: ResolvedSourceConfig): number {
+/** Drained (prior-session) reads still in the buffer — drives "Show N read". */
+function drainedReadCount(cfg: ResolvedSourceConfig): number {
   const sk = sourceKey(cfg);
-  return sectionItems(cfg).filter((i) => readSet.has(`${sk}:${i.id}`)).length;
+  return sectionItems(cfg).filter((i) => isDrained(`${sk}:${i.id}`)).length;
+}
+
+/** Lingering (read-this-session) items still shown — drives "Clear read". */
+function lingeringReadCount(cfg: ResolvedSourceConfig): number {
+  const sk = sourceKey(cfg);
+  return sectionItems(cfg).filter((i) => lingeringRead.has(`${sk}:${i.id}`)).length;
 }
 
 function showMore(sk: string): void {
@@ -180,6 +239,13 @@ function showMore(sk: string): void {
 }
 function toggleReveal(sk: string): void {
   revealedRead = { ...revealedRead, [sk]: !isRevealed(sk) };
+}
+
+/** Drain this section's lingering reads now (they'd otherwise drain on reopen). */
+function clearRead(sk: string): void {
+  const next = new Set(lingeringRead);
+  for (const id of lingeringRead) if (id.startsWith(`${sk}:`)) next.delete(id);
+  lingeringRead = next;
 }
 
 /** Toggle a feed item's read state via the bus (mark read / mark unread). */
@@ -459,19 +525,27 @@ const pageTitle = $derived(node ? `${node.name} · Lunma` : 'Smart folder · Lun
                     <div class="card-grid" class:feed={isFeed}>
                       {#each items as item (item.id)}
                         {@const read = isFeed && readSet.has(`${sourceKey(cfg)}:${item.id}`)}
-                        <FolderPageItem
-                          title={item.title}
-                          faviconSrc={itemFavicon(cfg, item)}
-                          status={item.status}
-                          feed={isFeed}
-                          {read}
-                          active={isActive(cfg, item)}
-                          ariaLabel={itemAria(cfg, item, read)}
-                          rich={richFor(cfg, item)}
-                          dateLabel={isFeed ? dateLabel(item) : undefined}
-                          onactivate={() => openItem(cfg, item)}
-                          onToggleRead={isFeed ? () => toggleRead(cfg, item) : undefined}
-                        />
+                        <!-- The cell is the keyed/animated box: FLIP repositions it
+                             when the list changes; fade carries enter/leave. -->
+                        <div
+                          class="card-cell"
+                          animate:flip={{ duration: CARD_MOTION_MS }}
+                          transition:fade={{ duration: CARD_MOTION_MS }}
+                        >
+                          <FolderPageItem
+                            title={item.title}
+                            faviconSrc={itemFavicon(cfg, item)}
+                            status={item.status}
+                            feed={isFeed}
+                            {read}
+                            active={isActive(cfg, item)}
+                            ariaLabel={itemAria(cfg, item, read)}
+                            rich={richFor(cfg, item)}
+                            dateLabel={isFeed ? dateLabel(item) : undefined}
+                            onactivate={() => openItem(cfg, item)}
+                            onToggleRead={isFeed ? () => toggleRead(cfg, item) : undefined}
+                          />
+                        </div>
                       {/each}
                     </div>
                   {/if}
@@ -483,8 +557,10 @@ const pageTitle = $derived(node ? `${node.name} · Lunma` : 'Smart folder · Lun
                       Couldn't reach {hostOf(cfg)}
                     </p>
                   {/if}
-                  <!-- Reading controls (feed sections): reveal/hide read + show more. -->
-                  {#if isFeed && (hasMore(cfg) || readCount(cfg) > 0)}
+                  <!-- Reading controls (feed sections): show more · clear read ·
+                       reveal/hide read. Just-read items linger (dimmed) until you
+                       clear them or reopen the page. -->
+                  {#if isFeed && (hasMore(cfg) || lingeringReadCount(cfg) > 0 || drainedReadCount(cfg) > 0)}
                     {@const sk = sourceKey(cfg)}
                     <div class="reading-controls" data-testid="folderpage-reading-controls">
                       {#if hasMore(cfg)}
@@ -493,14 +569,24 @@ const pageTitle = $derived(node ? `${node.name} · Lunma` : 'Smart folder · Lun
                         </Button>
                       {/if}
                       <span class="controls-spacer"></span>
-                      {#if readCount(cfg) > 0}
+                      {#if lingeringReadCount(cfg) > 0}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onclick={() => clearRead(sk)}
+                          title="Clear the items you've read this session"
+                        >
+                          Clear read
+                        </Button>
+                      {/if}
+                      {#if drainedReadCount(cfg) > 0}
                         <Button
                           variant="ghost"
                           size="sm"
                           onclick={() => toggleReveal(sk)}
                           title={isRevealed(sk) ? 'Hide read items' : 'Show read items'}
                         >
-                          {isRevealed(sk) ? 'Hide read' : `Show ${readCount(cfg)} read`}
+                          {isRevealed(sk) ? 'Hide read' : `Show ${drainedReadCount(cfg)} read`}
                         </Button>
                       {/if}
                     </div>
