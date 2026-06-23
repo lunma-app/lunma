@@ -70,10 +70,103 @@ interface DraftEntry {
   id?: string;
   /** The entry's link: RSS `<link>` text, or Atom `link[rel=alternate|'']`. */
   url?: string;
+  /** RSS `<description>` / Atom `<summary>` — the short summary (raw, may be HTML). */
+  summaryRaw?: string;
+  /** RSS `<content:encoded>` / Atom `<content>` — full body (raw HTML). */
+  contentRaw?: string;
+  /** First explicit media image (media:content / media:thumbnail / enclosure). */
+  image?: string;
+  /** Raw publication date text (RSS pubDate / Atom published|updated). */
+  dateText?: string;
 }
 
 /** Which leaf element's text we are currently accumulating, and into where. */
-type Capture = 'title' | 'id' | 'rss-link' | 'channel-link' | null;
+type Capture =
+  | 'title'
+  | 'id'
+  | 'rss-link'
+  | 'channel-link'
+  | 'description'
+  | 'content'
+  | 'date'
+  | null;
+
+/** Richer-content extraction (smart-folder-page). The SW has no DOMParser, so
+ * description HTML is reduced with bounded regexes — never parsed as a document. */
+const IMAGE_EXT = /\.(?:jpe?g|png|gif|webp|avif)(?:[?#]|$)/i;
+const EXCERPT_MAX = 280;
+
+function looksLikeImageUrl(u: string | undefined): boolean {
+  return u !== undefined && IMAGE_EXT.test(u);
+}
+
+// Common named HTML entities (not the five XML built-ins — those saxes already
+// decodes outside CDATA). Feeds routinely put HTML-encoded text INSIDE CDATA
+// titles/descriptions, where saxes leaves it literal, so we decode it here.
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: ' ',
+  rsquo: '’',
+  lsquo: '‘',
+  ldquo: '“',
+  rdquo: '”',
+  mdash: '—',
+  ndash: '–',
+  hellip: '…',
+  copy: '©',
+  reg: '®',
+  trade: '™',
+  deg: '°',
+  eacute: 'é',
+  egrave: 'è',
+  agrave: 'à',
+};
+
+/** Decode HTML entities — numeric decimal (`&#8217;`), hex (`&#x2019;`), and the
+ * common named set. Unknown entities are left verbatim. Applied to feed titles
+ * and excerpts so CDATA-encoded / double-encoded text renders as real glyphs. */
+function decodeHtmlEntities(s: string): string {
+  return s.replace(/&(#x?[0-9a-f]+|[a-z][a-z0-9]*);/gi, (whole, body: string) => {
+    if (body[0] === '#') {
+      const hex = body[1] === 'x' || body[1] === 'X';
+      const code = Number.parseInt(body.slice(hex ? 2 : 1), hex ? 16 : 10);
+      if (!Number.isFinite(code) || code <= 0) return whole;
+      try {
+        return String.fromCodePoint(code);
+      } catch {
+        return whole;
+      }
+    }
+    return NAMED_ENTITIES[body.toLowerCase()] ?? whole;
+  });
+}
+
+/** Reduce description HTML to clamped plain text for the card excerpt. */
+function htmlToExcerpt(html: string | undefined): string | undefined {
+  if (html === undefined) return undefined;
+  const text = decodeHtmlEntities(html.replace(/<[^>]*>/g, ' '))
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (text === '') return undefined;
+  return text.length <= EXCERPT_MAX ? text : `${text.slice(0, EXCERPT_MAX - 1).trimEnd()}…`;
+}
+
+/** First inline `<img src>` in description HTML — the fallback image. */
+function firstImageFromHtml(html: string | undefined): string | undefined {
+  if (html === undefined) return undefined;
+  return /<img[^>]+\bsrc=["']([^"']+)["']/i.exec(html)?.[1];
+}
+
+/** Parse a feed date (RFC-822 or ISO-8601) to epoch ms; undefined when unparseable. */
+function parseFeedDate(text: string | undefined): number | undefined {
+  if (text === undefined) return undefined;
+  const ms = Date.parse(text);
+  return Number.isNaN(ms) ? undefined : ms;
+}
 
 /**
  * Parse a syndication feed (RSS 2.0 or Atom) in one streaming SAX pass.
@@ -90,6 +183,9 @@ export function parseFeed(xml: string): { items: SmartFolderItem[]; channelLink?
   let entry: DraftEntry | null = null;
   let capture: Capture = null;
   let buf = '';
+  // A strong date element (pubDate / published) overrides a weak one (updated /
+  // dc:date) regardless of document order; a weak one only fills an empty slot.
+  let dateStrong = false;
 
   const append = (text: string): void => {
     if (capture !== null) buf += text;
@@ -116,15 +212,68 @@ export function parseFeed(xml: string): { items: SmartFolderItem[]; channelLink?
         const href = attrs.href;
         if (href !== undefined) {
           // Atom link: prefer the alternate (a missing `rel` defaults to
-          // alternate per Atom); ignore self/edit/enclosure/related/via.
+          // alternate per Atom); ignore self/edit/related/via. An enclosure link
+          // that is an image is a thumbnail candidate.
           const rel = (attrs.rel ?? '').toLowerCase();
           if ((rel === '' || rel === 'alternate') && entry.url === undefined) {
             entry.url = href;
+          } else if (
+            rel === 'enclosure' &&
+            entry.image === undefined &&
+            ((attrs.type ?? '').toLowerCase().startsWith('image') || looksLikeImageUrl(href))
+          ) {
+            entry.image = href;
           }
         } else {
           capture = 'rss-link';
           buf = '';
         }
+      } else if (name === 'description' || name === 'summary') {
+        // The short summary (smart-folder-page card excerpt).
+        capture = 'description';
+        buf = '';
+      } else if (name === 'encoded') {
+        // RSS content:encoded — the full body (richer image source).
+        capture = 'content';
+        buf = '';
+      } else if (name === 'content') {
+        // Ambiguous: `media:content` (image, has @url) vs Atom `<content>` (body).
+        const url = attrs.url;
+        if (url !== undefined) {
+          const medium = (attrs.medium ?? '').toLowerCase();
+          const type = (attrs.type ?? '').toLowerCase();
+          if (
+            entry.image === undefined &&
+            (medium === 'image' || type.startsWith('image') || looksLikeImageUrl(url))
+          ) {
+            entry.image = url;
+          }
+        } else {
+          capture = 'content';
+          buf = '';
+        }
+      } else if (name === 'thumbnail') {
+        // media:thumbnail — always an image.
+        if (entry.image === undefined && attrs.url !== undefined) entry.image = attrs.url;
+      } else if (name === 'enclosure') {
+        const url = attrs.url;
+        if (
+          url !== undefined &&
+          entry.image === undefined &&
+          ((attrs.type ?? '').toLowerCase().startsWith('image') || looksLikeImageUrl(url))
+        ) {
+          entry.image = url;
+        }
+      } else if (
+        name === 'pubdate' ||
+        name === 'published' ||
+        name === 'updated' ||
+        name === 'date'
+      ) {
+        capture = 'date';
+        buf = '';
+        // pubDate / published are authoritative; updated / dc:date only backfill.
+        dateStrong = name === 'pubdate' || name === 'published';
       }
     } else if (parent === 'channel' || parent === 'feed') {
       // Channel/feed level: capture only the website link.
@@ -161,6 +310,10 @@ export function parseFeed(xml: string): { items: SmartFolderItem[]; channelLink?
           if (capture === 'title') entry.title = value;
           else if (capture === 'id') entry.id ??= value;
           else if (capture === 'rss-link' && entry.url === undefined) entry.url = value;
+          else if (capture === 'description') entry.summaryRaw ??= value;
+          else if (capture === 'content') entry.contentRaw ??= value;
+          else if (capture === 'date' && (dateStrong || entry.dateText === undefined))
+            entry.dateText = value;
         }
       }
       capture = null;
@@ -171,13 +324,26 @@ export function parseFeed(xml: string): { items: SmartFolderItem[]; channelLink?
       if (entry !== null && entry.url !== undefined) {
         // `id` from guid/id, falling back to the url (gitlab.ts's id-fallback
         // precedent); a link-less entry can't be opened, so it is dropped.
+        // Richer fields (smart-folder-page): excerpt from the short summary (else
+        // the full content), image from explicit media (else the first inline
+        // <img>), and the publication time — all OPTIONAL, omitted when absent.
+        const excerpt = htmlToExcerpt(entry.summaryRaw) ?? htmlToExcerpt(entry.contentRaw);
+        const imageUrl = entry.image ?? firstImageFromHtml(entry.contentRaw ?? entry.summaryRaw);
+        const publishedAt = parseFeedDate(entry.dateText);
+        // Decode entities in the title too — feeds often CDATA-wrap or double-encode
+        // it (e.g. `&#8217;`), which saxes leaves literal.
+        const title = entry.title !== undefined ? decodeHtmlEntities(entry.title) : entry.url;
         items.push({
           id: entry.id ?? entry.url,
-          title: entry.title ?? entry.url,
+          title,
           url: entry.url,
+          ...(excerpt !== undefined ? { excerpt } : {}),
+          ...(imageUrl !== undefined ? { imageUrl } : {}),
+          ...(publishedAt !== undefined ? { publishedAt } : {}),
         });
       }
       entry = null;
+      dateStrong = false;
     }
   });
 

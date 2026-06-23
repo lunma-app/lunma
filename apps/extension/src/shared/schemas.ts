@@ -218,6 +218,11 @@ const SmartFolderItemSchema = z.strictObject({
       label: z.string(),
     })
     .optional(),
+  // Optional richer-content fields (smart-folder-page) — populated by the RSS
+  // connector; ephemeral like the rest of the slice (never persisted).
+  excerpt: z.string().optional(),
+  imageUrl: z.string().optional(),
+  publishedAt: z.number().optional(),
 });
 
 // Per-section runtime (multi-source-smart-folders). The slice is ephemeral
