@@ -33,6 +33,17 @@ export default defineConfig(({ mode }) => ({
   build: {
     target: 'esnext',
     sourcemap: mode !== 'production',
+    rollupOptions: {
+      // The smart-folder page (smart-folder-page) is an extension page the
+      // extension opens itself (chrome.tabs.create on its runtime URL). It is not
+      // referenced by the manifest (not a new-tab override, side panel, or options
+      // page), so crxjs won't discover it — declare it as an explicit input so it
+      // builds. NOT in web_accessible_resources: WAR would over-expose a
+      // state-mirroring page to all web origins (least privilege).
+      input: {
+        folderpage: new URL('./src/launcher/folderpage/index.html', import.meta.url).pathname,
+      },
+    },
   },
   test: {
     environment: 'jsdom',
