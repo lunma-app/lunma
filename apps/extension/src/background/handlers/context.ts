@@ -87,6 +87,7 @@ export type PendingEvent =
   | SidebarVariant<'refreshSmartFolder'>
   | SidebarVariant<'openSmartItem'>
   | SidebarVariant<'markSmartItemRead'>
+  | SidebarVariant<'markSmartItemUnread'>
   | SidebarVariant<'markAllSmartItemsRead'>
   | SidebarVariant<'setSmartFolderHideRead'>
   | SidebarVariant<'openSmartFolderListing'>

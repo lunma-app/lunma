@@ -957,6 +957,24 @@ describe('feed read-state handlers', () => {
     expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'c1', result: 'ok' });
   });
 
+  test('markSmartItemUnread removes the id from the read set (the page toggle)', async () => {
+    installActivationChrome();
+    const { coordinator, store, emitAck } = makeWithSpace();
+    store.state.pinnedBySpace.work = [feedNode()];
+    store.state.smartReadState['feed-1'] = [`${FEED_SK}:a`, `${FEED_SK}:b`];
+
+    coordinator.enqueue(
+      sidebar(
+        { kind: 'markSmartItemUnread', payload: { folderId: 'feed-1', itemId: `${FEED_SK}:a` } },
+        'c1',
+      ),
+    );
+    await coordinator.idle();
+
+    expect(store.state.smartReadState['feed-1']).toEqual([`${FEED_SK}:b`]);
+    expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'c1', result: 'ok' });
+  });
+
   test('setSmartFolderHideRead persists the preference without a refetch', async () => {
     installActivationChrome();
     const { coordinator, store, emitAck } = makeWithSpace();

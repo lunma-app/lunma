@@ -1147,6 +1147,16 @@ export class LunmaStore {
     if (!read.includes(itemId)) read.push(itemId);
   }
 
+  /** Mark one feed item UNread (the page's explicit toggle). Removes the id from
+   * the read set; drops the folder's entry when it empties. Idempotent. */
+  markSmartItemUnread(folderId: FolderId, itemId: string): void {
+    const read = this.state.smartReadState[folderId];
+    if (read === undefined) return;
+    const next = read.filter((id) => id !== itemId);
+    if (next.length === 0) delete this.state.smartReadState[folderId];
+    else this.state.smartReadState[folderId] = next;
+  }
+
   /** Mark every supplied item read (the "Mark all read" action). Unions with any
    * existing ids so a binding-held row already read stays read. */
   markAllSmartItemsRead(folderId: FolderId, itemIds: string[]): void {

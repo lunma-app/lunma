@@ -323,6 +323,10 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
     kind: 'markSmartItemRead',
     payload: { folderId: 'sf', itemId: '42' },
   },
+  markSmartItemUnread: {
+    kind: 'markSmartItemUnread',
+    payload: { folderId: 'sf', itemId: '42' },
+  },
   markAllSmartItemsRead: {
     kind: 'markAllSmartItemsRead',
     payload: { spaceId: 'sp', folderId: 'sf' },

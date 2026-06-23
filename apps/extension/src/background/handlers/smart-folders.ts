@@ -82,6 +82,7 @@ export function smartFolderHandlers(
   | 'refreshSmartFolder'
   | 'openSmartItem'
   | 'markSmartItemRead'
+  | 'markSmartItemUnread'
   | 'markAllSmartItemsRead'
   | 'setSmartFolderHideRead'
   | 'openSmartFolderListing'
@@ -312,6 +313,13 @@ export function smartFolderHandlers(
     markSmartItemRead: (ctx, event) => {
       const { folderId, itemId } = event.payload;
       ctx.store.markSmartItemRead(folderId, itemId);
+      ctx.markDirty();
+    },
+    // The page's explicit un-mark (smart-folder-page reading controls). Folder-keyed
+    // like markSmartItemRead; no refetch.
+    markSmartItemUnread: (ctx, event) => {
+      const { folderId, itemId } = event.payload;
+      ctx.store.markSmartItemUnread(folderId, itemId);
       ctx.markDirty();
     },
     markAllSmartItemsRead: (ctx, event) => {
