@@ -172,8 +172,10 @@ test('a smart-folder row activates like a pinned tab: open bound, re-click focus
   const folderId = (await snapshot(page)).folderIds[0] as string;
 
   // Expand the folder (the toggle is the folder-row's hit button) and wait for
-  // the mocked result row to render — proof the SW fetch was intercepted.
-  await page.getByTestId('folder-row').getByRole('button', { name: 'E2E review queue' }).click();
+  // the mocked result row to render — proof the SW fetch was intercepted. Target
+  // `.hit` directly: the header also carries an "open as page" icon button whose
+  // aria-label contains the folder name, so a name-based role query is ambiguous.
+  await page.getByTestId('folder-row').locator('.hit').click();
   await expect(page.getByTestId('smart-result-row')).toHaveCount(1);
 
   const before = await snapshot(page);
