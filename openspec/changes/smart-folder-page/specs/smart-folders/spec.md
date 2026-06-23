@@ -178,18 +178,28 @@ Activating a result card on the page SHALL dispatch `openSmartItem` (the same co
 
 The page SHALL provide reading controls for each **feed** section (queue sections have none):
 
-- **Read hidden at rest.** A feed section SHALL render only its **unread** items by default; read items are hidden until revealed. This is **page-local** state (component state, per section) — NOT persisted and NOT the sidebar's per-window reveal slice (a separate surface). It resets on reload.
-- **Show / hide read.** When a section's buffer holds read items, the page SHALL show a **"Show N read"** control that reveals the read items in place (rendered with the read treatment); activating it again **"Hide read"** re-drains them. The count N is the number of read items in the section buffer.
+- **Just-read items linger; prior reads drain.** Marking an item read SHALL NOT hide it immediately. An item read **while the page is open** (the "lingering" set) SHALL stay in place, rendered with the read treatment (dimmed), with its undo control — so the read action is reversible and never yanks content out from under the reader. An item read **before this page session** ("drained") SHALL be hidden at rest. The open→read transition is detected by diffing the broadcast read set; the lingering set is **page-local + ephemeral** (resets on reload — which is the drain boundary). The next reopen makes this session's reads drained.
+- **Clear read.** When a section has lingering reads, the page SHALL show a **"Clear read"** control that drains that section's lingering items now (otherwise they drain on the next reopen).
+- **Show / hide read.** When a section holds **drained** reads, the page SHALL show a **"Show N read"** control that reveals them in place; activating it again **"Hide read"** re-drains them. N is the count of drained reads in the section buffer.
+- **Layout animation.** As entries are added or removed (Clear read, a refresh bringing new items, Show more), the cards SHALL animate to their new positions (a FLIP reposition) and fade on enter/leave, so the grid re-settles smoothly rather than jumping. The motion SHALL collapse to instant under `prefers-reduced-motion` (the layout still settles, without animation).
 - **Show more.** The page's feed display window SHALL default to a page-appropriate count that is **independent of the folder's `maxItems`** (the sidebar budget), so the magazine grid fills out rather than inheriting the cramped sidebar cap. When more items remain in the buffer beyond the current window, a **"Show more"** control SHALL extend it by the same page increment. Queue sections are not paged (the connector already capped them).
 - **Toggle read/unread per item.** Each feed card SHALL expose a hover/focus-revealed control that marks the item **read** (when unread) or **unread** (when read), dispatching `markSmartItemRead` / `markSmartItemUnread` `{ folderId, itemId }`. The control is a sibling of the card's activation button (never nested). `markSmartItemUnread` is a new command added by this change; it removes the id from the folder's `smartReadState` set (folder-keyed; no refetch), mirroring `markSmartItemRead`.
 
-#### Scenario: Read items are hidden until revealed, then re-drained
+#### Scenario: Prior reads are drained; revealing shows them
 
-- **GIVEN** a feed section with two unread and one read item
+- **GIVEN** a feed section with two unread and one item read before this session
 - **WHEN** the page renders the section
 - **THEN** only the two unread cards render and a "Show 1 read" control is present
 - **AND WHEN** the user activates it
 - **THEN** all three cards render and the control reads "Hide read"
+
+#### Scenario: An item read while the page is open lingers, then Clear read drains it
+
+- **GIVEN** an unread feed item shown on the open page
+- **WHEN** it becomes read (a broadcast marks it read) while the page stays open
+- **THEN** its card stays visible with the read treatment (it does not vanish) and a "Clear read" control appears
+- **AND WHEN** the user activates "Clear read"
+- **THEN** the lingering card drains (animating out) and only the still-unread cards remain
 
 #### Scenario: The page window exceeds the sidebar budget and pages with Show more
 

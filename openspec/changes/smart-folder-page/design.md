@@ -109,6 +109,13 @@ A folder-page tab is a Lunma-managed extension page, the same category as the ne
 
 The page sets its **browser tab title** to the folder name (`<svelte:head><title>{folder} · Lunma</title>`), so the strip reads "Feeds · Lunma" rather than the static `index.html` fallback. (Alternative considered: opening the page in-place / not as a tab — rejected, an extension page must be a tab, and replacing the current tab would destroy the user's context.)
 
+### D12 — Read items linger (no auto-vanish), and the grid animates
+Marking an item read used to remove it from the at-rest view instantly — jarring, and it kills the undo window. Instead, an item read **while the page is open** *lingers*: it stays in place with the read treatment (dimmed) and its undo toggle. Only items read **before this session** are drained (hidden behind "Show read"); the next reopen makes this session's reads drained too, and a **"Clear read"** control drains them on demand. The lingering set is page-local + ephemeral, derived by diffing the broadcast read set (`prevRead === null` on first run captures the baseline so prior reads stay drained; ids that newly appear linger; ids that leave stop lingering).
+
+(Considered and rejected: the user's first sketch — a per-item radial countdown that auto-deletes read items unless clicked. It's distinctive but anxiety-inducing (a clock racing to remove content), chaotic at N-items-at-once, and an accessibility problem under `prefers-reduced-motion` / for screen readers (auto-dismissal, no accessible equivalent). The user agreed to the calmer "linger + manual clear" model; the radial-ring delight, if wanted later, belongs on a single undo snackbar, not per card.)
+
+As entries are added/removed (Clear read, a refresh, Show more), the card grid **animates**: each cell carries `animate:flip` (FLIP reposition) + `transition:fade` (enter/leave), wrapped in a `.card-cell` so the directives sit on a real keyed box (they can't apply to the `FolderPageItem` component directly). Durations come from a `prefers-reduced-motion`-aware constant (`CARD_MOTION_MS`, 0 when reduced — the layout still re-settles, just instantly). (Test note: jsdom lacks the Web Animations API, so `vitest.setup.ts` stubs `Element.prototype.animate`/`getAnimations`, and the page tests report reduced motion to keep DOM-count assertions deterministic.)
+
 ## Visual language
 
 The page is the "command-center" moment — the one surface where a folder gets to feel like a *place*. It channels a bold, atmospheric, editorial ambition strictly **through Lunma's pinned recipes** (no new aesthetic, no hard-coded values; all colour from the `--text-*` ramp and the active Space hue tokens).
