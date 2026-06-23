@@ -33,13 +33,14 @@ lunma/                              # pnpm workspace root (private)
 │  │  │  ├─ sidebar/                # flat — feature components compose ui/ primitives
 │  │  │  │  ├─ App.svelte · main.ts · PinnedTabs.svelte · TempTabs.svelte · SpaceSwitcher.svelte
 │  │  │  │  └─ drag.svelte.ts       # custom pointer-drag controller
-│  │  │  ├─ launcher/               # overlay (content script) + newtab (chrome_url_overrides) + shared engine
+│  │  │  ├─ launcher/               # overlay (content script) + newtab (chrome_url_overrides) + folderpage + shared engine
 │  │  │  │  ├─ overlay.ts · overlay.css
 │  │  │  │  ├─ newtab/              # full Svelte page — empty-Space "home" (idle) + inline launcher search
+│  │  │  │  ├─ folderpage/          # full Svelte page — one smart folder's read-only dashboard (vite rollupOptions.input entry)
 │  │  │  │  └─ shared/              # SearchEngine, scoring, providers, result/query types
 │  │  │  ├─ content/               # second declarative content script (tab-boundary.ts)
 │  │  │  └─ options/               # Options.svelte (orchestrator) · BackupRestore · FeedSubscriptions · RecentlyArchived · ConnectorsCard · ResultSourcesCard · ShortcutGuidanceCard · main.ts
-│  │  ├─ public/manifest.json       # MV3 manifest — crxjs derives build entries from it
+│  │  ├─ public/manifest.json       # MV3 manifest — crxjs derives build entries from it (+ vite rollupOptions.input for folderpage)
 │  │  ├─ e2e/                       # Playwright specs + fixtures (playwright.config.ts in apps/extension)
 │  │  │                             # unit tests are co-located: src/**/*.test.ts (no top-level tests/)
 │  │  ├─ vite.config.ts · svelte.config.js · tsconfig.json · stylelint.config.js · vitest.setup.ts
@@ -70,7 +71,7 @@ lunma/                              # pnpm workspace root (private)
 
 ## Surfaces
 
-Lunma ships five surfaces. The sidebar and the service worker are the only two
+Lunma ships six surfaces. The sidebar and the service worker are the only two
 that mutate the store. Everything else is read-only or settings-only.
 
 | Surface | Owns | Reads from store | Writes to store |
@@ -79,8 +80,20 @@ that mutate the store. Everything else is read-only or settings-only.
 | Sidebar | DOM, user interaction, drag-drop | yes (subscriber via state broadcast) | yes (calls store methods through the SW message bridge) |
 | Launcher overlay | `Alt+L` page injection, search UI | no (queries the suggestions channel) | no — dispatches `focusTab` / `focusSavedTab` / `openSavedTab` / `openUrl` over the bus |
 | Launcher newtab | Empty-Space home (Space identity) + inline search | yes (read-only: snapshot + `state-broadcast`, like the sidebar) + queries the suggestions channel | no — dispatches result actions over the bus |
+| Smart folder page | One smart folder's spacious read-only dashboard (`launcher/folderpage/`, `?folderId=…`) | yes (read-only: snapshot + `state-broadcast`, like newtab) | no — dispatches `openSmartItem` / `openSmartFolderListing` over the bus |
 | Options | Settings UI + Connectors (per-host PATs) | reads `chrome.storage.sync` directly; reads `chrome.storage.local` for archived tabs + the `lunma.connectors` record | writes `chrome.storage.sync`; writes `lunma.connectors` in `chrome.storage.local` via `shared/connectors.ts` |
 | Onboarding | Static content + open links (Planned) | no | no |
+
+The smart folder page is opened/focused (one reused tab per window) by the
+`openSmartFolderPage` SW command, which dedupes by querying tabs for the page
+URL + `folderId` — no persisted binding. It is reached from the sidebar smart
+folder header: the disclosure chevron toggles expand/collapse while activating
+the folder's label/body opens the page (a gesture split — `ui/FolderRow` gains
+an optional `onActivate`; regular folders, which pass none, keep their whole-row
+toggle). It renders feed entries as rich magazine cards (title + excerpt +
+thumbnail + date) from the optional `SmartFolderItem` fields the RSS connector
+now parses; queue items stay compact. It is registered as a vite
+`rollupOptions.input` entry (not `web_accessible_resources` — least privilege).
 
 ### Why the launcher overlay stays vanilla
 
