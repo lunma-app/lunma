@@ -6,6 +6,7 @@ import type { SpaceColor } from '../shared/types';
 import ColorSwatch from './ColorSwatch.svelte';
 import EditableLabel from './EditableLabel.svelte';
 import Icon from './Icon.svelte';
+import IconButton from './IconButton.svelte';
 import IconPicker from './IconPicker.svelte';
 import RowMenu, { type RowMenuItem } from './RowMenu.svelte';
 
@@ -24,6 +25,14 @@ interface Props {
   dropTarget?: boolean | undefined;
   /** Toggle expand/collapse (chevron + label click). */
   onToggle?: (() => void) | undefined;
+  /** When provided (smart folders, smart-folder-page), the header SPLITS: the
+   * disclosure chevron keeps expand/collapse (`onToggle`) while activating the
+   * glyph + name body calls this (open the folder's page). A hover/focus-revealed
+   * "open as page" icon button is also rendered in the trailing cluster. Absent
+   * (every regular folder) → the whole header toggles, byte-for-byte unchanged. */
+  onActivate?: (() => void) | undefined;
+  /** Accessible label + tooltip for the open-as-page affordance. */
+  activateLabel?: string | undefined;
   /** Accessible label override; defaults to `name`. */
   label?: string | undefined;
   /** When true, the name becomes an inline editable field (rename in place). */
@@ -80,6 +89,8 @@ let {
   expanded = false,
   dropTarget = false,
   onToggle,
+  onActivate,
+  activateLabel = 'Open as page',
   label,
   editing = false,
   onRename,
@@ -221,6 +232,33 @@ function onMenuOpenChange(open: boolean): void {
         oncommit={(next) => onRename?.(next)}
         oncancel={() => onRenameCancel?.()}
       />
+    {:else if onActivate}
+      <!-- Gesture split (smart-folder-page design D3): the disclosure toggles
+           expand/collapse; the glyph + name body opens the folder's page. -->
+      <button
+        type="button"
+        class="disclosure"
+        data-testid="folder-disclosure"
+        aria-label={expanded ? `Collapse ${name}` : `Expand ${name}`}
+        aria-expanded={expanded}
+        onclick={onToggle}
+      >
+        <span class="chevron" class:expanded aria-hidden="true">
+          <Icon name="chevron-right" size={12} />
+        </span>
+      </button>
+      <button
+        type="button"
+        class="hit hit-activate"
+        data-testid="folder-activate"
+        aria-label={label ?? name}
+        onclick={onActivate}
+      >
+        <span class="glyph" class:busy aria-hidden="true">
+          <Icon name={icon} size={16} />
+        </span>
+        <span class="name">{name}</span>
+      </button>
     {:else}
       <button
         type="button"
@@ -238,12 +276,33 @@ function onMenuOpenChange(open: boolean): void {
         <span class="name">{name}</span>
       </button>
     {/if}
-    <span class="trailing">
-      {#if badge !== undefined}
-        <span class="badge" data-testid="folder-row-badge">{badge}</span>
-      {/if}
-      <span class="kebab">{@render trigger()}</span>
-    </span>
+    {#if onActivate}
+      <span class="trailing trailing-split">
+        <span class="open-page">
+          <IconButton
+            icon="external-link"
+            ariaLabel={activateLabel}
+            title={activateLabel}
+            size={14}
+            testid="folder-open-page"
+            onclick={onActivate}
+          />
+        </span>
+        <span class="cluster">
+          {#if badge !== undefined}
+            <span class="badge" data-testid="folder-row-badge">{badge}</span>
+          {/if}
+          <span class="kebab">{@render trigger()}</span>
+        </span>
+      </span>
+    {:else}
+      <span class="trailing">
+        {#if badge !== undefined}
+          <span class="badge" data-testid="folder-row-badge">{badge}</span>
+        {/if}
+        <span class="kebab">{@render trigger()}</span>
+      </span>
+    {/if}
   </div>
 {/snippet}
 
@@ -299,6 +358,30 @@ function onMenuOpenChange(open: boolean): void {
     outline: var(--focus-width) solid var(--focus-color);
     outline-offset: var(--focus-offset);
     border-radius: var(--r-sm);
+  }
+
+  /* Gesture split (smart-folder-page): the disclosure is a bare chevron-gutter
+   * button; the activate body (`.hit-activate`) starts at the glyph, so the
+   * glyph + name land at the exact x they would in the single-button layout. */
+  .disclosure {
+    flex-shrink: 0;
+    height: 100%;
+    padding: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: inherit;
+    display: inline-flex;
+    align-items: center;
+  }
+  .disclosure:focus-visible {
+    outline: var(--focus-width) solid var(--focus-color);
+    outline-offset: var(--focus-offset);
+    border-radius: var(--r-sm);
+  }
+  .hit-activate {
+    /* No leading chevron gutter — the disclosure provides it. */
+    padding-left: 0;
   }
 
   /* Leading gutter — same width as TabRow's left padding, so the glyph aligns
@@ -369,6 +452,37 @@ function onMenuOpenChange(open: boolean): void {
   }
   .trailing > * {
     grid-area: 1 / 1; /* stack badge + kebab in the same cell */
+  }
+
+  /* Smart-folder split trailing (smart-folder-page): the open-as-page button
+   * sits beside the badge/kebab stack. The `.cluster` reproduces the badge/kebab
+   * stacking; `.trailing-split` lays it out in a flex row beside the open-page
+   * button. (Only rendered when `onActivate` is set, so regular folders keep the
+   * plain `.trailing` above untouched.) */
+  .trailing-split {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+  .cluster {
+    display: inline-grid;
+    align-items: center;
+    justify-items: end;
+  }
+  .cluster > * {
+    grid-area: 1 / 1;
+  }
+  /* The open-page button reveals on row hover / keyboard focus, like the kebab. */
+  .open-page {
+    display: inline-flex;
+    align-items: center;
+    opacity: 0;
+    transition: opacity var(--motion-fast) var(--ease-standard);
+  }
+  .folder-row:hover .open-page,
+  .folder-row.menu-open .open-page,
+  .trailing-split:focus-within .open-page {
+    opacity: 1;
   }
 
   /* Quiet trailing count badge — a soft pill that never competes with the name.

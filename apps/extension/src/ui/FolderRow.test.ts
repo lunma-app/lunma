@@ -41,6 +41,56 @@ describe('FolderRow', () => {
     expect(onToggle).toHaveBeenCalledTimes(1);
   });
 
+  describe('gesture split (onActivate — smart-folder-page)', () => {
+    test('without onActivate, the whole header is a single toggle button (unchanged)', () => {
+      const { container } = render(FolderRowHarness, { props: base });
+      expect(container.querySelector('.hit')).not.toBeNull();
+      expect(container.querySelector('[data-testid="folder-disclosure"]')).toBeNull();
+      expect(container.querySelector('[data-testid="folder-activate"]')).toBeNull();
+      expect(container.querySelector('[data-testid="folder-open-page"]')).toBeNull();
+    });
+
+    test('with onActivate, the disclosure toggles and the body activates', async () => {
+      const onToggle = vi.fn();
+      const onActivate = vi.fn();
+      const { container } = render(FolderRowHarness, {
+        props: { ...base, expanded: false, onToggle, onActivate },
+      });
+
+      const disclosure = container.querySelector(
+        '[data-testid="folder-disclosure"]',
+      ) as HTMLButtonElement;
+      const activate = container.querySelector(
+        '[data-testid="folder-activate"]',
+      ) as HTMLButtonElement;
+      expect(disclosure).not.toBeNull();
+      expect(activate).not.toBeNull();
+      expect(disclosure.getAttribute('aria-expanded')).toBe('false');
+
+      await fireEvent.click(disclosure);
+      expect(onToggle).toHaveBeenCalledTimes(1);
+      expect(onActivate).not.toHaveBeenCalled();
+
+      await fireEvent.click(activate);
+      expect(onActivate).toHaveBeenCalledTimes(1);
+      expect(onToggle).toHaveBeenCalledTimes(1); // body click never toggled
+    });
+
+    test('the open-as-page icon button also activates and carries the label', async () => {
+      const onActivate = vi.fn();
+      const { container } = render(FolderRowHarness, {
+        props: { ...base, onActivate, activateLabel: 'Open Reading as a page' },
+      });
+      const openPage = container.querySelector(
+        '[data-testid="folder-open-page"]',
+      ) as HTMLButtonElement;
+      expect(openPage).not.toBeNull();
+      expect(openPage.getAttribute('aria-label')).toBe('Open Reading as a page');
+      await fireEvent.click(openPage);
+      expect(onActivate).toHaveBeenCalledTimes(1);
+    });
+  });
+
   test('drop-target state toggles the highlight class', () => {
     const off = render(FolderRowHarness, { props: base });
     expect(off.container.querySelector('.folder-row.drop-target')).toBeNull();
