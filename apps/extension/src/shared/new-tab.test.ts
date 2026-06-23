@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { isNewTabUrl, NEWTAB_PAGE_PATH } from './new-tab';
+import { FOLDERPAGE_PATH, isFolderPageUrl, isNewTabUrl, NEWTAB_PAGE_PATH } from './new-tab';
 
 const RESOLVED = `chrome-extension://abcdef/${NEWTAB_PAGE_PATH}`;
 
@@ -61,5 +61,29 @@ describe('isNewTabUrl', () => {
     (globalThis as unknown as { chrome?: unknown }).chrome = undefined;
     expect(isNewTabUrl('chrome://newtab/')).toBe(true);
     expect(isNewTabUrl(RESOLVED)).toBe(false);
+  });
+});
+
+describe('isFolderPageUrl', () => {
+  const PAGE = `chrome-extension://abcdef/${FOLDERPAGE_PATH}`;
+
+  test('matches the resolved folder-page URL, with or without a folderId query', () => {
+    installChrome((path) => `chrome-extension://abcdef/${path}`);
+    expect(isFolderPageUrl(PAGE)).toBe(true);
+    expect(isFolderPageUrl(`${PAGE}?folderId=f1`)).toBe(true);
+  });
+
+  test('does not match other extension pages or web URLs', () => {
+    installChrome((path) => `chrome-extension://abcdef/${path}`);
+    expect(isFolderPageUrl(`chrome-extension://abcdef/${NEWTAB_PAGE_PATH}`)).toBe(false);
+    expect(isFolderPageUrl('https://example.com/')).toBe(false);
+    expect(isFolderPageUrl('')).toBe(false);
+    expect(isFolderPageUrl(undefined)).toBe(false);
+  });
+
+  test('degrades to a path-suffix check when chrome.runtime is unavailable', () => {
+    (globalThis as unknown as { chrome?: unknown }).chrome = undefined;
+    expect(isFolderPageUrl(`${PAGE}?folderId=f1`)).toBe(true);
+    expect(isFolderPageUrl('https://example.com/')).toBe(false);
   });
 });

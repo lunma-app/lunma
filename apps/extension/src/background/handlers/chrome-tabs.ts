@@ -6,7 +6,7 @@
 
 import { TAB_DEDUP_FLASH } from '../../shared/bus';
 import { log } from '../../shared/logger';
-import { isNewTabUrl } from '../../shared/new-tab';
+import { isFolderPageUrl, isNewTabUrl } from '../../shared/new-tab';
 import type { AppState, FolderId, WindowId } from '../../shared/types';
 import { resolveBoundaryAllow } from '../../shared/url-boundary';
 import { closeTab } from '../tab-groups';
@@ -53,7 +53,11 @@ export function chromeTabHandlers(): Pick<
       // Space's home, not a temporary tab. Recognised by URL (Chrome may report
       // either `url` or `pendingUrl` for a fresh NTP).
       const isHome = isNewTabUrl(tab.url) || isNewTabUrl(tab.pendingUrl);
-      if (!isHome) {
+      // A smart-folder page is a Lunma-managed view (smart-folder-page), not a
+      // browsing tab — grouped with its Space by `openSmartFolderPage`, but never
+      // adopted into the Temporary list. Treated like `isHome` for adoption.
+      const isFolderPage = isFolderPageUrl(tab.url) || isFolderPageUrl(tab.pendingUrl);
+      if (!isHome && !isFolderPage) {
         ctx.store.onTabCreated({ id: tab.id, windowId: tab.windowId });
       }
       ctx.store.syncLiveTab({
@@ -72,7 +76,10 @@ export function chromeTabHandlers(): Pick<
       });
       if (isHome) {
         await ctx.groups.groupHomeTab(tab.id, tab.windowId);
-      } else {
+      } else if (!isFolderPage) {
+        // The folder page is already grouped into its Space by openSmartFolderPage
+        // (which knows the folder's owning Space) — don't regroup into the active
+        // Space here, which may differ.
         await ctx.groups.groupNewTab(tab.id, tab.windowId);
       }
       ctx.markDirty();
@@ -138,6 +145,7 @@ export function chromeTabHandlers(): Pick<
       if (
         changeInfo.url !== undefined &&
         !isNewTabUrl(changeInfo.url) &&
+        !isFolderPageUrl(changeInfo.url) &&
         !isTrackedTab(ctx.store.state, tabId)
       ) {
         const navigatedUrl = changeInfo.url;

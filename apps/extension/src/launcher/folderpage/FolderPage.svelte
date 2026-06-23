@@ -338,7 +338,15 @@ async function openConnectorsSettings(): Promise<void> {
   }
   await chrome.tabs.create({ url });
 }
+
+// The browser tab title (smart-folder-page): the folder's name when resolved,
+// so the Chrome tab strip reads "Feeds" instead of the static fallback.
+const pageTitle = $derived(node ? `${node.name} · Lunma` : 'Smart folder · Lunma');
 </script>
+
+<svelte:head>
+  <title>{pageTitle}</title>
+</svelte:head>
 
 <main
   class="folderpage lunma-space-scope"

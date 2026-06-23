@@ -1193,4 +1193,28 @@ describe('openSmartFolderPage handler (smart-folder-page)', () => {
     });
     expect(stub.tabs.update).not.toHaveBeenCalled();
   });
+
+  test('a folder-page tab is NOT adopted into the Temporary list (managed view)', async () => {
+    installPageChrome([]);
+    const { coordinator, store } = makeWithSpace();
+    seedWindowInstance(store);
+
+    coordinator.enqueue({
+      source: 'chrome',
+      kind: 'tabs.onCreated',
+      payload: {
+        tab: {
+          id: 888,
+          windowId: 100,
+          url: `${PAGE_BASE}?folderId=sf-1`,
+          active: false,
+          status: 'complete',
+        } as chrome.tabs.Tab,
+      },
+    });
+    await coordinator.idle();
+
+    // Like the home tab, the page is a Lunma-managed view — never a Temporary tab.
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds ?? []).not.toContain(888);
+  });
 });
