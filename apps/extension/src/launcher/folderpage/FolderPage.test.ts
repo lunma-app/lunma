@@ -190,6 +190,87 @@ describe('FolderPage (smart-folder-page)', () => {
     expect(getByTestId('folderpage-date').textContent).toContain('h ago');
   });
 
+  test('reading controls: read hidden by default, reveal shows them, toggle marks read/unread', async () => {
+    const node: SmartNode = {
+      kind: 'smart',
+      id: 'sf-1',
+      name: 'Reading',
+      icon: 'rss',
+      sources: [{ source: 'rss', baseUrl: 'https://news.example.com/rss', queries: [] }],
+      maxItems: 10,
+      hideRead: true,
+      refreshMinutes: 30,
+    };
+    const SK = 'rss:news.example.com';
+    const initialState = stateWith(node, {
+      [SK]: {
+        state: 'ok',
+        items: [
+          { id: 'u1', title: 'Unread one', url: 'https://news.example.com/u1' },
+          { id: 'u2', title: 'Unread two', url: 'https://news.example.com/u2' },
+          { id: 'r1', title: 'Read one', url: 'https://news.example.com/r1' },
+        ],
+        fetchedAt: 1,
+      },
+    });
+    initialState.smartReadState['sf-1'] = [`${SK}:r1`];
+
+    const { container, getByText, getByRole, getAllByRole } = render(FolderPage, {
+      props: { windowId: 100, folderId: 'sf-1', initialState, tint: 'vivid' as const },
+    });
+
+    // Default: read hidden → only the two unread cards render.
+    expect(container.querySelectorAll('[data-testid="folderpage-item"]')).toHaveLength(2);
+
+    // Reveal read → all three render; the toggle flips to "Hide read".
+    await fireEvent.click(getByText('Show 1 read'));
+    expect(container.querySelectorAll('[data-testid="folderpage-item"]')).toHaveLength(3);
+    expect(getByText('Hide read')).toBeTruthy();
+
+    // Toggling the first (unread) card marks it read.
+    await fireEvent.click(getAllByRole('button', { name: 'Mark as read' })[0] as HTMLElement);
+    expect(lastCommand()).toEqual({
+      kind: 'markSmartItemRead',
+      payload: { folderId: 'sf-1', itemId: `${SK}:u1` },
+    });
+
+    // Toggling the read card marks it unread.
+    await fireEvent.click(getByRole('button', { name: 'Mark as unread' }));
+    expect(lastCommand()).toEqual({
+      kind: 'markSmartItemUnread',
+      payload: { folderId: 'sf-1', itemId: `${SK}:r1` },
+    });
+  });
+
+  test('the page shows more than the sidebar budget and pages with Show more', async () => {
+    const node: SmartNode = {
+      kind: 'smart',
+      id: 'sf-1',
+      name: 'Reading',
+      icon: 'rss',
+      sources: [{ source: 'rss', baseUrl: 'https://news.example.com/rss', queries: [] }],
+      maxItems: 10, // the sidebar budget — the page must NOT inherit it
+      hideRead: true,
+      refreshMinutes: 30,
+    };
+    const SK = 'rss:news.example.com';
+    const items = Array.from({ length: 30 }, (_, i) => ({
+      id: `e${i}`,
+      title: `Entry ${i}`,
+      url: `https://news.example.com/e${i}`,
+    }));
+    const initialState = stateWith(node, { [SK]: { state: 'ok', items, fetchedAt: 1 } });
+
+    const { container, getByText } = render(FolderPage, {
+      props: { windowId: 100, folderId: 'sf-1', initialState, tint: 'vivid' as const },
+    });
+
+    // Default page window is 24 (grid-friendly), not the folder's maxItems of 10.
+    expect(container.querySelectorAll('[data-testid="folderpage-item"]')).toHaveLength(24);
+    await fireEvent.click(getByText('Show more'));
+    expect(container.querySelectorAll('[data-testid="folderpage-item"]')).toHaveLength(30);
+  });
+
   test('no folderId renders the calm missing state (never an error card)', () => {
     const initialState = stateWith(twoFilterNode(), {});
     const { getByTestId } = render(FolderPage, {
