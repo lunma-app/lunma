@@ -25,14 +25,13 @@ interface Props {
   dropTarget?: boolean | undefined;
   /** Toggle expand/collapse (chevron + label click). */
   onToggle?: (() => void) | undefined;
-  /** When provided (smart folders, smart-folder-page), the header SPLITS: the
-   * disclosure chevron keeps expand/collapse (`onToggle`) while activating the
-   * glyph + name body calls this (open the folder's page). A hover/focus-revealed
-   * "open as page" icon button is also rendered in the trailing cluster. Absent
-   * (every regular folder) → the whole header toggles, byte-for-byte unchanged. */
-  onActivate?: (() => void) | undefined;
-  /** Accessible label + tooltip for the open-as-page affordance. */
-  activateLabel?: string | undefined;
+  /** When provided (smart folders, smart-folder-page), a hover/focus-revealed
+   * "open as page" icon button renders in the trailing cluster. The row body and
+   * chevron keep their normal expand/collapse behavior — only this icon (and the
+   * kebab item) open the page. Absent (every regular folder) → no icon. */
+  onOpenPage?: (() => void) | undefined;
+  /** Accessible label + tooltip for the open-as-page icon. */
+  openPageLabel?: string | undefined;
   /** Accessible label override; defaults to `name`. */
   label?: string | undefined;
   /** When true, the name becomes an inline editable field (rename in place). */
@@ -89,8 +88,8 @@ let {
   expanded = false,
   dropTarget = false,
   onToggle,
-  onActivate,
-  activateLabel = 'Open as page',
+  onOpenPage,
+  openPageLabel = 'Open as page',
   label,
   editing = false,
   onRename,
@@ -232,33 +231,6 @@ function onMenuOpenChange(open: boolean): void {
         oncommit={(next) => onRename?.(next)}
         oncancel={() => onRenameCancel?.()}
       />
-    {:else if onActivate}
-      <!-- Gesture split (smart-folder-page design D3): the disclosure toggles
-           expand/collapse; the glyph + name body opens the folder's page. -->
-      <button
-        type="button"
-        class="disclosure"
-        data-testid="folder-disclosure"
-        aria-label={expanded ? `Collapse ${name}` : `Expand ${name}`}
-        aria-expanded={expanded}
-        onclick={onToggle}
-      >
-        <span class="chevron" class:expanded aria-hidden="true">
-          <Icon name="chevron-right" size={12} />
-        </span>
-      </button>
-      <button
-        type="button"
-        class="hit hit-activate"
-        data-testid="folder-activate"
-        aria-label={label ?? name}
-        onclick={onActivate}
-      >
-        <span class="glyph" class:busy aria-hidden="true">
-          <Icon name={icon} size={16} />
-        </span>
-        <span class="name">{name}</span>
-      </button>
     {:else}
       <button
         type="button"
@@ -276,16 +248,16 @@ function onMenuOpenChange(open: boolean): void {
         <span class="name">{name}</span>
       </button>
     {/if}
-    {#if onActivate}
+    {#if onOpenPage}
       <span class="trailing trailing-split">
         <span class="open-page">
           <IconButton
-            icon="external-link"
-            ariaLabel={activateLabel}
-            title={activateLabel}
+            icon="maximize-2"
+            ariaLabel={openPageLabel}
+            title={openPageLabel}
             size={14}
             testid="folder-open-page"
-            onclick={onActivate}
+            onclick={onOpenPage}
           />
         </span>
         <span class="cluster">
@@ -360,29 +332,6 @@ function onMenuOpenChange(open: boolean): void {
     border-radius: var(--r-sm);
   }
 
-  /* Gesture split (smart-folder-page): the disclosure is a bare chevron-gutter
-   * button; the activate body (`.hit-activate`) starts at the glyph, so the
-   * glyph + name land at the exact x they would in the single-button layout. */
-  .disclosure {
-    flex-shrink: 0;
-    height: 100%;
-    padding: 0;
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: inherit;
-    display: inline-flex;
-    align-items: center;
-  }
-  .disclosure:focus-visible {
-    outline: var(--focus-width) solid var(--focus-color);
-    outline-offset: var(--focus-offset);
-    border-radius: var(--r-sm);
-  }
-  .hit-activate {
-    /* No leading chevron gutter — the disclosure provides it. */
-    padding-left: 0;
-  }
 
   /* Leading gutter — same width as TabRow's left padding, so the glyph aligns
    * with a tab favicon and the chevron never displaces it. */
