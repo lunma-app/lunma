@@ -11,8 +11,8 @@ interface Props {
   expanded?: boolean;
   dropTarget?: boolean;
   onToggle?: () => void;
-  onActivate?: () => void;
-  activateLabel?: string;
+  onOpenPage?: () => void;
+  openPageLabel?: string;
   label?: string;
   editing?: boolean;
   onRename?: (name: string) => void;
@@ -43,8 +43,8 @@ const {
   expanded,
   dropTarget,
   onToggle,
-  onActivate,
-  activateLabel,
+  onOpenPage,
+  openPageLabel,
   label,
   editing,
   onRename,
@@ -100,8 +100,8 @@ let menuOpen = $state(false);
     {expanded}
     {dropTarget}
     {onToggle}
-    {onActivate}
-    {activateLabel}
+    {onOpenPage}
+    {openPageLabel}
     {label}
     {editing}
     {onRename}

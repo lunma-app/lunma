@@ -229,6 +229,7 @@ export const iconLoaders: Record<string, IconLoader> = {
   'map-pin': () => import('@lucide/svelte/icons/map-pin'),
   'map-pin-house': () => import('@lucide/svelte/icons/map-pin-house'),
   martini: () => import('@lucide/svelte/icons/martini'),
+  'maximize-2': () => import('@lucide/svelte/icons/maximize-2'),
   medal: () => import('@lucide/svelte/icons/medal'),
   megaphone: () => import('@lucide/svelte/icons/megaphone'),
   'message-circle': () => import('@lucide/svelte/icons/message-circle'),
