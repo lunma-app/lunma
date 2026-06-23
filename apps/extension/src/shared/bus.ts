@@ -140,6 +140,14 @@ export type SidebarCommand =
       kind: 'openSmartItem';
       payload: { spaceId: SpaceId; folderId: FolderId; itemId: string; windowId: WindowId };
     }
+  // Open-or-focus the smart folder's full-page view (smart-folder-page). Opens an
+  // extension page (chrome-extension:// URL carrying ?folderId=…) and reuses an
+  // existing page tab in the window by tab-query dedupe — no persisted binding.
+  // NOT openUrl: that handler hardens its scheme and drops the chrome-extension:// URL.
+  | {
+      kind: 'openSmartFolderPage';
+      payload: { spaceId: SpaceId; folderId: FolderId; windowId: WindowId };
+    }
   | { kind: 'reorderTemp'; payload: { windowId: WindowId; tabIds: TabId[] } }
   | { kind: 'reorderSpaces'; payload: { spaceIds: SpaceId[] } }
   | { kind: 'renameTab'; payload: { savedTabId: SavedTabId; newName: string } }
@@ -229,6 +237,7 @@ export const SIDEBAR_COMMAND_KINDS: ReadonlySet<SidebarCommandKind> = new Set<Si
   'markAllSmartItemsRead',
   'setSmartFolderHideRead',
   'openSmartFolderListing',
+  'openSmartFolderPage',
   'reorderTemp',
   'reorderSpaces',
   'renameTab',
@@ -287,6 +296,7 @@ const _kindExhaustiveness = {
   markAllSmartItemsRead: true,
   setSmartFolderHideRead: true,
   openSmartFolderListing: true,
+  openSmartFolderPage: true,
   reorderTemp: true,
   reorderSpaces: true,
   renameTab: true,
@@ -599,6 +609,14 @@ const COMMAND_SCHEMAS = {
       windowId: z.number(),
     }),
   }),
+  openSmartFolderPage: z.strictObject({
+    kind: z.literal('openSmartFolderPage'),
+    payload: z.strictObject({
+      spaceId: z.string(),
+      folderId: z.string(),
+      windowId: z.number(),
+    }),
+  }),
   // Identity only — a payload smuggling a `url` key fails the strict parse
   // (smart-folder-item-bindings; the SW resolves the URL from its own runtime).
   openSmartItem: z.strictObject({
@@ -743,6 +761,7 @@ export const SidebarCommandSchema = z.discriminatedUnion('kind', [
   COMMAND_SCHEMAS.markAllSmartItemsRead,
   COMMAND_SCHEMAS.setSmartFolderHideRead,
   COMMAND_SCHEMAS.openSmartFolderListing,
+  COMMAND_SCHEMAS.openSmartFolderPage,
   COMMAND_SCHEMAS.reorderTemp,
   COMMAND_SCHEMAS.reorderSpaces,
   COMMAND_SCHEMAS.renameTab,

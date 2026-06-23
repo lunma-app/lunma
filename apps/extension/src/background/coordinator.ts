@@ -143,6 +143,9 @@ export const EventPolicy: Record<PendingEventKind, EventPolicyEntry> = {
   markAllSmartItemsRead: {},
   setSmartFolderHideRead: {},
   openSmartFolderListing: {},
+  // Per-click distinct (smart-folder-page): a re-click of an already-open folder
+  // page is the cheap focus path, so coalescing buys nothing.
+  openSmartFolderPage: {},
   'smartFolders.result': {},
   reorderTemp: {},
   reorderSpaces: {},

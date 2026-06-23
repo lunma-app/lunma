@@ -335,6 +335,10 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
     kind: 'openSmartFolderListing',
     payload: { spaceId: 'sp', folderId: 'sf', windowId: 1 },
   },
+  openSmartFolderPage: {
+    kind: 'openSmartFolderPage',
+    payload: { spaceId: 'sp', folderId: 'sf', windowId: 1 },
+  },
   openSmartItem: {
     kind: 'openSmartItem',
     payload: { spaceId: 'sp', folderId: 'sf', itemId: '42', windowId: 1 },

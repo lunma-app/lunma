@@ -90,6 +90,7 @@ export type PendingEvent =
   | SidebarVariant<'markAllSmartItemsRead'>
   | SidebarVariant<'setSmartFolderHideRead'>
   | SidebarVariant<'openSmartFolderListing'>
+  | SidebarVariant<'openSmartFolderPage'>
   | SidebarVariant<'reorderTemp'>
   | SidebarVariant<'reorderSpaces'>
   | SidebarVariant<'focusTab'>
