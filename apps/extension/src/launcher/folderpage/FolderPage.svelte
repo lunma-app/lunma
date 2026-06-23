@@ -307,7 +307,15 @@ function openItem(cfg: ResolvedSourceConfig, item: SmartFolderItem): void {
   if (spaceId === null || !node) return;
   dispatch({
     kind: 'openSmartItem',
-    payload: { spaceId, folderId: node.id, itemId: `${sourceKey(cfg)}:${item.id}`, windowId },
+    payload: {
+      spaceId,
+      folderId: node.id,
+      itemId: `${sourceKey(cfg)}:${item.id}`,
+      windowId,
+      // Mark this as a page-originated open so closing the tab returns to the
+      // page rather than auto-advancing to the next feed item.
+      fromPage: true,
+    },
   });
 }
 
