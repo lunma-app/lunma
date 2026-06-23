@@ -207,21 +207,21 @@ The page SHALL provide reading controls for each **feed** section (queue section
 - **AND WHEN** the user activates the toggle on a read item
 - **THEN** `markSmartItemUnread { folderId, itemId }` is dispatched and the id leaves the read set
 
-### Requirement: Feed auto-advance is suppressed when the folder page is open
+### Requirement: Feed auto-advance is suppressed for items opened from the page
 
-The feed reading queue's **auto-advance** (closing the tab of an unread feed item opens the next unread item in the same section) is a sidebar reading-flow affordance: it assumes the reader has no reading surface to return to. When the folder's **full page is open in the same window**, the reader is reading from the page, so closing an item SHALL return to the page (Chrome's natural focus) rather than auto-advancing.
+The feed reading queue's **auto-advance** (closing the tab of an unread feed item opens the next unread item in the same section) is a sidebar reading-flow affordance: it keeps the reader moving when the sidebar is their only reading surface. An item opened **from the folder page** SHALL NOT auto-advance on close — closing it SHALL return to the page (Chrome's natural focus). An item opened from the **sidebar** SHALL auto-advance exactly as before, **regardless of whether the folder page also happens to be open**.
 
-The `tabs.onRemoved` handler SHALL therefore suppress auto-advance when a folder-page tab for the closing item's folder is open in that window — detected by scanning `liveTabsById` for a tab whose URL is the folder-page path with a matching `folderId` query param (no chrome query). The service worker cannot observe sidebar visibility or folder-expanded state (both are sidebar-local, never broadcast), so an open folder page is the reliable proxy for "reading from the page, not the sidebar". All other auto-advance rules (consume=close never advances; only an unread manual close advances) are unchanged.
+The discriminator SHALL be the item's **open origin**, not whether the page is open: `openSmartItem` carries an optional `fromPage` flag (set by the page, absent for sidebar opens); when set, the SW records the bound tab id in an SW-session set (`background/page-opened-tabs.ts`, in-memory, not persisted). `tabs.onRemoved` SHALL suppress auto-advance when the closing tab is in that set, and SHALL forget the tab id on close. (The service worker cannot observe sidebar visibility or folder-expanded state — both are sidebar-local, never broadcast — so origin tracking, not an "is the page open" proxy, is the correct signal.) All other auto-advance rules (consume=close never advances; only an unread manual close advances) are unchanged.
 
-#### Scenario: Closing an unread item auto-advances when no page is open
+#### Scenario: A sidebar-opened item auto-advances on close
 
-- **GIVEN** a feed section with unread items and no folder page open in the window
-- **WHEN** the user closes the unread reading tab
-- **THEN** the next unread item in the section opens (auto-advance, unchanged)
+- **GIVEN** a feed section with unread items, the reading tab opened from the sidebar (no `fromPage`)
+- **WHEN** the user closes that unread tab
+- **THEN** the next unread item in the section opens (auto-advance) — even if the folder page is also open
 
-#### Scenario: Closing an unread item does not auto-advance when the page is open
+#### Scenario: A page-opened item does not auto-advance on close
 
-- **GIVEN** the folder's page is open in the same window and an unread feed item's tab is open
+- **GIVEN** a feed item whose tab was opened from the page (`openSmartItem { fromPage: true }`)
 - **WHEN** the user closes that tab
 - **THEN** no next item opens — focus returns toward the page
 
