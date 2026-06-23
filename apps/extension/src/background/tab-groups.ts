@@ -20,6 +20,18 @@ import type { TabId, WindowId } from '../shared/types';
 const NO_GROUP = -1;
 
 /**
+ * Chrome refuses tab edits (move / group / activate) while the user is mid-drag:
+ * "Tabs cannot be edited right now (user may be dragging a tab)." It is a benign,
+ * self-healing transient — the next reconcile after the drag ends re-applies the
+ * intent — so callers log it at `debug`, never `error` (it would otherwise spam
+ * the error log every time a Space switch races a tab drag).
+ */
+function isTabBusyError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /cannot be edited|dragging a tab/i.test(msg);
+}
+
+/**
  * Map a Lunma `SpaceColor` to a `chrome.tabGroups.Color`. The nine `SpaceColor`
  * values are exactly Chrome's nine group colours, so every colour maps 1:1 — the
  * only spelling difference is Lunma's `gray` vs Chrome's `grey`. Anything
@@ -89,7 +101,16 @@ export async function ensureGroupForSpace(
     }
     return await chrome.tabs.group(options);
   } catch (err) {
-    log.error('ensureGroupForSpace failed', { windowId, tabIds, groupId, err });
+    if (isTabBusyError(err)) {
+      log.debug('ensureGroupForSpace: deferred (tab busy / user dragging)', {
+        windowId,
+        tabIds,
+        groupId,
+        err,
+      });
+    } else {
+      log.error('ensureGroupForSpace failed', { windowId, tabIds, groupId, err });
+    }
     return null;
   }
 }
@@ -173,7 +194,11 @@ export async function activateTab(tabId: TabId): Promise<void> {
   try {
     await chrome.tabs.update(tabId, { active: true });
   } catch (err) {
-    log.error('activateTab failed', { tabId, err });
+    if (isTabBusyError(err)) {
+      log.debug('activateTab: deferred (tab busy / user dragging)', { tabId, err });
+    } else {
+      log.error('activateTab failed', { tabId, err });
+    }
   }
 }
 
