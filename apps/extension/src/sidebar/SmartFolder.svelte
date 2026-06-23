@@ -300,6 +300,13 @@ function openAll(): void {
   dispatch({ kind: 'openSmartFolderListing', payload: { spaceId, folderId: node.id, windowId } });
 }
 
+// Open the folder's full-page view (smart-folder-page). The disclosure chevron
+// still toggles expand/collapse — only the folder body/label and this action
+// open the page (gesture split, design D3).
+function openPage(): void {
+  dispatch({ kind: 'openSmartFolderPage', payload: { spaceId, folderId: node.id, windowId } });
+}
+
 function markAllRead(): void {
   dispatch({ kind: 'markAllSmartItemsRead', payload: { spaceId, folderId: node.id } });
 }
@@ -352,6 +359,7 @@ const menuItems = $derived<RowMenuItem[] & MenuItem[]>([
       editing = true;
     },
   },
+  { id: 'open-page', label: 'Open as page', icon: 'external-link', onSelect: openPage },
   { id: 'open-all', label: 'Open all in a tab', icon: 'arrow-up-right', onSelect: openAll },
   ...(hasFeedSections
     ? [{ id: 'mark-all-read', label: 'Mark all read', icon: 'check-check', onSelect: markAllRead }]
@@ -412,6 +420,8 @@ export function onContextMenu(e: MouseEvent): void {
   color={spaceColor}
   {expanded}
   {onToggle}
+  onActivate={openPage}
+  activateLabel={`Open ${node.name} as a page`}
   label={badge === undefined
     ? node.name
     : `${node.name}, ${badge} ${hasFeedSections ? 'unread' : 'items'}`}

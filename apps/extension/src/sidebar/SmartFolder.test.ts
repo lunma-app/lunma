@@ -430,14 +430,22 @@ describe('SmartFolder — menu (Refresh now · Edit… · Move · Delete)', () =
   const menuItem = (id: string): HTMLButtonElement =>
     document.querySelector(`[data-menu-id="${id}"]`) as HTMLButtonElement;
 
-  test('a queue folder carries Refresh · Edit · Open-all · Move · Delete (no Mark-all-read)', async () => {
+  test('a queue folder carries Refresh · Edit · Open-as-page · Open-all · Move · Delete (no Mark-all-read)', async () => {
     const store = makeStore({ state: 'ok', items: [], fetchedAt: 1 });
     const { container } = renderSmart(store);
     await fireEvent.click(container.querySelector(TRIGGER) as HTMLButtonElement);
     const ids = [...document.querySelectorAll('[data-testid="folder-row-menu-item"]')].map((e) =>
       e.getAttribute('data-menu-id'),
     );
-    expect(ids).toEqual(['refresh', 'edit', 'open-all', 'move-up', 'move-down', 'delete']);
+    expect(ids).toEqual([
+      'refresh',
+      'edit',
+      'open-page',
+      'open-all',
+      'move-up',
+      'move-down',
+      'delete',
+    ]);
   });
 
   test('a feed folder additionally carries Mark all read', async () => {
@@ -451,6 +459,7 @@ describe('SmartFolder — menu (Refresh now · Edit… · Move · Delete)', () =
     expect(ids).toEqual([
       'refresh',
       'edit',
+      'open-page',
       'open-all',
       'mark-all-read',
       'move-up',
