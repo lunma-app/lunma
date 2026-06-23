@@ -35,10 +35,10 @@
 
 ## 6. Sidebar entry points
 
-- [x] 6.1 Add an optional `onActivate` (+ `activateLabel`) to `FolderRow`: when present, the body click calls `onActivate` and the disclosure slot calls `onToggle`; when absent (regular folders), the whole header falls back to `onToggle` unchanged. Tests prove regular folders are unchanged + the split + the open-page icon button.
-- [x] 6.2 In `SmartFolder.svelte`, pass `onActivate` → dispatch `openSmartFolderPage`, keeping the disclosure region on expand/collapse.
+- [x] 6.1 Add an optional `onOpenPage` (+ `openPageLabel`) to `FolderRow`: when present, render a hover/focus-revealed "open as page" icon button in the trailing cluster; the row body + chevron keep normal expand/collapse. Absent (regular folders) → no icon. Tests prove regular folders are unchanged, the body still toggles, and the icon opens the page. (An earlier body-click gesture split was implemented then reverted at the user's request — see design D3.)
+- [x] 6.2 In `SmartFolder.svelte`, pass `onOpenPage` → dispatch `openSmartFolderPage`.
 - [x] 6.3 Add the `"Open as page"` kebab menu item (`id: 'open-page'`, icon `external-link`) dispatching `openSmartFolderPage`. Existing menu-id assertions updated.
-- [x] 6.4 Add the hover/focus-revealed "open as page" icon button (composed `Button`/`Icon` via `IconButton`) in the smart folder header with an accessible label.
+- [x] 6.4 The "open as page" icon button uses `IconButton` (icon `maximize-2`) with an accessible label.
 
 ## 7. Visual quality, a11y & tests
 
@@ -57,6 +57,8 @@
 - [x] 9a.1 Add the `markSmartItemUnread { folderId, itemId }` command (bus union/kinds/exhaustiveness/schema/array, coordinator coalescing, context variant, handler + return Pick, bus.test sample) and `LunmaStore.markSmartItemUnread` (removes the id from `smartReadState`, drops the folder entry when empty). Handler test covers it.
 - [x] 9a.2 `FolderPageItem`: render a hover/focus-revealed read-toggle as a SIBLING of the card button (`.card-wrap`); `check` (mark read) / `rotate-ccw` (mark unread) by `read`. Feed-only (`onToggleRead`). Reduced-motion covered.
 - [x] 9a.3 `FolderPage`: page-local `revealedRead` + `limits` (keyed by sourceKey); `displayItems` shows unread at rest, all when revealed, capped to the window; `FEED_PAGE_DEFAULT = 24` (decoupled from `maxItems`); "Show more" pages by that; "Show N read" / "Hide read" reveal toggle; per-card `toggleRead` dispatches mark read/unread. Component tests cover reveal, show-more, and the toggle dispatch.
+- [x] 9a.4 Suppress feed auto-advance when the folder page is open in the window: `tabs.onRemoved` checks `folderPageOpenInWindow` (scans `liveTabsById` for the folder-page URL + `folderId`) before enqueuing the next item. Handler tests cover advance (no page) and suppression (page open). (The SW can't see sidebar visibility/expand state — page-open is the SW-knowable proxy.)
+- [x] 9a.5 The page tab is a managed view, not Temporary: add `isFolderPageUrl` (`shared/new-tab.ts`); `tabs.onCreated`/`onUpdated` skip temp adoption (and onCreated skips regroup) for it, like a home tab. The page sets `<svelte:head><title>{folder} · Lunma</title>`. Tests: `isFolderPageUrl` unit + a folder-page tab is not adopted into Temporary.
 
 ## 10. Docs, artifact lockstep & verify
 
