@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { PinNode, SmartSectionRuntime } from '../shared/types';
 import type { PendingEvent } from './coordinator';
 import { makeCoordinator, sidebar } from './coordinator.test-helpers';
+import { markPageOpenedTab, resetPageOpenedTabs } from './page-opened-tabs';
 import { resetSmartFoldersInflight, SMART_FOLDERS_ALARM_NAME } from './smart-folders';
 
 type SmartNode = Extract<PinNode, { kind: 'smart' }>;
@@ -83,6 +84,7 @@ function resultEvent(
 beforeEach(() => {
   installChrome();
   resetSmartFoldersInflight();
+  resetPageOpenedTabs();
   fetchMock = vi.fn(async () => jsonResponse([]));
   vi.stubGlobal('fetch', fetchMock);
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -958,8 +960,8 @@ describe('feed read-state handlers', () => {
     return { coordinator, store, stub };
   }
 
-  test('closing an unread feed item auto-advances when NO folder page is open', async () => {
-    const { coordinator, stub } = seedTwoItemFeed();
+  test('closing a SIDEBAR-opened unread feed item auto-advances', async () => {
+    const { coordinator, stub } = seedTwoItemFeed(); // post-1 bound, not page-marked
     coordinator.enqueue({
       source: 'chrome',
       kind: 'tabs.onRemoved',
@@ -973,24 +975,17 @@ describe('feed read-state handlers', () => {
     });
   });
 
-  test('closing an unread feed item does NOT auto-advance when the folder page is open', async () => {
-    const { coordinator, store, stub } = seedTwoItemFeed();
-    // The folder's page is open in window 100 — the user reads from it.
-    store.syncLiveTab({
-      id: 777,
-      windowId: 100,
-      title: 'Feeds',
-      url: 'chrome-extension://abc/src/launcher/folderpage/index.html?folderId=feed-1',
-      active: false,
-      status: 'complete',
-    });
+  test('closing a PAGE-opened unread feed item does NOT auto-advance', async () => {
+    const { coordinator, stub } = seedTwoItemFeed();
+    // The item's tab was opened from the folder page — closing returns there,
+    // even with the sidebar open (the regression this guards against).
+    markPageOpenedTab(999);
     coordinator.enqueue({
       source: 'chrome',
       kind: 'tabs.onRemoved',
       payload: { tabId: 999, info: { windowId: 100, isWindowClosing: false } },
     });
     await coordinator.idle();
-    // No next item opened — the close returns to the page instead.
     expect(stub.tabs.create).not.toHaveBeenCalled();
   });
 

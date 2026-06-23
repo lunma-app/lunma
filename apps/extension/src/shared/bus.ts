@@ -139,7 +139,16 @@ export type SidebarCommand =
   // listed, throws (error ack).
   | {
       kind: 'openSmartItem';
-      payload: { spaceId: SpaceId; folderId: FolderId; itemId: string; windowId: WindowId };
+      payload: {
+        spaceId: SpaceId;
+        folderId: FolderId;
+        itemId: string;
+        windowId: WindowId;
+        // True when dispatched from the folder page (smart-folder-page): the SW
+        // records the bound tab so closing it returns to the page rather than
+        // auto-advancing to the next unread feed item. Absent for sidebar opens.
+        fromPage?: boolean;
+      };
     }
   // Open-or-focus the smart folder's full-page view (smart-folder-page). Opens an
   // extension page (chrome-extension:// URL carrying ?folderId=…) and reuses an
@@ -633,6 +642,7 @@ const COMMAND_SCHEMAS = {
       folderId: z.string(),
       itemId: z.string(),
       windowId: z.number(),
+      fromPage: z.boolean().optional(),
     }),
   }),
   reorderTemp: z.strictObject({

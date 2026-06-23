@@ -116,6 +116,8 @@ describe('FolderPage (smart-folder-page)', () => {
         folderId: 'sf-1',
         itemId: `${GITLAB_AUTHORED_SK}:42`,
         windowId: 100,
+        // Page-originated open → closing returns to the page (no auto-advance).
+        fromPage: true,
       },
     });
   });

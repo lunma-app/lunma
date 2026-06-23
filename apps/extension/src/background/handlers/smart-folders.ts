@@ -7,6 +7,7 @@
 import { log } from '../../shared/logger';
 import type { FolderId, SmartFolderItem, SmartSourceConfig, SpaceId } from '../../shared/types';
 import { pageGlob } from '../../shared/url-boundary';
+import { markPageOpenedTab } from '../page-opened-tabs';
 import {
   CONNECTORS,
   normalizeBaseUrl,
@@ -198,7 +199,7 @@ export function smartFolderHandlers(
     // Smart-item activation (smart-folder-item-bindings, design D2): identity
     // in, URL from the SW's own runtime — open-if-dormant, focus-if-bound.
     openSmartItem: async (ctx, event) => {
-      const { spaceId, folderId, itemId, windowId } = event.payload;
+      const { spaceId, folderId, itemId, windowId, fromPage } = event.payload;
       // Unknown spaceId/folderId throws (error ack) — the unknown-id convention.
       requireSmartNode(ctx, 'openSmartItem', spaceId, folderId);
       // NOTE (rss-connector, the draining queue): opening a FEED item does NOT
@@ -213,6 +214,9 @@ export function smartFolderHandlers(
       // needs no URL at all.
       const boundSlot = ctx.store.state.smartItemBindings[folderId]?.[itemId]?.[windowId];
       if (boundSlot !== undefined) {
+        // A page-originated re-open marks the (already bound) tab so its close
+        // returns to the page rather than auto-advancing (smart-folder-page).
+        if (fromPage) markPageOpenedTab(boundSlot.tabId);
         const tab = await chrome.tabs.update(boundSlot.tabId, { active: true });
         if (tab?.windowId !== undefined) {
           await chrome.windows.update(tab.windowId, { focused: true });
@@ -265,6 +269,9 @@ export function smartFolderHandlers(
         throw new Error('openSmartItem: opened tab has no id');
       }
       const tabId = tab.id;
+      // Opened from the page → record so closing returns to the page instead of
+      // auto-advancing (smart-folder-page).
+      if (fromPage) markPageOpenedTab(tabId);
       // Bind in the SAME drain (the openSavedTab ordering): the binding lands
       // before Chrome's onCreated round-trips, so the temp classifier's
       // isBound check passes the tab over — it NEVER appears in Temporary.
