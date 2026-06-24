@@ -3,6 +3,13 @@ packages:
   - 'packages/*'
 minimumReleaseAgeExclude:
   - '@sveltejs/kit@2.63.1'
+# Security overrides for transitive (dev/build-time only) deps flagged by
+# Dependabot — neither ships in the extension or static-site bundle.
+overrides:
+  # Stay on the same major: undici 8 drops the internal module path jsdom@29
+  # requires; cookie kept in 0.x for @sveltejs/kit@2.65 compatibility.
+  'undici@>=7.0.0 <7.28.0': '>=7.28.0 <8'
+  'cookie@<0.7.0': '>=0.7.0 <1'
 # Shared toolchain versions live here so the two apps' verify gates and compiler
 # behaviour can never silently diverge. Both apps reference these via `catalog:`.
 catalog:
