@@ -4,7 +4,7 @@
 // Google requires), and the JSON-LD builders the <head> emits.
 import { CHROME_WEB_STORE_URL, GITHUB_URL, LAUNCHED, MIN_CHROMIUM } from '$lib/links';
 
-/** Canonical origin. [VERIFY] confirm `lunma.app` is the live domain at launch. */
+/** Canonical origin. */
 export const SITE_URL = 'https://lunma.app';
 export const SITE_NAME = 'Lunma';
 
@@ -12,7 +12,7 @@ export const SITE_NAME = 'Lunma';
  *  language (no keyword stuffing): the long-tail is carried by real content. */
 export const SITE_TITLE = 'Lunma — Arc-style Spaces & vertical tabs for Chrome';
 export const SITE_DESCRIPTION =
-  'Lunma is an open-source Chrome and Edge extension with Arc-style Spaces: a vertical sidebar that groups your tabs by project, a launcher on Alt+L, and idle tabs that archive themselves. It runs in the browser you already use. No account, no server, everything on your device.';
+  'Lunma is an open-source Chrome and Edge extension. Every project gets its own colour-coded Space in the vertical sidebar. The launcher on Alt+L searches your tabs, bookmarks, and history. Idle tabs archive themselves. Connect a Lens to GitLab, GitHub, Jira, or an RSS feed and the work waiting for you shows up in your Space. It stays current on its own. Self-hosted instances work. No Lunma account, no server. Everything on your device.';
 
 /** og:image — absolute URL + intrinsic size for richer social cards. */
 export const OG_IMAGE = `${SITE_URL}/og.png`;
@@ -76,9 +76,7 @@ export function softwareAppLd(): Record<string, unknown> {
     operatingSystem: `Chrome, Edge (Chromium ${MIN_CHROMIUM}+)`,
     description: SITE_DESCRIPTION,
     url: SITE_URL,
-    // Pre-launch there is no listing, so we don't advertise a downloadUrl (gated
-    // on LAUNCHED, like the install CTAs). At launch it becomes the real listing.
-    ...(LAUNCHED ? { downloadUrl: CHROME_WEB_STORE_URL } : {}), // [VERIFY] real listing at launch
+    ...(LAUNCHED ? { downloadUrl: CHROME_WEB_STORE_URL } : {}),
     softwareHelp: GITHUB_URL,
     offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
     isAccessibleForFree: true,
