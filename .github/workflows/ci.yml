@@ -13,6 +13,11 @@ on:
   pull_request:
   push:
     branches: [main]
+  # The merge queue re-runs the full gate against the queued commits + latest
+  # main on a temporary branch, so required checks must report on this event or
+  # the queue stalls. Jobs only checkout + run, so no event-specific wiring is
+  # needed here (unlike dco/identity, which read the PR base/head SHAs).
+  merge_group:
 
 # Least privilege: the workflow only reads the repo; it never mutates it.
 permissions:
@@ -39,7 +44,7 @@ jobs:
       # Let corepack fetch the packageManager-pinned pnpm non-interactively.
       COREPACK_ENABLE_DOWNLOAD_PROMPT: 0
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.0
       - uses: actions/setup-node@v6
         with:
           node-version: 24
@@ -50,7 +55,7 @@ jobs:
       # static string, and the store only exists once corepack activates pnpm.
       - id: pnpm-store
         run: echo "dir=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v5
+      - uses: actions/cache@v5.0.5
         with:
           path: ${{ steps.pnpm-store.outputs.dir }}
           key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
@@ -63,14 +68,14 @@ jobs:
     env:
       COREPACK_ENABLE_DOWNLOAD_PROMPT: 0
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.0
       - uses: actions/setup-node@v6
         with:
           node-version: 24
       - run: corepack enable
       - id: pnpm-store
         run: echo "dir=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v5
+      - uses: actions/cache@v5.0.5
         with:
           path: ${{ steps.pnpm-store.outputs.dir }}
           key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
@@ -99,14 +104,14 @@ jobs:
     env:
       COREPACK_ENABLE_DOWNLOAD_PROMPT: 0
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.0
       - uses: actions/setup-node@v6
         with:
           node-version: 24
       - run: corepack enable
       - id: pnpm-store
         run: echo "dir=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v5
+      - uses: actions/cache@v5.0.5
         with:
           path: ${{ steps.pnpm-store.outputs.dir }}
           key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
