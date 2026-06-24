@@ -1,17 +1,20 @@
-// Outbound links. The store listings do not exist until Lunma is published, so
-// these are placeholders — [VERIFY] and replace with the real listing/repo URLs
-// before launch.
-export const CHROME_WEB_STORE_URL = 'https://chromewebstore.google.com/'; // [VERIFY] Lunma listing
-export const EDGE_ADDONS_URL = 'https://microsoftedge.microsoft.com/addons/'; // [VERIFY] Lunma listing
+// Outbound links.
+export const CHROME_WEB_STORE_URL =
+  'https://chromewebstore.google.com/detail/lunma/efdgelbfagbcjnobncgoodbekgcihlle';
+export const EDGE_ADDONS_URL = 'https://microsoftedge.microsoft.com/addons/'; // [VERIFY] Lunma listing when Edge ships
 export const GITHUB_URL = 'https://github.com/lunma-app/lunma'; // [VERIFY] public repo URL
 
 /**
- * Launch gate. While `false` (pre-launch), the install CTAs render an honest
- * "coming soon" state instead of linking to a store listing that doesn't exist
- * yet. Flip to `true` with the real store URLs above at launch and every CTA
- * becomes a live install button with no other change. [VERIFY] set true at launch.
+ * Chrome launch gate. Flip to `true` once the Chrome Web Store listing is live;
+ * all Chrome CTAs and the footer store link become active with no other change.
  */
-export const LAUNCHED = false;
+export const LAUNCHED = true;
+
+/**
+ * Edge launch gate. Independent of `LAUNCHED` — flip when the Edge Add-ons
+ * listing is live. While `false`, Edge CTAs and the footer Edge link are hidden.
+ */
+export const EDGE_LAUNCHED = false;
 
 /** Minimum supported Chromium version, mirrored from the extension manifest. */
 export const MIN_CHROMIUM = 123;
