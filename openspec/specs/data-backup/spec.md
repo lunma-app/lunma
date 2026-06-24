@@ -13,9 +13,7 @@ bindings, per-window Space instances, tab activity, and connector tokens — are
 deliberately excluded; window-bound maps re-seed empty on import. The whole flow
 is surfaced as a Backup & restore group on the options page, gated behind a
 two-step destructive-import confirm.
-
 ## Requirements
-
 ### Requirement: Portable backup envelope format
 
 A backup SHALL be a single JSON object — the `BackupEnvelope` (exported from
@@ -104,7 +102,7 @@ that importing replaces the current data, and only the second activation SHALL d
 A backup SHALL NOT contain machine-bound or secret data: live tab bindings
 (`tabBindings`), per-window Space instances (`spaceInstancesByWindow`), the per-window
 active Space (`activeSpaceByWindow`), tab activity timestamps (`tabLastActivity`), the
-live-tab slice (`liveTabsById`), ephemeral smart-folder results (`smartFolders`), or
+live-tab slice (`liveTabsById`), ephemeral lens results (`lenses`), or
 **connector tokens** (which Lunma keeps strictly machine-local). On import these
 window-bound maps SHALL be re-seeded to empty defaults, so the imported data adopts the new
 machine's live tabs cleanly on next boot rather than referencing another machine's tab ids.
@@ -112,7 +110,7 @@ machine's live tabs cleanly on next boot rather than referencing another machine
 #### Scenario: A backup omits live and secret state
 
 - **WHEN** a backup is produced
-- **THEN** it SHALL NOT contain `tabBindings`, `spaceInstancesByWindow`, `activeSpaceByWindow`, `tabLastActivity`, `liveTabsById`, `smartFolders`, or connector tokens
+- **THEN** it SHALL NOT contain `tabBindings`, `spaceInstancesByWindow`, `activeSpaceByWindow`, `tabLastActivity`, `liveTabsById`, `lenses`, or connector tokens
 
 #### Scenario: Imported window-bound maps start empty
 
@@ -131,3 +129,4 @@ contrast and respect reduced motion, at the page's visual bar.
 
 - **WHEN** the options page renders
 - **THEN** it SHALL show a Backup & restore group with Export and Import actions composed from existing primitives
+

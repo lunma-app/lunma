@@ -527,7 +527,7 @@ surface.
 The tooltip's positioned content layer SHALL be owned by the headless tooltip
 behaviour rather than a hand-rolled presence gate, and SHALL unmount **together
 with its trigger**: when the trigger is removed — for example a sidebar list row
-unmounting on a Space switch, a smart-folder refresh, hide-read, or an item
+unmounting on a Space switch, a lens refresh, hide-read, or an item
 dropping out of a connector result set — the tooltip's content/positioning layer
 SHALL NOT remain mounted beyond the trigger's teardown. No stale tooltip SHALL
 linger after its trigger is gone, and no reactive read SHALL survive the

@@ -1,6 +1,6 @@
 # marketing-site Specification
 
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: Lenses are positioned as a live-queue platform and demonstrated
 
@@ -86,9 +86,3 @@ TrustBand's "settings … on this device only" wording so the two agree.
 - **WHEN** a reader opens `/privacy`
 - **THEN** it SHALL state that workspace data lives in on-device local storage, that preferences sync via the browser while tokens do not, that there is no Lunma server or account, and that there is no analytics/telemetry
 - **AND** it SHALL state that a connected service is contacted directly using **either** a user-provided token **or** the existing signed-in session, with nothing sent to Lunma and tokens never logged
-
-## REMOVED Requirements
-
-### Requirement: Smart folders are positioned as a live-queue platform and demonstrated
-
-**Reason**: Renamed to lens vocabulary by establish-lens-model.
