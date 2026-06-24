@@ -47,4 +47,5 @@ Lunma uses an **OpenSpec** workflow — non-trivial changes start as a proposal 
 ## Reporting issues
 
 Bugs, ideas, and brand-impersonation reports are all welcome as issues. For security
-reports, please contact the maintainer privately rather than opening a public issue.
+reports, **don't** open a public issue — follow [`SECURITY.md`](SECURITY.md) to report
+the vulnerability privately.
