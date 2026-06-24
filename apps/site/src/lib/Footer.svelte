@@ -2,6 +2,7 @@
 import {
   CHROME_WEB_STORE_URL,
   EDGE_ADDONS_URL,
+  EDGE_LAUNCHED,
   GITHUB_URL,
   LAUNCHED,
   PRIVACY_PATH,
@@ -22,6 +23,8 @@ import Wordmark from '$lib/Wordmark.svelte';
            homepage. They appear (with the real listing URLs) when the flag flips. -->
       {#if LAUNCHED}
         <a href={CHROME_WEB_STORE_URL} target="_blank" rel="noopener">Chrome Web Store</a>
+      {/if}
+      {#if EDGE_LAUNCHED}
         <a href={EDGE_ADDONS_URL} target="_blank" rel="noopener">Edge Add-ons</a>
       {/if}
     </p>

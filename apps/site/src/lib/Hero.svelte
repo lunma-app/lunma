@@ -1,6 +1,6 @@
 <script lang="ts">
 import InstallCta from '$lib/InstallCta.svelte';
-import { CHROME_WEB_STORE_URL, EDGE_ADDONS_URL } from '$lib/links';
+import { CHROME_WEB_STORE_URL, EDGE_ADDONS_URL, EDGE_LAUNCHED } from '$lib/links';
 import { altKeySymbol } from '$lib/platform.svelte';
 import StageWindow from '$lib/StageWindow.svelte';
 </script>
@@ -17,7 +17,9 @@ import StageWindow from '$lib/StageWindow.svelte';
       </p>
       <div class="ctas kindle k3">
         <InstallCta href={CHROME_WEB_STORE_URL}>Add to Chrome, it's free</InstallCta>
-        <InstallCta href={EDGE_ADDONS_URL} variant="ghost">Add to Edge</InstallCta>
+        {#if EDGE_LAUNCHED}
+          <InstallCta href={EDGE_ADDONS_URL} variant="ghost">Add to Edge</InstallCta>
+        {/if}
       </div>
       <p class="hint kindle k3">Free, and it never phones home.</p>
     </div>
