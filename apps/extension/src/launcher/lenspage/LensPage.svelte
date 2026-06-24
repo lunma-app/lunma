@@ -437,7 +437,7 @@ const pageTitle = $derived(node ? `${node.name} · Lunma` : 'Lens · Lunma');
     {#if !node}
       <!-- Calm neutral state: no folderId, or the folder isn't in state (yet, or
            deleted). Never an error card. -->
-      <section class="missing" data-testid="folderpage-missing">
+      <section class="missing" data-testid="lenspage-missing">
         <Icon name="layers" size={40} color="var(--text-dim)" />
         <h1 class="missing-title">No lens to show</h1>
         <p class="missing-copy">
@@ -445,18 +445,18 @@ const pageTitle = $derived(node ? `${node.name} · Lunma` : 'Lens · Lunma');
         </p>
       </section>
     {:else}
-      <header class="page-head" data-testid="folderpage-head">
+      <header class="page-head" data-testid="lenspage-head">
         <span class="head-glyph" aria-hidden="true">
           <Icon name={node.icon} size={28} color="var(--space-c)" />
         </span>
-        <h1 class="page-name" data-testid="folderpage-name">{node.name}</h1>
-        <p class="page-meta" data-testid="folderpage-meta">
+        <h1 class="page-name" data-testid="lenspage-name">{node.name}</h1>
+        <p class="page-meta" data-testid="lenspage-meta">
           {sections.length}
           {sectionWord}{#if attentionSum > 0} · {attentionSum} waiting{/if}
         </p>
       </header>
 
-      <div class="sections" data-testid="folderpage-sections">
+      <div class="sections" data-testid="lenspage-sections">
         {#each sections as cfg, sectionIndex (sourceKey(cfg))}
           {@const sec = sectionRuntime(cfg)}
           {@const secState = sec?.state ?? 'pending'}
@@ -469,7 +469,7 @@ const pageTitle = $derived(node ? `${node.name} · Lunma` : 'Lens · Lunma');
             class="section-panel"
             class:feed={isFeed}
             style:--i={sectionIndex}
-            data-testid="folderpage-section"
+            data-testid="lenspage-section"
             data-source-key={sourceKey(cfg)}
           >
             <Surface variant="glass" radius="lg" glow testid="lenspage-section-surface">
@@ -480,20 +480,20 @@ const pageTitle = $derived(node ? `${node.name} · Lunma` : 'Lens · Lunma');
                   </span>
                   <h2 class="section-label">{sectionLabel(cfg)}</h2>
                   {#if count > 0}
-                    <span class="section-count" data-testid="folderpage-section-count">{count}</span>
+                    <span class="section-count" data-testid="lenspage-section-count">{count}</span>
                   {/if}
                 </div>
 
                 {#if secState === 'pending' && items.length === 0}
-                  <div class="ghost" data-testid="folderpage-ghost" aria-hidden="true"></div>
-                  <div class="ghost" data-testid="folderpage-ghost" aria-hidden="true"></div>
-                  <div class="ghost" data-testid="folderpage-ghost" aria-hidden="true"></div>
+                  <div class="ghost" data-testid="lenspage-ghost" aria-hidden="true"></div>
+                  <div class="ghost" data-testid="lenspage-ghost" aria-hidden="true"></div>
+                  <div class="ghost" data-testid="lenspage-ghost" aria-hidden="true"></div>
                 {:else if secState === 'signed-out'}
                   {#if cfg.source === 'github'}
                     <button
                       type="button"
                       class="signin-row"
-                      data-testid="folderpage-signin"
+                      data-testid="lenspage-signin"
                       onclick={() => void openConnectorsSettings()}
                     >
                       Add a token in Settings → Connectors
@@ -502,14 +502,14 @@ const pageTitle = $derived(node ? `${node.name} · Lunma` : 'Lens · Lunma');
                     <button
                       type="button"
                       class="signin-row"
-                      data-testid="folderpage-signin"
+                      data-testid="lenspage-signin"
                       onclick={() => signIn(cfg)}
                     >
                       Sign in to {hostOf(cfg)}
                     </button>
                   {/if}
                 {:else if secState === 'needs-access'}
-                  <div class="needs-access" data-testid="folderpage-needs-access">
+                  <div class="needs-access" data-testid="lenspage-needs-access">
                     <Icon name="key-round" size={16} />
                     <span class="needs-access-copy">Lunma needs access to {hostOf(cfg)}</span>
                     <Button
@@ -551,10 +551,10 @@ const pageTitle = $derived(node ? `${node.name} · Lunma` : 'Lens · Lunma');
                     </div>
                   {/if}
                   {#if note}
-                    <p class="note-row" data-testid="folderpage-empty-note">{note}</p>
+                    <p class="note-row" data-testid="lenspage-empty-note">{note}</p>
                   {/if}
                   {#if secState === 'error'}
-                    <p class="note-row" data-testid="folderpage-error-note">
+                    <p class="note-row" data-testid="lenspage-error-note">
                       Couldn't reach {hostOf(cfg)}
                     </p>
                   {/if}
@@ -563,7 +563,7 @@ const pageTitle = $derived(node ? `${node.name} · Lunma` : 'Lens · Lunma');
                        clear them or reopen the page. -->
                   {#if isFeed && (hasMore(cfg) || lingeringReadCount(cfg) > 0 || drainedReadCount(cfg) > 0)}
                     {@const sk = sourceKey(cfg)}
-                    <div class="reading-controls" data-testid="folderpage-reading-controls">
+                    <div class="reading-controls" data-testid="lenspage-reading-controls">
                       {#if hasMore(cfg)}
                         <Button variant="ghost" size="sm" onclick={() => showMore(sk)}>
                           <span>Show more</span>

@@ -554,7 +554,7 @@ export function onContextMenu(e: MouseEvent): void {
                     type="button"
                     class="result-row"
                     class:active
-                    data-testid="smart-result-row"
+                    data-testid="lens-result-row"
                     data-bound={bound}
                     data-active={active}
                     aria-label={itemAria(cfg, item, false)}
@@ -576,7 +576,7 @@ export function onContextMenu(e: MouseEvent): void {
                 class:feed={isSectionFeed}
                 class:read
                 tabindex={collapsed ? -1 : undefined}
-                data-testid="smart-result-row"
+                data-testid="lens-result-row"
                 data-bound={bound}
                 data-active={active}
                 aria-label={itemAria(cfg, item, read)}

@@ -31,12 +31,12 @@ function applyDensity(settings: Settings): void {
  * renders the first-paint value from its `tint` prop; this keeps the live glass
  * cast in sync when the user changes the setting in the options page. */
 function applyTint(settings: Settings): void {
-  const root = target.querySelector<HTMLElement>('[data-testid="folderpage-root"]');
+  const root = target.querySelector<HTMLElement>('[data-testid="lenspage-root"]');
   if (root) root.dataset.tint = settings.tint;
 }
 
 function applyShowGlares(settings: Settings): void {
-  const root = target.querySelector<HTMLElement>('[data-testid="folderpage-root"]');
+  const root = target.querySelector<HTMLElement>('[data-testid="lenspage-root"]');
   if (root) root.dataset.showGlares = String(settings.showGlares);
 }
 
