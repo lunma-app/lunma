@@ -24,7 +24,7 @@ jobs:
   dco:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.0
         with:
           # Fetch the full range so every PR commit is inspectable, not just
           # the merge tip.
