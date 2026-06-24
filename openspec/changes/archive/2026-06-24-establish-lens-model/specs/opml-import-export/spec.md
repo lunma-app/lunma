@@ -1,6 +1,6 @@
 # opml-import-export Specification
 
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: importOpml bus command bulk-creates RSS lenses
 
@@ -123,9 +123,3 @@ When `imported === 0` (all entries invalid) the Toast SHALL show an error messag
 
 - **WHEN** the state has at least one lens node with a `source: 'rss'` entry
 - **THEN** the Export button is rendered and clicking it triggers a file download
-
-## REMOVED Requirements
-
-### Requirement: importOpml bus command bulk-creates RSS smart folders
-
-**Reason**: Renamed to lens vocabulary by establish-lens-model.

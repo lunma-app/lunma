@@ -253,7 +253,7 @@ Saved-tab binding SHALL NOT depend on any content script, `sessionStorage` marke
 
 ### Requirement: Pinned ordering per Space
 
-The store SHALL maintain `pinnedBySpace: { [spaceId: string]: PinNode[] }` — the ordered tree of pinned entries in each Space: tab nodes referencing `savedTabId`s, folders, and smart folders (the node shapes are owned by the `spaces-and-tabs` capability). Order SHALL be the array order. The favicon row uses a sibling placement array over the same `savedTabs` map; a saved tab's record SHALL NOT be duplicated across placements. The sidebar SHALL let the user reorder pinned entries by dragging; a completed reorder SHALL dispatch a `reorderPinned` command carrying the full post-drop `PinNode[]` tree (`{ spaceId, nodes }`), and the resulting authoritative state broadcast SHALL define the rendered order (no optimistic update is layered on top).
+The store SHALL maintain `pinnedBySpace: { [spaceId: string]: PinNode[] }` — the ordered tree of pinned entries in each Space: tab nodes referencing `savedTabId`s, folders, and lenses (the node shapes are owned by the `spaces-and-tabs` capability). Order SHALL be the array order. The favicon row uses a sibling placement array over the same `savedTabs` map; a saved tab's record SHALL NOT be duplicated across placements. The sidebar SHALL let the user reorder pinned entries by dragging; a completed reorder SHALL dispatch a `reorderPinned` command carrying the full post-drop `PinNode[]` tree (`{ spaceId, nodes }`), and the resulting authoritative state broadcast SHALL define the rendered order (no optimistic update is layered on top).
 
 #### Scenario: Pinned order is the array order
 

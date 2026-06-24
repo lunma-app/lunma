@@ -1,6 +1,6 @@
 # chrome-event-coordination Specification
 
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: A parallel lenses refresh kick on state-request
 
@@ -125,9 +125,3 @@ The coordinator's `PendingEvent` union SHALL include `pinTab`, `unpinTab`, `reor
 
 - **WHEN** a `reorderTemp` event for window 100 with `tabIds: [22, 17]` is drained
 - **THEN** `store.reorderTemp(100, [22, 17])` SHALL run and `spaceInstancesByWindow[100].tempTabIds` SHALL become `[22, 17]` within one drain cycle
-
-## REMOVED Requirements
-
-### Requirement: A parallel smart-folders refresh kick on state-request
-
-**Reason**: Renamed to lens vocabulary by establish-lens-model.

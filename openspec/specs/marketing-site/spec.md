@@ -275,57 +275,6 @@ link that was diverted.
 - **THEN** it SHALL show a pinned tab that stays put alongside a separate freshly-opened tab standing in for the diverted off-site link
 - **AND** all text in the visual SHALL hold WCAG-AA contrast
 
-### Requirement: Smart folders are positioned as a live-queue platform and demonstrated
-
-The features section SHALL include a beat that presents Lunma's **smart folders** as a
-**live-queue capability** — a pinned folder whose contents are live items pulled from a
-service the visitor keeps checking, refreshed on their own — framed as the general
-capability with a **GitLab review queue** shown as the concrete example. The beat SHALL
-render in the shared editorial-chapter form (a numbered chapter with a kicker, a display
-heading, copy, and a staged product visual) and compose the shared design language
-(`@lunma/tokens` + the site's own mock components), not re-roll primitives.
-
-The claim SHALL be **factual** and stated in the brand voice. The page SHALL name the
-connectors that ship — **GitLab, GitHub, Jira, and RSS feeds** — and SHALL NOT name or
-imply that any **unshipped** connector (for example Notion or a calendar) is available.
-A calm, name-free and date-free indication that further connectors are planned is
-permitted; naming an unshipped connector or promising a date is not. The copy SHALL
-state that smart folders work with a self-hosted instance and that data stays on the
-visitor's device (no Lunma server), consistent with the shipped connectors. The beat
-SHALL hold WCAG-AA contrast and SHALL introduce no motion that violates the page's
-reduced-motion contract.
-
-The staged visual SHALL show the capability rather than only assert it: a smart-folder
-header with an item count over merge-request rows, each row carrying exactly one
-pipeline-status indicator (no more than one status mark per row), in keeping with the
-product's one-glyph restraint.
-
-#### Scenario: The features section presents smart folders as a live queue
-
-- **WHEN** a visitor reaches the features section
-- **THEN** a chapter SHALL present smart folders as a live queue pinned in the Space, with a GitLab review queue shown as the example
-- **AND** the chapter SHALL render in the shared editorial-chapter form composing the shared design language
-
-#### Scenario: The beat names the connectors that ship
-
-- **WHEN** the smart-folders beat renders its copy
-- **THEN** it SHALL name the shipped connectors — GitLab, GitHub, Jira, and RSS feeds — as available
-- **AND** it SHALL NOT name or imply any unshipped connector (Notion, a calendar, etc.) is available
-- **AND** any indication of future connectors SHALL be name-free and date-free
-
-#### Scenario: The beat frames smart folders as local and self-hostable
-
-- **WHEN** the smart-folders beat renders its copy
-- **THEN** it SHALL state that smart folders work with a self-hosted instance
-- **AND** it SHALL state that the data stays on the visitor's device with no Lunma server
-
-#### Scenario: The staged visual shows the queue with one status mark per row
-
-- **WHEN** the smart-folders beat renders its visual
-- **THEN** it SHALL show a smart-folder header with an item count over merge-request rows
-- **AND** each row SHALL carry exactly one pipeline-status indicator, never more than one
-- **AND** all text in the visual SHALL hold WCAG-AA contrast
-
 ### Requirement: Product previews depict real apps with recognisable, freely-licensed glyphs, self-hosted
 
 The staged previews' favicon stand-ins (the `FaviconSpec` entries rendered by `apps/site/src/lib/mocks/Favicon.svelte` across the favourites tiles, sidebar tab rows, and launcher rows) SHALL render a recognisable brand glyph for every entry that depicts a real app, sourced from a freely-licensed icon set (CC0 or equivalent; `simple-icons`) and inlined into the prerendered static output at build time — no runtime fetch, no CDN, no icon font. Entries depicting generic content (untitled notes, articles, lists) SHALL keep the neutral letter plate. The glyph SHALL render in the plate's existing near-white foreground on the existing OKLCH plate colours — the previews' palette SHALL NOT adopt per-brand hex colours. The glyphs remain decorative and SHALL stay hidden from assistive technology, as the surrounding mock content already is.
@@ -367,7 +316,7 @@ signals. Its copy SHALL state that workspace data is stored locally in
 `chrome.storage.local` on the user's device; that user preferences sync across
 the Chrome profile via `chrome.storage.sync` but connector tokens never do; that
 there is no Lunma account or server and no analytics or telemetry; that when the
-user connects a smart folder to a service, Lunma contacts that host directly
+user connects a lens to a service, Lunma contacts that host directly
 using **either** an access token the user provides (stored locally, sent only to
 that host) **or** the user's existing signed-in browser session, with nothing
 sent to Lunma and tokens never logged; that public feeds are fetched directly
@@ -450,4 +399,55 @@ listed).
 
 - **WHEN** the user prefers reduced motion
 - **THEN** the page SHALL present without transitions/animation
+
+### Requirement: Lenses are positioned as a live-queue platform and demonstrated
+
+The features section SHALL include a beat that presents Lunma's **lenses** as a
+**live-queue capability** — a pinned folder whose contents are live items pulled from a
+service the visitor keeps checking, refreshed on their own — framed as the general
+capability with a **GitLab review queue** shown as the concrete example. The beat SHALL
+render in the shared editorial-chapter form (a numbered chapter with a kicker, a display
+heading, copy, and a staged product visual) and compose the shared design language
+(`@lunma/tokens` + the site's own mock components), not re-roll primitives.
+
+The claim SHALL be **factual** and stated in the brand voice. The page SHALL name the
+connectors that ship — **GitLab, GitHub, Jira, and RSS feeds** — and SHALL NOT name or
+imply that any **unshipped** connector (for example Notion or a calendar) is available.
+A calm, name-free and date-free indication that further connectors are planned is
+permitted; naming an unshipped connector or promising a date is not. The copy SHALL
+state that lenses work with a self-hosted instance and that data stays on the
+visitor's device (no Lunma server), consistent with the shipped connectors. The beat
+SHALL hold WCAG-AA contrast and SHALL introduce no motion that violates the page's
+reduced-motion contract.
+
+The staged visual SHALL show the capability rather than only assert it: a lens
+header with an item count over merge-request rows, each row carrying exactly one
+pipeline-status indicator (no more than one status mark per row), in keeping with the
+product's one-glyph restraint.
+
+#### Scenario: The features section presents lenses as a live queue
+
+- **WHEN** a visitor reaches the features section
+- **THEN** a chapter SHALL present lenses as a live queue pinned in the Space, with a GitLab review queue shown as the example
+- **AND** the chapter SHALL render in the shared editorial-chapter form composing the shared design language
+
+#### Scenario: The beat names the connectors that ship
+
+- **WHEN** the lenses beat renders its copy
+- **THEN** it SHALL name the shipped connectors — GitLab, GitHub, Jira, and RSS feeds — as available
+- **AND** it SHALL NOT name or imply any unshipped connector (Notion, a calendar, etc.) is available
+- **AND** any indication of future connectors SHALL be name-free and date-free
+
+#### Scenario: The beat frames lenses as local and self-hostable
+
+- **WHEN** the lenses beat renders its copy
+- **THEN** it SHALL state that lenses work with a self-hosted instance
+- **AND** it SHALL state that the data stays on the visitor's device with no Lunma server
+
+#### Scenario: The staged visual shows the queue with one status mark per row
+
+- **WHEN** the lenses beat renders its visual
+- **THEN** it SHALL show a lens header with an item count over merge-request rows
+- **AND** each row SHALL carry exactly one pipeline-status indicator, never more than one
+- **AND** all text in the visual SHALL hold WCAG-AA contrast
 

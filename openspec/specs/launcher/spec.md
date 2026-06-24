@@ -25,12 +25,12 @@ sources) with no surface-specific state. The five providers SHALL be:
   the result ALSO carries that `spaceId` (its owning Space, for the current-Space
   scope — see Requirement: Launcher Space scope); a favicon-row favorite
   (`spaceId === null`) is global and carries none.
-- **smart-folder items** — from `LunmaStore.state.smartFolders` (the ephemeral,
-  broadcast-only connector-results slice), flattening **every** smart folder's
+- **lens items** — from `LunmaStore.state.lenses` (the ephemeral,
+  broadcast-only connector-results slice), flattening **every** lens's
   `items` across **all** sources (GitLab, GitHub, Jira, RSS). Each item is
   link-shaped (`{ id, title, url, status? }`) and maps to a result with
-  `source: 'smart'`, carrying no binding and no `tabId`/`savedTabId`, plus the
-  smart folder's name as `folderName` and the smart folder's owning Space as
+  `source: 'lens'`, carrying no binding and no `tabId`/`savedTabId`, plus the
+  lens's name as `folderName` and the lens's owning Space as
   `spaceId` (for the current-Space scope — see Requirement: Launcher Space scope).
   Items SHALL be taken regardless of the folder's runtime `state` — a `pending`
   refresh keeps last-known items (so they remain matchable and never blink out),
@@ -38,17 +38,17 @@ sources) with no surface-specific state. The five providers SHALL be:
 - **bookmarks** — from `chrome.bookmarks.search(query)`.
 - **history** — from `chrome.history.search({ text: query, maxResults: 100 })`.
 
-A `LauncherResult` SHALL carry at least `{ id, source: 'tab' | 'saved' | 'smart' |
+A `LauncherResult` SHALL carry at least `{ id, source: 'tab' | 'saved' | 'lens' |
 'bookmark' | 'history' | 'websearch' | 'navigate', title, url, score }` plus the
 source-specific action fields (`tabId`/`windowId` for `tab`, `savedTabId` for
 `saved`) and an OPTIONAL `folderName` (set for a `saved` result placed in a folder
-and for every `smart` result) and an OPTIONAL `spaceId` (the owning Space — set
-for a pinned `saved` result and every `smart` result; absent for global
+and for every `lens` result) and an OPTIONAL `spaceId` (the owning Space — set
+for a pinned `saved` result and every `lens` result; absent for global
 favicon-row favorites and `tab`/`bookmark`/`history`) and OPTIONAL
 `spaceName`/`spaceColor` (a **cross-Space marker** — set by the engine ONLY when
 the result's owning Space differs from the requesting window's active Space; see
-Requirement: Launcher Space scope). The `'smart'` source drives the result-row source
-badge via the existing `sourceBadgeLabel` (the badge reads `smart`) and acts
+Requirement: Launcher Space scope). The `'lens'` source drives the result-row source
+badge via the existing `sourceBadgeLabel` (the badge reads `lens`) and acts
 through `openUrl` (see Requirement: Acting on a launcher result). The `'websearch'`
 and `'navigate'` sources are **synthesized action results** (see "Synthesized
 web-search and navigation results"), not produced by any of the five providers;
@@ -58,16 +58,16 @@ results.**
 #### Scenario: The engine queries all five sources
 
 - **WHEN** the engine runs a non-empty query
-- **THEN** it SHALL consult the open-tabs, saved-tabs, smart-folder-items,
+- **THEN** it SHALL consult the open-tabs, saved-tabs, lens-items,
   bookmarks, and history providers and return a single merged result list
 - **AND** it SHALL exclude the active window's active tab from the open-tabs results
 
-#### Scenario: Smart-folder items are searchable
+#### Scenario: Lens items are searchable
 
-- **GIVEN** a smart folder named "Work PRs" holds a connector item titled
+- **GIVEN** a lens named "Work PRs" holds a connector item titled
   "Fix the parser" at `https://github.com/o/r/pull/12`
 - **WHEN** the engine runs a query matching that title
-- **THEN** the merged list SHALL include a result with `source: 'smart'`, that
+- **THEN** the merged list SHALL include a result with `source: 'lens'`, that
   title and URL, carrying `folderName: "Work PRs"`
 
 #### Scenario: An empty query yields no results
@@ -110,12 +110,12 @@ without a manual reload.
 ### Requirement: Result de-duplication, scoring, and ordering
 
 The engine SHALL de-duplicate results that share a URL with this precedence:
-**open tab > saved tab > smart-folder item > bookmark > history** (the
+**open tab > saved tab > lens item > bookmark > history** (the
 higher-precedence result is kept, the lower suppressed). It SHALL score each
 surviving result **deterministically** by **fuzzy, typo-tolerant** matching of the
 query against the result's `title`, `url`, and (when present) `folderName`,
 combined with field weight (title over url; folderName no greater than url) and
-source weight (tab > saved > smart > bookmark > history), and SHALL return results
+source weight (tab > saved > lens > bookmark > history), and SHALL return results
 sorted by score descending with a stable tie order (insertion order = source
 precedence breaks ties). Matching SHALL be subsequence-based and tolerant of a
 single per-term typo, SHALL still rank an exact prefix above a word-boundary match
@@ -134,7 +134,7 @@ scored, SHALL NOT be de-duplicated against data results, and SHALL NOT count
 against the cap; they occupy fixed positions ahead of the data results (websearch
 first, then navigate) per "Synthesized web-search and navigation results".
 
-Folders themselves SHALL NOT be emitted as results — a `folder` or `smart` node's
+Folders themselves SHALL NOT be emitted as results — a `folder` or `lens` node's
 name only widens what its child results match against; there is no folder result
 row and no folder-activation action.
 
@@ -150,11 +150,11 @@ row and no folder-activation action.
 - **WHEN** the engine merges results
 - **THEN** the list SHALL contain the saved-tab result and SHALL NOT contain a duplicate bookmark result
 
-#### Scenario: A smart item suppresses its bookmark duplicate
+#### Scenario: A lens item suppresses its bookmark duplicate
 
-- **GIVEN** `https://github.com/o/r/pull/12` is both a smart-folder item and a Chrome bookmark matching the query
+- **GIVEN** `https://github.com/o/r/pull/12` is both a lens item and a Chrome bookmark matching the query
 - **WHEN** the engine merges results
-- **THEN** the list SHALL contain the smart-folder (`source: 'smart'`) result and SHALL NOT contain a duplicate bookmark result for that URL
+- **THEN** the list SHALL contain the lens (`source: 'lens'`) result and SHALL NOT contain a duplicate bookmark result for that URL
 
 #### Scenario: Fuzzy subsequence matching finds a non-contiguous query
 
@@ -171,7 +171,7 @@ row and no folder-activation action.
 
 #### Scenario: A result matches the name of its folder
 
-- **GIVEN** a saved tab "Standup doc" placed in a regular folder named "Work", and a smart item placed in a smart folder named "Work PRs"
+- **GIVEN** a saved tab "Standup doc" placed in a regular folder named "Work", and a lens item placed in a lens named "Work PRs"
 - **WHEN** the user types `work`
 - **THEN** the engine SHALL include both results, each matched via its `folderName`, even though neither result's title nor url contains "work"
 - **AND** no "Work" / "Work PRs" folder row SHALL appear in the results
@@ -203,12 +203,12 @@ mutating Lunma state directly:
 - a `tab` result SHALL dispatch `focusTab { tabId }`;
 - a `saved` result SHALL dispatch `focusSavedTab` when the saved tab is bound to a
   live tab (i.e. the result carries a `tabId`), else `openSavedTab`;
-- a `smart`, `bookmark`, `history`, `websearch`, or `navigate` result SHALL
+- a `lens`, `bookmark`, `history`, `websearch`, or `navigate` result SHALL
   dispatch `openUrl { url, windowId }` on a plain Enter press (primary action). A
-  smart-folder item is link-shaped (a pre-built `url`, no binding), so it reuses
+  lens item is link-shaped (a pre-built `url`, no binding), so it reuses
   this branch and requires **no new dispatch logic** in either surface's `act()` —
   exactly like a bookmark/history result;
-- a `smart`, `bookmark`, `history`, `websearch`, or `navigate` result whose URL is
+- a `lens`, `bookmark`, `history`, `websearch`, or `navigate` result whose URL is
   already open in the active Space (detected by `isUrlOpenInActiveSpace`) SHALL
   dispatch `openUrl { url, windowId, force: true }` when Shift+Enter is pressed
   (secondary action — force a new tab regardless of dedup).
@@ -221,7 +221,7 @@ activation, so the opened/focused tab is visible in its now-active group. This i
 emergent behaviour of the `lunma-bookmark-bindings` handlers
 (`background/handlers/pinned-tabs.ts`), **not** a new launcher dispatch — the
 launcher keeps sending the same two commands. Favicon-row favorites (no `spaceId`)
-and `smart`/`tab`/`bookmark`/`history` results never switch the window's Space.
+and `lens`/`tab`/`bookmark`/`history` results never switch the window's Space.
 
 `isUrlOpenInActiveSpace(state, windowId, url): boolean` is a pure helper in
 `apps/extension/src/launcher/shared/already-open.ts` that mirrors the logic of
@@ -250,9 +250,9 @@ state differs:
 - **WHEN** the user acts on a `bookmark` result for `https://example.com/` in window 100
 - **THEN** the surface SHALL dispatch `bus.send({ kind: 'openUrl', payload: { url: 'https://example.com/', windowId: 100 } })`
 
-#### Scenario: Selecting a smart-folder result opens its URL
+#### Scenario: Selecting a lens result opens its URL
 
-- **WHEN** the user acts on a `smart` result for `https://github.com/o/r/pull/12` in window 100
+- **WHEN** the user acts on a `lens` result for `https://github.com/o/r/pull/12` in window 100
 - **THEN** the surface SHALL dispatch `bus.send({ kind: 'openUrl', payload: { url: 'https://github.com/o/r/pull/12', windowId: 100 } })`
 
 #### Scenario: Selecting a dormant saved tab opens it, a bound one focuses it
@@ -286,7 +286,7 @@ The launcher SHALL honour a single global user setting **`launcherScope`** (in t
 settings registry's `Search` group; default `prefer-current-space`) that governs
 how results owned by a Space relate to the **requesting window's active Space**
 (`activeSpaceByWindow[windowId]`). Only Space-placed Lunma results carry an owning
-`spaceId` — a pinned `saved` result and every `smart` result; global rows (open
+`spaceId` — a pinned `saved` result and every `lens` result; global rows (open
 tabs, bookmarks, history, favicon-row favorites, and the synthesized actions)
 carry none and are NEVER down-ranked or filtered by scope. The three modes:
 
@@ -319,7 +319,7 @@ marked.)
 
 #### Scenario: Global scope ignores the active Space
 
-- **GIVEN** `launcherScope` is `global`, the active Space is "Work", and two smart
+- **GIVEN** `launcherScope` is `global`, the active Space is "Work", and two lens
   items match a query equally — one in "Work", one in "Home"
 - **WHEN** the engine scores them
 - **THEN** both SHALL appear and SHALL receive equal scores (no current-Space boost)
@@ -327,7 +327,7 @@ marked.)
 #### Scenario: Prefer-current-space boosts the in-Space result
 
 - **GIVEN** `launcherScope` is `prefer-current-space`, the active Space is "Work",
-  and two equally-matching same-source smart items — one in "Work", one in "Home"
+  and two equally-matching same-source lens items — one in "Work", one in "Home"
 - **WHEN** the engine scores them
 - **THEN** the "Work" item SHALL score higher than the "Home" item
 - **AND** the "Home" item SHALL still be present (reachable)
@@ -336,14 +336,14 @@ marked.)
 
 - **GIVEN** `launcherScope` is `current-space-only` and the active Space is "Work"
 - **WHEN** the engine merges results
-- **THEN** a `smart` item or pinned `saved` result owned by "Home" SHALL be excluded
+- **THEN** a `lens` item or pinned `saved` result owned by "Home" SHALL be excluded
 - **AND** a favicon-row favorite, open tab, bookmark, or history result matching
   the query SHALL still be included
 
 #### Scenario: A cross-Space item is marked; an in-Space one is not
 
 - **GIVEN** the active Space is "Work" and `launcherScope` is `prefer-current-space`
-  (or `global`), with a matching smart item in "Work" and another in "Home"
+  (or `global`), with a matching lens item in "Work" and another in "Home"
 - **WHEN** the engine returns the merged list
 - **THEN** the "Home" result SHALL carry `spaceName: "Home"` and a `spaceColor`
 - **AND** the "Work" result SHALL carry neither (no marker for an in-Space row)

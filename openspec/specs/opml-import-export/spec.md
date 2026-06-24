@@ -44,9 +44,9 @@ An input with no qualifying outlines SHALL return an empty array.
 
 ### Requirement: OPML build utility serialises RSS feed folders to OPML 1.0
 
-`buildOpml(nodes: SmartFolderNode[])` in `shared/opml.ts` SHALL accept the updated
-node shape (with `sources: SmartSourceConfig[]`) and for each node produce one `<outline>`
-element per `SmartSourceConfig` entry whose `source === 'rss'`. The folder's `name` is
+`buildOpml(nodes: LensNode[])` in `shared/opml.ts` SHALL accept the updated
+node shape (with `sources: LensSource[]`) and for each node produce one `<outline>`
+element per `LensSource` entry whose `source === 'rss'`. The folder's `name` is
 used as the `text` attribute for each outline when the folder is single-source; for
 multi-source folders each outline's `text` is derived as
 `${node.name} — ${new URL(cfg.baseUrl).host}` to distinguish entries from the same folder.
@@ -67,59 +67,6 @@ Nodes where no `sources` entry has `source === 'rss'` produce no `<outline>`.
 
 - **WHEN** `buildOpml` is called with a folder containing sources `[{ source: 'gitlab', ... }, { source: 'rss', baseUrl: 'https://feed.example.com/rss' }]`
 - **THEN** only the rss source appears as an `<outline>` in the output
-
-### Requirement: importOpml bus command bulk-creates RSS smart folders
-
-The `importOpml` `SidebarCommand` SHALL be accepted by the background coordinator with
-the same payload shape: `{ spaceId: string; feeds: { name: string; feedUrl: string }[] }`.
-The handler SHALL now create **one** RSS smart folder per import operation (not one folder
-per feed entry). The single folder SHALL carry `sources: SmartSourceConfig[]` with one
-entry per valid feed: `{ source: 'rss', baseUrl: feedUrl }` (no `query`, as RSS sources
-are feed-kind). Invalid entries (unparseable or non-http(s) `feedUrl`) are silently
-skipped and counted. The folder's name SHALL be the single feed's `name` when
-`feeds.length === 1`; otherwise `"Feeds"`. Default `maxItems: 10`, `refreshMinutes: 30`,
-`hideRead: true` (unchanged per-feed defaults, now applied folder-level). The command
-SHALL complete with a summary `{ imported: number; skipped: number }` as the ack payload,
-where `imported` is the count of valid sources added to the folder and `skipped` is the
-count of invalid entries. When `imported === 0` (all entries invalid or `feeds` is empty)
-no folder is created and the ack carries `{ imported: 0, skipped: N }`.
-
-#### Scenario: All valid feeds create one multi-source folder
-
-- **WHEN** `importOpml` is dispatched with three valid feed entries
-- **THEN** exactly one RSS smart folder is created in the target space with `sources` containing three entries
-- **AND** the ack carries `{ imported: 3, skipped: 0 }`
-
-#### Scenario: Invalid feed URLs are skipped and counted; valid ones still create one folder
-
-- **WHEN** `importOpml` is dispatched with two valid entries and one entry with a relative `feedUrl`
-- **THEN** one folder is created with `sources` containing two entries
-- **AND** the ack carries `{ imported: 2, skipped: 1 }`
-
-#### Scenario: A single-feed import names the folder after the feed
-
-- **WHEN** `importOpml` is dispatched with `feeds: [{ name: 'Hacker News', feedUrl: 'https://news.ycombinator.com/rss' }]`
-- **THEN** the created folder's name SHALL be `'Hacker News'`
-
-#### Scenario: A multi-feed import names the folder "Feeds"
-
-- **WHEN** `importOpml` is dispatched with three feed entries
-- **THEN** the created folder's name SHALL be `'Feeds'`
-
-#### Scenario: Unknown spaceId throws
-
-- **WHEN** `importOpml` is dispatched with a `spaceId` that does not exist in the store
-- **THEN** the command acks with an error and no folder is created
-
-#### Scenario: Empty feeds array is a no-op
-
-- **WHEN** `importOpml` is dispatched with `feeds: []`
-- **THEN** no folder is created and the ack carries `{ imported: 0, skipped: 0 }`
-
-#### Scenario: All invalid entries is a no-op
-
-- **WHEN** `importOpml` is dispatched with feeds all having invalid (relative) `feedUrl` values
-- **THEN** no folder is created and the ack carries `{ imported: 0, skipped: N }`
 
 ### Requirement: Options-page Feed subscriptions card
 
@@ -154,11 +101,64 @@ When `imported === 0` (all entries invalid) the Toast SHALL show an error messag
 
 #### Scenario: Export button absent when no RSS sources exist
 
-- **WHEN** the state has no smart node with any `source: 'rss'` entry in its `sources`
+- **WHEN** the state has no lens node with any `source: 'rss'` entry in its `sources`
 - **THEN** the Export button is not rendered
 
 #### Scenario: Export button present when any RSS source exists
 
-- **WHEN** the state has at least one smart node with a `source: 'rss'` entry
+- **WHEN** the state has at least one lens node with a `source: 'rss'` entry
 - **THEN** the Export button is rendered and clicking it triggers a file download
+
+### Requirement: importOpml bus command bulk-creates RSS lenses
+
+The `importOpml` `SidebarCommand` SHALL be accepted by the background coordinator with
+the same payload shape: `{ spaceId: string; feeds: { name: string; feedUrl: string }[] }`.
+The handler SHALL now create **one** RSS lens per import operation (not one lens
+per feed entry). The single lens SHALL carry `sources: LensSource[]` with one
+entry per valid feed: `{ source: 'rss', baseUrl: feedUrl }` (no `query`, as RSS sources
+are feed-kind). Invalid entries (unparseable or non-http(s) `feedUrl`) are silently
+skipped and counted. The lens's name SHALL be the single feed's `name` when
+`feeds.length === 1`; otherwise `"Feeds"`. Default `maxItems: 10`, `refreshMinutes: 30`,
+`hideRead: true` (unchanged per-feed defaults, now applied folder-level). The command
+SHALL complete with a summary `{ imported: number; skipped: number }` as the ack payload,
+where `imported` is the count of valid sources added to the lens and `skipped` is the
+count of invalid entries. When `imported === 0` (all entries invalid or `feeds` is empty)
+no lens is created and the ack carries `{ imported: 0, skipped: N }`.
+
+#### Scenario: All valid feeds create one multi-source folder
+
+- **WHEN** `importOpml` is dispatched with three valid feed entries
+- **THEN** exactly one RSS lens is created in the target space with `sources` containing three entries
+- **AND** the ack carries `{ imported: 3, skipped: 0 }`
+
+#### Scenario: Invalid feed URLs are skipped and counted; valid ones still create one folder
+
+- **WHEN** `importOpml` is dispatched with two valid entries and one entry with a relative `feedUrl`
+- **THEN** one lens is created with `sources` containing two entries
+- **AND** the ack carries `{ imported: 2, skipped: 1 }`
+
+#### Scenario: A single-feed import names the folder after the feed
+
+- **WHEN** `importOpml` is dispatched with `feeds: [{ name: 'Hacker News', feedUrl: 'https://news.ycombinator.com/rss' }]`
+- **THEN** the created lens's name SHALL be `'Hacker News'`
+
+#### Scenario: A multi-feed import names the folder "Feeds"
+
+- **WHEN** `importOpml` is dispatched with three feed entries
+- **THEN** the created lens's name SHALL be `'Feeds'`
+
+#### Scenario: Unknown spaceId throws
+
+- **WHEN** `importOpml` is dispatched with a `spaceId` that does not exist in the store
+- **THEN** the command acks with an error and no lens is created
+
+#### Scenario: Empty feeds array is a no-op
+
+- **WHEN** `importOpml` is dispatched with `feeds: []`
+- **THEN** no lens is created and the ack carries `{ imported: 0, skipped: 0 }`
+
+#### Scenario: All invalid entries is a no-op
+
+- **WHEN** `importOpml` is dispatched with feeds all having invalid (relative) `feedUrl` values
+- **THEN** no lens is created and the ack carries `{ imported: 0, skipped: N }`
 

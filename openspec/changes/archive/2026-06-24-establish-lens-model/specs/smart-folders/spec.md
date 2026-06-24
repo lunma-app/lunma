@@ -1,3 +1,15 @@
+## ADDED Requirements
+
+### Requirement: smart-folders capability is retired — all requirements moved to lenses
+
+The `smart-folders` capability SHALL be considered retired as of the `establish-lens-model` change. All requirements MUST be referenced from the `lenses` capability instead; the `smart-folders` capability exists only as a tombstone.
+
+#### Scenario: Retirement tombstone
+
+Given the `establish-lens-model` change has been archived,
+When any code or document references the `smart-folders` capability,
+Then it SHALL reference the `lenses` capability instead.
+
 ## REMOVED Requirements
 
 ### Requirement: Smart-folder configuration persists as a pinned-tree node
