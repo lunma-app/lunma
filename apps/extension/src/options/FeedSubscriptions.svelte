@@ -2,14 +2,14 @@
 import { onMount } from 'svelte';
 import { readPersistedState } from '../shared/chrome/storage';
 import { log } from '../shared/logger';
-import { buildOpml, type SmartFolderNode } from '../shared/opml';
+import { buildOpml, type LensNode } from '../shared/opml';
 import type { AppState } from '../shared/types';
 import Button from '../ui/Button.svelte';
 import InlineError from '../ui/InlineError.svelte';
 import SettingsCard from '../ui/SettingsCard.svelte';
 import Toast from '../ui/Toast.svelte';
 
-let rssNodes = $state<SmartFolderNode[]>([]);
+let rssNodes = $state<LensNode[]>([]);
 let toast = $state<{ message: string } | null>(null);
 let exportError = $state<string | null>(null);
 
@@ -25,11 +25,11 @@ onMount(() => {
   };
 });
 
-function collectRssNodes(state: AppState): SmartFolderNode[] {
-  const nodes: SmartFolderNode[] = [];
+function collectRssNodes(state: AppState): LensNode[] {
+  const nodes: LensNode[] = [];
   for (const spaceNodes of Object.values(state.pinnedBySpace)) {
     for (const node of spaceNodes) {
-      if (node.kind === 'smart' && node.sources.some((s) => s.source === 'rss')) {
+      if (node.kind === 'lens' && node.sources.some((s) => s.source === 'rss')) {
         nodes.push(node);
       }
     }

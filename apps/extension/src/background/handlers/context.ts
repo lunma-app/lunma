@@ -9,7 +9,7 @@
 
 import type { SidebarCommand } from '../../shared/bus';
 import type { LunmaStore } from '../../shared/store.svelte';
-import type { FolderId, SmartSectionRuntime } from '../../shared/types';
+import type { FolderId, LensSectionRuntime } from '../../shared/types';
 import type { BoundaryController } from '../boundary-controller';
 import type { GroupOrchestrator } from '../group-orchestrator';
 
@@ -81,17 +81,17 @@ export type PendingEvent =
   | SidebarVariant<'setFolderIcon'>
   | SidebarVariant<'setFolderColor'>
   | SidebarVariant<'deleteFolder'>
-  | SidebarVariant<'createSmartFolder'>
-  | SidebarVariant<'updateSmartFolder'>
-  | SidebarVariant<'deleteSmartFolder'>
-  | SidebarVariant<'refreshSmartFolder'>
-  | SidebarVariant<'openSmartItem'>
-  | SidebarVariant<'markSmartItemRead'>
-  | SidebarVariant<'markSmartItemUnread'>
-  | SidebarVariant<'markAllSmartItemsRead'>
-  | SidebarVariant<'setSmartFolderHideRead'>
-  | SidebarVariant<'openSmartFolderListing'>
-  | SidebarVariant<'openSmartFolderPage'>
+  | SidebarVariant<'createLens'>
+  | SidebarVariant<'updateLens'>
+  | SidebarVariant<'deleteLens'>
+  | SidebarVariant<'refreshLens'>
+  | SidebarVariant<'openLensItem'>
+  | SidebarVariant<'markLensItemRead'>
+  | SidebarVariant<'markLensItemUnread'>
+  | SidebarVariant<'markAllLensItemsRead'>
+  | SidebarVariant<'setLensHideRead'>
+  | SidebarVariant<'openLensListing'>
+  | SidebarVariant<'openLensPage'>
   | SidebarVariant<'reorderTemp'>
   | SidebarVariant<'reorderSpaces'>
   | SidebarVariant<'focusTab'>
@@ -109,24 +109,23 @@ export type PendingEvent =
   // Data-backup (data-backup capability): replace the whole store state from an
   // imported backup file. Dispatched by the options page; handled by the SW.
   | SidebarVariant<'importState'>
-  // OPML import (opml-import-export): bulk-create RSS smart folders from a
-  // parsed feed list. Dispatched by the options page; handled by the SW.
+  // OPML import (opml-import-export): bulk-create RSS lenses from a parsed feed
+  // list. Dispatched by the options page; handled by the SW.
   | SidebarVariant<'importOpml'>
   // Auto-archive (auto-archive, design D2): the `chrome.alarms`-driven idle-tab
   // sweep. A new `source: 'alarm'` — not a Chrome event, not a sidebar command —
   // carrying no payload and no `correlationId` (fire-and-forget; nobody awaits it).
   | { source: 'alarm'; kind: 'autoArchiveSweep' }
-  // Smart-folders (smart-folders, design D3): a connector fetch's outcome,
-  // enqueued OFF-drain by `background/smart-folders.ts` so only the drain's
-  // handler writes the `smartFolders` runtime slice (single-writer). A new
-  // `source: 'connector'` — results also arrive from manual refresh and the
-  // sidebar-open kick, so reusing `'alarm'` would dilute what it means. No
-  // `correlationId` (fire-and-forget; the refresh ack never carries the
-  // fetch outcome).
+  // Lenses (lenses, design D3): a connector fetch's outcome, enqueued OFF-drain
+  // by `background/lenses.ts` so only the drain's handler writes the `lenses`
+  // runtime slice (single-writer). A new `source: 'connector'` — results also
+  // arrive from manual refresh and the sidebar-open kick, so reusing `'alarm'`
+  // would dilute what it means. No `correlationId` (fire-and-forget; the refresh
+  // ack never carries the fetch outcome).
   | {
       source: 'connector';
-      kind: 'smartFolders.result';
-      payload: { folderId: FolderId; sourceKey: string; runtime: SmartSectionRuntime };
+      kind: 'lenses.result';
+      payload: { folderId: FolderId; sourceKey: string; runtime: LensSectionRuntime };
     };
 
 export type PendingEventKind = PendingEvent['kind'];

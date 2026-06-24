@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import { requiredOriginsForConfig } from '../../shared/connector-origins';
 import type {
-  ResolvedSourceConfig,
-  SmartFolderItem,
-  SmartQuery,
-  SmartSectionRuntime,
+  LensItem,
+  LensQuery,
+  LensSectionRuntime,
+  ResolvedLensSource,
 } from '../../shared/types';
 import { boundedFetch, type ConnectorCaches, type SourceConnector } from './connector';
 
@@ -25,7 +25,7 @@ import { boundedFetch, type ConnectorCaches, type SourceConnector } from './conn
  *   - signed-out: GitLab's response-shape heuristic, ported and kept here.
  *
  * The source-agnostic engine (scheduling, in-flight guard, result-event
- * plumbing) stays in `../smart-folders.ts` and reaches this module only through
+ * plumbing) stays in `../lenses.ts` and reaches this module only through
  * the `CONNECTORS` registry.
  */
 
@@ -35,8 +35,8 @@ import { boundedFetch, type ConnectorCaches, type SourceConnector } from './conn
  * session (GitHub's `@me` precedent — no me-resolution request); every slot
  * excludes Done and orders by recency for a stable order between polls. The
  * `review-requested` slot is re-skinned to `watcher` (editor label "Watching")
- * — the `SmartQuery` value is unchanged; only label + JQL differ (design D9). */
-function jqlFor(query: SmartQuery): string {
+ * — the `LensQuery` value is unchanged; only label + JQL differ (design D9). */
+function jqlFor(query: LensQuery): string {
   const tail = 'AND statusCategory != Done ORDER BY updated DESC';
   switch (query) {
     case 'authored':
@@ -58,7 +58,7 @@ function jqlFor(query: SmartQuery): string {
  * `done` → `ok` branch is defensive (robust to a transition between fetch and
  * render).
  */
-export function statusForCategory(categoryKey: string | undefined): SmartFolderItem['status'] {
+export function statusForCategory(categoryKey: string | undefined): LensItem['status'] {
   switch (categoryKey) {
     case 'indeterminate':
       return { tone: 'pending', label: 'In progress' };
@@ -129,12 +129,12 @@ const SearchResponseSchema = z.object({ issues: z.array(z.unknown()) });
  * status read inline from the search response.
  */
 async function fetchRuntime(
-  cfg: ResolvedSourceConfig,
+  cfg: ResolvedLensSource,
   maxItems: number,
   _caches?: ConnectorCaches,
-): Promise<SmartSectionRuntime> {
+): Promise<LensSectionRuntime> {
   const fetchedAt = Date.now();
-  const fail = (state: 'signed-out' | 'error'): SmartSectionRuntime => ({
+  const fail = (state: 'signed-out' | 'error'): LensSectionRuntime => ({
     state,
     items: [],
     fetchedAt,
@@ -151,7 +151,7 @@ async function fetchRuntime(
 
   // A queue node always carries a query (source-optional only for feeds);
   // default defensively so the now-optional field stays a total switch.
-  const query: SmartQuery = cfg.query ?? 'assigned';
+  const query: LensQuery = cfg.query ?? 'assigned';
 
   // Per-section cap (rss-connector design D5) — the badge renders `N+` at it, so
   // the cap is never silent (the forge precedent).
@@ -164,7 +164,7 @@ async function fetchRuntime(
   if (!parsed.success) return fail('error');
 
   // Element-wise parse: one malformed issue never costs the rest of the list.
-  const items: SmartFolderItem[] = parsed.data.issues
+  const items: LensItem[] = parsed.data.issues
     .flatMap((element) => {
       const issue = IssueSchema.safeParse(element);
       return issue.success ? [issue.data] : [];
@@ -190,7 +190,7 @@ async function fetchRuntime(
  * tab"): the Jira issue navigator opened on the folder's own JQL — the "JQL
  * view" of exactly what the folder queues. The query is source-optional only
  * for feeds, so a queue node always supplies one (defaulted defensively). */
-function listingUrl(cfg: ResolvedSourceConfig): string {
+function listingUrl(cfg: ResolvedLensSource): string {
   return `${cfg.baseUrl}/issues/?jql=${encodeURIComponent(jqlFor(cfg.query ?? 'assigned'))}`;
 }
 
@@ -198,7 +198,7 @@ function listingUrl(cfg: ResolvedSourceConfig): string {
  * Jira fetches same-origin under `{baseUrl}/rest/api/3`. Delegates to the shared
  * {@link requiredOriginsForConfig} so the SW gate and the surfaces share one
  * derivation. */
-function requiredOrigins(cfg: ResolvedSourceConfig): string[] {
+function requiredOrigins(cfg: ResolvedLensSource): string[] {
   return requiredOriginsForConfig(cfg);
 }
 

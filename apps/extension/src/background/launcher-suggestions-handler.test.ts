@@ -361,7 +361,7 @@ describe('registerLauncherSuggestionsHandler', () => {
 
   /** A store with two Spaces, each owning one smart folder of one item; window
    * 100's active Space is `work`. The two items match the same query (`parser`). */
-  function storeWithCrossSpaceSmart(): LunmaStore {
+  function storeWithCrossSpaceLens(): LunmaStore {
     const store = new LunmaStore({ idFactory: () => 'id-1' });
     store.state.spaces.push(
       { id: 'work', name: 'Work', color: 'blue', icon: 'star' },
@@ -370,7 +370,8 @@ describe('registerLauncherSuggestionsHandler', () => {
     store.state.activeSpaceByWindow[100] = 'work';
     store.state.pinnedBySpace.work = [
       {
-        kind: 'smart',
+        kind: 'lens',
+        lensKind: 'general',
         id: 'sf-work',
         name: 'Work PRs',
         icon: 'git-pull-request',
@@ -382,7 +383,8 @@ describe('registerLauncherSuggestionsHandler', () => {
     ];
     store.state.pinnedBySpace.home = [
       {
-        kind: 'smart',
+        kind: 'lens',
+        lensKind: 'general',
         id: 'sf-home',
         name: 'Home Feed',
         icon: 'rss',
@@ -392,7 +394,7 @@ describe('registerLauncherSuggestionsHandler', () => {
         refreshMinutes: 10,
       },
     ];
-    store.state.smartFolders['sf-work'] = {
+    store.state.lenses['sf-work'] = {
       sections: {
         'github:github.com': {
           state: 'ok',
@@ -401,7 +403,7 @@ describe('registerLauncherSuggestionsHandler', () => {
         },
       },
     };
-    store.state.smartFolders['sf-home'] = {
+    store.state.lenses['sf-home'] = {
       sections: {
         'rss:h.example': {
           state: 'ok',
@@ -413,19 +415,19 @@ describe('registerLauncherSuggestionsHandler', () => {
     return store;
   }
 
-  const smartByUrl = (reply: { results: LauncherResult[] }, url: string) =>
-    reply.results.find((r) => r.source === 'smart' && r.url === url);
+  const lensByUrl = (reply: { results: LauncherResult[] }, url: string) =>
+    reply.results.find((r) => r.source === 'lens' && r.url === url);
 
   test('global scope: cross-Space smart items appear and are not boosted', async () => {
     const { deliver } = installChromeStub({ settings: { launcherScope: 'global' } });
-    const store = storeWithCrossSpaceSmart();
+    const store = storeWithCrossSpaceLens();
     registerLauncherSuggestionsHandler(store);
 
     const { send, promise } = deferred();
     deliver(request('parser', 100, 'r-global'), send);
     const reply = await promise;
-    const work = smartByUrl(reply, 'https://work/pr/1');
-    const home = smartByUrl(reply, 'https://home/post/1');
+    const work = lensByUrl(reply, 'https://work/pr/1');
+    const home = lensByUrl(reply, 'https://home/post/1');
     expect(work).toBeDefined();
     expect(home).toBeDefined();
     // Equal match + equal source + no boost → equal score (global is Space-blind).
@@ -435,14 +437,14 @@ describe('registerLauncherSuggestionsHandler', () => {
   test('prefer-current-space scope: the in-Space item outscores its cross-Space peer', async () => {
     // Default settings ⇒ prefer-current-space (no override needed).
     const { deliver } = installChromeStub();
-    const store = storeWithCrossSpaceSmart();
+    const store = storeWithCrossSpaceLens();
     registerLauncherSuggestionsHandler(store);
 
     const { send, promise } = deferred();
     deliver(request('parser', 100, 'r-prefer'), send);
     const reply = await promise;
-    const work = smartByUrl(reply, 'https://work/pr/1');
-    const home = smartByUrl(reply, 'https://home/post/1');
+    const work = lensByUrl(reply, 'https://work/pr/1');
+    const home = lensByUrl(reply, 'https://home/post/1');
     expect(work).toBeDefined();
     expect(home).toBeDefined();
     // The active-Space (work) item carries the boost; both still reachable.
@@ -451,14 +453,14 @@ describe('registerLauncherSuggestionsHandler', () => {
 
   test('cross-Space items carry a Space marker (name + colour); in-Space items do not', async () => {
     const { deliver } = installChromeStub(); // default prefer-current-space
-    const store = storeWithCrossSpaceSmart(); // active Space = "Work"
+    const store = storeWithCrossSpaceLens(); // active Space = "Work"
     registerLauncherSuggestionsHandler(store);
 
     const { send, promise } = deferred();
     deliver(request('parser', 100, 'r-mark'), send);
     const reply = await promise;
-    const home = smartByUrl(reply, 'https://home/post/1');
-    const work = smartByUrl(reply, 'https://work/pr/1');
+    const home = lensByUrl(reply, 'https://home/post/1');
+    const work = lensByUrl(reply, 'https://work/pr/1');
     // The other-Space ("Home") item is marked with its name + a paintable colour.
     expect(home?.spaceName).toBe('Home');
     expect(home?.spaceColor).toMatch(/^oklch\(/);
@@ -469,19 +471,19 @@ describe('registerLauncherSuggestionsHandler', () => {
 
   test('current-space-only scope: cross-Space smart items are filtered out', async () => {
     const { deliver } = installChromeStub({ settings: { launcherScope: 'current-space-only' } });
-    const store = storeWithCrossSpaceSmart();
+    const store = storeWithCrossSpaceLens();
     registerLauncherSuggestionsHandler(store);
 
     const { send, promise } = deferred();
     deliver(request('parser', 100, 'r-strict'), send);
     const reply = await promise;
-    expect(smartByUrl(reply, 'https://work/pr/1')).toBeDefined();
-    expect(smartByUrl(reply, 'https://home/post/1')).toBeUndefined();
+    expect(lensByUrl(reply, 'https://work/pr/1')).toBeDefined();
+    expect(lensByUrl(reply, 'https://home/post/1')).toBeUndefined();
   });
 
   test('current-space-only scope keeps global favorites (no owning Space)', async () => {
     const { deliver } = installChromeStub({ settings: { launcherScope: 'current-space-only' } });
-    const store = storeWithCrossSpaceSmart();
+    const store = storeWithCrossSpaceLens();
     // A favicon-row favorite (spaceId null) is global — it must survive the filter.
     store.state.savedTabs.fav = {
       id: 'fav',
@@ -498,7 +500,7 @@ describe('registerLauncherSuggestionsHandler', () => {
     const reply = await promise;
     expect(reply.results.some((r) => r.source === 'saved' && r.savedTabId === 'fav')).toBe(true);
     // …while the other Space's smart item is still hidden.
-    expect(smartByUrl(reply, 'https://home/post/1')).toBeUndefined();
+    expect(lensByUrl(reply, 'https://home/post/1')).toBeUndefined();
   });
 
   test('concurrent with a drain: the response does not block on the queue', async () => {

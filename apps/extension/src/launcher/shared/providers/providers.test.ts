@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import type { SavedTab, SmartFolderRuntime, SmartSectionRuntime } from '../../../shared/types';
+import type { LensRuntime, LensSectionRuntime, SavedTab } from '../../../shared/types';
 import { bookmarksProvider } from './bookmarks';
 import { historyProvider } from './history';
+import { lensesProvider } from './lenses';
 import { openTabsProvider } from './open-tabs';
 import { savedTabsProvider } from './saved-tabs';
-import { smartFoldersProvider } from './smart-folders';
 
 describe('openTabsProvider', () => {
   test('maps tabs to tab results carrying tabId + windowId', () => {
@@ -113,24 +113,24 @@ describe('savedTabsProvider', () => {
   });
 });
 
-describe('smartFoldersProvider', () => {
+describe('lensesProvider', () => {
   const SK = 'github:github.com';
 
   const section = (
-    state: SmartSectionRuntime['state'],
-    items: SmartSectionRuntime['items'],
-  ): SmartSectionRuntime => ({ state, items, fetchedAt: state === 'ok' ? 1 : null });
+    state: LensSectionRuntime['state'],
+    items: LensSectionRuntime['items'],
+  ): LensSectionRuntime => ({ state, items, fetchedAt: state === 'ok' ? 1 : null });
 
   const runtime = (
-    state: SmartSectionRuntime['state'],
-    items: SmartSectionRuntime['items'],
+    state: LensSectionRuntime['state'],
+    items: LensSectionRuntime['items'],
     sectionKey = SK,
-  ): SmartFolderRuntime => ({ sections: { [sectionKey]: section(state, items) } });
+  ): LensRuntime => ({ sections: { [sectionKey]: section(state, items) } });
 
   const item = (id: string, title: string, url: string) => ({ id, title, url });
 
   test("flattens every folder's items to smart results with folderName + spaceId", () => {
-    const results = smartFoldersProvider(
+    const results = lensesProvider(
       {
         'sf-1': runtime('ok', [item('i1', 'Fix the parser', 'https://github.com/o/r/pull/12')]),
       },
@@ -139,8 +139,8 @@ describe('smartFoldersProvider', () => {
     );
     expect(results).toEqual([
       {
-        id: `smart:${SK}:i1`,
-        source: 'smart',
+        id: `lens:${SK}:i1`,
+        source: 'lens',
         title: 'Fix the parser',
         url: 'https://github.com/o/r/pull/12',
         score: 0,
@@ -151,23 +151,23 @@ describe('smartFoldersProvider', () => {
   });
 
   test('carries no spaceId when no folder-space index is passed', () => {
-    const results = smartFoldersProvider({
+    const results = lensesProvider({
       'sf-1': runtime('ok', [item('i1', 'Title', 'https://x/1')]),
     });
     expect(results[0]?.spaceId).toBeUndefined();
   });
 
   test('a pending refresh keeps its last-known items', () => {
-    const results = smartFoldersProvider({
+    const results = lensesProvider({
       'sf-1': runtime('pending', [item('i1', 'Stale but matchable', 'https://x/1')]),
     });
     expect(results).toHaveLength(1);
-    expect(results[0]).toMatchObject({ source: 'smart', url: 'https://x/1' });
+    expect(results[0]).toMatchObject({ source: 'lens', url: 'https://x/1' });
     expect(results[0]?.folderName).toBeUndefined(); // no index passed
   });
 
   test('signed-out and error folders (empty items) contribute nothing', () => {
-    const results = smartFoldersProvider({
+    const results = lensesProvider({
       out: runtime('signed-out', []),
       err: runtime('error', []),
     });
@@ -175,7 +175,7 @@ describe('smartFoldersProvider', () => {
   });
 
   test('includes items from all folders and skips items without a url', () => {
-    const results = smartFoldersProvider({
+    const results = lensesProvider({
       a: runtime('ok', [item('a1', 'A one', 'https://a/1'), item('a2', 'no url', '')]),
       b: runtime('ok', [item('b1', 'B one', 'https://b/1')]),
     });

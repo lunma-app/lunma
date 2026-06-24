@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { buildOpml, parseOpml, type SmartFolderNode } from './opml';
+import { buildOpml, type LensNode, parseOpml } from './opml';
 
 // ── parseOpml ──────────────────────────────────────────────────────────────────
 
@@ -110,12 +110,11 @@ describe('parseOpml', () => {
 
 // ── buildOpml ─────────────────────────────────────────────────────────────────
 
-function node(
-  overrides: Partial<SmartFolderNode> & { sources?: SmartFolderNode['sources'] } = {},
-): SmartFolderNode {
+function node(overrides: Partial<LensNode> & { sources?: LensNode['sources'] } = {}): LensNode {
   const { sources, ...rest } = overrides;
   return {
-    kind: 'smart',
+    kind: 'lens',
+    lensKind: 'general',
     id: 'sf-1',
     name: 'HN',
     icon: 'rss',

@@ -22,19 +22,19 @@ import { installBusAdapter } from './bus-adapter';
 import type { PendingEvent } from './coordinator';
 import { ensureAtLeastOneSpace } from './default-space';
 import { registerLauncherSuggestionsHandler } from './launcher-suggestions-handler';
+import {
+  handleLensesAlarm,
+  type LensDeps,
+  refreshDueLenses,
+  registerLensesPermissionSync,
+  registerLensesRefreshKick,
+  syncLensesAlarm,
+} from './lenses';
 import { openOptionsAtResultSources } from './open-options-grant';
 import { backfillOverlayIntoOpenTabs, injectOverlay } from './overlay-injection';
 import { resolvePinActiveTab } from './pin-active-tab';
 import { seedExistingTabs } from './seed-existing-tabs';
 import { seedExistingWindows } from './seed-existing-windows';
-import {
-  handleSmartFoldersAlarm,
-  refreshDueSmartFolders,
-  registerSmartFoldersPermissionSync,
-  registerSmartFoldersRefreshKick,
-  type SmartFolderDeps,
-  syncSmartFoldersAlarm,
-} from './smart-folders';
 import { resolveSpaceTint } from './space-tint';
 import { registerStateSnapshotHandler } from './state-snapshot-handler';
 import { coordinator, loadState, store } from './store-singleton';
@@ -161,7 +161,7 @@ installBusAdapter(coordinator, bootReady);
 // the state-request kick, and handler-started refreshes all enqueue
 // `smartFolders.result` events through the coordinator, deferred to bootReady
 // like every other event source.
-const smartFolderDeps: SmartFolderDeps = { store, enqueue: enqueueAfterBoot };
+const lensDeps: LensDeps = { store, enqueue: enqueueAfterBoot };
 
 // The parallel `'lunma/state-request'` refresh-kick listener — a SECOND,
 // independent listener on the sidebar's boot/open signal (the pure-read
@@ -169,14 +169,14 @@ const smartFolderDeps: SmartFolderDeps = { store, enqueue: enqueueAfterBoot };
 // response channel). Registered SYNCHRONOUSLY: a sidebar opening can be the
 // message that wakes a dormant SW; the due-check itself defers to `bootReady`
 // so it never reads a half-loaded store.
-registerSmartFoldersRefreshKick(smartFolderDeps, bootReady);
+registerLensesRefreshKick(lensDeps, bootReady);
 
 // Host-permission sync (least-privilege-permissions design D5/D9): observe
 // `chrome.permissions` grants/revocations and heal gated folders without a
 // reload — a granted origin refetches its `needs-access`/due folders, a revoked
 // one drops affected folders back to `needs-access`. Registered SYNCHRONOUSLY
 // (the change may wake a dormant SW); the reconcile pass defers to `bootReady`.
-registerSmartFoldersPermissionSync(smartFolderDeps, bootReady);
+registerLensesPermissionSync(lensDeps, bootReady);
 
 // Initial poll-alarm sync from the loaded pinned trees (the alarm may have been
 // cleared by a browser restart; create/update/delete handlers retune it live),
@@ -187,8 +187,8 @@ registerSmartFoldersPermissionSync(smartFolderDeps, bootReady);
 // only other freshness path an open sidebar gets: it never re-sends its
 // state-request, so the sidebar-open kick can't fire for it).
 void bootReady.then(() => {
-  void syncSmartFoldersAlarm(store);
-  void refreshDueSmartFolders(smartFolderDeps);
+  void syncLensesAlarm(store);
+  void refreshDueLenses(lensDeps);
 });
 
 // Seed the boundary default + arm every currently-bound saved tab
@@ -419,7 +419,7 @@ function registerChromeListeners(): void {
     void handleAutoArchiveAlarm({ enqueue: enqueueAfterBoot }, alarm);
     // Smart-folders poll (smart-folders, design D4): same first-turn listener
     // rationale; the due-check reads the store, so it defers to bootReady.
-    void bootReady.then(() => handleSmartFoldersAlarm(smartFolderDeps, alarm));
+    void bootReady.then(() => handleLensesAlarm(lensDeps, alarm));
   });
 }
 

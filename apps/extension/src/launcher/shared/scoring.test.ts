@@ -112,7 +112,7 @@ describe('scoreCandidates — field weight', () => {
     const smart = score1(
       'work',
       candidate({
-        source: 'smart',
+        source: 'lens',
         title: 'Fix the parser',
         url: 'https://g/',
         folderName: 'Work PRs',
@@ -128,8 +128,8 @@ describe('scoreCandidates — source weight', () => {
     const score = (source: ResultSource) =>
       score1('docs', candidate({ source, title: 'docs', url: 'https://x/' }));
     expect(score('tab')).toBeGreaterThan(score('saved'));
-    expect(score('saved')).toBeGreaterThan(score('smart'));
-    expect(score('smart')).toBeGreaterThan(score('bookmark'));
+    expect(score('saved')).toBeGreaterThan(score('lens'));
+    expect(score('lens')).toBeGreaterThan(score('bookmark'));
     expect(score('bookmark')).toBeGreaterThan(score('history'));
   });
 
@@ -158,9 +158,9 @@ describe('scoreCandidates — source weight', () => {
 
 describe('scoreCandidates — current-Space boost (design D9)', () => {
   const inSpace = () =>
-    candidate({ source: 'smart', title: 'docs', url: 'https://x/', spaceId: 'work' });
+    candidate({ source: 'lens', title: 'docs', url: 'https://x/', spaceId: 'work' });
   const crossSpace = () =>
-    candidate({ source: 'smart', title: 'docs', url: 'https://y/', spaceId: 'home' });
+    candidate({ source: 'lens', title: 'docs', url: 'https://y/', spaceId: 'home' });
 
   test('an in-Space result outscores its same-source cross-Space peer', () => {
     const [inS, cross] = scoreCandidates('docs', [inSpace(), crossSpace()], undefined, 'work');
@@ -181,7 +181,7 @@ describe('scoreCandidates — current-Space boost (design D9)', () => {
 
   test('the boost never resurrects a non-matching candidate', () => {
     const noMatch = candidate({
-      source: 'smart',
+      source: 'lens',
       title: 'zzz',
       url: 'https://z/',
       spaceId: 'work',

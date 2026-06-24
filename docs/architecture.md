@@ -33,14 +33,14 @@ lunma/                              # pnpm workspace root (private)
 │  │  │  ├─ sidebar/                # flat — feature components compose ui/ primitives
 │  │  │  │  ├─ App.svelte · main.ts · PinnedTabs.svelte · TempTabs.svelte · SpaceSwitcher.svelte
 │  │  │  │  └─ drag.svelte.ts       # custom pointer-drag controller
-│  │  │  ├─ launcher/               # overlay (content script) + newtab (chrome_url_overrides) + folderpage + shared engine
+│  │  │  ├─ launcher/               # overlay (content script) + newtab (chrome_url_overrides) + lenspage + shared engine
 │  │  │  │  ├─ overlay.ts · overlay.css
 │  │  │  │  ├─ newtab/              # full Svelte page — empty-Space "home" (idle) + inline launcher search
-│  │  │  │  ├─ folderpage/          # full Svelte page — one smart folder's read-only dashboard (vite rollupOptions.input entry)
+│  │  │  │  ├─ lenspage/              # full Svelte page — one lens's read-only dashboard (vite rollupOptions.input entry)
 │  │  │  │  └─ shared/              # SearchEngine, scoring, providers, result/query types
 │  │  │  ├─ content/               # second declarative content script (tab-boundary.ts)
 │  │  │  └─ options/               # Options.svelte (orchestrator) · BackupRestore · FeedSubscriptions · RecentlyArchived · ConnectorsCard · ResultSourcesCard · ShortcutGuidanceCard · main.ts
-│  │  ├─ public/manifest.json       # MV3 manifest — crxjs derives build entries from it (+ vite rollupOptions.input for folderpage)
+│  │  ├─ public/manifest.json       # MV3 manifest — crxjs derives build entries from it (+ vite rollupOptions.input for lenspage)
 │  │  ├─ e2e/                       # Playwright specs + fixtures (playwright.config.ts in apps/extension)
 │  │  │                             # unit tests are co-located: src/**/*.test.ts (no top-level tests/)
 │  │  ├─ vite.config.ts · svelte.config.js · tsconfig.json · stylelint.config.js · vitest.setup.ts
@@ -80,18 +80,18 @@ that mutate the store. Everything else is read-only or settings-only.
 | Sidebar | DOM, user interaction, drag-drop | yes (subscriber via state broadcast) | yes (calls store methods through the SW message bridge) |
 | Launcher overlay | `Alt+L` page injection, search UI | no (queries the suggestions channel) | no — dispatches `focusTab` / `focusSavedTab` / `openSavedTab` / `openUrl` over the bus |
 | Launcher newtab | Empty-Space home (Space identity) + inline search | yes (read-only: snapshot + `state-broadcast`, like the sidebar) + queries the suggestions channel | no — dispatches result actions over the bus |
-| Smart folder page | One smart folder's spacious read-only dashboard (`launcher/folderpage/`, `?folderId=…`) | yes (read-only: snapshot + `state-broadcast`, like newtab) | no — dispatches `openSmartItem` / `openSmartFolderListing` over the bus |
+| Lens page | One lens's spacious read-only dashboard (`launcher/lenspage/`, `?folderId=…`) | yes (read-only: snapshot + `state-broadcast`, like newtab) | no — dispatches `openLensItem` / `openLensListing` over the bus |
 | Options | Settings UI + Connectors (per-host PATs) | reads `chrome.storage.sync` directly; reads `chrome.storage.local` for archived tabs + the `lunma.connectors` record | writes `chrome.storage.sync`; writes `lunma.connectors` in `chrome.storage.local` via `shared/connectors.ts` |
 | Onboarding | Static content + open links (Planned) | no | no |
 
-The smart folder page is opened/focused (one reused tab per window) by the
-`openSmartFolderPage` SW command, which dedupes by querying tabs for the page
-URL + `folderId` — no persisted binding. It is reached from the sidebar smart
+The lens page is opened/focused (one reused tab per window) by the
+`openLensPage` SW command, which dedupes by querying tabs for the page
+URL + `folderId` — no persisted binding. It is reached from the sidebar lens
 folder header: the row body + chevron keep normal expand/collapse, and a
 hover/focus-revealed "open as page" icon (`ui/FolderRow` gains an optional
 `onOpenPage`; regular folders pass none) + the kebab item open the page. It
 renders feed entries as rich magazine cards (title + excerpt +
-thumbnail + date) from the optional `SmartFolderItem` fields the RSS connector
+thumbnail + date) from the optional `LensItem` fields the RSS connector
 now parses; queue items stay compact. It is registered as a vite
 `rollupOptions.input` entry (not `web_accessible_resources` — least privilege).
 
@@ -230,10 +230,10 @@ user gesture and is callable only from an extension-page context.
 
 - The service worker only `has*`-queries (gating connector fetches and the
   launcher's history and bookmarks providers) and observes `onPermissionsChange`
-  to heal and refetch gated smart folders without a reload. It never calls
+  to heal and refetch gated lenses without a reload. It never calls
   `request*`.
 - Extension-page surfaces own the gesture-bound `request*` calls: the sidebar
-  smart-folder card and editor, the new-tab launcher, and the options Result
+  lens card and editor, the new-tab launcher, and the options Result
   sources section.
 - The `Alt+L` overlay is a content script, so it cannot request inline. Its
   "Enable …" affordance sends `lunma/open-options-grant` to the SW, which opens
@@ -274,18 +274,18 @@ const initial: AppState = {
   tabLastActivity: {},
   archivedTabs: [],
   trash: {},
-  pinnedBySpace: {},           // { [spaceId]: PinNode[] } — ordered tree of tab|folder|smart nodes
+  pinnedBySpace: {},           // { [spaceId]: PinNode[] } — ordered tree of tab|folder|lens nodes
                                //   PinNode = { kind:'tab'; id }
                                //           | { kind:'folder'; id; name; icon; color; children: savedTabId[] }
-                               //           | { kind:'smart'; id; name; icon; sources: SmartSourceConfig[]; maxItems; hideRead; refreshMinutes }
-                               //               SmartSourceConfig = { source:'gitlab'|'github'|'jira'|'rss'; baseUrl; queries: SmartQuery[] }
+                               //           | {  kind:'lens'; id; name; icon; sources: LensSource[]; maxItems; hideRead; refreshMinutes }
+                               //               LensSource = { source:'gitlab'|'github'|'jira'|'rss'; baseUrl; queries: SmartQuery[] }
                                //               — one entry per connector INSTANCE (source+host); `queries` is its set of
                                //                 canned filters (queue: non-empty; rss: []). The engine expands each entry
                                //                 over `queries[]` into per-filter ResolvedSourceConfig = { source; baseUrl; query? }
                                //                 (one fetch/section per filter) via resolvedConfigs(node).
                                //   single-level (folder children are tab ids, never nested folders);
-                               //   a smart node is connector CONFIG only — its displayed children are
-                               //   ephemeral query results in smartFolders, never persisted on the node
+                               //   a lens node is connector CONFIG only — its displayed children are
+                               //   ephemeral query results in lenses, never persisted on the node
   faviconRow: [],              // SavedTabId[] — flat, GLOBAL favicon-row favorites:
                                //   the ids whose SavedTab.spaceId === null (decoupled). Sibling to
                                //   pinnedBySpace, NOT keyed by Space; a record is in one XOR the other.
@@ -294,9 +294,9 @@ const initial: AppState = {
                                //   PERSISTED, IDS ONLY — work-sensitive payload stays off disk.
                                //   Heals SW restarts, prunes across browser restarts.
   liveTabsById: {},            // { [tabId]: LiveTab } — EPHEMERAL, stripped before persist
-  smartFolders: {},            // { [folderId]: SmartFolderRuntime } — EPHEMERAL connector results,
-                               //   SmartFolderRuntime = { sections: { [sourceKey]: SmartSectionRuntime } }
-                               //   SmartSectionRuntime = { state: 'pending'|'ok'|'signed-out'|'error'|'needs-access'; items; fetchedAt }
+  lenses: {},            // { [folderId]: LensRuntime } — EPHEMERAL connector results,
+                               //   LensRuntime = { sections: { [sourceKey]: LensSectionRuntime } }
+                               //   LensSectionRuntime = { state: 'pending'|'ok'|'signed-out'|'error'|'needs-access'; items; fetchedAt }
                                //   stripped before persist like liveTabsById
 };
 
@@ -352,7 +352,7 @@ Key properties:
 
 ### Ephemeral state slices
 
-`liveTabsById` and `smartFolders` are never persisted.
+`liveTabsById` and `lenses` are never persisted.
 
 `AppState.liveTabsById: { [tabId]: LiveTab }` mirrors live Chrome-tab metadata
 (`title`, `url`, `active`, `status: 'loading' | 'complete'`) so surfaces render
@@ -366,16 +366,16 @@ a tab list from the broadcast state alone.
   at SW boot, after load and recovery and before listener registration, never
   read back from disk.
 
-`AppState.smartFolders: { [folderId]: SmartFolderRuntime }` holds each smart
+`AppState.lenses: { [folderId]: LensRuntime }` holds each
 folder's live query results and fetch state, sectioned by per-filter source key.
 
-- `SmartFolderRuntime = { sections: { [sourceKey]: SmartSectionRuntime } }` —
+- `LensRuntime = { sections: { [sourceKey]: LensSectionRuntime } }` —
   one entry per RESOLVED section (each `sources[]` instance × each of its
   `queries[]`, or a single section for an rss feed);
   `sourceKey = "${source}:${host}:${query}"` for a queue section,
   `"${source}:${host}"` for an rss section.
-- `SmartSectionRuntime = { state: 'pending'|'ok'|'signed-out'|'error'|'needs-access'; items: SmartFolderItem[]; fetchedAt: number | null }`.
-- The coordinator drain writes it via `setSmartSectionRuntime(folderId, sourceKey, runtime)`.
+- `LensSectionRuntime = { state: 'pending'|'ok'|'signed-out'|'error'|'needs-access'; items: LensItem[]; fetchedAt: number | null }`.
+- The coordinator drain writes it via `setLensSectionRuntime(folderId, sourceKey, runtime)`.
 - `persist()` strips it alongside `liveTabsById`, so work-sensitive item titles
   never touch disk.
 - Connector polls rebuild it after a SW restart. A cold start costs one quiet
@@ -439,7 +439,7 @@ class Coordinator {
     }
     if (this.dirty) {
       this.dirty = false;
-      await persist(store.state);     // persist() strips the ephemeral liveTabsById + smartFolders slices
+      await persist(store.state);     // persist() strips the ephemeral liveTabsById + lenses slices
       broadcastState('<batched>', store.state);
     }
   }
@@ -673,20 +673,20 @@ schema widened but old data needs no transformation:
 
 | `toVersion` | Change |
 |---|---|
-| 2 | widened the `PinNode` union with the `smart` kind |
-| 3 | widened the smart node's `source` to `'gitlab' \| 'github'` |
+| 2 | widened the `PinNode` union with the `lens` kind |
+| 3 | widened the lens node's `source` to `'gitlab' \| 'github'` |
 | 4 | added the persisted ids-only `smartItemBindings` slice (parses via its `.default({})`) |
-| 5 | widened the smart node's `source` to `'gitlab' \| 'github' \| 'jira'` |
-| 6 | widened the smart node again |
-| 7 | reshaped each `smartItemBindings` slot from a bare `tabId` number into `{ tabId, allowGlob: '' }` |
-| 8 | replaced the flat `source`/`baseUrl`/`query?` on each smart node with `sources: [{ source, baseUrl, query }]`; re-keyed `smartItemBindings` item ids to `"${sourceKey}:${nativeId}"` |
-| 9 | rewrote each `sources[]` entry from the flat `query?` shape to `queries: SmartQuery[]` (queue → `[query]`, rss → `[]`); re-keyed `smartItemBindings` from `"${source}:${host}:${nativeId}"` to the per-filter `"${source}:${host}:${query}:${nativeId}"` (orphans dropped) |
+| 5 | widened the lens node's `source` to `'gitlab' \| 'github' \| 'jira'` |
+| 6 | widened the lens node again |
+| 7 | reshaped each `lensItemBindings` slot from a bare `tabId` number into `{ tabId, allowGlob: '' }` |
+| 8 | replaced the flat `source`/`baseUrl`/`query?` on each lens node with `sources: [{ source, baseUrl, query }]`; re-keyed `lensItemBindings` item ids to `"${sourceKey}:${nativeId}"` |
+| 9 | rewrote each `sources[]` entry from the flat `query?` shape to `queries: LensQuery[]` (queue → `[query]`, rss → `[]`); re-keyed `lensItemBindings` from `"${source}:${host}:${nativeId}"` to the per-filter `"${source}:${host}:${query}:${nativeId}"` (orphans dropped) |
 
 The v7 migration walks `smartItemBindings[folderId][itemId][windowId]` and
 rewrites any numeric slot to `{ tabId, allowGlob: '' }`. The v8 migration wraps
-each smart node's flat `source`/`baseUrl`/`query?` into `sources: [cfg]` and
+each lens node's flat `source`/`baseUrl`/`query?` into `sources: [cfg]` and
 re-keys item ids with the source namespace; orphaned folderId entries (no
-matching smart node) are dropped defensively.
+matching lens node) are dropped defensively.
 
 Each bump is deliberate even when the transform is a no-op: it makes a downgrade
 detectable. An older build reading newer data quarantines on the version gate

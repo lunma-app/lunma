@@ -214,7 +214,7 @@ describe('installBusAdapter', () => {
       type: 'lunma/command',
       id: 'bad:src',
       cmd: {
-        kind: 'createSmartFolder',
+        kind: 'createLens',
         payload: {
           spaceId: 'work',
           source: 'bitbucket', // not a shipped connector — the z.enum rejects
@@ -228,7 +228,7 @@ describe('installBusAdapter', () => {
 
     expect(enqueue).not.toHaveBeenCalled();
     const invalidCall = errSpy.mock.calls.find((c) => c[0] === 'BUS_INVALID_PAYLOAD');
-    expect(invalidCall?.[1]).toMatchObject({ id: 'bad:src', kind: 'createSmartFolder' });
+    expect(invalidCall?.[1]).toMatchObject({ id: 'bad:src', kind: 'createLens' });
     const ack = chrome.runtime.sendMessage.mock.calls[0]?.[0] as CommandAck;
     expect(ack.id).toBe('bad:src');
     expect(ack.result).toMatchObject({ error: expect.any(String) });

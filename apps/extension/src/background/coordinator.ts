@@ -21,8 +21,8 @@ import type {
 } from './handlers/context';
 import { favoriteHandlers } from './handlers/favorites';
 import { folderHandlers } from './handlers/folders';
+import { lensHandlers } from './handlers/lenses';
 import { pinnedTabHandlers } from './handlers/pinned-tabs';
-import { smartFolderHandlers } from './handlers/smart-folders';
 import { spaceHandlers } from './handlers/spaces';
 import { tempTabHandlers } from './handlers/temp-tabs';
 
@@ -130,24 +130,24 @@ export const EventPolicy: Record<PendingEventKind, EventPolicyEntry> = {
   deleteFolder: {},
   // Smart-folders (smart-folders): lifecycle commands are per-click distinct;
   // results are per-folder and infrequent — no coalescing (design D3).
-  createSmartFolder: {},
-  updateSmartFolder: {},
-  deleteSmartFolder: {},
-  refreshSmartFolder: {},
+  createLens: {},
+  updateLens: {},
+  deleteLens: {},
+  refreshLens: {},
   // Per-click distinct (smart-folder-item-bindings): a re-click of an
   // already-bound row is the cheap focus path, so coalescing buys nothing.
-  openSmartItem: {},
+  openLensItem: {},
   // Feed read-state (rss-connector): each is a distinct intent — per-item marks,
   // a mark-all, a hide-read toggle, an open-all. No coalescing.
-  markSmartItemRead: {},
-  markSmartItemUnread: {},
-  markAllSmartItemsRead: {},
-  setSmartFolderHideRead: {},
-  openSmartFolderListing: {},
+  markLensItemRead: {},
+  markLensItemUnread: {},
+  markAllLensItemsRead: {},
+  setLensHideRead: {},
+  openLensListing: {},
   // Per-click distinct (smart-folder-page): a re-click of an already-open folder
   // page is the cheap focus path, so coalescing buys nothing.
-  openSmartFolderPage: {},
-  'smartFolders.result': {},
+  openLensPage: {},
+  'lenses.result': {},
   reorderTemp: {},
   reorderSpaces: {},
   focusTab: {},
@@ -306,7 +306,7 @@ export class Coordinator {
       ...folderHandlers(),
       // Smart-folders: the lifecycle handlers start refreshes whose result
       // events re-enter this coordinator's queue — hence the enqueue closure.
-      ...smartFolderHandlers({ enqueue: (ev) => this.enqueue(ev) }),
+      ...lensHandlers({ enqueue: (ev) => this.enqueue(ev) }),
       ...tempTabHandlers(),
       ...autoArchiveHandlers(),
       ...boundaryHandlers(),

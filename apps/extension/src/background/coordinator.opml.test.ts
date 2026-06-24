@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { makeCoordinator, sidebar } from './coordinator.test-helpers';
-import { resetSmartFoldersInflight } from './smart-folders';
+import { resetLensesInflight } from './lenses';
 
 interface OPMLChromeStub {
   storage: { local: { get: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn> } };
@@ -28,7 +28,7 @@ function makeWithSpace() {
 
 beforeEach(() => {
   installChrome();
-  resetSmartFoldersInflight();
+  resetLensesInflight();
   vi.stubGlobal(
     'fetch',
     vi.fn(async () => ({ status: 200, ok: true, json: async () => [] })),
@@ -65,11 +65,11 @@ describe('importOpml handler', () => {
     await coordinator.idle();
 
     const nodes = store.state.pinnedBySpace.s1 ?? [];
-    const smartNodes = nodes.filter((n) => n.kind === 'smart');
+    const lensNodes = nodes.filter((n) => n.kind === 'lens');
     // One folder aggregating all 3 feeds.
-    expect(smartNodes).toHaveLength(1);
-    const folder = smartNodes[0];
-    if (folder?.kind !== 'smart') throw new Error('not smart');
+    expect(lensNodes).toHaveLength(1);
+    const folder = lensNodes[0];
+    if (folder?.kind !== 'lens') throw new Error('not smart');
     expect(folder.name).toBe('Feeds');
     expect(folder.sources).toHaveLength(3);
     expect(folder.sources.map((s) => s.source)).toEqual(['rss', 'rss', 'rss']);
@@ -93,10 +93,10 @@ describe('importOpml handler', () => {
     );
     await coordinator.idle();
 
-    const smartNodes = (store.state.pinnedBySpace.s1 ?? []).filter((n) => n.kind === 'smart');
-    expect(smartNodes).toHaveLength(1);
-    const folder = smartNodes[0];
-    if (folder?.kind !== 'smart') throw new Error('not smart');
+    const lensNodes = (store.state.pinnedBySpace.s1 ?? []).filter((n) => n.kind === 'lens');
+    expect(lensNodes).toHaveLength(1);
+    const folder = lensNodes[0];
+    if (folder?.kind !== 'lens') throw new Error('not smart');
     expect(folder.name).toBe('HN');
     expect(folder.sources).toHaveLength(1);
     expect(emitAck).toHaveBeenCalledWith(expect.objectContaining({ id: 'c-single', result: 'ok' }));
@@ -123,10 +123,10 @@ describe('importOpml handler', () => {
     );
     await coordinator.idle();
 
-    const smartNodes = (store.state.pinnedBySpace.s1 ?? []).filter((n) => n.kind === 'smart');
-    expect(smartNodes).toHaveLength(1);
-    const folder = smartNodes[0];
-    if (folder?.kind !== 'smart') throw new Error('not smart');
+    const lensNodes = (store.state.pinnedBySpace.s1 ?? []).filter((n) => n.kind === 'lens');
+    expect(lensNodes).toHaveLength(1);
+    const folder = lensNodes[0];
+    if (folder?.kind !== 'lens') throw new Error('not smart');
     expect(folder.sources).toHaveLength(2);
     expect(emitAck).toHaveBeenCalledWith(expect.objectContaining({ id: 'c2', result: 'ok' }));
   });

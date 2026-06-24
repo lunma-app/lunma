@@ -294,8 +294,8 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
     payload: { spaceId: 'sp', folderId: 'f', color: 'red' },
   },
   deleteFolder: { kind: 'deleteFolder', payload: { spaceId: 'sp', folderId: 'f' } },
-  createSmartFolder: {
-    kind: 'createSmartFolder',
+  createLens: {
+    kind: 'createLens',
     payload: {
       spaceId: 'sp',
       sources: [
@@ -306,8 +306,8 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
       refreshMinutes: 10,
     },
   },
-  updateSmartFolder: {
-    kind: 'updateSmartFolder',
+  updateLens: {
+    kind: 'updateLens',
     payload: {
       spaceId: 'sp',
       folderId: 'sf',
@@ -317,34 +317,34 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
       refreshMinutes: 30,
     },
   },
-  deleteSmartFolder: { kind: 'deleteSmartFolder', payload: { spaceId: 'sp', folderId: 'sf' } },
-  refreshSmartFolder: { kind: 'refreshSmartFolder', payload: { spaceId: 'sp', folderId: 'sf' } },
-  markSmartItemRead: {
-    kind: 'markSmartItemRead',
+  deleteLens: { kind: 'deleteLens', payload: { spaceId: 'sp', folderId: 'sf' } },
+  refreshLens: { kind: 'refreshLens', payload: { spaceId: 'sp', folderId: 'sf' } },
+  markLensItemRead: {
+    kind: 'markLensItemRead',
     payload: { folderId: 'sf', itemId: '42' },
   },
-  markSmartItemUnread: {
-    kind: 'markSmartItemUnread',
+  markLensItemUnread: {
+    kind: 'markLensItemUnread',
     payload: { folderId: 'sf', itemId: '42' },
   },
-  markAllSmartItemsRead: {
-    kind: 'markAllSmartItemsRead',
+  markAllLensItemsRead: {
+    kind: 'markAllLensItemsRead',
     payload: { spaceId: 'sp', folderId: 'sf' },
   },
-  setSmartFolderHideRead: {
-    kind: 'setSmartFolderHideRead',
+  setLensHideRead: {
+    kind: 'setLensHideRead',
     payload: { spaceId: 'sp', folderId: 'sf', hideRead: true },
   },
-  openSmartFolderListing: {
-    kind: 'openSmartFolderListing',
+  openLensListing: {
+    kind: 'openLensListing',
     payload: { spaceId: 'sp', folderId: 'sf', windowId: 1 },
   },
-  openSmartFolderPage: {
-    kind: 'openSmartFolderPage',
+  openLensPage: {
+    kind: 'openLensPage',
     payload: { spaceId: 'sp', folderId: 'sf', windowId: 1 },
   },
-  openSmartItem: {
-    kind: 'openSmartItem',
+  openLensItem: {
+    kind: 'openLensItem',
     payload: { spaceId: 'sp', folderId: 'sf', itemId: '42', windowId: 1 },
   },
   reorderTemp: { kind: 'reorderTemp', payload: { windowId: 1, tabIds: [1, 2, 3] } },
@@ -510,10 +510,10 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     expect(parsed.success).toBe(false);
   });
 
-  test('rejects an out-of-vocabulary smart-folder query', () => {
+  test('rejects an out-of-vocabulary lens query', () => {
     expect(
       SidebarCommandSchema.safeParse({
-        kind: 'createSmartFolder',
+        kind: 'createLens',
         payload: {
           spaceId: 'sp',
           sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['merged-by-me'] }],
@@ -525,9 +525,9 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     ).toBe(false);
   });
 
-  test('openSmartItem round-trips (identity-only payload)', () => {
+  test('openLensItem round-trips (identity-only payload)', () => {
     const cmd = {
-      kind: 'openSmartItem',
+      kind: 'openLensItem',
       payload: { spaceId: 'sp', folderId: 'sf-1', itemId: '42', windowId: 100 },
     };
     const parsed = SidebarCommandSchema.safeParse(cmd);
@@ -535,11 +535,11 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     if (parsed.success) expect(parsed.data).toEqual(cmd);
   });
 
-  test('openSmartItem rejects a smuggled url key (strict payload)', () => {
+  test('openLensItem rejects a smuggled url key (strict payload)', () => {
     // The SW resolves the URL from its own runtime slice — a URL on the wire
     // is exactly what the identity-only contract forbids.
     const parsed = SidebarCommandSchema.safeParse({
-      kind: 'openSmartItem',
+      kind: 'openLensItem',
       payload: {
         spaceId: 'sp',
         folderId: 'sf-1',
@@ -551,18 +551,18 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     expect(parsed.success).toBe(false);
   });
 
-  test('openSmartItem rejects a missing itemId', () => {
+  test('openLensItem rejects a missing itemId', () => {
     const parsed = SidebarCommandSchema.safeParse({
-      kind: 'openSmartItem',
+      kind: 'openLensItem',
       payload: { spaceId: 'sp', folderId: 'sf-1', windowId: 100 },
     });
     expect(parsed.success).toBe(false);
   });
 
-  test('createSmartFolder and updateSmartFolder round-trip with each queue source', () => {
+  test('createLens and updateLens round-trip with each queue source', () => {
     for (const source of ['gitlab', 'github', 'jira'] as const) {
       const create = {
-        kind: 'createSmartFolder',
+        kind: 'createLens',
         payload: {
           spaceId: 'sp',
           sources: [
@@ -574,7 +574,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
         },
       };
       const update = {
-        kind: 'updateSmartFolder',
+        kind: 'updateLens',
         payload: { ...create.payload, folderId: 'sf-1' },
       };
       const parsedCreate = SidebarCommandSchema.safeParse(create);
@@ -586,9 +586,9 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     }
   });
 
-  test('multi-source createSmartFolder round-trips (gitlab + rss)', () => {
+  test('multi-source createLens round-trips (gitlab + rss)', () => {
     const create = {
-      kind: 'createSmartFolder',
+      kind: 'createLens',
       payload: {
         spaceId: 'sp',
         sources: [
@@ -605,9 +605,9 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     if (parsed.success) expect(parsed.data).toEqual(create);
   });
 
-  test('an rss createSmartFolder round-trips with no query (feed source, rss-connector D2)', () => {
+  test('an rss createLens round-trips with no query (feed source, rss-connector D2)', () => {
     const create = {
-      kind: 'createSmartFolder',
+      kind: 'createLens',
       payload: {
         spaceId: 'sp',
         sources: [{ source: 'rss', baseUrl: 'https://news.ycombinator.com/rss', queries: [] }],
@@ -621,14 +621,14 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     if (parsed.success) expect(parsed.data).toEqual(create);
   });
 
-  test('rejects an out-of-vocabulary smart-folder source in sources[]', () => {
-    for (const kind of ['createSmartFolder', 'updateSmartFolder'] as const) {
+  test('rejects an out-of-vocabulary lens source in sources[]', () => {
+    for (const kind of ['createLens', 'updateLens'] as const) {
       expect(
         SidebarCommandSchema.safeParse({
           kind,
           payload: {
             spaceId: 'sp',
-            ...(kind === 'updateSmartFolder' ? { folderId: 'sf-1' } : {}),
+            ...(kind === 'updateLens' ? { folderId: 'sf-1' } : {}),
             sources: [
               {
                 source: 'bitbucket',
@@ -646,10 +646,10 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     }
   });
 
-  test('rejects a createSmartFolder with empty sources array', () => {
+  test('rejects a createLens with empty sources array', () => {
     expect(
       SidebarCommandSchema.safeParse({
-        kind: 'createSmartFolder',
+        kind: 'createLens',
         payload: {
           spaceId: 'sp',
           sources: [],
@@ -661,11 +661,11 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     ).toBe(false);
   });
 
-  test('rejects a createSmartFolder carrying a sidebar-minted folderId', () => {
+  test('rejects a createLens carrying a sidebar-minted folderId', () => {
     // The SW mints the id — a `folderId` on create is an extra key (strict).
     expect(
       SidebarCommandSchema.safeParse({
-        kind: 'createSmartFolder',
+        kind: 'createLens',
         payload: {
           spaceId: 'sp',
           folderId: 'sf-1',
@@ -678,10 +678,10 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     ).toBe(false);
   });
 
-  test('rejects an updateSmartFolder missing its folderId', () => {
+  test('rejects an updateLens missing its folderId', () => {
     expect(
       SidebarCommandSchema.safeParse({
-        kind: 'updateSmartFolder',
+        kind: 'updateLens',
         payload: {
           spaceId: 'sp',
           sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored'] }],
@@ -693,9 +693,10 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     ).toBe(false);
   });
 
-  test('a reorderPinned tree containing a single-source smart node round-trips losslessly', () => {
-    const smartNode = {
-      kind: 'smart',
+  test('a reorderPinned tree containing a single-source lens node round-trips losslessly', () => {
+    const lensNode = {
+      kind: 'lens',
+      lensKind: 'general',
       id: 'sf-1',
       name: 'Review requests',
       icon: 'folder-git-2',
@@ -712,7 +713,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
         spaceId: 'sp',
         nodes: [
           { kind: 'tab', id: 't1' },
-          smartNode,
+          lensNode,
           { kind: 'folder', id: 'f1', name: 'F', icon: 'folder', color: 'gray', children: ['t2'] },
         ],
       },
@@ -722,14 +723,15 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     if (parsed.success) expect(parsed.data).toEqual(cmd);
   });
 
-  test('a reorderPinned tree containing a multi-source smart node round-trips losslessly', () => {
+  test('a reorderPinned tree containing a multi-source lens node round-trips losslessly', () => {
     const cmd = {
       kind: 'reorderPinned',
       payload: {
         spaceId: 'sp',
         nodes: [
           {
-            kind: 'smart',
+            kind: 'lens',
+            lensKind: 'general',
             id: 'sf-1',
             name: 'Work + News',
             icon: 'layers',
@@ -749,14 +751,15 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     if (parsed.success) expect(parsed.data).toEqual(cmd);
   });
 
-  test('a reorderPinned tree containing a jira smart node round-trips losslessly', () => {
+  test('a reorderPinned tree containing a jira lens node round-trips losslessly', () => {
     const cmd = {
       kind: 'reorderPinned',
       payload: {
         spaceId: 'sp',
         nodes: [
           {
-            kind: 'smart',
+            kind: 'lens',
+            lensKind: 'general',
             id: 'sf-jira',
             name: 'My reported issues',
             icon: 'folder-kanban',
@@ -775,14 +778,15 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     if (parsed.success) expect(parsed.data).toEqual(cmd);
   });
 
-  test('a reorderPinned tree containing an rss smart node (no query) round-trips losslessly', () => {
+  test('a reorderPinned tree containing an rss lens node (no query) round-trips losslessly', () => {
     const cmd = {
       kind: 'reorderPinned',
       payload: {
         spaceId: 'sp',
         nodes: [
           {
-            kind: 'smart',
+            kind: 'lens',
+            lensKind: 'general',
             id: 'feed-1',
             name: 'Hacker News',
             icon: 'rss',
@@ -799,7 +803,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     if (parsed.success) expect(parsed.data).toEqual(cmd);
   });
 
-  test('rejects a smart PinNode with an out-of-vocabulary source in sources[]', () => {
+  test('rejects a lens PinNode with an out-of-vocabulary source in sources[]', () => {
     expect(
       SidebarCommandSchema.safeParse({
         kind: 'reorderPinned',
@@ -807,7 +811,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
           spaceId: 'sp',
           nodes: [
             {
-              kind: 'smart',
+              kind: 'lens',
               id: 'sf-1',
               name: 'X',
               icon: 'folder-git-2',

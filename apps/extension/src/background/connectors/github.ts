@@ -2,10 +2,10 @@ import { z } from 'zod';
 import { requiredOriginsForConfig } from '../../shared/connector-origins';
 import { readConnectors } from '../../shared/connectors';
 import type {
-  ResolvedSourceConfig,
-  SmartFolderItem,
-  SmartQuery,
-  SmartSectionRuntime,
+  LensItem,
+  LensQuery,
+  LensSectionRuntime,
+  ResolvedLensSource,
 } from '../../shared/types';
 import { boundedFetch, type ConnectorCaches, type SourceConnector } from './connector';
 
@@ -42,7 +42,7 @@ export function apiRootOf(baseUrl: string): string {
 
 /** The search qualifier per canned query — `@me` resolves server-side under
  * token auth. */
-function qualifierFor(query: SmartQuery): string {
+function qualifierFor(query: LensQuery): string {
   switch (query) {
     case 'authored':
       return 'author:@me';
@@ -131,7 +131,7 @@ const WARN_CONCLUSIONS = new Set(['skipped', 'cancelled']);
  * conclusions remain, or there are zero runs, the item carries no status
  * (absence over guessing, the GitLab unmapped-pipeline precedent).
  */
-export function aggregateCheckRuns(runs: CheckRun[]): SmartFolderItem['status'] {
+export function aggregateCheckRuns(runs: CheckRun[]): LensItem['status'] {
   if (runs.some((r) => FAIL_CONCLUSIONS.has(r.conclusion ?? ''))) {
     return { tone: 'fail', label: 'Checks failed' };
   }
@@ -170,7 +170,7 @@ async function mapWithConcurrency<T, R>(
 
 interface Enrichment {
   draft: boolean;
-  status: SmartFolderItem['status'];
+  status: LensItem['status'];
 }
 
 /**
@@ -214,12 +214,12 @@ async function enrich(
  * rate-limit kind).
  */
 async function fetchRuntime(
-  cfg: ResolvedSourceConfig,
+  cfg: ResolvedLensSource,
   maxItems: number,
   _caches?: ConnectorCaches,
-): Promise<SmartSectionRuntime> {
+): Promise<LensSectionRuntime> {
   const fetchedAt = Date.now();
-  const fail = (state: 'signed-out' | 'error'): SmartSectionRuntime => ({
+  const fail = (state: 'signed-out' | 'error'): LensSectionRuntime => ({
     state,
     items: [],
     fetchedAt,
@@ -241,7 +241,7 @@ async function fetchRuntime(
 
   // A queue node always carries a query (source-optional only for feeds);
   // default defensively so the now-optional field stays a total switch.
-  const query: SmartQuery = cfg.query ?? 'assigned';
+  const query: LensQuery = cfg.query ?? 'assigned';
 
   // `advanced_search=true` rides GitHub's issue-search migration — becoming
   // required on github.com, ignored by GHE versions that predate it. The
@@ -267,7 +267,7 @@ async function fetchRuntime(
     enrich(pr.pull_request?.url, apiRoot, token),
   );
 
-  const items: SmartFolderItem[] = prs.map((pr, index) => {
+  const items: LensItem[] = prs.map((pr, index) => {
     const enrichment = enrichments[index] ?? { draft: false, status: undefined };
     return {
       id: String(pr.id),
@@ -286,7 +286,7 @@ async function fetchRuntime(
  * tab"): GitHub's pull-requests dashboard — the canonical "PRs that involve me"
  * page (github.com AND GHE both serve `/pulls`), independent of the canned
  * query. */
-function listingUrl(cfg: ResolvedSourceConfig): string {
+function listingUrl(cfg: ResolvedLensSource): string {
   return `${cfg.baseUrl}/pulls`;
 }
 
@@ -296,7 +296,7 @@ function listingUrl(cfg: ResolvedSourceConfig): string {
  * same-origin. Delegates to the shared {@link requiredOriginsForConfig} so the
  * SW gate and the surfaces' grant request share one derivation.
  */
-function requiredOrigins(cfg: ResolvedSourceConfig): string[] {
+function requiredOrigins(cfg: ResolvedLensSource): string[] {
   return requiredOriginsForConfig(cfg);
 }
 

@@ -5,13 +5,13 @@ import { scoreCandidates } from './scoring';
 
 /**
  * Candidate results from the five providers, kept apart so the engine can apply
- * the de-dup precedence `tab > saved > smart > bookmark > history`
- * (launcher-fuzzy-smart-folders, design D4).
+ * the de-dup precedence `tab > saved > lens > bookmark > history`
+ * (launcher-fuzzy-lenses, design D4).
  */
 export interface SearchSources {
   tabs: LauncherResult[];
   saved: LauncherResult[];
-  smart: LauncherResult[];
+  lens: LauncherResult[];
   bookmarks: LauncherResult[];
   history: LauncherResult[];
 }
@@ -24,7 +24,7 @@ export const MAX_RESULTS = 12;
  *
  * - An empty/whitespace query returns `[]` (the surfaces show their idle state).
  * - Results sharing a URL are de-duped with precedence
- *   `tab > saved > smart > bookmark > history` (the higher-precedence one is kept).
+ *   `tab > saved > lens > bookmark > history` (the higher-precedence one is kept).
  * - The de-duped survivors are scored in a single batch (uFuzzy is a batch
  *   matcher); candidates the query does not match (score 0) are dropped.
  * - Sorted by score descending with a stable tie order (insertion order, which
@@ -50,7 +50,7 @@ export function runSearch(
   for (const candidate of [
     ...sources.tabs,
     ...sources.saved,
-    ...sources.smart,
+    ...sources.lens,
     ...sources.bookmarks,
     ...sources.history,
   ]) {

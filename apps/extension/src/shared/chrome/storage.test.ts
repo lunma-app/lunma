@@ -345,9 +345,9 @@ describe('readPersistedState', () => {
     expect(chromeMock.set).not.toHaveBeenCalled();
   });
 
-  test('a v1 envelope chains through all nine entries and writes back as v10', async () => {
+  test('a v1 envelope chains through all ten entries and writes back as v11', async () => {
     // A faithful pre-smart-folders envelope: in-state schemaVersion 1, no
-    // ephemeral slices on disk, no smartItemBindings / smartReadState (neither
+    // ephemeral slices on disk, no lensItemBindings / lensReadState (neither
     // existed yet), a Space with a pinned tab.
     const state = createInitialState();
     state.schemaVersion = 1;
@@ -360,13 +360,7 @@ describe('readPersistedState', () => {
       currentURL: null,
     };
     state.pinnedBySpace.work = [{ kind: 'tab', id: 'st-1' }];
-    const {
-      liveTabsById: _l,
-      smartFolders: _s,
-      smartItemBindings: _b,
-      smartReadState: _r,
-      ...persistable
-    } = state;
+    const { liveTabsById: _l, lenses: _s, ...persistable } = state;
     chromeMock.data['lunma.state'] = { schemaVersion: 1, state: persistable };
     chromeMock.set.mockClear();
 
@@ -375,129 +369,143 @@ describe('readPersistedState', () => {
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
     // Lossless: the pass-throughs change no content; the absent
-    // `smartItemBindings` / `smartReadState` / `liveTabsById` / `smartFolders`
+    // `lensItemBindings` / `lensReadState` / `liveTabsById` / `lenses`
     // parse to their `{}` defaults.
     expect(result.state).toEqual({
       ...persistable,
-      smartItemBindings: {},
-      smartReadState: {},
       liveTabsById: {},
-      smartFolders: {},
+      lenses: {},
     });
-    // The envelope is written back at the current (v8) version.
+    // The envelope is written back at the current (v11) version.
     expect(chromeMock.set).toHaveBeenCalledWith({
       'lunma.state': {
-        schemaVersion: 10,
-        state: { ...persistable, smartItemBindings: {}, smartReadState: {} },
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+        state: persistable,
       },
     });
     const backupKey = Object.keys(chromeMock.data).find((k) => k.startsWith('__corrupt_backup_'));
     expect(backupKey).toBeUndefined();
   });
 
-  test('a v2 envelope (gitlab smart node) migrates losslessly and writes back as v10', async () => {
-    // A pre-github-connector envelope: in-state schemaVersion 2, a gitlab smart
-    // node among the pins (the only smart source v2 admits). The node carries
-    // the current v8 shape (the suite builds from `createInitialState`, then
-    // overrides the version) — the migrations are pure pass-throughs, so a
-    // lossless round-trip is the contract under test.
-    const state = createInitialState();
-    state.schemaVersion = 2;
-    state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
-    state.pinnedBySpace.work = [
-      {
-        kind: 'smart',
-        id: 'sf-1',
-        name: 'Review requests',
-        icon: 'folder-git-2',
-        sources: [
-          {
-            source: 'gitlab',
-            baseUrl: 'https://gitlab.example.com',
-            queries: ['review-requested'],
-          },
-        ],
-        maxItems: 20,
-        hideRead: false,
-        refreshMinutes: 10,
+  test('a v2 envelope (gitlab lens node) migrates and writes back as v11', async () => {
+    // A pre-github-connector envelope: schemaVersion 2, a gitlab smart node
+    // stored in the raw v2 format (`kind: 'smart'`). The v11 migration converts
+    // it to `kind: 'lens'` + `lensKind: 'general'` and renames the binding keys.
+    chromeMock.data['lunma.state'] = {
+      schemaVersion: 2,
+      state: {
+        schemaVersion: 2,
+        spaces: [{ id: 'work', name: 'Work', color: 'blue', icon: 'star' }],
+        activeSpaceByWindow: {},
+        spaceInstancesByWindow: {},
+        tabBindings: {},
+        savedTabs: {},
+        lastActivatedSpaceId: null,
+        tabLastActivity: {},
+        archivedTabs: [],
+        trash: {},
+        pinnedBySpace: {
+          work: [
+            {
+              kind: 'smart',
+              id: 'sf-1',
+              name: 'Review requests',
+              icon: 'folder-git-2',
+              source: 'gitlab',
+              baseUrl: 'https://gitlab.example.com',
+              query: 'review-requested',
+              refreshMinutes: 10,
+            },
+          ],
+        },
+        faviconRow: [],
+        smartItemBindings: {},
       },
-    ];
-    const { liveTabsById: _l, smartFolders: _s, smartItemBindings: _b, ...persistable } = state;
-    chromeMock.data['lunma.state'] = { schemaVersion: 2, state: persistable };
+    };
     chromeMock.set.mockClear();
 
     const result = await readPersistedState();
 
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
-    // Lossless: the pass-throughs change no content — the smart node included.
-    // `liveTabsById` / `smartFolders` are ephemeral: absent on disk, present as
-    // `{}` in the parsed in-memory state (Zod default).
-    expect(result.state).toEqual({
-      ...persistable,
-      smartItemBindings: {},
-      liveTabsById: {},
-      smartFolders: {},
+    // v11 migration converts the smart node.
+    expect(result.state.pinnedBySpace.work?.[0]).toMatchObject({
+      kind: 'lens',
+      lensKind: 'general',
+      id: 'sf-1',
     });
-    expect(chromeMock.set).toHaveBeenCalledWith({
-      'lunma.state': { schemaVersion: 10, state: { ...persistable, smartItemBindings: {} } },
-    });
+    expect(result.state.lensItemBindings).toEqual({});
+    expect(chromeMock.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        'lunma.state': expect.objectContaining({ schemaVersion: CURRENT_SCHEMA_VERSION }),
+      }),
+    );
     const backupKey = Object.keys(chromeMock.data).find((k) => k.startsWith('__corrupt_backup_'));
     expect(backupKey).toBeUndefined();
   });
 
-  test('a v3 envelope (no smartItemBindings field) migrates losslessly and writes back as v10', async () => {
-    // A pre-bindings envelope: in-state schemaVersion 3, a smart node among the
-    // pins, and no `smartItemBindings` key anywhere — the slice parses to its
-    // `{}` default through the v4 pass-through.
-    const state = createInitialState();
-    state.schemaVersion = 3;
-    state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
-    state.pinnedBySpace.work = [
-      {
-        kind: 'smart',
-        id: 'sf-1',
-        name: 'Review requests',
-        icon: 'folder-git-2',
-        sources: [
-          {
-            source: 'gitlab',
-            baseUrl: 'https://gitlab.example.com',
-            queries: ['review-requested'],
-          },
-        ],
-        maxItems: 20,
-        hideRead: false,
-        refreshMinutes: 10,
+  test('a v3 envelope (no smartItemBindings field) migrates and writes back as v11', async () => {
+    // A pre-bindings envelope: schemaVersion 3, a smart node among the pins,
+    // and no `smartItemBindings` key — the v11 migration renames to
+    // `lensItemBindings` if present; absent means Zod default fills it.
+    chromeMock.data['lunma.state'] = {
+      schemaVersion: 3,
+      state: {
+        schemaVersion: 3,
+        spaces: [{ id: 'work', name: 'Work', color: 'blue', icon: 'star' }],
+        activeSpaceByWindow: {},
+        spaceInstancesByWindow: {},
+        tabBindings: {},
+        savedTabs: {},
+        lastActivatedSpaceId: null,
+        tabLastActivity: {},
+        archivedTabs: [],
+        trash: {},
+        pinnedBySpace: {
+          work: [
+            {
+              kind: 'smart',
+              id: 'sf-1',
+              name: 'Review requests',
+              icon: 'folder-git-2',
+              source: 'gitlab',
+              baseUrl: 'https://gitlab.example.com',
+              query: 'review-requested',
+              refreshMinutes: 10,
+            },
+          ],
+        },
+        faviconRow: [],
+        // no smartItemBindings — the slice parses to {} via Zod default
       },
-    ];
-    const { liveTabsById: _l, smartFolders: _s, smartItemBindings: _b, ...persistable } = state;
-    chromeMock.data['lunma.state'] = { schemaVersion: 3, state: persistable };
+    };
     chromeMock.set.mockClear();
 
     const result = await readPersistedState();
 
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
-    expect(result.state).toEqual({
-      ...persistable,
-      smartItemBindings: {},
-      liveTabsById: {},
-      smartFolders: {},
+    expect(result.state.pinnedBySpace.work?.[0]).toMatchObject({
+      kind: 'lens',
+      lensKind: 'general',
     });
-    expect(chromeMock.set).toHaveBeenCalledWith({
-      'lunma.state': { schemaVersion: 10, state: { ...persistable, smartItemBindings: {} } },
-    });
+    expect(result.state.lensItemBindings).toEqual({});
+    expect(chromeMock.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        'lunma.state': expect.objectContaining({ schemaVersion: CURRENT_SCHEMA_VERSION }),
+      }),
+    );
     const backupKey = Object.keys(chromeMock.data).find((k) => k.startsWith('__corrupt_backup_'));
     expect(backupKey).toBeUndefined();
   });
 
-  test('a v6 state with a gitlab smart node round-trips without quarantine', async () => {
+  test('a v11 state with a gitlab lens node round-trips without quarantine', async () => {
     const state = createInitialState();
     state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
     state.pinnedBySpace.work = [
       {
-        kind: 'smart',
+        kind: 'lens',
+        lensKind: 'general',
         id: 'sf-1',
         name: 'Review requests',
         icon: 'folder-git-2',
@@ -528,7 +536,8 @@ describe('readPersistedState', () => {
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
     expect(result.state.pinnedBySpace.work?.[0]).toEqual({
-      kind: 'smart',
+      kind: 'lens',
+      lensKind: 'general',
       id: 'sf-1',
       name: 'Review requests',
       icon: 'folder-git-2',
@@ -543,51 +552,68 @@ describe('readPersistedState', () => {
     expect(backupKey).toBeUndefined();
   });
 
-  test('a v4 envelope (github smart node) migrates losslessly and writes back as v10', async () => {
-    // A pre-jira-connector envelope: in-state schemaVersion 4, a github smart
-    // node among the pins. The v5 + v6 pass-throughs change no content — the
-    // node carries the current v8 shape (the suite builds from
-    // `createInitialState`), so the round-trip is lossless.
-    const state = createInitialState();
-    state.schemaVersion = 4;
-    state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
-    state.pinnedBySpace.work = [
-      {
-        kind: 'smart',
-        id: 'sf-gh',
-        name: 'My pull requests',
-        icon: 'folder-git-2',
-        sources: [{ source: 'github', baseUrl: 'https://github.com', queries: ['authored'] }],
-        maxItems: 20,
-        hideRead: false,
-        refreshMinutes: 10,
+  test('a v4 envelope (github lens node) migrates and writes back as v11', async () => {
+    // A pre-jira-connector envelope: schemaVersion 4, a github smart node.
+    chromeMock.data['lunma.state'] = {
+      schemaVersion: 4,
+      state: {
+        schemaVersion: 4,
+        spaces: [{ id: 'work', name: 'Work', color: 'blue', icon: 'star' }],
+        activeSpaceByWindow: {},
+        spaceInstancesByWindow: {},
+        tabBindings: {},
+        savedTabs: {},
+        lastActivatedSpaceId: null,
+        tabLastActivity: {},
+        archivedTabs: [],
+        trash: {},
+        pinnedBySpace: {
+          work: [
+            {
+              kind: 'smart',
+              id: 'sf-gh',
+              name: 'My pull requests',
+              icon: 'folder-git-2',
+              source: 'github',
+              baseUrl: 'https://github.com',
+              query: 'authored',
+              refreshMinutes: 10,
+            },
+          ],
+        },
+        faviconRow: [],
+        smartItemBindings: {},
       },
-    ];
-    const { liveTabsById: _l, smartFolders: _s, ...persistable } = state;
-    chromeMock.data['lunma.state'] = { schemaVersion: 4, state: persistable };
+    };
     chromeMock.set.mockClear();
 
     const result = await readPersistedState();
 
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
-    // Lossless: the pass-through changes no content — the github node included.
-    // `liveTabsById` / `smartFolders` are absent on disk but present as `{}`
-    // in the parsed in-memory state (Zod default).
-    expect(result.state).toEqual({ ...persistable, liveTabsById: {}, smartFolders: {} });
-    expect(chromeMock.set).toHaveBeenCalledWith({
-      'lunma.state': { schemaVersion: 10, state: persistable },
+    // v11 migration converts the smart node to lens.
+    expect(result.state.pinnedBySpace.work?.[0]).toMatchObject({
+      kind: 'lens',
+      lensKind: 'general',
+      id: 'sf-gh',
     });
+    expect(result.state.lensItemBindings).toEqual({});
+    expect(chromeMock.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        'lunma.state': expect.objectContaining({ schemaVersion: CURRENT_SCHEMA_VERSION }),
+      }),
+    );
     const backupKey = Object.keys(chromeMock.data).find((k) => k.startsWith('__corrupt_backup_'));
     expect(backupKey).toBeUndefined();
   });
 
-  test('a v6 state with a jira smart node round-trips without quarantine', async () => {
+  test('a v11 state with a jira lens node round-trips without quarantine', async () => {
     const state = createInitialState();
     state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
     state.pinnedBySpace.work = [
       {
-        kind: 'smart',
+        kind: 'lens',
+        lensKind: 'general',
         id: 'sf-jira',
         name: 'My reported issues',
         icon: 'folder-kanban',
@@ -604,7 +630,8 @@ describe('readPersistedState', () => {
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
     expect(result.state.pinnedBySpace.work?.[0]).toEqual({
-      kind: 'smart',
+      kind: 'lens',
+      lensKind: 'general',
       id: 'sf-jira',
       name: 'My reported issues',
       icon: 'folder-kanban',
@@ -617,15 +644,16 @@ describe('readPersistedState', () => {
     expect(backupKey).toBeUndefined();
   });
 
-  test('a v7 state with a populated smart-item binding round-trips without quarantine', async () => {
-    // The ids-only bindings slice (smart-folder-item-bindings) IS persisted —
-    // unlike the runtime `smartFolders` slice — and must survive the round-trip
+  test('a v11 state with a populated lens-item binding round-trips without quarantine', async () => {
+    // The ids-only bindings slice (lens-item-bindings) IS persisted —
+    // unlike the runtime `lenses` slice — and must survive the round-trip
     // intact, no migration, no write-back, no quarantine.
     const state = createInitialState();
     state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
     state.pinnedBySpace.work = [
       {
-        kind: 'smart',
+        kind: 'lens',
+        lensKind: 'general',
         id: 'sf-1',
         name: 'Review requests',
         icon: 'folder-git-2',
@@ -641,7 +669,7 @@ describe('readPersistedState', () => {
         refreshMinutes: 10,
       },
     ];
-    state.smartItemBindings['sf-1'] = { '42': { 100: { tabId: 7, allowGlob: '' } } };
+    state.lensItemBindings['sf-1'] = { '42': { 100: { tabId: 7, allowGlob: '' } } };
     await persist(state);
     chromeMock.set.mockClear();
 
@@ -649,7 +677,7 @@ describe('readPersistedState', () => {
 
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
-    expect(result.state.smartItemBindings).toEqual({
+    expect(result.state.lensItemBindings).toEqual({
       'sf-1': { '42': { 100: { tabId: 7, allowGlob: '' } } },
     });
     expect(chromeMock.set).not.toHaveBeenCalled(); // already current — no write-back
@@ -657,15 +685,16 @@ describe('readPersistedState', () => {
     expect(backupKey).toBeUndefined();
   });
 
-  test('a v6 state with smartReadState round-trips it (persisted) while smartFolders is stripped', async () => {
+  test('a v11 state with lensReadState round-trips it (persisted) while lenses is stripped', async () => {
     // rss-connector design D3: the read-state slice is persisted ids-only (like
-    // smartItemBindings), so it MUST survive the round-trip — while the ephemeral
-    // `smartFolders` runtime slice is stripped before write and never read back.
+    // lensItemBindings), so it MUST survive the round-trip — while the ephemeral
+    // `lenses` runtime slice is stripped before write and never read back.
     const state = createInitialState();
     state.spaces.push({ id: 'read', name: 'Reading', color: 'orange', icon: 'rss' });
     state.pinnedBySpace.read = [
       {
-        kind: 'smart',
+        kind: 'lens',
+        lensKind: 'general',
         id: 'feed-1',
         name: 'Hacker News',
         icon: 'rss',
@@ -675,9 +704,9 @@ describe('readPersistedState', () => {
         refreshMinutes: 30,
       },
     ];
-    state.smartReadState['feed-1'] = ['item-a', 'item-b'];
+    state.lensReadState['feed-1'] = ['item-a', 'item-b'];
     // A populated ephemeral runtime — this MUST NOT reach disk.
-    state.smartFolders['feed-1'] = {
+    state.lenses['feed-1'] = {
       sections: {
         'rss:news.ycombinator.com': {
           state: 'ok',
@@ -688,15 +717,15 @@ describe('readPersistedState', () => {
     };
     await persist(state);
 
-    // The on-disk envelope keeps smartReadState, drops smartFolders.
+    // The on-disk envelope keeps lensReadState, drops lenses.
     const onDisk = chromeMock.data['lunma.state'] as { state: Record<string, unknown> };
-    expect(onDisk.state.smartReadState).toEqual({ 'feed-1': ['item-a', 'item-b'] });
-    expect(onDisk.state).not.toHaveProperty('smartFolders');
+    expect(onDisk.state.lensReadState).toEqual({ 'feed-1': ['item-a', 'item-b'] });
+    expect(onDisk.state).not.toHaveProperty('lenses');
 
     const result = await readPersistedState();
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
-    expect(result.state.smartReadState).toEqual({ 'feed-1': ['item-a', 'item-b'] });
+    expect(result.state.lensReadState).toEqual({ 'feed-1': ['item-a', 'item-b'] });
     const backupKey = Object.keys(chromeMock.data).find((k) => k.startsWith('__corrupt_backup_'));
     expect(backupKey).toBeUndefined();
   });
@@ -908,11 +937,12 @@ describe('salvagePersistedState', () => {
     expect(out?.spaces).toEqual([]);
   });
 
-  test('a pinned tree containing a smart node survives slice-wise salvage intact (either source)', () => {
+  test('a pinned tree containing a lens node survives slice-wise salvage intact (either source)', () => {
     // The scenario admits BOTH shipped sources — run the same salvage for each.
     for (const source of ['gitlab', 'github'] as const) {
-      const smartNode = {
-        kind: 'smart',
+      const lensNode = {
+        kind: 'lens',
+        lensKind: 'general',
         id: 'sf-1',
         name: 'Assigned to me',
         icon: 'folder-git-2',
@@ -924,18 +954,19 @@ describe('salvagePersistedState', () => {
       const out = salvagePersistedState({
         ...validPersistedState(),
         spaces: [{ id: 'work', name: 'Work', color: 'blue', icon: 'star' }],
-        pinnedBySpace: { work: [smartNode, { kind: 'tab', id: 'st-1' }] },
+        pinnedBySpace: { work: [lensNode, { kind: 'tab', id: 'st-1' }] },
         savedTabs: { bad: { id: 'bad' } }, // malformed → whole-state validation fails
       });
       expect(out, `salvage with source ${source}`).not.toBeNull();
-      expect(out?.pinnedBySpace.work).toEqual([smartNode, { kind: 'tab', id: 'st-1' }]);
+      expect(out?.pinnedBySpace.work).toEqual([lensNode, { kind: 'tab', id: 'st-1' }]);
       expect(out?.savedTabs).toEqual({});
     }
   });
 
-  test('a pinned tree containing a smart node survives slice-wise salvage intact', () => {
-    const smartNode = {
-      kind: 'smart',
+  test('a pinned tree containing a lens node survives slice-wise salvage intact', () => {
+    const lensNode = {
+      kind: 'lens',
+      lensKind: 'general',
       id: 'sf-1',
       name: 'Assigned to me',
       icon: 'folder-git-2',
@@ -947,45 +978,45 @@ describe('salvagePersistedState', () => {
     const out = salvagePersistedState({
       ...validPersistedState(),
       spaces: [{ id: 'work', name: 'Work', color: 'blue', icon: 'star' }],
-      pinnedBySpace: { work: [smartNode, { kind: 'tab', id: 'st-1' }] },
+      pinnedBySpace: { work: [lensNode, { kind: 'tab', id: 'st-1' }] },
       savedTabs: { bad: { id: 'bad' } }, // malformed → whole-state validation fails
     });
     expect(out).not.toBeNull();
-    // The valid pinnedBySpace slice — smart node config included — is preserved,
+    // The valid pinnedBySpace slice — lens node config included — is preserved,
     // not reset by stale v1 slice validation.
-    expect(out?.pinnedBySpace.work).toEqual([smartNode, { kind: 'tab', id: 'st-1' }]);
+    expect(out?.pinnedBySpace.work).toEqual([lensNode, { kind: 'tab', id: 'st-1' }]);
     expect(out?.savedTabs).toEqual({});
   });
 
-  test('a valid smartItemBindings slice survives an unrelated slice failure', () => {
+  test('a valid lensItemBindings slice survives an unrelated slice failure', () => {
     const out = salvagePersistedState({
       ...validPersistedState(),
-      smartItemBindings: { 'sf-1': { '42': { 100: { tabId: 7, allowGlob: '' } } } },
+      lensItemBindings: { 'sf-1': { '42': { 100: { tabId: 7, allowGlob: '' } } } },
       savedTabs: { bad: { id: 'bad' } }, // malformed → whole-state validation fails
     });
     expect(out).not.toBeNull();
-    expect(out?.smartItemBindings).toEqual({
+    expect(out?.lensItemBindings).toEqual({
       'sf-1': { '42': { 100: { tabId: 7, allowGlob: '' } } },
     });
     expect(out?.savedTabs).toEqual({});
   });
 
-  test('a malformed smartItemBindings slice resets to {}', () => {
+  test('a malformed lensItemBindings slice resets to {}', () => {
     const out = salvagePersistedState({
       ...validPersistedState(),
       spaces: [{ id: 'a', name: 'Work', color: 'blue', icon: 'star' }],
-      smartItemBindings: { 'sf-1': { '42': 'not a window record' } },
+      lensItemBindings: { 'sf-1': { '42': 'not a window record' } },
     });
     expect(out).not.toBeNull();
-    expect(out?.smartItemBindings).toEqual({});
+    expect(out?.lensItemBindings).toEqual({});
     expect(out?.spaces).toEqual([{ id: 'a', name: 'Work', color: 'blue', icon: 'star' }]);
   });
 });
 
 describe('persist', () => {
-  test('writes envelope to lunma.state (without the ephemeral liveTabsById/smartFolders slices)', async () => {
+  test('writes envelope to lunma.state (without the ephemeral liveTabsById/lenses slices)', async () => {
     const state = createInitialState();
-    const { liveTabsById: _drop, smartFolders: _drop2, ...persistable } = state;
+    const { liveTabsById: _drop, lenses: _drop2, ...persistable } = state;
     await persist(state);
     expect(chromeMock.data['lunma.state']).toEqual({
       schemaVersion: CURRENT_SCHEMA_VERSION,
@@ -1008,9 +1039,9 @@ describe('persist', () => {
     expect(envelope.state).not.toHaveProperty('liveTabsById');
   });
 
-  test('strips a populated smartFolders before writing; the rest is unchanged', async () => {
+  test('strips a populated lenses before writing; the rest is unchanged', async () => {
     const state = createInitialState();
-    state.smartFolders['sf-1'] = {
+    state.lenses['sf-1'] = {
       sections: {
         'gitlab:gitlab.com': {
           state: 'ok',
@@ -1021,9 +1052,9 @@ describe('persist', () => {
     };
     await persist(state);
     const envelope = chromeMock.data['lunma.state'] as { state: Record<string, unknown> };
-    expect(envelope.state).not.toHaveProperty('smartFolders');
+    expect(envelope.state).not.toHaveProperty('lenses');
     // The rest of the persisted state is exactly what it would be without the slice.
-    const { liveTabsById: _l, smartFolders: _s, ...persistable } = createInitialState();
+    const { liveTabsById: _l, lenses: _s, ...persistable } = createInitialState();
     expect(envelope.state).toEqual(persistable);
   });
 

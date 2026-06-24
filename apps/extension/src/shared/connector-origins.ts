@@ -1,5 +1,5 @@
 import { originPatternForBaseUrl } from './permissions';
-import type { ResolvedSourceConfig } from './types';
+import type { ResolvedLensSource } from './types';
 
 /**
  * The host match patterns a smart folder section's connector ACTUALLY fetches
@@ -20,10 +20,10 @@ import type { ResolvedSourceConfig } from './types';
  *
  * Pure and total: a malformed `baseUrl` yields an empty pattern (treated as
  * ungranted by `hasHostPermissions`) rather than throwing. Origins are
- * query-independent, so it accepts a {@link ResolvedSourceConfig} and the
+ * query-independent, so it accepts a {@link ResolvedLensSource} and the
  * folder-level union dedups to one entry per connector instance.
  */
-export function requiredOriginsForConfig(cfg: ResolvedSourceConfig): string[] {
+export function requiredOriginsForConfig(cfg: ResolvedLensSource): string[] {
   if (cfg.source === 'github') {
     let isDotCom = false;
     try {

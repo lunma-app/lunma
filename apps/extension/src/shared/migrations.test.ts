@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { assertMigrationsTerminal, type Migration, migrations, runMigrations } from './migrations';
-import { AppStateV10Schema, CURRENT_SCHEMA_VERSION } from './schemas';
+import { AppStateV10Schema, AppStateV11Schema, CURRENT_SCHEMA_VERSION } from './schemas';
 import { createInitialState } from './store.svelte';
 
 // Snapshot of the REAL migration chain, captured at module load (before the
@@ -8,8 +8,8 @@ import { createInitialState } from './store.svelte';
 const realMigrations = [...migrations];
 
 describe('the real migration chain', () => {
-  test('holds exactly the v2 through v10 entries', () => {
-    expect(realMigrations).toHaveLength(9);
+  test('holds exactly the v2 through v11 entries', () => {
+    expect(realMigrations).toHaveLength(10);
     expect(realMigrations[0]?.toVersion).toBe(2);
     expect(realMigrations[1]?.toVersion).toBe(3);
     expect(realMigrations[2]?.toVersion).toBe(4);
@@ -19,7 +19,8 @@ describe('the real migration chain', () => {
     expect(realMigrations[6]?.toVersion).toBe(8);
     expect(realMigrations[7]?.toVersion).toBe(9);
     expect(realMigrations[8]?.toVersion).toBe(10);
-    expect(CURRENT_SCHEMA_VERSION).toBe(10);
+    expect(realMigrations[9]?.toVersion).toBe(11);
+    expect(CURRENT_SCHEMA_VERSION).toBe(11);
     // v2–v6 are pass-throughs (see comment in migrations.ts). v7 is the
     // smart-tab-boundary real transformation; v8 is the multi-source wrap.
     const input = { schemaVersion: 1, pinnedBySpace: { work: [{ kind: 'tab', id: 'a' }] } };
@@ -30,12 +31,13 @@ describe('the real migration chain', () => {
     expect(realMigrations[4]?.migrate(input)).toBe(input);
   });
 
-  test('a v1 payload chains through all nine entries cleanly', () => {
+  test('a v1 payload chains through all ten entries cleanly', () => {
     // The file-level beforeEach clears the live array for the runner suites —
     // restore the real chain so this exercises it, not an empty list.
     migrations.push(...realMigrations);
-    // v1 data has no smartItemBindings and no smart nodes, so the v7 and v8
-    // real migrations are both no-ops; all seven migrations return the same reference.
+    // v1 data has no lensItemBindings and no smart/lens nodes, so the v7 and v8
+    // real migrations are both no-ops; v11 finds no smartItemBindings/smartReadState
+    // to rename. All migrations return the same reference.
     const input = { schemaVersion: 1, pinnedBySpace: { work: [{ kind: 'tab', id: 'a' }] } };
     expect(runMigrations(input, 1)).toBe(input);
   });
@@ -43,13 +45,22 @@ describe('the real migration chain', () => {
   test('a v5 envelope migrates losslessly and defaults the new v6 node + slice fields', () => {
     migrations.push(...realMigrations);
     // A v5-shaped state whose smart node carries NO maxItems/hideRead and which
-    // has no smartReadState slice — exactly what a build before rss-connector
-    // wrote. The v5→v6 migration is a pass-through; the V6 schema's `.default()`s
-    // supply the new fields on parse (rss-connector design D5/D9/D3). The v8
-    // migration wraps source/baseUrl/query into sources[].
-    const v5State = {
-      ...createInitialState(),
+    // has no smartReadState/lensReadState slice — exactly what a build before
+    // rss-connector wrote. The v5→v6 migration is a pass-through; the V6 schema's
+    // `.default()`s supply the new fields on parse (rss-connector design D5/D9/D3).
+    // The v8 migration wraps source/baseUrl/query into sources[]; v11 stamps
+    // lensKind and renames the node discriminant.
+    const v5State: Record<string, unknown> = {
       schemaVersion: 5,
+      spaces: [],
+      activeSpaceByWindow: {},
+      spaceInstancesByWindow: {},
+      tabBindings: {},
+      savedTabs: {},
+      lastActivatedSpaceId: null,
+      tabLastActivity: {},
+      archivedTabs: [],
+      trash: {},
       pinnedBySpace: {
         work: [
           {
@@ -64,30 +75,41 @@ describe('the real migration chain', () => {
           },
         ],
       },
-    } as unknown as Record<string, unknown>;
-    delete v5State.smartReadState; // the slice did not exist pre-v6
+      faviconRow: [],
+      smartItemBindings: {},
+      // no smartReadState — the slice did not exist pre-v6
+    };
 
     const migrated = runMigrations(v5State, 5);
-    const parsed = AppStateV10Schema.parse(migrated);
+    const parsed = AppStateV11Schema.parse(migrated);
     const node = parsed.pinnedBySpace.work?.[0];
-    expect(node?.kind).toBe('smart');
-    if (node?.kind === 'smart') {
+    expect(node?.kind).toBe('lens');
+    if (node?.kind === 'lens') {
+      expect(node.lensKind).toBe('general');
       expect(node.maxItems).toBe(20);
       // The draining-queue default: a feed's resting state hides read (drained).
       expect(node.hideRead).toBe(true);
       // query moved to sources[0] by v8, then rewritten to queries[] by v9.
       expect(node.sources?.[0]?.queries).toEqual(['authored']);
     }
-    expect(parsed.smartReadState).toEqual({});
+    expect(parsed.lensReadState).toEqual({});
   });
 });
 
 describe('v7 migration — smart-tab-boundary slot widening', () => {
   test('v6 envelope with a numeric smartItemBindings slot migrates to { tabId, allowGlob: "" } and then v8/v9 re-key the item id', () => {
     migrations.push(...realMigrations);
-    const v6State = {
-      ...createInitialState(),
+    const v6State: Record<string, unknown> = {
       schemaVersion: 6,
+      spaces: [],
+      activeSpaceByWindow: {},
+      spaceInstancesByWindow: {},
+      tabBindings: {},
+      savedTabs: {},
+      lastActivatedSpaceId: null,
+      tabLastActivity: {},
+      archivedTabs: [],
+      trash: {},
       // Smart node required so the v8 migration can look up the sourceKey for re-keying
       // (without it the binding would be treated as orphaned and dropped by v8).
       pinnedBySpace: {
@@ -106,44 +128,57 @@ describe('v7 migration — smart-tab-boundary slot widening', () => {
           },
         ],
       },
+      faviconRow: [],
       // Bare number slot — the shape written by the previous code.
       smartItemBindings: { f1: { 'item-a': { 100: 42 } } },
-    } as unknown as Record<string, unknown>;
+      smartReadState: {},
+    };
 
     const migrated = runMigrations(v6State, 6);
-    // Parse against V10 since the full chain now ends at v10.
-    const parsed = AppStateV10Schema.parse(migrated);
+    // Parse against V11 since the full chain now ends at v11.
+    const parsed = AppStateV11Schema.parse(migrated);
     // v7 widened the slot; v8 namespaced the item id (`gitlab:gitlab.com:item-a`);
-    // v9 inserted the per-filter axis from the node's single migrated filter.
-    expect(parsed.smartItemBindings).toEqual({
+    // v9 inserted the per-filter axis from the node's single migrated filter;
+    // v11 renamed smartItemBindings → lensItemBindings.
+    expect(parsed.lensItemBindings).toEqual({
       f1: { 'gitlab:gitlab.com:authored:item-a': { 100: { tabId: 42, allowGlob: '' } } },
     });
   });
 
   test('v6 envelope with empty smartItemBindings passes through unchanged', () => {
     migrations.push(...realMigrations);
-    const v6State = {
-      ...createInitialState(),
+    const v6State: Record<string, unknown> = {
       schemaVersion: 6,
+      spaces: [],
+      activeSpaceByWindow: {},
+      spaceInstancesByWindow: {},
+      tabBindings: {},
+      savedTabs: {},
+      lastActivatedSpaceId: null,
+      tabLastActivity: {},
+      archivedTabs: [],
+      trash: {},
+      pinnedBySpace: {},
+      faviconRow: [],
       smartItemBindings: {},
-    } as unknown as Record<string, unknown>;
+      smartReadState: {},
+    };
 
     const migrated = runMigrations(v6State, 6);
-    const parsed = AppStateV10Schema.parse(migrated);
-    expect(parsed.smartItemBindings).toEqual({});
+    const parsed = AppStateV11Schema.parse(migrated);
+    expect(parsed.lensItemBindings).toEqual({});
   });
 
-  test('v1 envelope migrates through all nine entries cleanly (no smartItemBindings)', () => {
+  test('v1 envelope migrates through all ten entries cleanly (no smartItemBindings)', () => {
     migrations.push(...realMigrations);
     const v1State = {
       ...createInitialState(),
       schemaVersion: 1,
     } as unknown as Record<string, unknown>;
-    // No smartItemBindings or smart nodes in v1 — v7 and v8 migrations are both
-    // no-ops; v8 schema default fills smartItemBindings with {}.
+    // No smart nodes in v1 — v7 and v8 migrations are both no-ops.
     const migrated = runMigrations(v1State, 1);
-    const parsed = AppStateV10Schema.parse(migrated);
-    expect(parsed.smartItemBindings).toEqual({});
+    const parsed = AppStateV11Schema.parse(migrated);
+    expect(parsed.lensItemBindings).toEqual({});
     expect(parsed.schemaVersion).toBe(1); // the schema version field itself is from the state
   });
 });
@@ -336,11 +371,19 @@ describe('v9 migration — multi-filter-smart-connectors queries[] rewrite + per
     expect(node.kind).toBe('tab');
   });
 
-  test('a full v1 → v10 chain validates against the v10 schema', () => {
+  test('a full v1 → v11 chain validates against the v11 schema', () => {
     migrations.push(...realMigrations);
-    const v1State = {
-      ...createInitialState(),
+    const v1State: Record<string, unknown> = {
       schemaVersion: 1,
+      spaces: [],
+      activeSpaceByWindow: {},
+      spaceInstancesByWindow: {},
+      tabBindings: {},
+      savedTabs: {},
+      lastActivatedSpaceId: null,
+      tabLastActivity: {},
+      archivedTabs: [],
+      trash: {},
       pinnedBySpace: {
         s1: [
           {
@@ -355,16 +398,254 @@ describe('v9 migration — multi-filter-smart-connectors queries[] rewrite + per
           },
         ],
       },
-    } as unknown as Record<string, unknown>;
-    delete v1State.smartReadState;
+      faviconRow: [],
+      smartItemBindings: {},
+      // no smartReadState — pre-v6 envelope
+    };
 
     const migrated = runMigrations(v1State, 1);
-    const parsed = AppStateV10Schema.parse(migrated);
+    const parsed = AppStateV11Schema.parse(migrated);
     const node = parsed.pinnedBySpace.s1?.[0];
-    expect(node?.kind).toBe('smart');
-    if (node?.kind === 'smart') {
+    expect(node?.kind).toBe('lens');
+    if (node?.kind === 'lens') {
+      expect(node.lensKind).toBe('general');
       expect(node.sources[0]?.queries).toEqual(['authored']);
     }
+  });
+});
+
+describe('v11 migration — establish-lens-model rename', () => {
+  const v11Migration = realMigrations.find((m) => m.toVersion === 11);
+  if (!v11Migration) throw new Error('expected v11 migration');
+
+  test('a smart PinNode becomes a lens node with lensKind: general', () => {
+    const state = {
+      pinnedBySpace: {
+        s1: [
+          {
+            kind: 'smart',
+            id: 'f1',
+            name: 'My MRs',
+            icon: 'folder-git-2',
+            sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored'] }],
+            maxItems: 20,
+            hideRead: true,
+            refreshMinutes: 10,
+          },
+        ],
+      },
+      smartItemBindings: {},
+      smartReadState: {},
+    };
+    const result = v11Migration.migrate(state) as typeof state;
+    const node = result.pinnedBySpace.s1[0] as Record<string, unknown>;
+    expect(node.kind).toBe('lens');
+    expect(node.lensKind).toBe('general');
+    // Provider/query values are untouched.
+    const sources = node.sources as Array<Record<string, unknown>>;
+    expect(sources[0]?.source).toBe('gitlab');
+    expect(sources[0]?.queries).toEqual(['authored']);
+  });
+
+  test('smartItemBindings is renamed to lensItemBindings', () => {
+    const state = {
+      pinnedBySpace: {},
+      smartItemBindings: {
+        f1: { 'gitlab:gitlab.com:authored:42': { 1: { tabId: 7, allowGlob: '' } } },
+      },
+      smartReadState: {},
+    };
+    const result = v11Migration.migrate(state) as Record<string, unknown>;
+    expect('smartItemBindings' in result).toBe(false);
+    expect(result.lensItemBindings).toEqual({
+      f1: { 'gitlab:gitlab.com:authored:42': { 1: { tabId: 7, allowGlob: '' } } },
+    });
+  });
+
+  test('smartReadState is renamed to lensReadState', () => {
+    const state = {
+      pinnedBySpace: {},
+      smartItemBindings: {},
+      smartReadState: { f1: ['rss:feeds.example.com:item-1', 'rss:feeds.example.com:item-2'] },
+    };
+    const result = v11Migration.migrate(state) as Record<string, unknown>;
+    expect('smartReadState' in result).toBe(false);
+    expect(result.lensReadState).toEqual({
+      f1: ['rss:feeds.example.com:item-1', 'rss:feeds.example.com:item-2'],
+    });
+  });
+
+  test('provider/query values are untouched', () => {
+    const state = {
+      pinnedBySpace: {
+        s1: [
+          {
+            kind: 'smart',
+            id: 'f1',
+            name: 'Issues',
+            icon: 'folder-git-2',
+            sources: [
+              {
+                source: 'github',
+                baseUrl: 'https://api.github.com',
+                queries: ['authored', 'assigned'],
+              },
+              { source: 'rss', baseUrl: 'https://feeds.example.com/rss', queries: [] },
+            ],
+            maxItems: 20,
+            hideRead: false,
+            refreshMinutes: 10,
+          },
+        ],
+      },
+      smartItemBindings: {},
+      smartReadState: {},
+    };
+    const result = v11Migration.migrate(state) as typeof state;
+    const node = result.pinnedBySpace.s1[0] as Record<string, unknown>;
+    const sources = node.sources as Array<Record<string, unknown>>;
+    expect(sources[0]?.source).toBe('github');
+    expect(sources[0]?.queries).toEqual(['authored', 'assigned']);
+    expect(sources[1]?.source).toBe('rss');
+    expect(sources[1]?.queries).toEqual([]);
+  });
+
+  test('idempotent — running again on already-migrated data is a no-op', () => {
+    const state = {
+      pinnedBySpace: {
+        s1: [
+          {
+            kind: 'lens',
+            lensKind: 'general',
+            id: 'f1',
+            name: 'My MRs',
+            icon: 'folder-git-2',
+            sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored'] }],
+            maxItems: 20,
+            hideRead: true,
+            refreshMinutes: 10,
+          },
+        ],
+      },
+      lensItemBindings: {},
+      lensReadState: {},
+    };
+    const result = v11Migration.migrate(state) as typeof state;
+    const node = result.pinnedBySpace.s1[0] as Record<string, unknown>;
+    expect(node.kind).toBe('lens');
+    expect(node.lensKind).toBe('general');
+    expect('smartItemBindings' in result).toBe(false);
+    expect('smartReadState' in result).toBe(false);
+    expect((result as Record<string, unknown>).lensItemBindings).toEqual({});
+    expect((result as Record<string, unknown>).lensReadState).toEqual({});
+  });
+
+  test('a v10 envelope validates under AppStateV11Schema after migration', () => {
+    const v10State: Record<string, unknown> = {
+      schemaVersion: 10,
+      spaces: [],
+      activeSpaceByWindow: {},
+      spaceInstancesByWindow: {},
+      tabBindings: {},
+      savedTabs: {},
+      lastActivatedSpaceId: null,
+      tabLastActivity: {},
+      archivedTabs: [],
+      trash: {},
+      pinnedBySpace: {
+        s1: [
+          {
+            kind: 'smart',
+            id: 'f1',
+            name: 'My MRs',
+            icon: 'folder-git-2',
+            sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored'] }],
+            maxItems: 20,
+            hideRead: true,
+            refreshMinutes: 10,
+          },
+        ],
+      },
+      faviconRow: [],
+      smartItemBindings: {
+        f1: { 'gitlab:gitlab.com:authored:42': { 1: { tabId: 7, allowGlob: '' } } },
+      },
+      smartReadState: { f1: ['rss:feeds.example.com:item-1'] },
+    };
+
+    const migrated = v11Migration.migrate(v10State);
+    const parsed = AppStateV11Schema.parse(migrated);
+    const node = parsed.pinnedBySpace.s1?.[0];
+    expect(node?.kind).toBe('lens');
+    if (node?.kind === 'lens') {
+      expect(node.lensKind).toBe('general');
+    }
+    expect(parsed.lensItemBindings).toEqual({
+      f1: { 'gitlab:gitlab.com:authored:42': { 1: { tabId: 7, allowGlob: '' } } },
+    });
+    expect(parsed.lensReadState).toEqual({ f1: ['rss:feeds.example.com:item-1'] });
+  });
+
+  test('non-smart (tab/folder) nodes are untouched', () => {
+    const state = {
+      pinnedBySpace: {
+        s1: [
+          { kind: 'tab', id: 't1' },
+          {
+            kind: 'folder',
+            id: 'fdr1',
+            name: 'Docs',
+            icon: 'folder',
+            color: 'blue',
+            children: ['t1'],
+          },
+        ],
+      },
+      smartItemBindings: {},
+      smartReadState: {},
+    };
+    const result = v11Migration.migrate(state) as typeof state;
+    const tab = result.pinnedBySpace.s1[0] as Record<string, unknown>;
+    const folder = result.pinnedBySpace.s1[1] as Record<string, unknown>;
+    expect(tab.kind).toBe('tab');
+    expect(folder.kind).toBe('folder');
+    expect(tab.lensKind).toBeUndefined();
+    expect(folder.lensKind).toBeUndefined();
+  });
+
+  // Compile-time guard: AppStateV10Schema (v10 on-disk shape) is kept for
+  // migration fixtures. The coherence assertion lives in schemas.ts.
+  test('AppStateV10Schema still parses a v10 on-disk envelope', () => {
+    const v10 = {
+      schemaVersion: 10,
+      spaces: [],
+      activeSpaceByWindow: {},
+      spaceInstancesByWindow: {},
+      tabBindings: {},
+      savedTabs: {},
+      lastActivatedSpaceId: null,
+      tabLastActivity: {},
+      archivedTabs: [],
+      trash: {},
+      pinnedBySpace: {
+        s1: [
+          {
+            kind: 'smart',
+            id: 'f1',
+            name: 'Test',
+            icon: 'folder-git-2',
+            sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored'] }],
+            maxItems: 20,
+            hideRead: true,
+            refreshMinutes: 10,
+          },
+        ],
+      },
+      faviconRow: [],
+    };
+    const parsed = AppStateV10Schema.parse(v10);
+    const node = parsed.pinnedBySpace.s1?.[0];
+    expect(node?.kind).toBe('smart');
   });
 });
 

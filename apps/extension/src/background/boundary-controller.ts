@@ -41,14 +41,14 @@ export class BoundaryController {
    * inheriting bound tab re-arms/disarms live. Each tab's `configureBoundary`
    * recomputes independently, so an explicit `off` tab simply stays free.
    *
-   * Also covers smart item tabs (smart-tab-boundary): every slot whose
-   * `allowGlob` is non-empty gets `configureSmartItemBoundary` so a smart tab
+   * Also covers lens item tabs (smart-tab-boundary): every slot whose
+   * `allowGlob` is non-empty gets `configureLensItemBoundary` so a lens tab
    * open when the SW restarted regains enforcement on boot.
    */
   async refreshBoundTabBoundaries(): Promise<void> {
-    const { tabBindings, savedTabs, smartItemBindings } = this.store.state;
+    const { tabBindings, savedTabs, lensItemBindings } = this.store.state;
     // Configure in PARALLEL so one slow/blocked injection can't stall the rest.
-    // Each `configureBoundary` / `configureSmartItemBoundary` swallows its own
+    // Each `configureBoundary` / `configureLensItemBoundary` swallows its own
     // errors (injection + send), so the `Promise.all` never rejects.
     const tasks: Promise<void>[] = [];
     for (const [savedTabId, slots] of Object.entries(tabBindings)) {
@@ -60,11 +60,11 @@ export class BoundaryController {
         tasks.push(this.configureBoundary(tabId, saved));
       }
     }
-    for (const byItem of Object.values(smartItemBindings)) {
+    for (const byItem of Object.values(lensItemBindings)) {
       for (const slots of Object.values(byItem)) {
         for (const slot of Object.values(slots)) {
           if (slot.allowGlob) {
-            tasks.push(this.configureSmartItemBoundary(slot.tabId, slot.allowGlob));
+            tasks.push(this.configureLensItemBoundary(slot.tabId, slot.allowGlob));
           }
         }
       }
@@ -73,19 +73,19 @@ export class BoundaryController {
   }
 
   /**
-   * Inject (when needed) and push the boundary allow-set for one smart item tab
+   * Inject (when needed) and push the boundary allow-set for one lens item tab
    * (smart-tab-boundary). A no-op when `allowGlob` is empty (pre-migration slots
    * or non-http URLs that degraded to ''); otherwise injects the content script
    * and arms it with `[allowGlob]`. Never throws — a forbidden page or closed
    * receiver is benign, same as {@link configureBoundary}.
    */
-  async configureSmartItemBoundary(tabId: TabId, allowGlob: string): Promise<void> {
+  async configureLensItemBoundary(tabId: TabId, allowGlob: string): Promise<void> {
     if (!allowGlob) return;
     try {
       await injectBoundary(tabId);
       sendBoundaryConfig(tabId, [allowGlob]);
     } catch (err) {
-      log.debug('configureSmartItemBoundary: benign error', { tabId, err });
+      log.debug('configureLensItemBoundary: benign error', { tabId, err });
     }
   }
 

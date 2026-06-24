@@ -5,9 +5,9 @@ import { parseBackup } from '../../shared/backup';
 import { log } from '../../shared/logger';
 import { writeAllSettings } from '../../shared/settings';
 import type { TabId } from '../../shared/types';
+import { refreshDueLenses } from '../lenses';
 import { seedExistingTabs } from '../seed-existing-tabs';
 import { seedExistingWindows } from '../seed-existing-windows';
-import { refreshDueSmartFolders } from '../smart-folders';
 import { reconcileTabGroupsOnBoot } from '../tab-group-adoption';
 import type { HandlersMap } from './context';
 
@@ -55,7 +55,7 @@ export function backupHandlers(): Pick<HandlersMap, 'importState'> {
       // slice (smartFolders) is always empty after replaceState (it's
       // ephemeral, never exported), and the sidebar-open kick only fires on
       // lunma/state-request which an already-open sidebar never resends.
-      ctx.runSideEffect(() => refreshDueSmartFolders({ store: ctx.store, enqueue: ctx.enqueue }));
+      ctx.runSideEffect(() => refreshDueLenses({ store: ctx.store, enqueue: ctx.enqueue }));
     },
   };
 }

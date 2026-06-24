@@ -3,7 +3,7 @@ import Chapter from '$lib/Chapter.svelte';
 import { FAV } from '$lib/mocks/apps';
 import FaviconGrid from '$lib/mocks/FaviconGrid.svelte';
 import LauncherMock from '$lib/mocks/LauncherMock.svelte';
-import SmartFolderMock from '$lib/mocks/SmartFolderMock.svelte';
+import LensMock from '$lib/mocks/LensMock.svelte';
 import SpaceHeader from '$lib/mocks/SpaceHeader.svelte';
 import TabRowMock from '$lib/mocks/TabRowMock.svelte';
 import { altKeyLabel } from '$lib/platform.svelte';
@@ -141,10 +141,10 @@ import { altKeyLabel } from '$lib/platform.svelte';
   {/snippet}
 </Chapter>
 
-<Chapter index={6} kicker="Smart folders" title="A folder that fills itself." layout="right" color="pink">
+<Chapter index={6} kicker="Lenses" title="A folder that fills itself." layout="right" color="pink">
   {#snippet copy()}
     <p>
-      A smart folder fills itself from a service you keep checking, so you stop reopening
+      A lens fills itself from a service you keep checking, so you stop reopening
       the site to see what moved. Point one at a code host like GitLab or GitHub and the
       work waiting on you lands in your Space, kept current on its own. An issue tracker
       like Jira or an RSS feed you follow fills the same way. It works with your own
@@ -153,11 +153,11 @@ import { altKeyLabel } from '$lib/platform.svelte';
     </p>
   {/snippet}
   {#snippet visual()}
-    <!-- A smart folder of live GitLab merge requests — one concrete example of the
+    <!-- A lens of live GitLab merge requests — one concrete example of the
          shipped connectors (the copy names the others: GitHub, Jira, RSS). One
          pipeline-status dot per row (the one-glyph restraint), from the semantic tone
          tokens. Sits directly in the glass panel like the auto-archive list. -->
-    <SmartFolderMock />
+    <LensMock />
   {/snippet}
 </Chapter>
 

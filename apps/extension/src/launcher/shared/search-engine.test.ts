@@ -8,7 +8,7 @@ function result(source: ResultSource, url: string, title = url): LauncherResult 
 }
 
 function sources(partial: Partial<SearchSources>): SearchSources {
-  return { tabs: [], saved: [], smart: [], bookmarks: [], history: [], ...partial };
+  return { tabs: [], saved: [], lens: [], bookmarks: [], history: [], ...partial };
 }
 
 describe('runSearch — empty query', () => {
@@ -47,12 +47,12 @@ describe('runSearch — de-dup precedence', () => {
     const out = runSearch(
       'pull',
       sources({
-        smart: [result('smart', 'https://github.com/o/r/pull/12', 'pull request')],
+        lens: [result('lens', 'https://github.com/o/r/pull/12', 'pull request')],
         bookmarks: [result('bookmark', 'https://github.com/o/r/pull/12', 'pull request')],
       }),
     );
     expect(out).toHaveLength(1);
-    expect(out[0]?.source).toBe('smart');
+    expect(out[0]?.source).toBe('lens');
   });
 
   test('a tab and a saved tab both suppress a smart duplicate (precedence)', () => {
@@ -60,7 +60,7 @@ describe('runSearch — de-dup precedence', () => {
       'pull',
       sources({
         tabs: [result('tab', 'https://github.com/o/r/pull/12', 'pull request')],
-        smart: [result('smart', 'https://github.com/o/r/pull/12', 'pull request')],
+        lens: [result('lens', 'https://github.com/o/r/pull/12', 'pull request')],
       }),
     );
     expect(out).toHaveLength(1);

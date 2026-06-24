@@ -5,13 +5,14 @@ import type {
   AppState,
   ArchivedTab,
   FolderId,
+  LensKind,
+  LensSectionRuntime,
+  LensSource,
   LiveTab,
   PinNode,
   SavedTab,
   SavedTabId,
   SidebarLocalState,
-  SmartSectionRuntime,
-  SmartSourceConfig,
   Space,
   SpaceAutoArchive,
   SpaceColor,
@@ -67,10 +68,10 @@ export const createInitialState = (): AppState => ({
   trash: {},
   pinnedBySpace: {},
   faviconRow: [],
-  smartItemBindings: {},
-  smartReadState: {},
+  lensItemBindings: {},
+  lensReadState: {},
   liveTabsById: {},
-  smartFolders: {},
+  lenses: {},
 });
 
 const defaultIdFactory: IdFactory = () =>
@@ -537,7 +538,7 @@ export class LunmaStore {
     this.markFeedItemForClosedTab(tabId);
     // A closing tab also drops any smart-item binding it held (smart-folder-
     // item-bindings): the row returns to plain, a held row evaporates.
-    this.unbindSmartItemsForTab(tabId);
+    this.unbindLensItemsForTab(tabId);
     delete this.state.tabLastActivity[tabId];
   }
 
@@ -893,52 +894,53 @@ export class LunmaStore {
   }
 
   /**
-   * Insert a smart-folder node at the top of a Space's pinned list
-   * (smart-folders, design D12 — matching {@link createFolder}'s top
-   * insertion). The COORDINATOR mints the node (id via `crypto.randomUUID`,
-   * `icon: 'folder-git-2'`, normalized `baseUrl`, clamped `refreshMinutes`)
-   * because the immediate first fetch needs the new id and mutators are
-   * void-returning; the store only places it.
+   * Insert a lens node at the top of a Space's pinned list (lenses, design D12
+   * — matching {@link createFolder}'s top insertion). The COORDINATOR mints the
+   * node (id via `crypto.randomUUID`, `icon: 'folder-git-2'`, normalized
+   * `baseUrl`, clamped `refreshMinutes`) because the immediate first fetch needs
+   * the new id and mutators are void-returning; the store only places it.
    */
-  addSmartFolder(spaceId: SpaceId, node: Extract<PinNode, { kind: 'smart' }>): void {
+  addLens(spaceId: SpaceId, node: Extract<PinNode, { kind: 'lens' }>): void {
     const list = this.state.pinnedBySpace[spaceId] ?? [];
     list.unshift({ ...node });
     this.state.pinnedBySpace[spaceId] = list;
   }
 
   /**
-   * Edit a smart folder's config in place (smart-folders, design D12;
-   * multi-filter-smart-connectors design D6). Runtime sections whose resolved
-   * key is no longer in the new `sources × queries` set (a removed filter or
-   * instance) are DROPPED. A `maxItems` change additionally invalidates every
-   * remaining section's `fetchedAt` (the cap changed for all), making them due;
-   * the coordinator handler refetches added sections (and all on a cap change).
+   * Edit a lens's config in place (lenses, design D12; multi-filter-smart-
+   * connectors design D6). Runtime sections whose resolved key is no longer in
+   * the new `sources × queries` set (a removed filter or instance) are DROPPED.
+   * A `maxItems` change additionally invalidates every remaining section's
+   * `fetchedAt` (the cap changed for all), making them due; the coordinator
+   * handler refetches added sections (and all on a cap change).
    */
-  updateSmartFolder(
+  updateLens(
     spaceId: SpaceId,
     folderId: FolderId,
     config: {
       name: string;
       icon: string;
-      sources: SmartSourceConfig[];
+      lensKind: LensKind;
+      sources: LensSource[];
       maxItems: number;
       refreshMinutes: number;
     },
   ): void {
-    const node = this.findSmartFolder(spaceId, folderId);
+    const node = this.findLens(spaceId, folderId);
     if (!node) {
-      log.error('updateSmartFolder: unknown smart folder', { spaceId, folderId });
+      log.error('updateLens: unknown lens', { spaceId, folderId });
       return;
     }
-    // `hideRead` is owned by `setSmartFolderHideRead`, not the editor's update,
+    // `hideRead` is owned by `setLensHideRead`, not the editor's update,
     // so it is preserved.
     const maxItemsChanged = node.maxItems !== config.maxItems;
     node.name = config.name;
     node.icon = config.icon;
+    node.lensKind = config.lensKind;
     node.sources = config.sources;
     node.maxItems = config.maxItems;
     node.refreshMinutes = config.refreshMinutes;
-    const runtime = this.state.smartFolders[folderId];
+    const runtime = this.state.lenses[folderId];
     if (runtime) {
       // Drop sections no longer in the resolved set (removed filters/instances).
       const validKeys = new Set<string>();
@@ -968,49 +970,45 @@ export class LunmaStore {
     }
   }
 
-  /** Remove a smart-folder node AND drop its runtime entry and item bindings
-   * (smart-folders design D12; smart-folder-item-bindings) — all store state.
-   * Closes no tabs, spills no children (a smart node has none). The
-   * coordinator captures the orphaned live tabs via
-   * {@link dropSmartFolderBindings} BEFORE this, to demote them to Temporary. */
-  deleteSmartFolder(spaceId: SpaceId, folderId: FolderId): void {
+  /** Remove a lens node AND drop its runtime entry and item bindings (lenses
+   * design D12; smart-folder-item-bindings) — all store state. Closes no tabs,
+   * spills no children (a lens node has none). The coordinator captures the
+   * orphaned live tabs via {@link dropLensBindings} BEFORE this, to demote them
+   * to Temporary. */
+  deleteLens(spaceId: SpaceId, folderId: FolderId): void {
     const list = this.state.pinnedBySpace[spaceId];
     if (!list) {
-      log.error('deleteSmartFolder: unknown smart folder', { spaceId, folderId });
+      log.error('deleteLens: unknown lens', { spaceId, folderId });
       return;
     }
-    const idx = list.findIndex((n) => n.kind === 'smart' && n.id === folderId);
+    const idx = list.findIndex((n) => n.kind === 'lens' && n.id === folderId);
     if (idx === -1) {
-      log.error('deleteSmartFolder: unknown smart folder', { spaceId, folderId });
+      log.error('deleteLens: unknown lens', { spaceId, folderId });
       return;
     }
     list.splice(idx, 1);
-    delete this.state.smartFolders[folderId];
-    delete this.state.smartItemBindings[folderId];
+    delete this.state.lenses[folderId];
+    delete this.state.lensItemBindings[folderId];
     // Drop the feed's read-state too (rss-connector design D3) — the config is
     // gone, so the read ids have nothing to prune against.
-    delete this.state.smartReadState[folderId];
+    delete this.state.lensReadState[folderId];
   }
 
   /**
-   * Write one section's runtime slice (smart-folders, design D3) — called ONLY
-   * by the coordinator drain's `smartFolders.result` handler (single-writer
-   * discipline). A `pending` write preserves the section's last-known `items`
-   * and `fetchedAt` (the list never blinks and dueness isn't reset by the
-   * in-flight mark); an `error` write preserves last-known `items` while taking
-   * the attempt's `fetchedAt` (rate-limit kindness). `ok`, `signed-out`, and
-   * `needs-access` replace the section wholesale.
+   * Write one section's runtime slice (lenses, design D3) — called ONLY by the
+   * coordinator drain's `lenses.result` handler (single-writer discipline). A
+   * `pending` write preserves the section's last-known `items` and `fetchedAt`
+   * (the list never blinks and dueness isn't reset by the in-flight mark); an
+   * `error` write preserves last-known `items` while taking the attempt's
+   * `fetchedAt` (rate-limit kindness). `ok`, `signed-out`, and `needs-access`
+   * replace the section wholesale.
    */
-  setSmartSectionRuntime(
-    folderId: FolderId,
-    sectionKey: string,
-    runtime: SmartSectionRuntime,
-  ): void {
-    let folder = this.state.smartFolders[folderId];
+  setLensSectionRuntime(folderId: FolderId, sectionKey: string, runtime: LensSectionRuntime): void {
+    let folder = this.state.lenses[folderId];
     if (!folder) {
-      this.state.smartFolders[folderId] = { sections: {} };
-      folder = this.state.smartFolders[folderId] as {
-        sections: { [k: string]: SmartSectionRuntime };
+      this.state.lenses[folderId] = { sections: {} };
+      folder = this.state.lenses[folderId] as {
+        sections: { [k: string]: LensSectionRuntime };
       };
     }
     const prev = folder.sections[sectionKey];
@@ -1034,25 +1032,25 @@ export class LunmaStore {
   }
 
   /**
-   * Bind a smart-folder result item to a live Chrome tab IN A SPECIFIC WINDOW
-   * (smart-folder-item-bindings): set `smartItemBindings[folderId][itemId][windowId]`
-   * to `{ tabId, allowGlob }` (smart-tab-boundary), leaving any other window's slot
-   * untouched, and enforce the bound-not-temp invariant for `windowId` (mirrors
-   * {@link bindSavedTab}). Ids only — the item's URL/title never enter the slice.
+   * Bind a lens result item to a live Chrome tab IN A SPECIFIC WINDOW (lenses):
+   * set `lensItemBindings[folderId][itemId][windowId]` to `{ tabId, allowGlob }`
+   * (smart-tab-boundary), leaving any other window's slot untouched, and enforce
+   * the bound-not-temp invariant for `windowId` (mirrors {@link bindSavedTab}).
+   * Ids only — the item's URL/title never enter the slice.
    */
-  bindSmartItem(
+  bindLensItem(
     folderId: FolderId,
     itemId: string,
     windowId: WindowId,
     tabId: TabId,
     allowGlob: string,
   ): void {
-    let byItem = this.state.smartItemBindings[folderId];
+    let byItem = this.state.lensItemBindings[folderId];
     if (!byItem) {
-      this.state.smartItemBindings[folderId] = {};
+      this.state.lensItemBindings[folderId] = {};
       // Re-read so we mutate the reactive proxy, not the plain literal
       // (the ensureInstance/ensureBindingRecord precedent).
-      byItem = this.state.smartItemBindings[folderId] as {
+      byItem = this.state.lensItemBindings[folderId] as {
         [itemId: string]: { [windowId: WindowId]: { tabId: TabId; allowGlob: string } };
       };
     }
@@ -1066,34 +1064,33 @@ export class LunmaStore {
   }
 
   /**
-   * Drop every smart-item binding slot held by `tabId` (smart-folder-item-
-   * bindings) — called from {@link onTabRemoved} when the tab closes. A Chrome
-   * tab id is globally unique, but scan every slot anyway (defensive, like the
-   * `tabBindings` loop there). Emptied item/folder records are pruned so a held
-   * row evaporates on the next render and the persisted slice never accretes
-   * empty husks.
+   * Drop every lens-item binding slot held by `tabId` (lenses) — called from
+   * {@link onTabRemoved} when the tab closes. A Chrome tab id is globally unique,
+   * but scan every slot anyway (defensive, like the `tabBindings` loop there).
+   * Emptied item/folder records are pruned so a held row evaporates on the next
+   * render and the persisted slice never accretes empty husks.
    */
-  unbindSmartItemsForTab(tabId: TabId): void {
-    for (const [folderId, byItem] of Object.entries(this.state.smartItemBindings)) {
+  unbindLensItemsForTab(tabId: TabId): void {
+    for (const [folderId, byItem] of Object.entries(this.state.lensItemBindings)) {
       for (const [itemId, slots] of Object.entries(byItem)) {
         for (const [windowIdStr, slot] of Object.entries(slots)) {
           if (slot.tabId === tabId) delete slots[Number(windowIdStr)];
         }
         if (Object.keys(slots).length === 0) delete byItem[itemId];
       }
-      if (Object.keys(byItem).length === 0) delete this.state.smartItemBindings[folderId];
+      if (Object.keys(byItem).length === 0) delete this.state.lensItemBindings[folderId];
     }
   }
 
   /**
-   * Drop ALL of a smart folder's item bindings (smart-folder-item-bindings,
-   * design D4) and return the orphaned still-open tab ids — the tabs the
-   * coordinator demotes into their window's active instance (`tempTabIds`) so
-   * no tab goes invisible. "Still open" is judged by `liveTabsById` (the SW's
-   * live view); a stale id (tab already closed) is dropped silently.
+   * Drop ALL of a lens's item bindings (lenses, design D4) and return the
+   * orphaned still-open tab ids — the tabs the coordinator demotes into their
+   * window's active instance (`tempTabIds`) so no tab goes invisible. "Still
+   * open" is judged by `liveTabsById` (the SW's live view); a stale id (tab
+   * already closed) is dropped silently.
    */
-  dropSmartFolderBindings(folderId: FolderId): TabId[] {
-    const byItem = this.state.smartItemBindings[folderId];
+  dropLensBindings(folderId: FolderId): TabId[] {
+    const byItem = this.state.lensItemBindings[folderId];
     if (!byItem) return [];
     const orphaned: TabId[] = [];
     for (const slots of Object.values(byItem)) {
@@ -1101,47 +1098,46 @@ export class LunmaStore {
         if (this.state.liveTabsById[slot.tabId] !== undefined) orphaned.push(slot.tabId);
       }
     }
-    delete this.state.smartItemBindings[folderId];
+    delete this.state.lensItemBindings[folderId];
     return orphaned;
   }
 
-  private findSmartFolder(
+  private findLens(
     spaceId: SpaceId,
     folderId: FolderId,
-  ): Extract<PinNode, { kind: 'smart' }> | undefined {
+  ): Extract<PinNode, { kind: 'lens' }> | undefined {
     const list = this.state.pinnedBySpace[spaceId];
     if (!list) return undefined;
     for (const node of list) {
-      if (node.kind === 'smart' && node.id === folderId) return node;
+      if (node.kind === 'lens' && node.id === folderId) return node;
     }
     return undefined;
   }
 
-  /** Find a smart node by id across every Space (folder ids are globally unique
-   * — `crypto.randomUUID`), for the read-state mutators that address a folder by
-   * id alone (the `smartReadState` slice is keyed by folder id, not by Space). */
-  private findSmartFolderAnySpace(
-    folderId: FolderId,
-  ): Extract<PinNode, { kind: 'smart' }> | undefined {
+  /** Find a lens node by id across every Space (folder ids are globally unique
+   * — `crypto.randomUUID`), for the read-state mutators that address a folder
+   * by id alone (the `lensReadState` slice is keyed by folder id, not by
+   * Space). */
+  private findLensAnySpace(folderId: FolderId): Extract<PinNode, { kind: 'lens' }> | undefined {
     for (const nodes of Object.values(this.state.pinnedBySpace)) {
       for (const node of nodes) {
-        if (node.kind === 'smart' && node.id === folderId) return node;
+        if (node.kind === 'lens' && node.id === folderId) return node;
       }
     }
     return undefined;
   }
 
-  // Feed read-state (rss-connector, design D3). The persisted `smartReadState`
+  // Feed read-state (rss-connector, design D3). The persisted `lensReadState`
   // slice holds the read item ids per feed folder, ids only and pruned to the
   // live window. RSS-only — queue items self-resolve. These mutators ride the
   // existing single-writer drain (the coordinator's read-state handlers).
 
   /** Mark one feed item read (opening it). Idempotent; seeds the folder's entry
    * on first write. */
-  markSmartItemRead(folderId: FolderId, itemId: string): void {
-    const read = this.state.smartReadState[folderId];
+  markLensItemRead(folderId: FolderId, itemId: string): void {
+    const read = this.state.lensReadState[folderId];
     if (read === undefined) {
-      this.state.smartReadState[folderId] = [itemId];
+      this.state.lensReadState[folderId] = [itemId];
       return;
     }
     if (!read.includes(itemId)) read.push(itemId);
@@ -1149,26 +1145,26 @@ export class LunmaStore {
 
   /** Mark one feed item UNread (the page's explicit toggle). Removes the id from
    * the read set; drops the folder's entry when it empties. Idempotent. */
-  markSmartItemUnread(folderId: FolderId, itemId: string): void {
-    const read = this.state.smartReadState[folderId];
+  markLensItemUnread(folderId: FolderId, itemId: string): void {
+    const read = this.state.lensReadState[folderId];
     if (read === undefined) return;
     const next = read.filter((id) => id !== itemId);
-    if (next.length === 0) delete this.state.smartReadState[folderId];
-    else this.state.smartReadState[folderId] = next;
+    if (next.length === 0) delete this.state.lensReadState[folderId];
+    else this.state.lensReadState[folderId] = next;
   }
 
   /** Mark every supplied item read (the "Mark all read" action). Unions with any
    * existing ids so a binding-held row already read stays read. */
-  markAllSmartItemsRead(folderId: FolderId, itemIds: string[]): void {
-    const existing = this.state.smartReadState[folderId] ?? [];
-    this.state.smartReadState[folderId] = Array.from(new Set([...existing, ...itemIds]));
+  markAllLensItemsRead(folderId: FolderId, itemIds: string[]): void {
+    const existing = this.state.lensReadState[folderId] ?? [];
+    this.state.lensReadState[folderId] = Array.from(new Set([...existing, ...itemIds]));
   }
 
-  /** Set a feed folder's persisted `hideRead` preference (design D9). */
-  setSmartFolderHideRead(folderId: FolderId, hideRead: boolean): void {
-    const node = this.findSmartFolderAnySpace(folderId);
+  /** Set a lens's persisted `hideRead` preference (design D9). */
+  setLensHideRead(folderId: FolderId, hideRead: boolean): void {
+    const node = this.findLensAnySpace(folderId);
     if (!node) {
-      log.error('setSmartFolderHideRead: unknown smart folder', { folderId });
+      log.error('setLensHideRead: unknown lens', { folderId });
       return;
     }
     node.hideRead = hideRead;
@@ -1183,15 +1179,15 @@ export class LunmaStore {
    * read marks whenever a different section refreshes). Removes the folder's
    * entry entirely once empty. For a single-section folder every id shares the
    * prefix, so this reduces to the prior folder-wide prune. */
-  pruneSmartReadState(folderId: FolderId, sectionKey: string, liveIds: string[]): void {
-    const read = this.state.smartReadState[folderId];
+  pruneLensReadState(folderId: FolderId, sectionKey: string, liveIds: string[]): void {
+    const read = this.state.lensReadState[folderId];
     if (read === undefined) return;
     const live = new Set(liveIds);
     const prefix = `${sectionKey}:`;
     const kept = read.filter((id) => !id.startsWith(prefix) || live.has(id));
     if (kept.length === read.length) return;
-    if (kept.length === 0) delete this.state.smartReadState[folderId];
-    else this.state.smartReadState[folderId] = kept;
+    if (kept.length === 0) delete this.state.lensReadState[folderId];
+    else this.state.lensReadState[folderId] = kept;
   }
 
   /** Remove a folder, spilling its children back to top-level tab nodes at the
@@ -1253,26 +1249,26 @@ export class LunmaStore {
   }
 
   /**
-   * Sidebar-local, per-window per-section collapse state for multi-source smart
-   * folders (collapsible-smart-folder-sections). Like `setFolderExpanded`, the
-   * `collapsedSmartSectionsByWindow` field is augmented onto `state` by the
+   * Sidebar-local, per-window per-section collapse state for multi-source lenses
+   * (collapsible-smart-folder-sections). Like `setFolderExpanded`, the
+   * `collapsedLensSectionsByWindow` field is augmented onto `state` by the
    * sidebar and is NOT part of `AppState` — section open/closed is a property of
    * "this window's view", never persisted/broadcast, so the same folder's
    * section can be collapsed in one window and expanded in another. An absent
    * leaf means expanded; `collapsed === true` means collapsed.
    */
-  setSmartSectionCollapsed(
+  setLensSectionCollapsed(
     windowId: WindowId,
     folderId: FolderId,
     sourceKey: string,
     collapsed: boolean,
   ): void {
     const augmented = this.state as AppState & SidebarLocalState;
-    if (!augmented.collapsedSmartSectionsByWindow) augmented.collapsedSmartSectionsByWindow = {};
-    if (!augmented.collapsedSmartSectionsByWindow[windowId]) {
-      augmented.collapsedSmartSectionsByWindow[windowId] = {};
+    if (!augmented.collapsedLensSectionsByWindow) augmented.collapsedLensSectionsByWindow = {};
+    if (!augmented.collapsedLensSectionsByWindow[windowId]) {
+      augmented.collapsedLensSectionsByWindow[windowId] = {};
     }
-    const forWindow = augmented.collapsedSmartSectionsByWindow[windowId];
+    const forWindow = augmented.collapsedLensSectionsByWindow[windowId];
     if (!forWindow) return;
     if (!forWindow[folderId]) forWindow[folderId] = {};
     const forFolder = forWindow[folderId];
@@ -1282,26 +1278,26 @@ export class LunmaStore {
   /**
    * Sidebar-local, per-window per-section "reveal recently read" peek for feed
    * sections (collapsible-smart-folder-sections). Mirrors
-   * {@link setSmartSectionCollapsed}: augmented onto `state`, NOT part of
+   * {@link setLensSectionCollapsed}: augmented onto `state`, NOT part of
    * `AppState`, never persisted/broadcast — revealing one feed's read rows in
    * this window is independent of every other feed and window. An absent leaf
    * means NOT revealed (the folder's drained `hideRead` default holds);
    * `revealed === true` reveals that one section's read rows for this window.
    */
-  setSmartSectionRevealRead(
+  setLensSectionRevealRead(
     windowId: WindowId,
     folderId: FolderId,
     sourceKey: string,
     revealed: boolean,
   ): void {
     const augmented = this.state as AppState & SidebarLocalState;
-    if (!augmented.revealedReadSmartSectionsByWindow) {
-      augmented.revealedReadSmartSectionsByWindow = {};
+    if (!augmented.revealedReadLensSectionsByWindow) {
+      augmented.revealedReadLensSectionsByWindow = {};
     }
-    if (!augmented.revealedReadSmartSectionsByWindow[windowId]) {
-      augmented.revealedReadSmartSectionsByWindow[windowId] = {};
+    if (!augmented.revealedReadLensSectionsByWindow[windowId]) {
+      augmented.revealedReadLensSectionsByWindow[windowId] = {};
     }
-    const forWindow = augmented.revealedReadSmartSectionsByWindow[windowId];
+    const forWindow = augmented.revealedReadLensSectionsByWindow[windowId];
     if (!forWindow) return;
     if (!forWindow[folderId]) forWindow[folderId] = {};
     const forFolder = forWindow[folderId];
@@ -1451,10 +1447,10 @@ export class LunmaStore {
     this.state.activeSpaceByWindow = next.activeSpaceByWindow;
     this.state.spaceInstancesByWindow = next.spaceInstancesByWindow;
     this.state.tabLastActivity = next.tabLastActivity;
-    this.state.smartItemBindings = next.smartItemBindings;
-    this.state.smartReadState = next.smartReadState;
+    this.state.lensItemBindings = next.lensItemBindings;
+    this.state.lensReadState = next.lensReadState;
     this.state.liveTabsById = next.liveTabsById;
-    this.state.smartFolders = next.smartFolders;
+    this.state.lenses = next.lenses;
 
     // Arrays: splice in place so any component holding a reference to the
     // reactive array proxy continues to observe the replaced contents.
@@ -1567,7 +1563,7 @@ export class LunmaStore {
   /** Whether `folderId` has any `rss` source — the draining-queue read trigger
    * checks if any section is a feed. */
   private isFeedFolder(folderId: FolderId): boolean {
-    return this.findSmartFolderAnySpace(folderId)?.sources.some((s) => s.source === 'rss') ?? false;
+    return this.findLensAnySpace(folderId)?.sources.some((s) => s.source === 'rss') ?? false;
   }
 
   /**
@@ -1582,16 +1578,16 @@ export class LunmaStore {
    */
   private markConsumedFeedItems(): TabId[] {
     const consumedTabs: TabId[] = [];
-    for (const [folderId, byItem] of Object.entries(this.state.smartItemBindings)) {
+    for (const [folderId, byItem] of Object.entries(this.state.lensItemBindings)) {
       if (!this.isFeedFolder(folderId)) continue;
-      const alreadyRead = new Set(this.state.smartReadState[folderId] ?? []);
+      const alreadyRead = new Set(this.state.lensReadState[folderId] ?? []);
       for (const [itemId, slots] of Object.entries(byItem)) {
         if (alreadyRead.has(itemId)) continue; // already consumed — don't re-close
         const anyActive = Object.values(slots).some(
           (slot) => this.state.liveTabsById[slot.tabId]?.active === true,
         );
         if (anyActive) continue; // still the active tab — you're on it
-        this.markSmartItemRead(folderId, itemId);
+        this.markLensItemRead(folderId, itemId);
         for (const slot of Object.values(slots)) consumedTabs.push(slot.tabId);
       }
     }
@@ -1603,11 +1599,11 @@ export class LunmaStore {
    * closed tab is unambiguously done. Called from {@link onTabRemoved} BEFORE
    * the binding is dropped (so the item is still findable). */
   private markFeedItemForClosedTab(tabId: TabId): void {
-    for (const [folderId, byItem] of Object.entries(this.state.smartItemBindings)) {
+    for (const [folderId, byItem] of Object.entries(this.state.lensItemBindings)) {
       if (!this.isFeedFolder(folderId)) continue;
       for (const [itemId, slots] of Object.entries(byItem)) {
         if (Object.values(slots).some((slot) => slot.tabId === tabId)) {
-          this.markSmartItemRead(folderId, itemId);
+          this.markLensItemRead(folderId, itemId);
         }
       }
     }
@@ -1636,7 +1632,7 @@ export class LunmaStore {
     // Find the folder + namespaced item id bound to the closing tab.
     let targetFolderId: FolderId | undefined;
     let closingNamespacedId: string | undefined;
-    outer: for (const [folderId, byItem] of Object.entries(this.state.smartItemBindings)) {
+    outer: for (const [folderId, byItem] of Object.entries(this.state.lensItemBindings)) {
       for (const [namespacedId, slots] of Object.entries(byItem)) {
         if (Object.values(slots).some((s) => s.tabId === closedTabId)) {
           targetFolderId = folderId as FolderId;
@@ -1650,7 +1646,7 @@ export class LunmaStore {
     // Consume=close guard: an already-read closing item means the drain marked
     // it read and is now clearing its tab — not a manual close of an unread
     // reading tab. Advancing here would loop the consume into a runaway drain.
-    if ((this.state.smartReadState[targetFolderId] ?? []).includes(closingNamespacedId)) {
+    if ((this.state.lensReadState[targetFolderId] ?? []).includes(closingNamespacedId)) {
       return undefined;
     }
 
@@ -1663,7 +1659,7 @@ export class LunmaStore {
     // Find the folder's space.
     let spaceId: SpaceId | undefined;
     for (const [sid, nodes] of Object.entries(this.state.pinnedBySpace)) {
-      if (nodes.some((n) => n.kind === 'smart' && n.id === targetFolderId)) {
+      if (nodes.some((n) => n.kind === 'lens' && n.id === targetFolderId)) {
         spaceId = sid as SpaceId;
         break;
       }
@@ -1671,14 +1667,14 @@ export class LunmaStore {
     if (!spaceId) return undefined;
 
     // Items in section order from the runtime.
-    const items = this.state.smartFolders[targetFolderId]?.sections[sk]?.items ?? [];
+    const items = this.state.lenses[targetFolderId]?.sections[sk]?.items ?? [];
     if (items.length === 0) return undefined;
 
-    const readSet = new Set(this.state.smartReadState[targetFolderId] ?? []);
+    const readSet = new Set(this.state.lensReadState[targetFolderId] ?? []);
     // Items already bound in this window (skip them — they're already open).
     const boundInWindow = new Set<string>();
     for (const [namespacedId, slots] of Object.entries(
-      this.state.smartItemBindings[targetFolderId] ?? {},
+      this.state.lensItemBindings[targetFolderId] ?? {},
     )) {
       if (namespacedId !== closingNamespacedId && slots[windowId] !== undefined) {
         boundInWindow.add(namespacedId);
@@ -1802,7 +1798,7 @@ export class LunmaStore {
         if (!this.state.savedTabs[node.id] || seen.has(node.id)) continue;
         seen.add(node.id);
         out.push({ kind: 'tab', id: node.id });
-      } else if (node.kind === 'smart') {
+      } else if (node.kind === 'lens') {
         if (seen.has(node.id)) continue;
         seen.add(node.id);
         out.push({ ...node });
@@ -1882,7 +1878,7 @@ export class LunmaStore {
     // Smart-item bindings count too (smart-folder-item-bindings): a tab opened
     // from a smart-folder row is bound, never temporary. O(bindings) — smart-item
     // bindings number at most a handful, no cost at sidebar scale.
-    for (const byItem of Object.values(this.state.smartItemBindings)) {
+    for (const byItem of Object.values(this.state.lensItemBindings)) {
       for (const slots of Object.values(byItem)) {
         for (const slot of Object.values(slots)) {
           if (slot.tabId === tabId) return true;

@@ -2,15 +2,15 @@ import { z } from 'zod';
 import { requiredOriginsForConfig } from '../../shared/connector-origins';
 import { readConnectors } from '../../shared/connectors';
 import type {
-  ResolvedSourceConfig,
-  SmartFolderItem,
-  SmartQuery,
-  SmartSectionRuntime,
+  LensItem,
+  LensQuery,
+  LensSectionRuntime,
+  ResolvedLensSource,
 } from '../../shared/types';
 import { boundedFetch, type ConnectorCaches, type SourceConnector } from './connector';
 
 /**
- * The GitLab connector (smart-folders v1, relocated by github-connector design
+ * The GitLab connector (lenses v1, relocated by github-connector design
  * D2 WITHOUT behaviour change — its pre-existing unit tests pass with
  * assertions unmodified):
  *
@@ -20,7 +20,7 @@ import { boundedFetch, type ConnectorCaches, type SourceConnector } from './conn
  *     detection — never throwing.
  *
  * The source-agnostic engine (scheduling, in-flight guard, result-event
- * plumbing) stays in `../smart-folders.ts` and reaches this module only
+ * plumbing) stays in `../lenses.ts` and reaches this module only
  * through the `CONNECTORS` registry.
  */
 
@@ -34,7 +34,7 @@ function hostOf(baseUrl: string): string {
 
 // ── pipeline → tone mapping ────────────────────────────────────────────────────
 
-const TONE_BY_PIPELINE_STATUS: Record<string, NonNullable<SmartFolderItem['status']>> = {
+const TONE_BY_PIPELINE_STATUS: Record<string, NonNullable<LensItem['status']>> = {
   success: { tone: 'ok', label: 'Pipeline passed' },
   failed: { tone: 'fail', label: 'Pipeline failed' },
   running: { tone: 'pending', label: 'Pipeline running' },
@@ -50,7 +50,7 @@ const TONE_BY_PIPELINE_STATUS: Record<string, NonNullable<SmartFolderItem['statu
  * `waiting_for_resource`, `scheduled`, or anything GitLab adds later) — maps to
  * `undefined` (no glyph): absence over guessing.
  */
-export function pipelineStatus(raw: string | undefined | null): SmartFolderItem['status'] {
+export function pipelineStatus(raw: string | undefined | null): LensItem['status'] {
   if (!raw) return undefined;
   const mapped = TONE_BY_PIPELINE_STATUS[raw];
   return mapped ? { ...mapped } : undefined;
@@ -155,7 +155,7 @@ function resolveMe(
 /** The documented query params for each canned query. `review-requested`
  * REQUIRES `scope=all`: the endpoint defaults to `scope=created_by_me`, under
  * which `reviewer_id` filters only within your own authored MRs. */
-function queryParams(query: SmartQuery, meId: number | null): string {
+function queryParams(query: LensQuery, meId: number | null): string {
   switch (query) {
     case 'authored':
       return 'scope=created_by_me';
@@ -193,16 +193,16 @@ function usablePipelineStatus(mr: Mr): string | undefined {
 
 /**
  * Fetch one smart folder section's results and normalize them into a
- * `SmartSectionRuntime`. Never throws — every failure shape resolves to a
+ * `LensSectionRuntime`. Never throws — every failure shape resolves to a
  * runtime state. The engine reaches this via `CONNECTORS.gitlab.fetchRuntime`.
  */
 async function fetchRuntime(
-  cfg: ResolvedSourceConfig,
+  cfg: ResolvedLensSource,
   maxItems: number,
   caches: ConnectorCaches = new Map(),
-): Promise<SmartSectionRuntime> {
+): Promise<LensSectionRuntime> {
   const fetchedAt = Date.now();
-  const fail = (state: 'signed-out' | 'error'): SmartSectionRuntime => ({
+  const fail = (state: 'signed-out' | 'error'): LensSectionRuntime => ({
     state,
     items: [],
     fetchedAt,
@@ -220,7 +220,7 @@ async function fetchRuntime(
 
   // A queue node always carries a query (it's source-optional only for feeds);
   // default defensively so the now-optional field stays a total switch.
-  const query: SmartQuery = cfg.query ?? 'assigned';
+  const query: LensQuery = cfg.query ?? 'assigned';
 
   let meId: number | null = null;
   if (query === 'review-requested') {
@@ -261,7 +261,7 @@ async function fetchRuntime(
     return parsed.success ? usablePipelineStatus(parsed.data) : undefined;
   });
 
-  const items: SmartFolderItem[] = mrs.map((mr, index) => {
+  const items: LensItem[] = mrs.map((mr, index) => {
     const status = pipelineStatus(statuses[index]);
     return {
       id: String(mr.id),
@@ -277,7 +277,7 @@ async function fetchRuntime(
 /** The full listing on the instance (rss-connector design D6, "open all in a
  * tab"): GitLab's cross-project merge-requests dashboard — the canonical
  * "MRs that involve me" page, independent of the folder's canned query. */
-function listingUrl(cfg: ResolvedSourceConfig): string {
+function listingUrl(cfg: ResolvedLensSource): string {
   return `${cfg.baseUrl}/dashboard/merge_requests`;
 }
 
@@ -285,7 +285,7 @@ function listingUrl(cfg: ResolvedSourceConfig): string {
  * GitLab fetches same-origin under `{baseUrl}/api/v4`. Delegates to the shared
  * {@link requiredOriginsForConfig} so the SW gate and the surfaces share one
  * derivation. */
-function requiredOrigins(cfg: ResolvedSourceConfig): string[] {
+function requiredOrigins(cfg: ResolvedLensSource): string[] {
   return requiredOriginsForConfig(cfg);
 }
 
