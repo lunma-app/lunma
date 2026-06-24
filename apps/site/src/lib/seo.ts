@@ -10,7 +10,7 @@ export const SITE_NAME = 'Lunma';
 
 /** Keyword-tuned <title> + description — names the category once, in natural
  *  language (no keyword stuffing): the long-tail is carried by real content. */
-export const SITE_TITLE = 'Lunma — Arc-style Spaces & vertical tabs for Chrome';
+export const SITE_TITLE = 'Lunma — Arc alternative: vertical tabs & Spaces for Chrome';
 export const SITE_DESCRIPTION =
   'Lunma is an open-source Chrome and Edge extension. Every project gets its own colour-coded Space in the vertical sidebar. The launcher on Alt+L searches your tabs, bookmarks, and history. Idle tabs archive themselves. Connect a Lens to GitLab, GitHub, Jira, or an RSS feed and the work waiting for you shows up in your Space. It stays current on its own. Self-hosted instances work. No Lunma account, no server. Everything on your device.';
 
