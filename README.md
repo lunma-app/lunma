@@ -8,7 +8,7 @@ A Chrome extension for vertical tab spaces. Spec-driven, TypeScript-strict, Svel
 
 ## What Lunma delivers
 
-A Chrome Manifest V3 extension with an Arc-style vertical workspace for tabs:
+A Chrome Manifest V3 extension that gives every project its own colour-coded vertical workspace — the Spaces pattern Arc popularised, brought to the browser you already use:
 
 - **Spaces** — Chrome tab groups augmented with metadata; one active Space per window
 - **Pinned tabs** — durable, bookmark-backed, sync across devices

@@ -1,6 +1,6 @@
 # Lunma — agent instructions
 
-Lunma is an Arc-style vertical-workspace Chrome MV3 extension.
+Lunma is a vertical-workspace Chrome MV3 extension (the Spaces / vertical-tabs pattern Arc popularised).
 Stack (pinned in [docs/tech-stack.md](docs/tech-stack.md); don't add
 alternatives without proposing a change): TypeScript strict, Svelte 5 (runes),
 Vite 8, Vitest 4, Biome 2, Stylelint 17, Zod 4, @crxjs/vite-plugin, pnpm,
