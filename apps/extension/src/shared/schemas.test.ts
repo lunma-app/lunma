@@ -1,33 +1,30 @@
 import { describe, expect, test } from 'vitest';
 import {
-  AppStateV6Schema,
   AppStateV7Schema,
+  AppStateV11Schema,
   CURRENT_SCHEMA_VERSION,
   EnvelopeSchema,
 } from './schemas';
 import { createInitialState } from './store.svelte';
 
-// Validates the freshly-minted initial state against the persisted schema.
-// `createInitialState()` carries the `faviconRow` placement (favicon-row-model),
-// a nullable `spaceId` shape, and the optional per-Space `autoArchive`
-// override (auto-archive) — all part of the current `AppStateV6Schema` shape.
-describe('AppStateV6Schema validation', () => {
+// Validates the freshly-minted initial state against the current persisted schema.
+describe('AppStateV11Schema validation', () => {
   test('valid initial AppState parses', () => {
     const state = createInitialState();
-    const result = AppStateV6Schema.safeParse(state);
+    const result = AppStateV11Schema.safeParse(state);
     expect(result.success).toBe(true);
   });
 
   test('missing required field rejects', () => {
     const state = createInitialState() as unknown as Record<string, unknown>;
     delete state.spaces;
-    const result = AppStateV6Schema.safeParse(state);
+    const result = AppStateV11Schema.safeParse(state);
     expect(result.success).toBe(false);
   });
 
   test('unknown extra field rejects (strict)', () => {
     const state = { ...createInitialState(), extra: 'nope' };
-    const result = AppStateV6Schema.safeParse(state);
+    const result = AppStateV11Schema.safeParse(state);
     expect(result.success).toBe(false);
   });
 });
@@ -92,7 +89,13 @@ describe('saved-tab boundary', () => {
 describe('AppStateV7Schema smartItemBindings slot shape', () => {
   function stateWithBindings(bindings: unknown) {
     const state = createInitialState() as unknown as Record<string, unknown>;
+    // V7Schema uses old field names; strip V11 fields and add V7-compatible ones.
+    delete state.lensItemBindings;
+    delete state.lensReadState;
+    delete state.lenses;
     state.smartItemBindings = bindings;
+    state.smartReadState = {};
+    state.smartFolders = {};
     return state;
   }
 

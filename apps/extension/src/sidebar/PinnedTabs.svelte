@@ -26,7 +26,7 @@ import TabRow from '../ui/TabRow.svelte';
 import { boundaryDefault } from './boundary-default.svelte';
 import { type DropResult, drag, reorderFlipMs } from './drag.svelte';
 import EmptyState from './EmptyState.svelte';
-import SmartFolder from './SmartFolder.svelte';
+import Lens from './Lens.svelte';
 import { useStore } from './store-context.svelte';
 import TabBoundaryEditor from './TabBoundaryEditor.svelte';
 
@@ -112,15 +112,15 @@ interface FolderView {
   expanded: boolean;
   children: TabView[];
 }
-interface SmartRowView {
-  kind: 'smart';
+interface LensRowView {
+  kind: 'lens';
   id: FolderId;
-  /** The config node itself — `SmartFolder.svelte` reads its runtime results
+  /** The config node itself — `Lens.svelte` reads its runtime results
    * from the store's ephemeral `smartFolders` slice. */
-  node: Extract<PinNode, { kind: 'smart' }>;
+  node: Extract<PinNode, { kind: 'lens' }>;
   expanded: boolean;
 }
-type TopRow = TabView | FolderView | SmartRowView;
+type TopRow = TabView | FolderView | LensRowView;
 
 /** Project a saved-tab id into a renderable tab view, or null on drift (no record). */
 function projectTab(id: SavedTabId): TabView | null {
@@ -192,10 +192,10 @@ const rows = $derived.by<TopRow[]>(() => {
     if (node.kind === 'tab') {
       const view = projectTab(node.id);
       if (view) out.push(view);
-    } else if (node.kind === 'smart') {
+    } else if (node.kind === 'lens') {
       // A smart folder reuses the folder expand/collapse mechanism, keyed by
-      // node id; its children are connector results owned by SmartFolder.svelte.
-      out.push({ kind: 'smart', id: node.id, node, expanded: isExpanded(node.id) });
+      // node id; its children are connector results owned by Lens.svelte.
+      out.push({ kind: 'lens', id: node.id, node, expanded: isExpanded(node.id) });
     } else if (node.kind === 'folder') {
       const children: TabView[] = [];
       for (const childId of node.children) {
@@ -235,7 +235,7 @@ let rowEls = $state<HTMLElement[]>([]);
 let childZoneEls = $state<Record<FolderId, HTMLElement>>({});
 // Smart-folder component refs — the wrapper's contextmenu routes to the
 // component's own ContextMenu (the smart row's right-click menu).
-let smartFolderRefs = $state<Record<FolderId, { onContextMenu: (e: MouseEvent) => void }>>({});
+let lensRefs = $state<Record<FolderId, { onContextMenu: (e: MouseEvent) => void }>>({});
 // Folder child rows, keyed by the child's SavedTabId (a saved tab lives in
 // exactly one place, so a flat record is unambiguous and avoids the per-folder
 // nested-array bind that would require a render-time mutation).
@@ -257,7 +257,7 @@ $effect(() => {
       rows.map((row) =>
         row.kind === 'folder'
           ? { id: row.id, onto: true, springLoad: !row.expanded }
-          : row.kind === 'smart'
+          : row.kind === 'lens'
             ? // A smart row is an INERT onto target (design D13): never reported
               // via targetOntoId, so a drop on it degrades to nearest-edge
               // top-level insertion — it has no children to file into, and
@@ -347,7 +347,7 @@ function onFolderPointerDown(e: PointerEvent, row: FolderView): void {
   );
 }
 
-function onSmartPointerDown(e: PointerEvent, row: SmartRowView): void {
+function onLensPointerDown(e: PointerEvent, row: LensRowView): void {
   // A smart node drags/reorders among pins as ONE unit, exactly like a folder
   // (design D13). Its result rows stop their own pointerdown (activate-only,
   // never drag sources), so a press here is always the node drag.
@@ -488,7 +488,7 @@ function removeId(list: PinNode[], id: string): PinNode[] {
 function findUnitNode(list: PinNode[], id: string): PinNode {
   const found = list.find((n) => n.kind !== 'tab' && n.id === id);
   if (found?.kind === 'folder') return { ...found, children: found.children.slice() };
-  if (found?.kind === 'smart') return { ...found };
+  if (found?.kind === 'lens') return { ...found };
   return { kind: 'tab', id }; // defensive fallback (shouldn't happen)
 }
 
@@ -859,17 +859,17 @@ function tabMenuItems(row: TabView): MenuItem[] {
             trailing={row.dormant ? undefined : closeButton}
           />
         </div>
-      {:else if row.kind === 'smart'}
+      {:else if row.kind === 'lens'}
         <!-- A smart folder: folder-row chrome + live connector results. The
              wrapper arms the smart node's unit drag; the result rows inside
-             SmartFolder stop their own pointerdown (activate-only). -->
+             Lens stop their own pointerdown (activate-only). -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
-          onpointerdown={(e) => onSmartPointerDown(e, row)}
-          oncontextmenu={(e) => smartFolderRefs[row.id]?.onContextMenu(e)}
+          onpointerdown={(e) => onLensPointerDown(e, row)}
+          oncontextmenu={(e) => lensRefs[row.id]?.onContextMenu(e)}
         >
-          <SmartFolder
-            bind:this={smartFolderRefs[row.id]}
+          <Lens
+            bind:this={lensRefs[row.id]}
             {windowId}
             {spaceId}
             node={row.node}

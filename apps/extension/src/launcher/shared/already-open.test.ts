@@ -16,7 +16,7 @@ describe('isDedupEligibleSource', () => {
     // A live tab / saved record carries its own focus semantics — never flagged.
     expect(isDedupEligibleSource('tab')).toBe(false);
     expect(isDedupEligibleSource('saved')).toBe(false);
-    expect(isDedupEligibleSource('smart')).toBe(false);
+    expect(isDedupEligibleSource('lens')).toBe(false);
   });
 });
 

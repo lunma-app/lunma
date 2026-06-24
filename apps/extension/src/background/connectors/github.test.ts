@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import type { ResolvedSourceConfig } from '../../shared/types';
+import type { ResolvedLensSource } from '../../shared/types';
 import { aggregateCheckRuns, apiRootOf, githubConnector } from './github';
 
 // ── test plumbing ──────────────────────────────────────────────────────────────
@@ -36,7 +36,7 @@ function jsonResponse(body: unknown, status = 200): unknown {
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
-function node(overrides: Partial<ResolvedSourceConfig> = {}): ResolvedSourceConfig {
+function node(overrides: Partial<ResolvedLensSource> = {}): ResolvedLensSource {
   return {
     source: 'github',
     baseUrl: 'https://github.com',

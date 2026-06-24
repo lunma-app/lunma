@@ -73,7 +73,7 @@ const FOLDER_WEIGHT = 0.5;
 const SOURCE_WEIGHT: Record<ResultSource, number> = {
   tab: 1.0,
   saved: 0.85,
-  smart: 0.78,
+  lens: 0.78,
   bookmark: 0.7,
   history: 0.55,
   websearch: 0,

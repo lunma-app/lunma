@@ -94,14 +94,14 @@ describe('ResultRow', () => {
 
   test('renders a cross-Space chip (dot + name) only when spaceName is set', () => {
     const { container, rerender } = render(ResultRowHarness, {
-      props: { title: 'Fix the parser', url: 'https://g/', source: 'smart' },
+      props: { title: 'Fix the parser', url: 'https://g/', source: 'lens' },
     });
     // No marker for an in-Space / global row.
     expect(container.querySelector('[data-testid="result-space"]')).toBeNull();
     return rerender({
       title: 'Fix the parser',
       url: 'https://g/',
-      source: 'smart',
+      source: 'lens',
       spaceName: 'Home',
       spaceColor: 'oklch(0.7 0.15 150)',
     }).then(() => {

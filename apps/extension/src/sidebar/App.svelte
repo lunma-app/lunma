@@ -31,13 +31,13 @@ import ArchivedChip from './ArchivedChip.svelte';
 import DragClone from './DragClone.svelte';
 import FaviconRow from './FaviconRow.svelte';
 import FirstRunNotice from './FirstRunNotice.svelte';
+// LensEditor (and any future conditionally-shown panel) is statically
+// imported — no code splitting. A dynamic import would reduce first-parse cost
+// but needs bundle-size measurement before it's worth the complexity.
+import LensEditor from './LensEditor.svelte';
 import { openOptionsAt } from './open-options';
 import PinnedTabs from './PinnedTabs.svelte';
 import SectionHeader from './SectionHeader.svelte';
-// SmartFolderEditor (and any future conditionally-shown panel) is statically
-// imported — no code splitting. A dynamic import would reduce first-parse cost
-// but needs bundle-size measurement before it's worth the complexity.
-import SmartFolderEditor from './SmartFolderEditor.svelte';
 import SpaceSwitcher from './SpaceSwitcher.svelte';
 import { sidebarGlares } from './show-glares-state.svelte';
 import { setStore } from './store-context.svelte';
@@ -426,7 +426,7 @@ function onUndoClear(tabIds: number[]): void {
 // "Recently archived" subpage (a roomy management view), rather than an inline
 // popover — archived tabs are secondary, so they live out of the sidebar.
 // `openOptionsAt` lives in `open-options.ts` (extracted by github-connector so
-// SmartFolder's Connectors row composes the same deep-link).
+// Lens's Connectors row composes the same deep-link).
 function openArchivedOptions(): void {
   void openOptionsAt('#recently-archived');
 }
@@ -444,10 +444,10 @@ function onNewFolder(spaceId: SpaceId): void {
   dispatch({ kind: 'createFolder', payload: { spaceId } });
 }
 
-// "New smart folder…" (smart-folders, design D9): the header kebab drills in
-// place into the SmartFolderEditor panel for the Space whose id is held here.
+// "New lens…" (smart-folders, design D9): the header kebab drills in
+// place into the LensEditor panel for the Space whose id is held here.
 // Confirm closes the morph (via the bindable open); back/close just dismisses.
-let newSmartFolderSpaceId = $state<SpaceId | null>(null);
+let newLensSpaceId = $state<SpaceId | null>(null);
 let headerMenuOpenBySpace = $state<Record<SpaceId, boolean>>({});
 
 // ── swipe action callbacks ──────────────────────────────────────────────────
@@ -572,11 +572,11 @@ function onCancel(): void {
             style:--space-l={String(panel.l)}
             style:--space-on={panel.on}
           >
-            {#snippet newSmartFolderPanel()}
-              <SmartFolderEditor
+            {#snippet newLensPanel()}
+              <LensEditor
                 spaceId={panel.space.id}
                 onDone={() => {
-                  newSmartFolderSpaceId = null;
+                  newLensSpaceId = null;
                   headerMenuOpenBySpace[panel.space.id] = false;
                 }}
               />
@@ -593,19 +593,19 @@ function onCancel(): void {
                 },
                 {
                   id: 'new-smart-folder',
-                  label: 'New smart folder…',
+                  label: 'New lens…',
                   icon: 'folder-git-2',
                   keepOpen: true,
                   submenu: true,
                   onSelect: () => {
-                    newSmartFolderSpaceId = panel.space.id;
+                    newLensSpaceId = panel.space.id;
                   },
                 },
               ]}
-              panel={newSmartFolderSpaceId === panel.space.id ? newSmartFolderPanel : undefined}
-              panelTitle={newSmartFolderSpaceId === panel.space.id ? 'New smart folder' : undefined}
+              panel={newLensSpaceId === panel.space.id ? newLensPanel : undefined}
+              panelTitle={newLensSpaceId === panel.space.id ? 'New lens' : undefined}
               onPanelBack={() => {
-                newSmartFolderSpaceId = null;
+                newLensSpaceId = null;
               }}
               bind:open={
                 () => headerMenuOpenBySpace[panel.space.id] ?? false,

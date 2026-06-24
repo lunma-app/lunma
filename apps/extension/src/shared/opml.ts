@@ -1,7 +1,7 @@
 import { SaxesParser } from 'saxes';
 import type { PinNode } from './types';
 
-export type SmartFolderNode = Extract<PinNode, { kind: 'smart' }>;
+export type LensNode = Extract<PinNode, { kind: 'lens' }>;
 
 /**
  * Parse an OPML XML string and return the RSS feed entries found at any
@@ -54,7 +54,7 @@ function fixBareAmpersands(xml: string): string {
  * folders with >1 rss source the outline `text` is qualified with the host
  * (`${node.name} — ${host}`) to disambiguate. `htmlUrl` is set to `baseUrl`.
  */
-export function buildOpml(folders: SmartFolderNode[]): string {
+export function buildOpml(folders: LensNode[]): string {
   const lines: string[] = [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<opml version="1.0">',

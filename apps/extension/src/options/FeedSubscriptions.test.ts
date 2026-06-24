@@ -38,7 +38,6 @@ function makeState(rssCount = 0) {
     smartItemBindings: {},
     smartReadState: {},
     liveTabsById: {},
-    smartFolders: {},
   };
 }
 

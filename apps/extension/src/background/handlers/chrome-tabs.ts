@@ -6,7 +6,7 @@
 
 import { TAB_DEDUP_FLASH } from '../../shared/bus';
 import { log } from '../../shared/logger';
-import { isFolderPageUrl, isNewTabUrl } from '../../shared/new-tab';
+import { isLensPageUrl, isNewTabUrl } from '../../shared/new-tab';
 import { resolveBoundaryAllow } from '../../shared/url-boundary';
 import { forgetPageOpenedTab, isPageOpenedTab } from '../page-opened-tabs';
 import { closeTab } from '../tab-groups';
@@ -34,8 +34,8 @@ export function chromeTabHandlers(): Pick<
       // A smart-folder page is a Lunma-managed view (smart-folder-page), not a
       // browsing tab — grouped with its Space by `openSmartFolderPage`, but never
       // adopted into the Temporary list. Treated like `isHome` for adoption.
-      const isFolderPage = isFolderPageUrl(tab.url) || isFolderPageUrl(tab.pendingUrl);
-      if (!isHome && !isFolderPage) {
+      const isLensPage = isLensPageUrl(tab.url) || isLensPageUrl(tab.pendingUrl);
+      if (!isHome && !isLensPage) {
         ctx.store.onTabCreated({ id: tab.id, windowId: tab.windowId });
       }
       ctx.store.syncLiveTab({
@@ -54,7 +54,7 @@ export function chromeTabHandlers(): Pick<
       });
       if (isHome) {
         await ctx.groups.groupHomeTab(tab.id, tab.windowId);
-      } else if (!isFolderPage) {
+      } else if (!isLensPage) {
         // The folder page is already grouped into its Space by openSmartFolderPage
         // (which knows the folder's owning Space) — don't regroup into the active
         // Space here, which may differ.
@@ -85,7 +85,7 @@ export function chromeTabHandlers(): Pick<
       if (advance && !openedFromPage) {
         ctx.enqueue({
           source: 'sidebar',
-          kind: 'openSmartItem',
+          kind: 'openLensItem',
           payload: advance,
           correlationId: `feed-auto-advance-${tabId}`,
         });
@@ -127,7 +127,7 @@ export function chromeTabHandlers(): Pick<
       if (
         changeInfo.url !== undefined &&
         !isNewTabUrl(changeInfo.url) &&
-        !isFolderPageUrl(changeInfo.url) &&
+        !isLensPageUrl(changeInfo.url) &&
         !isTrackedTab(ctx.store.state, tabId)
       ) {
         const navigatedUrl = changeInfo.url;
@@ -197,12 +197,12 @@ export function chromeTabHandlers(): Pick<
         }
         // Re-arm smart item boundary on page load (smart-tab-boundary): each
         // navigation spins up a fresh content-script context that starts disarmed.
-        for (const byItem of Object.values(ctx.store.state.smartItemBindings)) {
+        for (const byItem of Object.values(ctx.store.state.lensItemBindings)) {
           for (const slots of Object.values(byItem)) {
             for (const slot of Object.values(slots)) {
               if (slot.tabId === tabId && slot.allowGlob) {
                 ctx.runSideEffect(() =>
-                  ctx.boundary.configureSmartItemBoundary(slot.tabId, slot.allowGlob),
+                  ctx.boundary.configureLensItemBoundary(slot.tabId, slot.allowGlob),
                 );
               }
             }

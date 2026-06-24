@@ -1,10 +1,6 @@
 import { SaxesParser } from 'saxes';
 import { requiredOriginsForConfig } from '../../shared/connector-origins';
-import type {
-  ResolvedSourceConfig,
-  SmartFolderItem,
-  SmartSectionRuntime,
-} from '../../shared/types';
+import type { LensItem, LensSectionRuntime, ResolvedLensSource } from '../../shared/types';
 import { boundedFetch, type ConnectorCaches, type SourceConnector } from './connector';
 
 /**
@@ -24,7 +20,7 @@ import { boundedFetch, type ConnectorCaches, type SourceConnector } from './conn
  *     (design D6) and memoised per feed URL, falling back to the feed URL.
  *
  * The source-agnostic engine (scheduling, in-flight guard, result-event
- * plumbing) stays in `../smart-folders.ts` and reaches this module only through
+ * plumbing) stays in `../lenses.ts` and reaches this module only through
  * the `CONNECTORS` registry.
  */
 
@@ -175,9 +171,9 @@ function parseFeedDate(text: string | undefined): number | undefined {
  * entry already committed. Returns the normalized items plus the channel-level
  * website link when present (for `listingUrl`).
  */
-export function parseFeed(xml: string): { items: SmartFolderItem[]; channelLink?: string } {
+export function parseFeed(xml: string): { items: LensItem[]; channelLink?: string } {
   const parser = new SaxesParser({ xmlns: false });
-  const items: SmartFolderItem[] = [];
+  const items: LensItem[] = [];
   const stack: string[] = [];
   let channelLink: string | undefined;
   let entry: DraftEntry | null = null;
@@ -400,12 +396,12 @@ function decodeXmlBuffer(buf: ArrayBuffer, contentType: string): string {
  * draining-queue model) — the buffer bounds memory + read-state.
  */
 async function fetchRuntime(
-  cfg: ResolvedSourceConfig,
+  cfg: ResolvedLensSource,
   _maxItems: number,
   _caches?: ConnectorCaches,
-): Promise<SmartSectionRuntime> {
+): Promise<LensSectionRuntime> {
   const fetchedAt = Date.now();
-  const fail = (): SmartSectionRuntime => ({ state: 'error', items: [], fetchedAt });
+  const fail = (): LensSectionRuntime => ({ state: 'error', items: [], fetchedAt });
 
   try {
     // A malformed persisted baseUrl (defensive — the SW validates on
@@ -451,7 +447,7 @@ async function fetchRuntime(
 
 /** The feed's listing URL: the channel website link captured during the last
  * successful parse, falling back to the feed URL (design D6). No network I/O. */
-function listingUrl(cfg: ResolvedSourceConfig): string {
+function listingUrl(cfg: ResolvedLensSource): string {
   return channelLinkByFeed.get(cfg.baseUrl) ?? cfg.baseUrl;
 }
 
@@ -460,7 +456,7 @@ function listingUrl(cfg: ResolvedSourceConfig): string {
  * (an ungranted feed shows `needs-access`, not `error`). Delegates to the shared
  * {@link requiredOriginsForConfig} so the SW gate and the surfaces share one
  * derivation. */
-function requiredOrigins(cfg: ResolvedSourceConfig): string[] {
+function requiredOrigins(cfg: ResolvedLensSource): string[] {
   return requiredOriginsForConfig(cfg);
 }
 

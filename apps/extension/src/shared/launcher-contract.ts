@@ -2,12 +2,12 @@ import type { SavedTabId, SpaceId, TabId, WindowId } from './types';
 
 /**
  * Where a launcher result came from. Drives the source badge, the de-dup
- * precedence (`tab > saved > smart > bookmark > history`), the source weight in
+ * precedence (`tab > saved > lens > bookmark > history`), the source weight in
  * scoring, and which bus command acts on it (see `design.md` D2/D3/D4).
  *
- * The five data-provider sources (`tab`/`saved`/`smart`/`bookmark`/`history`) are
- * scored and capped. `smart` is a smart-folder item (link-shaped: a pre-built
- * `url`, no binding), badged generically `smart` and acting through `openUrl`
+ * The five data-provider sources (`tab`/`saved`/`lens`/`bookmark`/`history`) are
+ * scored and capped. `lens` is a lens item (link-shaped: a pre-built
+ * `url`, no binding), badged generically `lens` and acting through `openUrl`
  * exactly like a bookmark/history row (launcher-fuzzy-smart-folders).
  * `websearch` and `navigate` are **synthesized action sources**
  * (launcher-web-search): not produced by a provider, not scored/deduped/capped,
@@ -16,7 +16,7 @@ import type { SavedTabId, SpaceId, TabId, WindowId } from './types';
 export type ResultSource =
   | 'tab'
   | 'saved'
-  | 'smart'
+  | 'lens'
   | 'bookmark'
   | 'history'
   | 'websearch'
@@ -29,13 +29,13 @@ export type ResultSource =
  * - `tab`     → `tabId` + `windowId` (focus the live tab);
  * - `saved`   → `savedTabId` (open/focus the Lunma saved tab); `folderName` when
  *              the saved tab lives in a regular folder (a matchable field);
- * - `smart`   → no binding/`tabId` (acted on by `openUrl { url }`); always carries
- *              its smart folder's `folderName` (a matchable field);
+ * - `lens`    → no binding/`tabId` (acted on by `openUrl { url }`); always carries
+ *              its lens's `folderName` (a matchable field);
  * - `bookmark`→ no extra field (acted on by `openUrl { url }`);
  * - `history` → optional `lastVisitTime` (epoch ms, recency term for scoring).
  *
  * `folderName` is an OPTIONAL matched field (alongside `title`/`url`): a `saved`
- * result placed in a folder and every `smart` result carry their folder's name so
+ * result placed in a folder and every `lens` result carry their folder's name so
  * the query can match it, without folders ever becoming result rows themselves
  * (launcher-fuzzy-smart-folders).
  *
@@ -54,10 +54,10 @@ export interface LauncherResult {
   /** History-only: `chrome.history.HistoryItem.lastVisitTime` (epoch ms). */
   lastVisitTime?: number;
   /** The enclosing folder's name, a matchable field — set for a `saved` result in
-   * a regular folder and for every `smart` result. Absent otherwise. */
+   * a regular folder and for every `lens` result. Absent otherwise. */
   folderName?: string;
   /** The owning Space of a space-placed Lunma result — set for a pinned `saved`
-   * result (its `SavedTab.spaceId`) and every `smart` result (its folder's Space).
+   * result (its `SavedTab.spaceId`) and every `lens` result (its folder's Space).
    * Absent for global rows (favicon-row favorites, `bookmark`/`history`/`tab`,
    * and the synthesized actions). Drives the launcher's current-Space scope: the
    * `prefer-current-space` ranking boost and the `current-space-only` filter
@@ -121,7 +121,7 @@ export interface SuggestionsResult {
 const BADGE_LABELS: Record<ResultSource, string> = {
   tab: 'tab',
   saved: 'saved',
-  smart: 'smart',
+  lens: 'lens',
   bookmark: 'bookmark',
   history: 'history',
   websearch: 'search',

@@ -6,9 +6,9 @@ import type {
   BackupEnvelope,
   FolderId,
   IconName,
+  LensSource,
   PinNode,
   SavedTabId,
-  SmartSourceConfig,
   SpaceAutoArchive,
   SpaceColor,
   SpaceId,
@@ -87,75 +87,74 @@ export type SidebarCommand =
   | { kind: 'setFolderIcon'; payload: { spaceId: SpaceId; folderId: FolderId; icon: IconName } }
   | { kind: 'setFolderColor'; payload: { spaceId: SpaceId; folderId: FolderId; color: SpaceColor } }
   | { kind: 'deleteFolder'; payload: { spaceId: SpaceId; folderId: FolderId } }
-  // Smart-folder lifecycle (smart-folders). Flat payloads; update/delete/refresh
-  // address `{ spaceId, folderId }` like the sibling folder commands. The SW
-  // mints the node id + icon on create; `baseUrl` is normalized/validated SW-side
+  // Lens lifecycle (lenses). Flat payloads; update/delete/refresh address
+  // `{ spaceId, folderId }` like the sibling folder commands. The SW mints the
+  // node id + icon on create; `baseUrl` is normalized/validated SW-side
   // (absolute http(s), trailing slash stripped — invalid throws, error ack) and
   // `refreshMinutes` is clamped to the floor of 5.
   | {
-      kind: 'createSmartFolder';
+      kind: 'createLens';
       payload: {
         spaceId: SpaceId;
-        sources: SmartSourceConfig[];
+        sources: LensSource[];
         name: string;
         maxItems: number;
         refreshMinutes: number;
       };
     }
   | {
-      kind: 'updateSmartFolder';
+      kind: 'updateLens';
       payload: {
         spaceId: SpaceId;
         folderId: FolderId;
-        sources: SmartSourceConfig[];
+        sources: LensSource[];
         name: string;
         maxItems: number;
         refreshMinutes: number;
       };
     }
-  | { kind: 'deleteSmartFolder'; payload: { spaceId: SpaceId; folderId: FolderId } }
+  | { kind: 'deleteLens'; payload: { spaceId: SpaceId; folderId: FolderId } }
   // Feed read-state (rss-connector design D3). Mark one item read (the open path
   // also marks read SW-side), mark every current item read, toggle the persisted
   // hide-read preference, and open the source's full listing in a tab.
-  | { kind: 'markSmartItemRead'; payload: { folderId: FolderId; itemId: string } }
-  | { kind: 'markSmartItemUnread'; payload: { folderId: FolderId; itemId: string } }
-  | { kind: 'markAllSmartItemsRead'; payload: { spaceId: SpaceId; folderId: FolderId } }
+  | { kind: 'markLensItemRead'; payload: { folderId: FolderId; itemId: string } }
+  | { kind: 'markLensItemUnread'; payload: { folderId: FolderId; itemId: string } }
+  | { kind: 'markAllLensItemsRead'; payload: { spaceId: SpaceId; folderId: FolderId } }
   | {
-      kind: 'setSmartFolderHideRead';
+      kind: 'setLensHideRead';
       payload: { spaceId: SpaceId; folderId: FolderId; hideRead: boolean };
     }
   | {
-      kind: 'openSmartFolderListing';
+      kind: 'openLensListing';
       payload: { spaceId: SpaceId; folderId: FolderId; windowId: WindowId };
     }
   // Unconditional refresh; acks ok once underway — the fetch OUTCOME lands via
   // the runtime slice and the state broadcast, never via the ack.
-  | { kind: 'refreshSmartFolder'; payload: { spaceId: SpaceId; folderId: FolderId } }
-  // Smart-item activation (smart-folder-item-bindings): open-if-dormant,
-  // focus-if-bound. IDENTITY ONLY — the SW resolves the item's URL from its own
-  // `smartFolders` runtime slice and never trusts a URL on the wire (the
-  // `openUrl` scheme-hardening questions don't arise; the attack surface is a
-  // lookup key). Unknown spaceId/folderId, or an itemId neither bound nor
-  // listed, throws (error ack).
+  | { kind: 'refreshLens'; payload: { spaceId: SpaceId; folderId: FolderId } }
+  // Lens item activation (lenses): open-if-dormant, focus-if-bound. IDENTITY
+  // ONLY — the SW resolves the item's URL from its own `lenses` runtime slice
+  // and never trusts a URL on the wire (the `openUrl` scheme-hardening questions
+  // don't arise; the attack surface is a lookup key). Unknown spaceId/folderId,
+  // or an itemId neither bound nor listed, throws (error ack).
   | {
-      kind: 'openSmartItem';
+      kind: 'openLensItem';
       payload: {
         spaceId: SpaceId;
         folderId: FolderId;
         itemId: string;
         windowId: WindowId;
-        // True when dispatched from the folder page (smart-folder-page): the SW
-        // records the bound tab so closing it returns to the page rather than
-        // auto-advancing to the next unread feed item. Absent for sidebar opens.
+        // True when dispatched from the lens page: the SW records the bound tab
+        // so closing it returns to the page rather than auto-advancing to the
+        // next unread feed item. Absent for sidebar opens.
         fromPage?: boolean;
       };
     }
-  // Open-or-focus the smart folder's full-page view (smart-folder-page). Opens an
-  // extension page (chrome-extension:// URL carrying ?folderId=…) and reuses an
-  // existing page tab in the window by tab-query dedupe — no persisted binding.
+  // Open-or-focus the lens's full-page view. Opens an extension page
+  // (chrome-extension:// URL carrying ?folderId=…) and reuses an existing page
+  // tab in the window by tab-query dedupe — no persisted binding.
   // NOT openUrl: that handler hardens its scheme and drops the chrome-extension:// URL.
   | {
-      kind: 'openSmartFolderPage';
+      kind: 'openLensPage';
       payload: { spaceId: SpaceId; folderId: FolderId; windowId: WindowId };
     }
   | { kind: 'reorderTemp'; payload: { windowId: WindowId; tabIds: TabId[] } }
@@ -203,8 +202,8 @@ export type SidebarCommand =
   // Data-backup (data-backup capability): the options page sends a parsed backup
   // file to the SW, which validates, migrates, and replaces the store state + broadcasts.
   | { kind: 'importState'; payload: { backup: BackupEnvelope } }
-  // OPML import (opml-import-export): bulk-create RSS smart folders from a
-  // parsed OPML feed list. The handler loops createSmartFolder logic per entry.
+  // OPML import (opml-import-export): bulk-create RSS lenses from a
+  // parsed OPML feed list. The handler loops createLens logic per entry.
   | {
       kind: 'importOpml';
       payload: { spaceId: string; feeds: { name: string; feedUrl: string }[] };
@@ -238,17 +237,17 @@ export const SIDEBAR_COMMAND_KINDS: ReadonlySet<SidebarCommandKind> = new Set<Si
   'setFolderIcon',
   'setFolderColor',
   'deleteFolder',
-  'createSmartFolder',
-  'updateSmartFolder',
-  'deleteSmartFolder',
-  'refreshSmartFolder',
-  'openSmartItem',
-  'markSmartItemRead',
-  'markSmartItemUnread',
-  'markAllSmartItemsRead',
-  'setSmartFolderHideRead',
-  'openSmartFolderListing',
-  'openSmartFolderPage',
+  'createLens',
+  'updateLens',
+  'deleteLens',
+  'refreshLens',
+  'openLensItem',
+  'markLensItemRead',
+  'markLensItemUnread',
+  'markAllLensItemsRead',
+  'setLensHideRead',
+  'openLensListing',
+  'openLensPage',
   'reorderTemp',
   'reorderSpaces',
   'renameTab',
@@ -298,17 +297,17 @@ const _kindExhaustiveness = {
   setFolderIcon: true,
   setFolderColor: true,
   deleteFolder: true,
-  createSmartFolder: true,
-  updateSmartFolder: true,
-  deleteSmartFolder: true,
-  refreshSmartFolder: true,
-  openSmartItem: true,
-  markSmartItemRead: true,
-  markSmartItemUnread: true,
-  markAllSmartItemsRead: true,
-  setSmartFolderHideRead: true,
-  openSmartFolderListing: true,
-  openSmartFolderPage: true,
+  createLens: true,
+  updateLens: true,
+  deleteLens: true,
+  refreshLens: true,
+  openLensItem: true,
+  markLensItemRead: true,
+  markLensItemUnread: true,
+  markAllLensItemsRead: true,
+  setLensHideRead: true,
+  openLensListing: true,
+  openLensPage: true,
   reorderTemp: true,
   reorderSpaces: true,
   renameTab: true,
@@ -376,28 +375,28 @@ const SpaceAutoArchiveSchema = z.discriminatedUnion('mode', [
   z.strictObject({ mode: z.literal('custom'), idleMinutes: z.number().int().positive() }),
 ]);
 
-// The canned smart-folder query set — mirrors `SmartQuery` in `types.ts`.
-const SmartQuerySchema = z.enum(['authored', 'assigned', 'review-requested']);
+// The canned lens query set — mirrors `LensQuery` in `types.ts`.
+const LensQuerySchema = z.enum(['authored', 'assigned', 'review-requested']);
 
-// The shipped connector sources — mirrors `SmartSource` in `types.ts`. An
+// The shipped connector sources — mirrors `LensProvider` in `types.ts`. An
 // out-of-vocabulary source (e.g. 'bitbucket') rejects at the bus boundary.
-const SmartSourceSchema = z.enum(['gitlab', 'github', 'jira', 'rss']);
+const LensProviderSchema = z.enum(['gitlab', 'github', 'jira', 'rss']);
 
-// Per-instance config entry — mirrors `SmartSourceConfig` in `types.ts`
+// Per-instance config entry — mirrors `LensSource` in `types.ts`
 // (multi-filter-smart-connectors): each entry carries the set of canned filters
 // (`queries`) for one connector instance. Queue sources carry a non-empty
 // `queries`; rss carries `[]` — the per-source split is enforced by the SW's
 // create/update handlers, not at the wire boundary.
-const SmartSourceConfigSchema = z.strictObject({
-  source: SmartSourceSchema,
+const LensSourceSchema = z.strictObject({
+  source: LensProviderSchema,
   baseUrl: z.string(),
-  queries: z.array(SmartQuerySchema),
+  queries: z.array(LensQuerySchema),
   // Optional per-source display name (smart-source-rename).
   name: z.string().optional(),
 });
 
 // A pinned-tab placement node — mirrors `PinNode` in `types.ts` (all three
-// kinds, so `reorderPinned` round-trips smart nodes losslessly with their
+// kinds, so `reorderPinned` round-trips lens nodes losslessly with their
 // config fields intact). Folder `icon`/`color` are plain strings on the record
 // (the narrow unions live only on the dedicated `setFolderIcon`/`setFolderColor`
 // commands).
@@ -412,11 +411,12 @@ const PinNodeSchema = z.discriminatedUnion('kind', [
     children: z.array(z.string()),
   }),
   z.strictObject({
-    kind: z.literal('smart'),
+    kind: z.literal('lens'),
     id: z.string(),
     name: z.string(),
     icon: z.string(),
-    sources: z.array(SmartSourceConfigSchema).min(1),
+    lensKind: z.literal('general'),
+    sources: z.array(LensSourceSchema).min(1),
     maxItems: z.number(),
     hideRead: z.boolean(),
     refreshMinutes: z.number(),
@@ -565,68 +565,68 @@ const COMMAND_SCHEMAS = {
     kind: z.literal('deleteFolder'),
     payload: z.strictObject({ spaceId: z.string(), folderId: z.string() }),
   }),
-  createSmartFolder: z.strictObject({
-    kind: z.literal('createSmartFolder'),
+  createLens: z.strictObject({
+    kind: z.literal('createLens'),
     payload: z.strictObject({
       spaceId: z.string(),
-      sources: z.array(SmartSourceConfigSchema).min(1),
+      sources: z.array(LensSourceSchema).min(1),
       name: z.string(),
       maxItems: z.number(),
       refreshMinutes: z.number(),
     }),
   }),
-  updateSmartFolder: z.strictObject({
-    kind: z.literal('updateSmartFolder'),
+  updateLens: z.strictObject({
+    kind: z.literal('updateLens'),
     payload: z.strictObject({
       spaceId: z.string(),
       folderId: z.string(),
-      sources: z.array(SmartSourceConfigSchema).min(1),
+      sources: z.array(LensSourceSchema).min(1),
       name: z.string(),
       maxItems: z.number(),
       refreshMinutes: z.number(),
     }),
   }),
-  deleteSmartFolder: z.strictObject({
-    kind: z.literal('deleteSmartFolder'),
+  deleteLens: z.strictObject({
+    kind: z.literal('deleteLens'),
     payload: z.strictObject({ spaceId: z.string(), folderId: z.string() }),
   }),
-  refreshSmartFolder: z.strictObject({
-    kind: z.literal('refreshSmartFolder'),
+  refreshLens: z.strictObject({
+    kind: z.literal('refreshLens'),
     payload: z.strictObject({ spaceId: z.string(), folderId: z.string() }),
   }),
-  // Feed read-state (rss-connector design D3). `markSmartItemRead` is keyed by
+  // Feed read-state (rss-connector design D3). `markLensItemRead` is keyed by
   // folder id alone (the read-state slice is not Space-keyed); the rest carry
-  // `spaceId` for the `requireSmartNode` validation.
-  markSmartItemRead: z.strictObject({
-    kind: z.literal('markSmartItemRead'),
+  // `spaceId` for the `requireLensNode` validation.
+  markLensItemRead: z.strictObject({
+    kind: z.literal('markLensItemRead'),
     payload: z.strictObject({ folderId: z.string(), itemId: z.string() }),
   }),
-  markSmartItemUnread: z.strictObject({
-    kind: z.literal('markSmartItemUnread'),
+  markLensItemUnread: z.strictObject({
+    kind: z.literal('markLensItemUnread'),
     payload: z.strictObject({ folderId: z.string(), itemId: z.string() }),
   }),
-  markAllSmartItemsRead: z.strictObject({
-    kind: z.literal('markAllSmartItemsRead'),
+  markAllLensItemsRead: z.strictObject({
+    kind: z.literal('markAllLensItemsRead'),
     payload: z.strictObject({ spaceId: z.string(), folderId: z.string() }),
   }),
-  setSmartFolderHideRead: z.strictObject({
-    kind: z.literal('setSmartFolderHideRead'),
+  setLensHideRead: z.strictObject({
+    kind: z.literal('setLensHideRead'),
     payload: z.strictObject({
       spaceId: z.string(),
       folderId: z.string(),
       hideRead: z.boolean(),
     }),
   }),
-  openSmartFolderListing: z.strictObject({
-    kind: z.literal('openSmartFolderListing'),
+  openLensListing: z.strictObject({
+    kind: z.literal('openLensListing'),
     payload: z.strictObject({
       spaceId: z.string(),
       folderId: z.string(),
       windowId: z.number(),
     }),
   }),
-  openSmartFolderPage: z.strictObject({
-    kind: z.literal('openSmartFolderPage'),
+  openLensPage: z.strictObject({
+    kind: z.literal('openLensPage'),
     payload: z.strictObject({
       spaceId: z.string(),
       folderId: z.string(),
@@ -634,9 +634,9 @@ const COMMAND_SCHEMAS = {
     }),
   }),
   // Identity only — a payload smuggling a `url` key fails the strict parse
-  // (smart-folder-item-bindings; the SW resolves the URL from its own runtime).
-  openSmartItem: z.strictObject({
-    kind: z.literal('openSmartItem'),
+  // (lenses; the SW resolves the URL from its own runtime).
+  openLensItem: z.strictObject({
+    kind: z.literal('openLensItem'),
     payload: z.strictObject({
       spaceId: z.string(),
       folderId: z.string(),
@@ -727,7 +727,7 @@ const COMMAND_SCHEMAS = {
     kind: z.literal('importState'),
     payload: z.strictObject({ backup: BackupEnvelopeSchema }),
   }),
-  // OPML import: bulk-create RSS smart folders from a parsed feed list.
+  // OPML import: bulk-create RSS lenses from a parsed feed list.
   importOpml: z.strictObject({
     kind: z.literal('importOpml'),
     payload: z.strictObject({
@@ -769,17 +769,17 @@ export const SidebarCommandSchema = z.discriminatedUnion('kind', [
   COMMAND_SCHEMAS.setFolderIcon,
   COMMAND_SCHEMAS.setFolderColor,
   COMMAND_SCHEMAS.deleteFolder,
-  COMMAND_SCHEMAS.createSmartFolder,
-  COMMAND_SCHEMAS.updateSmartFolder,
-  COMMAND_SCHEMAS.deleteSmartFolder,
-  COMMAND_SCHEMAS.refreshSmartFolder,
-  COMMAND_SCHEMAS.openSmartItem,
-  COMMAND_SCHEMAS.markSmartItemRead,
-  COMMAND_SCHEMAS.markSmartItemUnread,
-  COMMAND_SCHEMAS.markAllSmartItemsRead,
-  COMMAND_SCHEMAS.setSmartFolderHideRead,
-  COMMAND_SCHEMAS.openSmartFolderListing,
-  COMMAND_SCHEMAS.openSmartFolderPage,
+  COMMAND_SCHEMAS.createLens,
+  COMMAND_SCHEMAS.updateLens,
+  COMMAND_SCHEMAS.deleteLens,
+  COMMAND_SCHEMAS.refreshLens,
+  COMMAND_SCHEMAS.openLensItem,
+  COMMAND_SCHEMAS.markLensItemRead,
+  COMMAND_SCHEMAS.markLensItemUnread,
+  COMMAND_SCHEMAS.markAllLensItemsRead,
+  COMMAND_SCHEMAS.setLensHideRead,
+  COMMAND_SCHEMAS.openLensListing,
+  COMMAND_SCHEMAS.openLensPage,
   COMMAND_SCHEMAS.reorderTemp,
   COMMAND_SCHEMAS.reorderSpaces,
   COMMAND_SCHEMAS.renameTab,

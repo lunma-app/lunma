@@ -215,6 +215,47 @@ export const migrations: Migration[] = [
     toVersion: 10,
     migrate: (raw: unknown): unknown => raw,
   },
+  {
+    // v11 (establish-lens-model): (a) for every PinNode with `kind === 'smart'`,
+    // set `kind = 'lens'` and stamp `lensKind = 'general'`; (b) rename top-level
+    // persisted keys `smartItemBindings`→`lensItemBindings` and
+    // `smartReadState`→`lensReadState`. Provider/query values + `queries[]` are
+    // untouched. The ephemeral `smartFolders` slice is stripped before persist so
+    // it needs only the code rename — no data transform here.
+    toVersion: 11,
+    migrate: (raw: unknown): unknown => {
+      if (typeof raw !== 'object' || raw === null) return raw;
+      const state = raw as Record<string, unknown>;
+
+      // Step 1: rename smart→lens in every PinNode across every Space.
+      const pinnedBySpace = state.pinnedBySpace;
+      if (typeof pinnedBySpace === 'object' && pinnedBySpace !== null) {
+        for (const nodes of Object.values(pinnedBySpace as Record<string, unknown>)) {
+          if (!Array.isArray(nodes)) continue;
+          for (const node of nodes) {
+            if (typeof node !== 'object' || node === null) continue;
+            const n = node as Record<string, unknown>;
+            if (n.kind === 'smart') {
+              n.kind = 'lens';
+              n.lensKind = 'general';
+            }
+          }
+        }
+      }
+
+      // Step 2: rename persisted top-level keys.
+      if ('smartItemBindings' in state) {
+        state.lensItemBindings = state.smartItemBindings;
+        delete state.smartItemBindings;
+      }
+      if ('smartReadState' in state) {
+        state.lensReadState = state.smartReadState;
+        delete state.smartReadState;
+      }
+
+      return raw;
+    },
+  },
 ];
 
 export function assertMigrationsTerminal(list: Migration[], currentVersion: number): void {

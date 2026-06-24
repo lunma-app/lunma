@@ -1216,8 +1216,9 @@ describe('PinnedTabs keyboard reorder (Move up/down)', () => {
 });
 
 describe('PinnedTabs smart-folder node (smart-folders, design D13)', () => {
-  const SMART_NODE: Extract<import('../shared/types').PinNode, { kind: 'smart' }> = {
-    kind: 'smart',
+  const LENS_NODE: Extract<import('../shared/types').PinNode, { kind: 'lens' }> = {
+    kind: 'lens',
+    lensKind: 'general',
     id: 'sf-1',
     name: 'Review requests',
     icon: 'folder-git-2',
@@ -1236,8 +1237,8 @@ describe('PinnedTabs smart-folder node (smart-folders, design D13)', () => {
     store.state.tabBindings['st-1'] = {};
     store.state.pinnedBySpace.work =
       order === 'tab-first'
-        ? [{ kind: 'tab', id: 'st-1' }, { ...SMART_NODE }]
-        : [{ ...SMART_NODE }, { kind: 'tab', id: 'st-1' }];
+        ? [{ kind: 'tab', id: 'st-1' }, { ...LENS_NODE }]
+        : [{ ...LENS_NODE }, { kind: 'tab', id: 'st-1' }];
     return store;
   }
 
@@ -1247,7 +1248,7 @@ describe('PinnedTabs smart-folder node (smart-folders, design D13)', () => {
       props: { store, windowId: 100, spaceId: 'work' },
     });
     const wrap = container.querySelector('[data-row-id="sf-1"]') as HTMLElement;
-    expect(wrap.getAttribute('data-row-kind')).toBe('smart');
+    expect(wrap.getAttribute('data-row-kind')).toBe('lens');
     expect(wrap.querySelector('[data-testid="folder-row"]')).not.toBeNull();
     expect(wrap.querySelector('[data-testid="tab-row"]')).toBeNull();
     expect(wrap.textContent).toContain('Review requests');
@@ -1279,7 +1280,7 @@ describe('PinnedTabs smart-folder node (smart-folders, design D13)', () => {
       payload: {
         spaceId: 'work',
         // The smart node round-trips losslessly with all config fields intact.
-        nodes: [{ kind: 'tab', id: 'st-1' }, { ...SMART_NODE }],
+        nodes: [{ kind: 'tab', id: 'st-1' }, { ...LENS_NODE }],
       },
     });
   });
@@ -1313,7 +1314,7 @@ describe('PinnedTabs smart-folder node (smart-folders, design D13)', () => {
       kind: 'reorderPinned',
       payload: {
         spaceId: 'work',
-        nodes: [{ ...SMART_NODE }, { kind: 'tab', id: 'st-1' }],
+        nodes: [{ ...LENS_NODE }, { kind: 'tab', id: 'st-1' }],
       },
     });
   });
@@ -1374,7 +1375,7 @@ describe('PinnedTabs smart-folder node (smart-folders, design D13)', () => {
       kind: 'reorderPinned',
       payload: {
         spaceId: 'work',
-        nodes: [{ ...SMART_NODE }, { kind: 'tab', id: 'st-1' }],
+        nodes: [{ ...LENS_NODE }, { kind: 'tab', id: 'st-1' }],
       },
     });
   });

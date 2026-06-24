@@ -1,11 +1,11 @@
-import type { ResolvedSourceConfig, SmartSectionRuntime, SmartSource } from '../../shared/types';
+import type { LensProvider, LensSectionRuntime, ResolvedLensSource } from '../../shared/types';
 
 /**
  * The connector contract (github-connector, design D1) — a fetch-contract, not
  * a framework. Extracted from two real implementations (GitLab, GitHub), so
  * every member is derived, not guessed: per-source query→request translation,
- * response normalization onto the agnostic `SmartFolderItem`/
- * `SmartSectionRuntime` shapes, a per-source auth strategy (GitLab:
+ * response normalization onto the agnostic `LensItem`/
+ * `LensSectionRuntime` shapes, a per-source auth strategy (GitLab:
  * PAT-then-cookies; GitHub: token-only), and a per-source status→tone mapping.
  * The source-agnostic engine in `../smart-folders.ts` dispatches through the
  * closed `CONNECTORS` registry keyed by `source`.
@@ -35,7 +35,7 @@ export type ConnectorCaches = Map<string, Promise<unknown>>;
 
 /** One smart-folder connector source. */
 export interface SourceConnector {
-  readonly source: SmartSource;
+  readonly source: LensProvider;
   /** The editor's per-source base-URL seed (empty for `rss` — a feed has no
    * canonical host; the user pastes the feed URL). */
   readonly defaultBaseUrl: string;
@@ -53,16 +53,16 @@ export interface SourceConnector {
    * malformed `baseUrl` yields an empty pattern (treated as ungranted) rather
    * than throwing.
    */
-  requiredOrigins(cfg: ResolvedSourceConfig): string[];
+  requiredOrigins(cfg: ResolvedLensSource): string[];
   /** Bounded, never throws; resolves every failure to a runtime state. Slices
    * its normalized results to `maxItems` (rss-connector design D5). Receives a
    * RESOLVED single-query config — the engine expands `queries[]` before
    * dispatch, so a connector never sees a `queries[]` array. */
   fetchRuntime(
-    cfg: ResolvedSourceConfig,
+    cfg: ResolvedLensSource,
     maxItems: number,
     caches?: ConnectorCaches,
-  ): Promise<SmartSectionRuntime>;
+  ): Promise<LensSectionRuntime>;
   /**
    * The URL that shows the source's full listing in a browser, consumed by
    * "open all in a tab" (rss-connector design D6) — the dashboard/search/JQL
@@ -70,7 +70,7 @@ export interface SourceConnector {
    * (falling back to the feed URL when the channel link is not yet known). NO
    * network I/O — a synchronous, pure resolution.
    */
-  listingUrl(cfg: ResolvedSourceConfig): string;
+  listingUrl(cfg: ResolvedLensSource): string;
 }
 
 /**

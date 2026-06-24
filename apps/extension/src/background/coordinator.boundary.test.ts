@@ -465,15 +465,15 @@ describe('off-allow divert reuses openUrl', () => {
   });
 });
 
-// ── configureSmartItemBoundary (smart-tab-boundary) ──────────────────────────
+// ── configureLensItemBoundary (smart-tab-boundary) ──────────────────────────
 
-describe('BoundaryController.configureSmartItemBoundary', () => {
+describe('BoundaryController.configureLensItemBoundary', () => {
   test('empty allowGlob is a no-op (no inject or send called)', async () => {
     const chromeStub = installChrome();
     const store = new LunmaStore();
     const boundary = new BoundaryController(store);
 
-    await boundary.configureSmartItemBoundary(42, '');
+    await boundary.configureLensItemBoundary(42, '');
 
     expect(chromeStub.scripting.executeScript).not.toHaveBeenCalled();
     expect(chromeStub.tabs.sendMessage).not.toHaveBeenCalled();
@@ -484,7 +484,7 @@ describe('BoundaryController.configureSmartItemBoundary', () => {
     const store = new LunmaStore();
     const boundary = new BoundaryController(store);
 
-    await boundary.configureSmartItemBoundary(42, 'https://gitlab.example.com/mr/42*');
+    await boundary.configureLensItemBoundary(42, 'https://gitlab.example.com/mr/42*');
 
     expect(chromeStub.scripting.executeScript).toHaveBeenCalledWith({
       target: { tabId: 42 },
@@ -503,7 +503,7 @@ describe('BoundaryController.configureSmartItemBoundary', () => {
     const boundary = new BoundaryController(store);
 
     await expect(
-      boundary.configureSmartItemBoundary(42, 'https://example.com/page*'),
+      boundary.configureLensItemBoundary(42, 'https://example.com/page*'),
     ).resolves.toBeUndefined();
   });
 });
@@ -511,10 +511,10 @@ describe('BoundaryController.configureSmartItemBoundary', () => {
 // ── smart-item boundary re-arm on tabs.onUpdated ─────────────────────────────
 
 describe('smart-item boundary re-arm on tabs.onUpdated', () => {
-  test('tab id matches a slot with non-empty allowGlob → configureSmartItemBoundary called', async () => {
+  test('tab id matches a slot with non-empty allowGlob → configureLensItemBoundary called', async () => {
     const chromeStub = installChrome();
     const { coordinator, store } = makeCoordinator();
-    store.state.smartItemBindings['sf-1'] = {
+    store.state.lensItemBindings['sf-1'] = {
       '42': { 100: { tabId: 7, allowGlob: 'https://gitlab.example.com/mr/42*' } },
     };
 
@@ -534,7 +534,7 @@ describe('smart-item boundary re-arm on tabs.onUpdated', () => {
   test('slot allowGlob empty → skipped (no inject or send)', async () => {
     const chromeStub = installChrome();
     const { coordinator, store } = makeCoordinator();
-    store.state.smartItemBindings['sf-1'] = {
+    store.state.lensItemBindings['sf-1'] = {
       '42': { 100: { tabId: 7, allowGlob: '' } },
     };
 
@@ -553,7 +553,7 @@ describe('smart-item boundary re-arm on tabs.onUpdated', () => {
     });
     store.state.tabBindings['st-1'] = { 100: 42 };
     // Smart item binding on a different tab (999), not the updated tab (42).
-    store.state.smartItemBindings['sf-1'] = {
+    store.state.lensItemBindings['sf-1'] = {
       '7': { 100: { tabId: 999, allowGlob: 'https://gitlab.example.com/mr/7*' } },
     };
 

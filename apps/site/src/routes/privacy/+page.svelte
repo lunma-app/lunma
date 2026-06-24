@@ -95,7 +95,7 @@ const lastUpdated = '15 June 2026';
     <section>
       <h2>Connecting Lunma to a service</h2>
       <p>
-        A smart folder can pull in your work from a service you already use, like a
+        A lens can pull in your work from a service you already use, like a
         code host, an issue tracker, or a feed. When you connect one, Lunma talks
         to that service directly from your browser. It only asks for that access
         when you connect, and nothing about the connection passes through us.

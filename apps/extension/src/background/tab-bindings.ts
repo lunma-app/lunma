@@ -90,7 +90,7 @@ export async function runRestartRecovery(): Promise<void> {
     }
   }
 
-  pruneSmartItemBindings(windowByTabId);
+  pruneLensItemBindings(windowByTabId);
 
   if (Object.keys(resolved).length === 0) return;
   store.applyRestartRecovery(resolved);
@@ -115,16 +115,16 @@ export async function runRestartRecovery(): Promise<void> {
  * boot stage, so `dropSmartFolderBindings`'s return value — which judges "open"
  * by that slice — is unusable here; the open set is computed from the query).
  */
-function pruneSmartItemBindings(windowByTabId: Map<TabId, WindowId>): void {
-  const liveSmartFolderIds = new Set<string>();
+function pruneLensItemBindings(windowByTabId: Map<TabId, WindowId>): void {
+  const liveLensIds = new Set<string>();
   for (const nodes of Object.values(store.state.pinnedBySpace)) {
     for (const node of nodes) {
-      if (node.kind === 'smart') liveSmartFolderIds.add(node.id);
+      if (node.kind === 'lens') liveLensIds.add(node.id);
     }
   }
 
-  for (const [folderId, byItem] of Object.entries(store.state.smartItemBindings)) {
-    if (liveSmartFolderIds.has(folderId)) continue;
+  for (const [folderId, byItem] of Object.entries(store.state.lensItemBindings)) {
+    if (liveLensIds.has(folderId)) continue;
     // Folder gone — capture the still-open tabs BEFORE the drop, demote after
     // (restoreTempTab's isBound guard must no longer see the binding).
     const openTabs: Array<{ windowId: WindowId; tabId: TabId }> = [];
@@ -134,7 +134,7 @@ function pruneSmartItemBindings(windowByTabId: Map<TabId, WindowId>): void {
         if (windowId !== undefined) openTabs.push({ windowId, tabId: slot.tabId });
       }
     }
-    store.dropSmartFolderBindings(folderId);
+    store.dropLensBindings(folderId);
     for (const { windowId, tabId } of openTabs) {
       store.restoreTempTab(windowId, tabId);
     }
@@ -143,7 +143,7 @@ function pruneSmartItemBindings(windowByTabId: Map<TabId, WindowId>): void {
   // Slots whose tab id no longer exists: unbind per dead tab (the closing-tab
   // mutator already drops every slot a tab holds and prunes empty records).
   const deadTabIds = new Set<TabId>();
-  for (const byItem of Object.values(store.state.smartItemBindings)) {
+  for (const byItem of Object.values(store.state.lensItemBindings)) {
     for (const slots of Object.values(byItem)) {
       for (const slot of Object.values(slots)) {
         if (!windowByTabId.has(slot.tabId)) deadTabIds.add(slot.tabId);
@@ -151,6 +151,6 @@ function pruneSmartItemBindings(windowByTabId: Map<TabId, WindowId>): void {
     }
   }
   for (const tabId of deadTabIds) {
-    store.unbindSmartItemsForTab(tabId);
+    store.unbindLensItemsForTab(tabId);
   }
 }

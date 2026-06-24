@@ -48,8 +48,8 @@ describe('buildBackup', () => {
     expect('activeSpaceByWindow' in envelope.state).toBe(false);
     expect('tabLastActivity' in envelope.state).toBe(false);
     expect('liveTabsById' in envelope.state).toBe(false);
-    expect('smartFolders' in envelope.state).toBe(false);
-    expect('smartItemBindings' in envelope.state).toBe(false);
+    expect('lenses' in envelope.state).toBe(false);
+    expect('lensItemBindings' in envelope.state).toBe(false);
   });
 });
 
@@ -137,6 +137,6 @@ describe('parseBackup', () => {
     expect(result.state.activeSpaceByWindow).toEqual({});
     expect(result.state.tabLastActivity).toEqual({});
     expect(result.state.liveTabsById).toEqual({});
-    expect(result.state.smartFolders).toEqual({});
+    expect(result.state.lenses).toEqual({});
   });
 });

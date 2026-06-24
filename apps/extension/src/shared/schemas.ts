@@ -19,8 +19,13 @@ import type { AppState, BackupEnvelope, SpaceColor } from './types';
 // flat source/baseUrl/query? into `sources: [{…}]`; v9 (multi-filter-smart-
 // connectors) rewrites each `sources[]` entry from the flat `query?` shape to
 // `queries: SmartQuery[]` and re-keys `smartItemBindings` with the per-filter
-// axis. Each bump is deliberate: it makes a downgrade detectable.
-export const CURRENT_SCHEMA_VERSION = 10;
+// axis. v10 (smart-source-rename) additive — adds optional `name` to
+// `SmartSourceConfig`. v11 (establish-lens-model) renames the `smart` PinNode
+// discriminant to `lens`, adds `lensKind: 'general'`, and renames the persisted
+// top-level keys `smartItemBindings`→`lensItemBindings`,
+// `smartReadState`→`lensReadState`. Each bump is deliberate: it makes a
+// downgrade detectable.
+export const CURRENT_SCHEMA_VERSION = 11;
 
 const SpaceInstanceSchema = z.strictObject({
   spaceId: z.string(),
@@ -108,8 +113,8 @@ const ArchivedTabSchema = z.strictObject({
 // canned filters that instance contributes. Queue sources carry a non-empty
 // `queries`; feed sources (`rss`) carry an empty `queries` (the create/update
 // handlers enforce the non-empty/empty split per source — the persisted schema
-// only types the shape). This is the CURRENT (v9) shape.
-const SmartSourceConfigSchema = z.strictObject({
+// only types the shape). This is the CURRENT (v9+) shape.
+const LensSourceSchema = z.strictObject({
   source: z.enum(['gitlab', 'github', 'jira', 'rss']),
   baseUrl: z.string(),
   queries: z.array(z.enum(['authored', 'assigned', 'review-requested'])),
@@ -128,13 +133,42 @@ const SmartSourceConfigV8Schema = z.strictObject({
   query: z.enum(['authored', 'assigned', 'review-requested']).optional(),
 });
 
-// A pinned-tab placement node (CURRENT/v9 shape): a tab node, a single-level
-// folder node, or a smart-folder config node whose `sources[]` entries carry
-// `queries[]` (smart-folders — configuration only; results are ephemeral and
-// never persisted). Folder `icon`/`color` are plain strings on the record (as
-// on `Space`); the narrow `IconName`/`SpaceColor` unions live only at the bus
-// boundary.
+// A pinned-tab placement node (CURRENT/v11 shape): a tab node, a single-level
+// folder node, or a lens config node whose `sources[]` entries carry `queries[]`
+// (lenses — configuration only; results are ephemeral and never persisted).
+// Folder `icon`/`color` are plain strings on the record (as on `Space`); the
+// narrow `IconName`/`SpaceColor` unions live only at the bus boundary.
 const PinNodeSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('tab'), id: z.string() }),
+  z.strictObject({
+    kind: z.literal('folder'),
+    id: z.string(),
+    name: z.string(),
+    icon: z.string(),
+    color: z.string(),
+    children: z.array(z.string()),
+  }),
+  z.strictObject({
+    kind: z.literal('lens'),
+    id: z.string(),
+    name: z.string(),
+    icon: z.string(),
+    lensKind: z.enum(['general']),
+    // One or more connector instance entries (multi-filter-smart-connectors).
+    // `.min(1)` enforced at the schema boundary; the editor also blocks
+    // confirming with an empty list.
+    sources: z.array(LensSourceSchema).min(1),
+    maxItems: z.number().default(20),
+    hideRead: z.boolean().default(true),
+    refreshMinutes: z.number(),
+  }),
+]);
+
+// Historical (v2–v10) pinned-tab node: identical to the current `PinNodeSchema`
+// except the smart/lens branch uses the old `smart` discriminant and the
+// flat `query?` / `queries[]` shapes. Kept so pre-v11 envelopes (or v10
+// migration output) still validate in migration tests.
+const PinNodeV10Schema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('tab'), id: z.string() }),
   z.strictObject({
     kind: z.literal('folder'),
@@ -149,17 +183,14 @@ const PinNodeSchema = z.discriminatedUnion('kind', [
     id: z.string(),
     name: z.string(),
     icon: z.string(),
-    // One or more connector instance entries (multi-filter-smart-connectors).
-    // `.min(1)` enforced at the schema boundary; the editor also blocks
-    // confirming with an empty list.
-    sources: z.array(SmartSourceConfigSchema).min(1),
+    sources: z.array(LensSourceSchema).min(1),
     maxItems: z.number().default(20),
     hideRead: z.boolean().default(true),
     refreshMinutes: z.number(),
   }),
 ]);
 
-// Historical (v6–v8) pinned-tab node: identical to `PinNodeSchema` except the
+// Historical (v6–v8) pinned-tab node: identical to `PinNodeV10Schema` except the
 // smart branch uses the flat `query?` `SmartSourceConfigV8Schema`. The V6/V7/V8
 // AppState schemas reference this so a pre-v9 envelope (or v8-migration output)
 // still validates.
@@ -204,11 +235,11 @@ const LiveTabSchema = z.strictObject({
 // coerced from their JSON string form.
 const TabBindingsSchema = z.record(z.string(), z.record(z.coerce.number(), z.number()));
 
-// The smart-folder runtime slice (smart-folders, design D2). Ephemeral like
-// `liveTabsById`: the schema ACCEPTS it when present so a broadcast/runtime
-// state round-trips, but it is `.optional()` because `persist()` strips it —
-// on-disk envelopes never carry it (MR titles never touch disk).
-const SmartFolderItemSchema = z.strictObject({
+// The lens runtime slice (lenses, design D2). Ephemeral like `liveTabsById`: the
+// schema ACCEPTS it when present so a broadcast/runtime state round-trips, but it
+// is `.optional()` because `persist()` strips it — on-disk envelopes never carry
+// it (MR titles never touch disk).
+const LensItemSchema = z.strictObject({
   id: z.string(),
   title: z.string(),
   url: z.string(),
@@ -227,20 +258,20 @@ const SmartFolderItemSchema = z.strictObject({
 
 // Per-section runtime (multi-source-smart-folders). The slice is ephemeral
 // (stripped by `toPersistable`, never read back from disk).
-const SmartSectionRuntimeSchema = z.strictObject({
+const LensSectionRuntimeSchema = z.strictObject({
   state: z.enum(['pending', 'ok', 'signed-out', 'error', 'needs-access']),
-  items: z.array(SmartFolderItemSchema),
+  items: z.array(LensItemSchema),
   fetchedAt: z.number().nullable(),
 });
 
-// Sectioned folder runtime: a map of per-section runtimes keyed by sourceKey.
-const SmartFolderRuntimeSchema = z.strictObject({
-  sections: z.record(z.string(), SmartSectionRuntimeSchema),
+// Sectioned lens runtime: a map of per-section runtimes keyed by sourceKey.
+const LensRuntimeSchema = z.strictObject({
+  sections: z.record(z.string(), LensSectionRuntimeSchema),
 });
 
-// Per-(smart-folder item, window) live bindings (smart-folder-item-bindings):
-// `{ [folderId]: { [itemId]: { [windowId]: tabId } } }` — v6 shape (bare TabId).
-// Kept so the v6 schema below can remain a stable parse target for migration tests.
+// Per-(lens item, window) live bindings (lenses): `{ [folderId]: { [itemId]: {
+// [windowId]: tabId } } }` — v6 shape (bare TabId). Kept so the v6 schema below
+// can remain a stable parse target for migration tests.
 const SmartItemBindingsSchema = z.record(
   z.string(),
   z.record(z.string(), z.record(z.coerce.number(), z.number())),
@@ -248,7 +279,7 @@ const SmartItemBindingsSchema = z.record(
 
 // v7 shape (smart-tab-boundary): each slot stores `{ tabId, allowGlob }` so the
 // boundary content script can be re-armed at boot without the ephemeral runtime.
-const SmartItemBindingsV7Schema = z.record(
+const LensItemBindingsSchema = z.record(
   z.string(),
   z.record(
     z.string(),
@@ -257,12 +288,12 @@ const SmartItemBindingsV7Schema = z.record(
 );
 
 // Per-feed-folder read-state (rss-connector, design D3): `{ [folderId]: string[] }`
-// — the read item ids per smart folder. PERSISTED (kept by `toPersistable`, like
-// `smartItemBindings`; not stripped like the ephemeral `smartFolders`), but IDS
-// ONLY — never the item's title/URL. `.default({})` (the `smartItemBindings`
-// precedent) so pre-v6 envelopes, written before this slice existed, parse
-// cleanly through the v6 pass-through.
-const SmartReadStateSchema = z.record(z.string(), z.array(z.string()));
+// — the read item ids per lens. PERSISTED (kept by `toPersistable`, like
+// `lensItemBindings`; not stripped like the ephemeral `lenses`), but IDS
+// ONLY — never the item's title/URL. `.default({})` (the precedent) so pre-v6
+// envelopes, written before this slice existed, parse cleanly through the v6
+// pass-through.
+const LensReadStateSchema = z.record(z.string(), z.array(z.string()));
 
 export const AppStateV6Schema = z.strictObject({
   schemaVersion: z.number(),
@@ -282,12 +313,12 @@ export const AppStateV6Schema = z.strictObject({
   liveTabsById: z.record(z.coerce.number(), LiveTabSchema).optional(),
   faviconRow: z.array(z.string()),
   smartItemBindings: SmartItemBindingsSchema.default({}),
-  smartReadState: SmartReadStateSchema.default({}),
-  smartFolders: z.record(z.string(), SmartFolderRuntimeSchema).optional(),
+  smartReadState: LensReadStateSchema.default({}),
+  smartFolders: z.record(z.string(), LensRuntimeSchema).optional(),
 });
 
-// v7: same as v6 but with the widened SmartItemBindingsV7Schema (smart-tab-boundary).
-// Note: `SmartFolderRuntimeSchema` now reflects the sectioned v8 shape; `smartFolders`
+// v7: same as v6 but with the widened LensItemBindingsSchema (smart-tab-boundary).
+// Note: `LensRuntimeSchema` now reflects the sectioned v8 shape; `smartFolders`
 // is ephemeral (never persisted), so on-disk v7 envelopes never carry it and the
 // `.default({})` makes it a non-issue for v7 parsing in migration tests.
 export const AppStateV7Schema = z.strictObject({
@@ -307,13 +338,13 @@ export const AppStateV7Schema = z.strictObject({
   pinnedBySpace: z.record(z.string(), z.array(PinNodeV8Schema)),
   liveTabsById: z.record(z.coerce.number(), LiveTabSchema).default({}),
   faviconRow: z.array(z.string()),
-  smartItemBindings: SmartItemBindingsV7Schema.default({}),
-  smartReadState: SmartReadStateSchema.default({}),
-  smartFolders: z.record(z.string(), SmartFolderRuntimeSchema).default({}),
+  smartItemBindings: LensItemBindingsSchema.default({}),
+  smartReadState: LensReadStateSchema.default({}),
+  smartFolders: z.record(z.string(), LensRuntimeSchema).default({}),
 });
 
 // v8: widens the smart PinNode from a flat source triple to `sources[]`
-// (multi-source-smart-folders) and adopts the sectioned SmartFolderRuntime.
+// (multi-source-smart-folders) and adopts the sectioned LensRuntime.
 export const AppStateV8Schema = z.strictObject({
   schemaVersion: z.number(),
   spaces: z.array(SpaceSchema),
@@ -331,17 +362,45 @@ export const AppStateV8Schema = z.strictObject({
   pinnedBySpace: z.record(z.string(), z.array(PinNodeV8Schema)),
   liveTabsById: z.record(z.coerce.number(), LiveTabSchema).default({}),
   faviconRow: z.array(z.string()),
-  smartItemBindings: SmartItemBindingsV7Schema.default({}),
-  smartReadState: SmartReadStateSchema.default({}),
-  smartFolders: z.record(z.string(), SmartFolderRuntimeSchema).default({}),
+  smartItemBindings: LensItemBindingsSchema.default({}),
+  smartReadState: LensReadStateSchema.default({}),
+  smartFolders: z.record(z.string(), LensRuntimeSchema).default({}),
 });
 
-// v9: rewrites each smart node's `sources[]` entries from the flat `query?`
-// shape to `queries: SmartQuery[]` (multi-filter-smart-connectors) via the
-// current `PinNodeSchema`. `smartItemBindings` item keys gain the per-filter
+// v9–v10: rewrites each smart node's `sources[]` entries from the flat `query?`
+// shape to `queries: LensQuery[]` (multi-filter-smart-connectors) via the current
+// `PinNodeV10Schema`. `smartItemBindings` item keys gain the per-filter
 // `${source}:${host}:${query}:${nativeId}` axis, but they remain arbitrary
-// strings so `SmartItemBindingsV7Schema` is unchanged.
+// strings so `LensItemBindingsSchema` is unchanged. Uses old persisted key names
+// (`smartItemBindings`, `smartReadState`, `smartFolders`) — these are the v10
+// on-disk names; v11 migration renames them.
 export const AppStateV10Schema = z.strictObject({
+  schemaVersion: z.number(),
+  spaces: z.array(SpaceSchema),
+  activeSpaceByWindow: z.record(z.coerce.number(), z.string().nullable()),
+  spaceInstancesByWindow: z.record(
+    z.coerce.number(),
+    z.record(z.string(), SpaceInstanceSchema).optional(),
+  ),
+  tabBindings: TabBindingsSchema,
+  savedTabs: z.record(z.string(), SavedTabSchema),
+  lastActivatedSpaceId: z.string().nullable(),
+  tabLastActivity: z.record(z.coerce.number(), z.number()),
+  archivedTabs: z.array(ArchivedTabSchema),
+  trash: z.record(z.string(), TrashedSpaceSchema),
+  pinnedBySpace: z.record(z.string(), z.array(PinNodeV10Schema)),
+  liveTabsById: z.record(z.coerce.number(), LiveTabSchema).default({}),
+  faviconRow: z.array(z.string()),
+  smartItemBindings: LensItemBindingsSchema.default({}),
+  smartReadState: LensReadStateSchema.default({}),
+  smartFolders: z.record(z.string(), LensRuntimeSchema).default({}),
+});
+
+// v11 (establish-lens-model): renames the `smart` PinNode discriminant to `lens`,
+// adds `lensKind: z.enum(['general'])`, and renames the persisted top-level keys
+// `smartItemBindings`→`lensItemBindings`, `smartReadState`→`lensReadState`.
+// The ephemeral `smartFolders`→`lenses` slice needs only the code rename.
+export const AppStateV11Schema = z.strictObject({
   schemaVersion: z.number(),
   spaces: z.array(SpaceSchema),
   activeSpaceByWindow: z.record(z.coerce.number(), z.string().nullable()),
@@ -358,26 +417,27 @@ export const AppStateV10Schema = z.strictObject({
   pinnedBySpace: z.record(z.string(), z.array(PinNodeSchema)),
   liveTabsById: z.record(z.coerce.number(), LiveTabSchema).default({}),
   faviconRow: z.array(z.string()),
-  smartItemBindings: SmartItemBindingsV7Schema.default({}),
-  smartReadState: SmartReadStateSchema.default({}),
-  smartFolders: z.record(z.string(), SmartFolderRuntimeSchema).default({}),
+  lensItemBindings: LensItemBindingsSchema.default({}),
+  lensReadState: LensReadStateSchema.default({}),
+  lenses: z.record(z.string(), LensRuntimeSchema).default({}),
 });
 
 export const EnvelopeSchema = z.strictObject({
   schemaVersion: z.number(),
-  state: AppStateV10Schema,
+  state: AppStateV11Schema,
 });
 
 export type AppStateV6 = z.infer<typeof AppStateV6Schema>;
 export type AppStateV7 = z.infer<typeof AppStateV7Schema>;
 export type AppStateV8 = z.infer<typeof AppStateV8Schema>;
 export type AppStateV10 = z.infer<typeof AppStateV10Schema>;
+export type AppStateV11 = z.infer<typeof AppStateV11Schema>;
 export type Envelope = z.infer<typeof EnvelopeSchema>;
 
 type AssertEqual<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
-const _schemaMatchesAppState: AssertEqual<AppStateV10, AppState> = true;
+const _schemaMatchesAppState: AssertEqual<AppStateV11, AppState> = true;
 void _schemaMatchesAppState;
 
 // ── Data-backup: BackupEnvelopeSchema ────────────────────────────────────────

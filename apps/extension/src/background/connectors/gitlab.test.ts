@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import type { ResolvedSourceConfig } from '../../shared/types';
+import type { ResolvedLensSource } from '../../shared/types';
 import type { ConnectorCaches } from './connector';
 import { gitlabConnector, pipelineStatus } from './gitlab';
 
 // The GitLab connector's fetch/normalize/auth suites, relocated from
-// `../smart-folders.test.ts` by the github-connector change (design D2) with
+// `../lenses.test.ts` by the github-connector change (design D2) with
 // assertions UNMODIFIED — only import paths and the entry-point call sites
 // (`fetchSmartFolderRuntime(...)` → `gitlabConnector.fetchRuntime(...)`)
 // changed. The refactor is proven by the absence of assertion changes.
@@ -53,7 +53,7 @@ function htmlResponse(status = 200): unknown {
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
-function node(overrides: Partial<ResolvedSourceConfig> = {}): ResolvedSourceConfig {
+function node(overrides: Partial<ResolvedLensSource> = {}): ResolvedLensSource {
   return {
     source: 'gitlab',
     baseUrl: 'https://gitlab.example.com',

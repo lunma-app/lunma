@@ -149,16 +149,16 @@ describe('runRestartRecovery (per-window)', () => {
   });
 });
 
-describe('runRestartRecovery — smart-item bindings (smart-folder-item-bindings)', () => {
+describe('runRestartRecovery — lens-item bindings (smart-folder-item-bindings)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
 
   /** Seed a smart node so the binding's folder exists. */
-  function seedSmartFolder(store: { state: { pinnedBySpace: Record<string, unknown> } }): void {
+  function seedLens(store: { state: { pinnedBySpace: Record<string, unknown> } }): void {
     store.state.pinnedBySpace.work = [
       {
-        kind: 'smart',
+        kind: 'lens',
         id: 'sf-1',
         name: 'Review requests',
         icon: 'folder-git-2',
@@ -173,24 +173,24 @@ describe('runRestartRecovery — smart-item bindings (smart-folder-item-bindings
   test('a stale binding (tab id gone) prunes away', async () => {
     installChromeStub([]); // a browser restart: no persisted tab id survives
     const { store, runRestartRecovery } = await freshImports();
-    seedSmartFolder(store);
-    store.state.smartItemBindings['sf-1'] = { '42': { 100: { tabId: 7, allowGlob: '' } } };
+    seedLens(store);
+    store.state.lensItemBindings['sf-1'] = { '42': { 100: { tabId: 7, allowGlob: '' } } };
 
     await runRestartRecovery();
 
-    expect(store.state.smartItemBindings).toEqual({});
+    expect(store.state.lensItemBindings).toEqual({});
   });
 
   test('a live binding survives an SW restart and keeps its tab out of temp', async () => {
     installChromeStub([liveTab(7, 100, 'https://gitlab.example.com/mr/42')]);
     const { store, runRestartRecovery } = await freshImports();
-    seedSmartFolder(store);
+    seedLens(store);
     store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
     store.state.activeSpaceByWindow[100] = 'work';
     store.state.spaceInstancesByWindow[100] = {
       work: { spaceId: 'work', groupId: -1, tempTabIds: [], tempTabTitles: {} },
     };
-    store.state.smartItemBindings['sf-1'] = {
+    store.state.lensItemBindings['sf-1'] = {
       '42': { 100: { tabId: 7, allowGlob: 'https://gitlab.example.com/mr/42*' } },
     };
 
@@ -200,7 +200,7 @@ describe('runRestartRecovery — smart-item bindings (smart-folder-item-bindings
     const { seedExistingTabs } = await import('./seed-existing-tabs');
     seedExistingTabs(store, [{ id: 7, windowId: 100, url: 'https://gitlab.example.com/mr/42' }]);
 
-    expect(store.state.smartItemBindings).toEqual({
+    expect(store.state.lensItemBindings).toEqual({
       'sf-1': { '42': { 100: { tabId: 7, allowGlob: 'https://gitlab.example.com/mr/42*' } } },
     });
     expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([]);
@@ -209,17 +209,17 @@ describe('runRestartRecovery — smart-item bindings (smart-folder-item-bindings
   test('a binding for a deleted folder demotes its still-open tab to Temporary', async () => {
     installChromeStub([liveTab(7, 100, 'https://gitlab.example.com/mr/42')]);
     const { store, runRestartRecovery } = await freshImports();
-    // No smart node anywhere — the folder is gone, but its bound tab is open.
+    // No lens node anywhere — the folder is gone, but its bound tab is open.
     store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
     store.state.activeSpaceByWindow[100] = 'work';
     store.state.spaceInstancesByWindow[100] = {
       work: { spaceId: 'work', groupId: -1, tempTabIds: [], tempTabTitles: {} },
     };
-    store.state.smartItemBindings['sf-gone'] = { '42': { 100: { tabId: 7, allowGlob: '' } } };
+    store.state.lensItemBindings['sf-gone'] = { '42': { 100: { tabId: 7, allowGlob: '' } } };
 
     await runRestartRecovery();
 
-    expect(store.state.smartItemBindings).toEqual({});
+    expect(store.state.lensItemBindings).toEqual({});
     expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([7]);
   });
 
@@ -230,11 +230,11 @@ describe('runRestartRecovery — smart-item bindings (smart-folder-item-bindings
     store.state.spaceInstancesByWindow[100] = {
       work: { spaceId: 'work', groupId: -1, tempTabIds: [], tempTabTitles: {} },
     };
-    store.state.smartItemBindings['sf-gone'] = { '42': { 100: { tabId: 7, allowGlob: '' } } };
+    store.state.lensItemBindings['sf-gone'] = { '42': { 100: { tabId: 7, allowGlob: '' } } };
 
     await runRestartRecovery();
 
-    expect(store.state.smartItemBindings).toEqual({});
+    expect(store.state.lensItemBindings).toEqual({});
     expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([]);
   });
 });

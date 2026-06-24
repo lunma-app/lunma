@@ -41,7 +41,7 @@ export default defineConfig(({ mode }) => ({
       // builds. NOT in web_accessible_resources: WAR would over-expose a
       // state-mirroring page to all web origins (least privilege).
       input: {
-        folderpage: new URL('./src/launcher/folderpage/index.html', import.meta.url).pathname,
+        lenspage: new URL('./src/launcher/lenspage/index.html', import.meta.url).pathname,
       },
     },
   },

@@ -11,8 +11,9 @@ const folder = (id: string, name: string, children: string[]): PinNode => ({
   children,
 });
 
-const smart = (id: string, name: string): PinNode => ({
-  kind: 'smart',
+const lens = (id: string, name: string): PinNode => ({
+  kind: 'lens',
+  lensKind: 'general',
   id,
   name,
   icon: 'git-pull-request',
@@ -47,30 +48,30 @@ describe('buildFolderNameIndex', () => {
     expect(idx.savedTabFolder.fav).toBeUndefined();
   });
 
-  test('maps a smart node id to its name', () => {
+  test('maps a lens node id to its name', () => {
     const idx = buildFolderNameIndex({
-      work: [smart('sf-1', 'Work PRs')],
+      work: [lens('sf-1', 'Work PRs')],
     });
-    expect(idx.smartFolder).toEqual({ 'sf-1': 'Work PRs' });
-    expect(idx.smartFolderSpace).toEqual({ 'sf-1': 'work' });
+    expect(idx.lens).toEqual({ 'sf-1': 'Work PRs' });
+    expect(idx.lensSpace).toEqual({ 'sf-1': 'work' });
     expect(idx.savedTabFolder).toEqual({});
   });
 
   test('scans across every Space', () => {
     const idx = buildFolderNameIndex({
       work: [folder('f1', 'Work', ['t1'])],
-      home: [folder('f2', 'Home', ['t2']), smart('sf-2', 'Reading')],
+      home: [folder('f2', 'Home', ['t2']), lens('sf-2', 'Reading')],
     });
     expect(idx.savedTabFolder).toEqual({ t1: 'Work', t2: 'Home' });
-    expect(idx.smartFolder).toEqual({ 'sf-2': 'Reading' });
-    expect(idx.smartFolderSpace).toEqual({ 'sf-2': 'home' });
+    expect(idx.lens).toEqual({ 'sf-2': 'Reading' });
+    expect(idx.lensSpace).toEqual({ 'sf-2': 'home' });
   });
 
   test('empty pinned trees yield empty indexes', () => {
     expect(buildFolderNameIndex({})).toEqual({
       savedTabFolder: {},
-      smartFolder: {},
-      smartFolderSpace: {},
+      lens: {},
+      lensSpace: {},
     });
   });
 });

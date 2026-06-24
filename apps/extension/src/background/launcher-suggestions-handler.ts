@@ -2,9 +2,9 @@ import { isDedupEligibleSource, isUrlOpenInActiveSpace } from '../launcher/share
 import { buildFolderNameIndex } from '../launcher/shared/folder-names';
 import { bookmarksProvider } from '../launcher/shared/providers/bookmarks';
 import { historyProvider } from '../launcher/shared/providers/history';
+import { lensesProvider } from '../launcher/shared/providers/lenses';
 import { openTabsProvider } from '../launcher/shared/providers/open-tabs';
 import { savedTabsProvider } from '../launcher/shared/providers/saved-tabs';
-import { smartFoldersProvider } from '../launcher/shared/providers/smart-folders';
 import { runSearch } from '../launcher/shared/search-engine';
 import { buildWebActionResults, resolveDefaultEngine } from '../launcher/shared/web-actions';
 import type { LauncherResult, OptionalResultSource } from '../shared/launcher-contract';
@@ -49,7 +49,7 @@ function markCrossSpace(
  * Pure-read per the chrome-event-coordination contract (like the state-snapshot
  * handler): it NEVER enqueues onto the coordinator queue, mutates LunmaStore,
  * persists, or broadcasts. It reads `store.state.savedTabs`,
- * `store.state.smartFolders`, `store.state.pinnedBySpace` (for the folder-name
+ * `store.state.lenses`, `store.state.pinnedBySpace` (for the folder-name
  * index), `store.state.activeSpaceByWindow` (for the current-Space scope), and the
  * user's settings (`readSettings`, for the default engine + `launcherScope`), and
  * may call read-only chrome APIs (`chrome.tabs.query`, `chrome.bookmarks.search`,
@@ -111,11 +111,7 @@ export function registerLauncherSuggestionsHandler(store: LunmaStore): () => voi
       windowId,
       idx.savedTabFolder,
     );
-    let smart = smartFoldersProvider(
-      store.state.smartFolders,
-      idx.smartFolder,
-      idx.smartFolderSpace,
-    );
+    let lens = lensesProvider(store.state.lenses, idx.lens, idx.lensSpace);
     // `current-space-only` hides cross-Space Lunma items (a result whose owning
     // Space is set and differs from the active one); global rows keep their place —
     // favicon-row favorites (no `spaceId`), open tabs, bookmarks, history. With no
@@ -123,13 +119,13 @@ export function registerLauncherSuggestionsHandler(store: LunmaStore): () => voi
     if (scope === 'current-space-only' && activeSpaceId !== undefined) {
       const inScope = (r: LauncherResult) => r.spaceId === undefined || r.spaceId === activeSpaceId;
       saved = saved.filter(inScope);
-      smart = smart.filter(inScope);
+      lens = lens.filter(inScope);
     }
     // Mark whatever cross-Space Lunma items remain (design D10) so the rows show
     // a "lives in another Space" chip. Independent of scope mode — in
     // `current-space-only` the filter above already removed them, so this no-ops.
     markCrossSpace(saved, activeSpaceId, store.state.spaces);
-    markCrossSpace(smart, activeSpaceId, store.state.spaces);
+    markCrossSpace(lens, activeSpaceId, store.state.spaces);
     // `prefer-current-space` boosts in-Space results during scoring; `global` and
     // `current-space-only` pass no active Space, so no boost applies.
     const boostSpaceId = scope === 'prefer-current-space' ? activeSpaceId : undefined;
@@ -138,7 +134,7 @@ export function registerLauncherSuggestionsHandler(store: LunmaStore): () => voi
       {
         tabs: openTabsProvider(tabs, windowId),
         saved,
-        smart,
+        lens,
         bookmarks: bookmarksProvider(bookmarks),
         history: historyProvider(history),
       },
