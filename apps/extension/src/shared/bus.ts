@@ -876,7 +876,10 @@ interface PendingCall {
 
 function allocateSessionId(): string {
   // 32 random bits, base36 — short and unique enough for cross-instance disambiguation.
-  return Math.floor(Math.random() * 0x100000000).toString(36);
+  // Web Crypto (CSPRNG) rather than Math.random(): identical format, no insecure-
+  // randomness lint debt even though this id never crosses a trust boundary.
+  const [bits] = crypto.getRandomValues(new Uint32Array(1));
+  return (bits ?? 0).toString(36);
 }
 
 function parseSession(id: string): string | null {
