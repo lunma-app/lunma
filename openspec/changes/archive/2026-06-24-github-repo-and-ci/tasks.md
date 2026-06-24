@@ -104,17 +104,18 @@
   merge authors the merge commit with the operator's GitHub-account display name,
   which would re-introduce a personal name onto `main`; the FF keeps every commit
   `Lunma <dev@lunma.app>`. PR #1 auto-closed as merged._
-- [ ] 5.4 **(DEFERRED — plan-blocked.)** Apply `main` protection requiring the
-  `verify` + `e2e` checks. At execution time GitHub returned HTTP 403 for **both** a
-  repository ruleset (`POST /repos/lunma-app/lunma/rulesets`) **and** classic branch
-  protection (`PUT …/branches/main/protection`) on this **Free org + private** repo:
-  "Upgrade to GitHub Pro or make this repository public." D5's assumption that
-  rulesets are free for private repos no longer holds (D5 explicitly flagged this as
-  movable). Deferred until the org upgrades (Team) or the repo goes public
-  (`open-source-public-launch`), when protection is free. CI still runs `verify` +
-  `e2e` on every PR and push to `main` — only the merge-*blocking* enforcement is
-  deferred; the job names are already `verify`/`e2e`, so enabling it later is a
-  one-call follow-up.
+- [x] 5.4 Applied `main` protection requiring the `verify` + `e2e` checks.
+  _Originally deferred (plan-blocked): at first execution GitHub returned HTTP 403
+  for both a repository ruleset (`POST …/rulesets`) and classic branch protection
+  (`PUT …/branches/main/protection`) on the then **Free org + private** repo
+  ("Upgrade to GitHub Pro or make this repository public"), invalidating D5's
+  assumption that rulesets are free for private repos. Resolved exactly as §5.4
+  anticipated: the repo went **public** under `open-source-public-launch`, and
+  branch protection is free on public repos even for a Free org. Classic branch
+  protection is now in place on `main`: `required_status_checks.strict: true` with
+  contexts `verify` + `e2e` (plus `dco` + `identity` from sibling commit-identity/
+  DCO work), `enforce_admins: true`, `allow_force_pushes: false`,
+  `allow_deletions: false`._
 
 ## 6. Verification (against the spec scenarios)
 
@@ -125,13 +126,12 @@
   stale lockfile (spec: "Lockfile drift fails the build").
 - [x] 6.3 Confirm the `e2e` check ran under `xvfb-run` and passed (spec: "CI runs
   the Playwright MV3 end-to-end smoke headlessly").
-- [ ] 6.4 **(DEFERRED with §5.4.)** Confirm merging is blocked while a required
-  check is failing/pending and allowed when both pass (spec: "Merges to main are
-  gated on green CI"). Unverifiable until branch protection is applied (plan-blocked
-  — see §5.4). The required-check contexts (`verify`, `e2e`) exist and pass; only
-  the merge-blocking enforcement is absent. The spec's "Merges to main are gated"
-  requirement therefore is **not yet satisfied**, so this change is NOT archived
-  until protection lands.
+- [x] 6.4 Confirmed merges to `main` are gated on green CI (spec: "Merges to main
+  are gated on green CI"). _Branch protection on `main` requires the `verify` +
+  `e2e` status checks under `strict: true` (must be up to date) and enforces admins,
+  so a PR cannot merge while either check is failing or pending and can merge once
+  both pass. The earlier "not yet satisfied / do not archive until protection lands"
+  caveat is now resolved — protection landed (see §5.4)._
 - [x] 6.5 Confirm the workflow token is `contents: read` and a superseding push
   cancels the prior run (spec: "least privilege and cancels superseded runs").
 - [x] 6.6 Confirm a dependabot PR (or a manually-forced bump) runs `verify` + `e2e`
