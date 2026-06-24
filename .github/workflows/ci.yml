@@ -13,6 +13,11 @@ on:
   pull_request:
   push:
     branches: [main]
+  # The merge queue re-runs the full gate against the queued commits + latest
+  # main on a temporary branch, so required checks must report on this event or
+  # the queue stalls. Jobs only checkout + run, so no event-specific wiring is
+  # needed here (unlike dco/identity, which read the PR base/head SHAs).
+  merge_group:
 
 # Least privilege: the workflow only reads the repo; it never mutates it.
 permissions:
