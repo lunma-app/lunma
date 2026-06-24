@@ -83,9 +83,10 @@ component-library and visual-quality policies by explicit exemption).
     assert-and-retry gesture (D7); the three drag call sites pass a `settled`
     predicate. No product/runtime code changes.
 - **New OpenSpec spec:** `openspec/specs/release-engineering/spec.md` (on archive).
-- **External / account state (not files):** the `lunma-app` org, the private
+- **External / account state (not files):** the `lunma-app` org, the
   `lunma-app/lunma` repo, the `origin` remote, and the `main` branch-protection
-  ruleset. Recorded as reproducible `gh`/`git` commands in `tasks.md`.
+  rule (landed as classic branch protection once the repo went public — see
+  design D5). Recorded as reproducible `gh`/`git` commands in `tasks.md`.
 - **Docs updated in this change (doc-lockstep):**
   - `docs/tech-stack.md` — add a CI/release-engineering note (the toolchain is
     pinned for both local `verify` and CI; corepack-pinned pnpm, Node 24, the
@@ -95,7 +96,8 @@ component-library and visual-quality policies by explicit exemption).
     by, so architecture-integrity is enforced on every PR, not just locally.
   - The CI tooling choices (setup-node+corepack over devbox-in-CI; xvfb for MV3
     e2e; single `pnpm -r verify` job over a per-package matrix; imperative branch
-    protection via a ruleset) are recorded in this change's `design.md`.
+    protection — ruleset intended, classic protection landed) are recorded in this
+    change's `design.md`.
 - **Docs explicitly left untouched:** the capability specs under
   `openspec/specs/` (no product behaviour, roadmap, or brand surface
   changes here).
