@@ -85,7 +85,7 @@ const initial = $derived.by(() => {
   class:feed
   class:read
   class:has-hero={hasHero}
-  data-testid="folderpage-item"
+  data-testid="lenspage-item"
   data-active={active}
   aria-label={ariaLabel}
   onclick={onactivate}
@@ -95,11 +95,11 @@ const initial = $derived.by(() => {
        hue wash) at the SAME ratio, so titles stay aligned across the grid row. -->
   {#if hasHero}
     {#if hasImage}
-      <span class="hero" data-testid="folderpage-hero" aria-hidden="true">
+      <span class="hero" data-testid="lenspage-hero" aria-hidden="true">
         <img src={rich?.imageUrl} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" />
       </span>
     {:else}
-      <span class="hero placeholder" data-testid="folderpage-hero-placeholder" aria-hidden="true">
+      <span class="hero placeholder" data-testid="lenspage-hero-placeholder" aria-hidden="true">
         <span class="initial">{initial}</span>
       </span>
     {/if}
@@ -111,18 +111,18 @@ const initial = $derived.by(() => {
     </span>
     <span class="title">{title}</span>
     {#if status}
-      <span class="dot {status.tone}" data-testid="folderpage-status-dot"></span>
+      <span class="dot {status.tone}" data-testid="lenspage-status-dot"></span>
     {:else if feed}
-      <span class="dot unread" class:cleared={read} data-testid="folderpage-unread-dot"></span>
+      <span class="dot unread" class:cleared={read} data-testid="lenspage-unread-dot"></span>
     {/if}
   </span>
 
   {#if rich?.excerpt}
-    <span class="excerpt" data-testid="folderpage-excerpt">{rich.excerpt}</span>
+    <span class="excerpt" data-testid="lenspage-excerpt">{rich.excerpt}</span>
   {/if}
   {#if dateLabel || rich?.meta}
     <span class="footer">
-      {#if dateLabel}<time class="date" data-testid="folderpage-date">{dateLabel}</time>{/if}
+      {#if dateLabel}<time class="date" data-testid="lenspage-date">{dateLabel}</time>{/if}
       {#if rich?.meta}<span class="meta">{rich.meta}</span>{/if}
     </span>
   {/if}
@@ -132,7 +132,7 @@ const initial = $derived.by(() => {
   <button
     type="button"
     class="mark"
-    data-testid="folderpage-mark-read"
+    data-testid="lenspage-mark-read"
     aria-label={read ? 'Mark as unread' : 'Mark as read'}
     title={read ? 'Mark as unread' : 'Mark as read'}
     onclick={onToggleRead}

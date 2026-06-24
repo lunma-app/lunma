@@ -110,7 +110,7 @@ describe('LensPage (smart-folder-page)', () => {
     });
 
     expect(getByText('My work')).toBeTruthy();
-    const sectionKeys = [...container.querySelectorAll('[data-testid="folderpage-section"]')].map(
+    const sectionKeys = [...container.querySelectorAll('[data-testid="lenspage-section"]')].map(
       (el) => el.getAttribute('data-source-key'),
     );
     expect(sectionKeys).toEqual([GITLAB_AUTHORED_SK, GITLAB_REVIEW_SK]);
@@ -133,7 +133,7 @@ describe('LensPage (smart-folder-page)', () => {
     });
 
     await fireEvent.click(
-      container.querySelector('[data-testid="folderpage-item"]') as HTMLButtonElement,
+      container.querySelector('[data-testid="lenspage-item"]') as HTMLButtonElement,
     );
     expect(lastCommand()).toEqual({
       kind: 'openLensItem',
@@ -160,7 +160,7 @@ describe('LensPage (smart-folder-page)', () => {
     const { getByTestId } = render(LensPage, {
       props: { windowId: 100, folderId: 'sf-1', initialState, tint: 'vivid' as const },
     });
-    expect(getByTestId('folderpage-signin').textContent).toContain('Add a token');
+    expect(getByTestId('lenspage-signin').textContent).toContain('Add a token');
   });
 
   test('first-fetch pending renders static ghost cards', () => {
@@ -172,9 +172,7 @@ describe('LensPage (smart-folder-page)', () => {
     const { container } = render(LensPage, {
       props: { windowId: 100, folderId: 'sf-1', initialState, tint: 'vivid' as const },
     });
-    expect(container.querySelectorAll('[data-testid="folderpage-ghost"]').length).toBeGreaterThan(
-      0,
-    );
+    expect(container.querySelectorAll('[data-testid="lenspage-ghost"]').length).toBeGreaterThan(0);
   });
 
   test('a feed section renders rich magazine cards (hero image + excerpt + date)', () => {
@@ -211,12 +209,12 @@ describe('LensPage (smart-folder-page)', () => {
 
     // Magazine grid + hero image (lazy + no-referrer) + excerpt + relative date.
     expect(container.querySelector('.card-grid.feed')).not.toBeNull();
-    const hero = getByTestId('folderpage-hero').querySelector('img') as HTMLImageElement;
+    const hero = getByTestId('lenspage-hero').querySelector('img') as HTMLImageElement;
     expect(hero.getAttribute('src')).toBe('https://img.example.com/a.jpg');
     expect(hero.getAttribute('loading')).toBe('lazy');
     expect(hero.getAttribute('referrerpolicy')).toBe('no-referrer');
     expect(getByText('A short summary of the story.')).toBeTruthy();
-    expect(getByTestId('folderpage-date').textContent).toContain('h ago');
+    expect(getByTestId('lenspage-date').textContent).toContain('h ago');
   });
 
   test('reading controls: read hidden by default, reveal shows them, toggle marks read/unread', async () => {
@@ -250,11 +248,11 @@ describe('LensPage (smart-folder-page)', () => {
     });
 
     // Default: read hidden → only the two unread cards render.
-    expect(container.querySelectorAll('[data-testid="folderpage-item"]')).toHaveLength(2);
+    expect(container.querySelectorAll('[data-testid="lenspage-item"]')).toHaveLength(2);
 
     // Reveal read → all three render; the toggle flips to "Hide read".
     await fireEvent.click(getByText('Show 1 read'));
-    expect(container.querySelectorAll('[data-testid="folderpage-item"]')).toHaveLength(3);
+    expect(container.querySelectorAll('[data-testid="lenspage-item"]')).toHaveLength(3);
     expect(getByText('Hide read')).toBeTruthy();
 
     // Toggling the first (unread) card marks it read.
@@ -293,7 +291,7 @@ describe('LensPage (smart-folder-page)', () => {
     const { container, getByText } = render(LensPage, {
       props: { windowId: 100, folderId: 'sf-1', initialState, tint: 'vivid' as const },
     });
-    expect(container.querySelectorAll('[data-testid="folderpage-item"]')).toHaveLength(2);
+    expect(container.querySelectorAll('[data-testid="lenspage-item"]')).toHaveLength(2);
 
     // u1 becomes read WHILE the page is open (a live broadcast) — it lingers,
     // staying visible (dimmed), not vanishing.
@@ -301,13 +299,13 @@ describe('LensPage (smart-folder-page)', () => {
     afterRead.lensReadState['sf-1'] = [`${SK}:u1`];
     broadcast(afterRead);
     await tick();
-    expect(container.querySelectorAll('[data-testid="folderpage-item"]')).toHaveLength(2);
+    expect(container.querySelectorAll('[data-testid="lenspage-item"]')).toHaveLength(2);
 
     // Clear read drains the lingering item; only u2 remains (await the leave
     // transition — the card fades out before it's removed).
     await fireEvent.click(getByText('Clear read'));
     await waitFor(() =>
-      expect(container.querySelectorAll('[data-testid="folderpage-item"]')).toHaveLength(1),
+      expect(container.querySelectorAll('[data-testid="lenspage-item"]')).toHaveLength(1),
     );
   });
 
@@ -336,9 +334,9 @@ describe('LensPage (smart-folder-page)', () => {
     });
 
     // Default page window is 24 (grid-friendly), not the folder's maxItems of 10.
-    expect(container.querySelectorAll('[data-testid="folderpage-item"]')).toHaveLength(24);
+    expect(container.querySelectorAll('[data-testid="lenspage-item"]')).toHaveLength(24);
     await fireEvent.click(getByText('Show more'));
-    expect(container.querySelectorAll('[data-testid="folderpage-item"]')).toHaveLength(30);
+    expect(container.querySelectorAll('[data-testid="lenspage-item"]')).toHaveLength(30);
   });
 
   test('no folderId renders the calm missing state (never an error card)', () => {
@@ -346,6 +344,6 @@ describe('LensPage (smart-folder-page)', () => {
     const { getByTestId } = render(LensPage, {
       props: { windowId: 100, folderId: null, initialState, tint: 'vivid' as const },
     });
-    expect(getByTestId('folderpage-missing')).toBeTruthy();
+    expect(getByTestId('lenspage-missing')).toBeTruthy();
   });
 });

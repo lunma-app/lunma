@@ -17,7 +17,7 @@ describe('LensPageItem (smart-folder-page B-seam)', () => {
       props: { ...base, status: { tone: 'ok' as const, label: 'Checks passed' } },
     });
     expect(getByText('Fix the parser')).toBeTruthy();
-    expect(container.querySelector('[data-testid="folderpage-status-dot"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="lenspage-status-dot"]')).not.toBeNull();
     // The B-seam slots are absent (no rich content supplied) — a clean link card,
     // not a skeleton with empty boxes.
     expect(container.querySelector('.excerpt')).toBeNull();
@@ -29,13 +29,13 @@ describe('LensPageItem (smart-folder-page B-seam)', () => {
     const unread = render(LensPageItem, { props: { ...base, feed: true, read: false } });
     expect(
       unread.container
-        .querySelector('[data-testid="folderpage-unread-dot"]')
+        .querySelector('[data-testid="lenspage-unread-dot"]')
         ?.classList.contains('cleared'),
     ).toBe(false);
     const read = render(LensPageItem, { props: { ...base, feed: true, read: true } });
     expect(
       read.container
-        .querySelector('[data-testid="folderpage-unread-dot"]')
+        .querySelector('[data-testid="lenspage-unread-dot"]')
         ?.classList.contains('cleared'),
     ).toBe(true);
   });
@@ -53,16 +53,16 @@ describe('LensPageItem (smart-folder-page B-seam)', () => {
     const withImage = render(LensPageItem, {
       props: { ...base, feed: true, rich: { imageUrl: 'https://img.example.com/x.jpg' } },
     });
-    expect(withImage.container.querySelector('[data-testid="folderpage-hero"]')).not.toBeNull();
+    expect(withImage.container.querySelector('[data-testid="lenspage-hero"]')).not.toBeNull();
     expect(
-      withImage.container.querySelector('[data-testid="folderpage-hero-placeholder"]'),
+      withImage.container.querySelector('[data-testid="lenspage-hero-placeholder"]'),
     ).toBeNull();
 
     const noImage = render(LensPageItem, {
       props: { ...base, title: 'Entre a sede', feed: true },
     });
     const placeholder = noImage.container.querySelector(
-      '[data-testid="folderpage-hero-placeholder"]',
+      '[data-testid="lenspage-hero-placeholder"]',
     );
     expect(placeholder).not.toBeNull();
     expect(placeholder?.querySelector('.initial')?.textContent).toBe('E');
@@ -72,15 +72,15 @@ describe('LensPageItem (smart-folder-page B-seam)', () => {
     const { container } = render(LensPageItem, {
       props: { ...base, status: { tone: 'ok' as const, label: 'Checks passed' } },
     });
-    expect(container.querySelector('[data-testid="folderpage-hero"]')).toBeNull();
-    expect(container.querySelector('[data-testid="folderpage-hero-placeholder"]')).toBeNull();
+    expect(container.querySelector('[data-testid="lenspage-hero"]')).toBeNull();
+    expect(container.querySelector('[data-testid="lenspage-hero-placeholder"]')).toBeNull();
   });
 
   test('clicking the card fires onactivate', async () => {
     const onactivate = vi.fn();
     const { container } = render(LensPageItem, { props: { ...base, onactivate } });
     await fireEvent.click(
-      container.querySelector('[data-testid="folderpage-item"]') as HTMLButtonElement,
+      container.querySelector('[data-testid="lenspage-item"]') as HTMLButtonElement,
     );
     expect(onactivate).toHaveBeenCalledTimes(1);
   });

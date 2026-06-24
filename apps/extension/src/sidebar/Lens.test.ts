@@ -204,7 +204,7 @@ describe('Lens — populated render + one-glyph restraint', () => {
     });
     const { container } = renderLens(store);
 
-    const rows = container.querySelectorAll('[data-testid="smart-result-row"]');
+    const rows = container.querySelectorAll('[data-testid="lens-result-row"]');
     expect(rows).toHaveLength(3);
     // One-glyph restraint: each row carries at most one dot; tone classes map
     // to the semantic tokens; the no-pipeline row carries none.
@@ -274,7 +274,7 @@ describe('Lens — pinned-tab activation (smart-folder-item-bindings)', () => {
     const store = makeStore({ state: 'ok', items: [item(42)], fetchedAt: 1 });
     const { container } = renderLens(store);
     await fireEvent.click(
-      container.querySelector('[data-testid="smart-result-row"]') as HTMLButtonElement,
+      container.querySelector('[data-testid="lens-result-row"]') as HTMLButtonElement,
     );
     expect(sendMock).toHaveBeenCalledWith({
       kind: 'openLensItem',
@@ -302,7 +302,7 @@ describe('Lens — pinned-tab activation (smart-folder-item-bindings)', () => {
     };
     const { container } = renderLens(store);
 
-    const rows = container.querySelectorAll('[data-testid="smart-result-row"]');
+    const rows = container.querySelectorAll('[data-testid="lens-result-row"]');
     expect(rows[0]?.getAttribute('data-bound')).toBe('true');
     expect(rows[0]?.getAttribute('data-active')).toBe('true');
     expect(rows[0]?.classList).toContain('active');
@@ -325,7 +325,7 @@ describe('Lens — pinned-tab activation (smart-folder-item-bindings)', () => {
       status: 'complete',
     };
     const { container } = renderLens(store);
-    const row = container.querySelector('[data-testid="smart-result-row"]');
+    const row = container.querySelector('[data-testid="lens-result-row"]');
     expect(row?.getAttribute('data-bound')).toBe('true');
     expect(row?.getAttribute('data-active')).toBe('false');
   });
@@ -336,7 +336,7 @@ describe('Lens — pinned-tab activation (smart-folder-item-bindings)', () => {
       'gitlab:gitlab.example.com:review-requested:mr-1': { 200: { tabId: 7, allowGlob: '' } },
     }; // window 200, not 100
     const { container } = renderLens(store);
-    const row = container.querySelector('[data-testid="smart-result-row"]');
+    const row = container.querySelector('[data-testid="lens-result-row"]');
     expect(row?.getAttribute('data-bound')).toBe('false');
     expect(container.querySelector('[data-testid="smart-close"]')).toBeNull();
   });
@@ -360,7 +360,7 @@ describe('Lens — pinned-tab activation (smart-folder-item-bindings)', () => {
     // mouse-out) and the full phrase stays in the ARIA label.
     expect(container.querySelector('[data-testid="smart-status-dot"]')).not.toBeNull();
     expect(
-      container.querySelector('[data-testid="smart-result-row"]')?.getAttribute('aria-label'),
+      container.querySelector('[data-testid="lens-result-row"]')?.getAttribute('aria-label'),
     ).toBe('MR 1 — Pipeline passed');
   });
 
@@ -379,7 +379,7 @@ describe('Lens — binding-held rows (open work holds its row)', () => {
     };
     const { container } = renderLens(store);
     await tick();
-    expect(container.querySelectorAll('[data-testid="smart-result-row"]')).toHaveLength(2);
+    expect(container.querySelectorAll('[data-testid="lens-result-row"]')).toHaveLength(2);
 
     // The next ok poll no longer lists mr-1 (merged) — its binding lives, so
     // the row holds, rendered from component memory with its bound treatment.
@@ -393,7 +393,7 @@ describe('Lens — binding-held rows (open work holds its row)', () => {
       },
     };
     await tick();
-    let rows = container.querySelectorAll('[data-testid="smart-result-row"]');
+    let rows = container.querySelectorAll('[data-testid="lens-result-row"]');
     expect(rows).toHaveLength(2);
     const heldRow = [...rows].find((r) => r.getAttribute('aria-label') === 'MR 1');
     expect(heldRow?.getAttribute('data-bound')).toBe('true');
@@ -401,7 +401,7 @@ describe('Lens — binding-held rows (open work holds its row)', () => {
     // The bound tab closes → the binding drops → the held row evaporates.
     store.unbindLensItemsForTab(7);
     await tick();
-    rows = container.querySelectorAll('[data-testid="smart-result-row"]');
+    rows = container.querySelectorAll('[data-testid="lens-result-row"]');
     expect(rows).toHaveLength(1);
     expect(rows[0]?.getAttribute('aria-label')).toBe('MR 2');
   });
@@ -420,7 +420,7 @@ describe('Lens — binding-held rows (open work holds its row)', () => {
       },
     };
     await tick();
-    const rows = container.querySelectorAll('[data-testid="smart-result-row"]');
+    const rows = container.querySelectorAll('[data-testid="lens-result-row"]');
     expect(rows).toHaveLength(1);
     expect(rows[0]?.getAttribute('aria-label')).toBe('MR 1');
   });
@@ -637,13 +637,13 @@ describe('Lens — calm states (design D7)', () => {
     const store = makeStore(); // absent runtime → pending, no items
     const { container } = renderLens(store);
     expect(container.querySelectorAll('[data-testid="smart-ghost-row"]')).toHaveLength(3);
-    expect(container.querySelector('[data-testid="smart-result-row"]')).toBeNull();
+    expect(container.querySelector('[data-testid="lens-result-row"]')).toBeNull();
   });
 
   test('a pending refresh keeps last-known items rendered (no ghosts, no blink)', () => {
     const store = makeStore({ state: 'pending', items: [item(1)], fetchedAt: 1 });
     const { container } = renderLens(store);
-    expect(container.querySelectorAll('[data-testid="smart-result-row"]')).toHaveLength(1);
+    expect(container.querySelectorAll('[data-testid="lens-result-row"]')).toHaveLength(1);
     expect(container.querySelector('[data-testid="smart-ghost-row"]')).toBeNull();
     // The in-flight refresh spins the glyph (FolderRow's busy treatment).
     expect(container.querySelector('.glyph.busy')).not.toBeNull();
@@ -719,7 +719,7 @@ describe('Lens — calm states (design D7)', () => {
     expect(container.querySelector('[data-testid="smart-error-note"]')).toBeNull();
     expect(container.querySelector('[data-testid="smart-signin-row"]')).toBeNull();
     // No result rows in needs-access (the grant prompt replaces them).
-    expect(container.querySelector('[data-testid="smart-result-row"]')).toBeNull();
+    expect(container.querySelector('[data-testid="lens-result-row"]')).toBeNull();
 
     const grant = [...prompt.querySelectorAll('button')].find((b) =>
       (b.textContent ?? '').includes('Grant access'),
@@ -763,7 +763,7 @@ describe('Lens — calm states (design D7)', () => {
       fetchedAt: 1,
     });
     const { container } = renderLens(store);
-    expect(container.querySelectorAll('[data-testid="smart-result-row"]')).toHaveLength(2);
+    expect(container.querySelectorAll('[data-testid="lens-result-row"]')).toHaveLength(2);
     expect(container.querySelector('[data-testid="smart-error-note"]')?.textContent).toBe(
       "Couldn't reach gitlab.example.com",
     );
@@ -773,7 +773,7 @@ describe('Lens — calm states (design D7)', () => {
     // Populated first…
     const store = makeStore({ state: 'ok', items: [item(1), item(2)], fetchedAt: 1 });
     const { container } = renderLens(store);
-    expect(container.querySelectorAll('[data-testid="smart-result-row"]')).toHaveLength(2);
+    expect(container.querySelectorAll('[data-testid="lens-result-row"]')).toHaveLength(2);
 
     // …then the SW restarts: the boot broadcast carries an EMPTY runtime slice
     // (results are never persisted) while the sidebar stays open.
@@ -782,12 +782,12 @@ describe('Lens — calm states (design D7)', () => {
 
     // The held items stay rendered (busy glyph spins — a reload, not a wipe);
     // no ghost rows; rows remain activatable mid-reload.
-    expect(container.querySelectorAll('[data-testid="smart-result-row"]')).toHaveLength(2);
+    expect(container.querySelectorAll('[data-testid="lens-result-row"]')).toHaveLength(2);
     expect(container.querySelector('[data-testid="smart-ghost-row"]')).toBeNull();
     expect(container.querySelector('.glyph.busy')).not.toBeNull();
     expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('2');
     await fireEvent.click(
-      container.querySelector('[data-testid="smart-result-row"]') as HTMLButtonElement,
+      container.querySelector('[data-testid="lens-result-row"]') as HTMLButtonElement,
     );
     expect(sendMock).toHaveBeenCalledWith({
       kind: 'openLensItem',
@@ -803,7 +803,7 @@ describe('Lens — calm states (design D7)', () => {
   test('an honest ok-empty result clears the hold (no stale items resurrected)', async () => {
     const store = makeStore({ state: 'ok', items: [item(1)], fetchedAt: 1 });
     const { container } = renderLens(store);
-    expect(container.querySelectorAll('[data-testid="smart-result-row"]')).toHaveLength(1);
+    expect(container.querySelectorAll('[data-testid="lens-result-row"]')).toHaveLength(1);
 
     // The queue genuinely empties.
     store.state.lenses['sf-1'] = {
@@ -812,7 +812,7 @@ describe('Lens — calm states (design D7)', () => {
       },
     };
     await tick();
-    expect(container.querySelectorAll('[data-testid="smart-result-row"]')).toHaveLength(0);
+    expect(container.querySelectorAll('[data-testid="lens-result-row"]')).toHaveLength(0);
 
     // A later reload shows ghosts, not the long-gone items.
     store.state.lenses['sf-1'] = {
@@ -825,14 +825,14 @@ describe('Lens — calm states (design D7)', () => {
       },
     };
     await tick();
-    expect(container.querySelectorAll('[data-testid="smart-result-row"]')).toHaveLength(0);
+    expect(container.querySelectorAll('[data-testid="lens-result-row"]')).toHaveLength(0);
     expect(container.querySelectorAll('[data-testid="smart-ghost-row"]')).toHaveLength(3);
   });
 });
 
 describe('Lens — the reading nook (rss-connector)', () => {
   const rows = (c: HTMLElement): HTMLButtonElement[] =>
-    [...c.querySelectorAll('[data-testid="smart-result-row"]')] as HTMLButtonElement[];
+    [...c.querySelectorAll('[data-testid="lens-result-row"]')] as HTMLButtonElement[];
 
   test('unread and read rows render distinctly (dot, read class, accessible name)', () => {
     const node = feedNode();
@@ -930,7 +930,7 @@ describe('Lens — the reading nook (rss-connector)', () => {
     expect(readWrap?.classList).toContain('collapsed');
     expect(readWrap?.getAttribute('aria-hidden')).toBe('true');
     expect(
-      readWrap?.querySelector('[data-testid="smart-result-row"]')?.getAttribute('tabindex'),
+      readWrap?.querySelector('[data-testid="lens-result-row"]')?.getAttribute('tabindex'),
     ).toBe('-1');
     // The unread row is unaffected.
     const unreadWrap = [...container.querySelectorAll('[data-testid="smart-row-wrap"]')].find(
@@ -1003,7 +1003,7 @@ describe('Lens — the draining queue (rss-connector, maxItems = unread budget)'
       .filter((w) => !w.classList.contains('collapsed'))
       .map(
         (w) =>
-          w.querySelector('[data-testid="smart-result-row"]')?.getAttribute('aria-label') ?? null,
+          w.querySelector('[data-testid="lens-result-row"]')?.getAttribute('aria-label') ?? null,
       );
 
   /** A feed buffer, newest-first (post-5 newest … post-1 oldest), all unread. */
@@ -1037,7 +1037,7 @@ describe('Lens — the draining queue (rss-connector, maxItems = unread budget)'
       w.classList.contains('collapsed'),
     );
     expect(
-      drained?.querySelector('[data-testid="smart-result-row"]')?.getAttribute('aria-label'),
+      drained?.querySelector('[data-testid="lens-result-row"]')?.getAttribute('aria-label'),
     ).toBe('Post 5 — read');
   });
 
@@ -1154,7 +1154,7 @@ describe('Lens — empty-state parity (rss-connector)', () => {
   test('a queue folder with no open items shows a quiet note (not a blank list)', () => {
     const store = makeStore({ state: 'ok', items: [], fetchedAt: 1 });
     const { container } = renderLens(store);
-    expect(container.querySelectorAll('[data-testid="smart-result-row"]')).toHaveLength(0);
+    expect(container.querySelectorAll('[data-testid="lens-result-row"]')).toHaveLength(0);
     expect(emptyNote(container)).toBe('Nothing here right now.');
   });
 
@@ -1259,7 +1259,7 @@ describe('Lens — per-section collapse (collapsible-smart-folder-sections)', ()
     const { container } = renderLens(store, { node: twoSourceNode() });
     // Both bodies present, all five rows render.
     expect(container.querySelector(GITLAB_BODY)).not.toBeNull();
-    expect(container.querySelectorAll('[data-testid="smart-result-row"]')).toHaveLength(5);
+    expect(container.querySelectorAll('[data-testid="lens-result-row"]')).toHaveLength(5);
 
     store.setLensSectionCollapsed(100, 'sf-1', GITLAB_KEY, true);
     await tick();
@@ -1270,7 +1270,7 @@ describe('Lens — per-section collapse (collapsible-smart-folder-sections)', ()
     expect(headers(container)[0]?.getAttribute('aria-expanded')).toBe('false');
     // The github section is unaffected — its body and three rows remain.
     expect(container.querySelector(GITHUB_BODY)).not.toBeNull();
-    expect(container.querySelectorAll('[data-testid="smart-result-row"]')).toHaveLength(3);
+    expect(container.querySelectorAll('[data-testid="lens-result-row"]')).toHaveLength(3);
   });
 
   test('the collapsed section header keeps showing its attention count', async () => {
@@ -1312,7 +1312,7 @@ describe('Lens — per-section collapse (collapsible-smart-folder-sections)', ()
       props: { store, windowId: 200, spaceId: 'work', node: twoSourceNode() },
     });
     expect(w200.container.querySelector(GITLAB_BODY)).not.toBeNull();
-    expect(w200.container.querySelectorAll('[data-testid="smart-result-row"]')).toHaveLength(3);
+    expect(w200.container.querySelectorAll('[data-testid="lens-result-row"]')).toHaveLength(3);
   });
 
   test('the folder badge is unchanged when a busy section is collapsed', async () => {
