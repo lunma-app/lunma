@@ -91,6 +91,7 @@ export const iconLoaders: Record<string, IconLoader> = {
   'chevron-left': () => import('@lucide/svelte/icons/chevron-left'),
   'chevron-right': () => import('@lucide/svelte/icons/chevron-right'),
   church: () => import('@lucide/svelte/icons/church'),
+  'circle-alert': () => import('@lucide/svelte/icons/circle-alert'),
   clapperboard: () => import('@lucide/svelte/icons/clapperboard'),
   clock: () => import('@lucide/svelte/icons/clock'),
   cloud: () => import('@lucide/svelte/icons/cloud'),

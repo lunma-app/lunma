@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { requiredOriginsForConfig } from '../../shared/connector-origins';
 import { readConnectors } from '../../shared/connectors';
 import type {
+  ChangeData,
   LensItem,
   LensQuery,
   LensSectionRuntime,
@@ -115,6 +116,11 @@ async function gitlabGet(baseUrl: string, path: string, auth: AuthMode): Promise
 
 const PipelineRefSchema = z.object({ status: z.string().optional() }).nullable().optional();
 
+/** A GitLab user reference (review-lens) — the list/detail MR object's
+ * `author`/`reviewers` carry at least a `username`. `state`, when an instance
+ * exposes per-reviewer review-state, lets us surface a `changes` verdict (D5). */
+const UserRefSchema = z.object({ username: z.string(), state: z.string().optional() });
+
 const MrSchema = z.object({
   id: z.union([z.number(), z.string()]),
   iid: z.number().optional(),
@@ -123,6 +129,24 @@ const MrSchema = z.object({
   web_url: z.string(),
   head_pipeline: PipelineRefSchema,
   pipeline: PipelineRefSchema,
+  // review-lens enrichment fields (D4) — all present on the list response on
+  // recent GitLab; lenient so an older/partial payload never fails the section.
+  author: UserRefSchema.nullable().optional(),
+  target_branch: z.string().optional(),
+  updated_at: z.string().optional(),
+  draft: z.boolean().optional(),
+  work_in_progress: z.boolean().optional(),
+  reviewers: z.array(UserRefSchema).optional(),
+  // Line diff stats are not on the standard MR object; parsed leniently for
+  // instances/fixtures that expose them, else the diffstat collapses.
+  additions: z.number().optional(),
+  deletions: z.number().optional(),
+});
+
+// The MR approvals endpoint (review-lens, D4): `approved_by` lists the users who
+// have approved. Lenient — unknown keys stripped.
+const ApprovalsSchema = z.object({
+  approved_by: z.array(z.object({ user: UserRefSchema })).optional(),
 });
 
 const MeSchema = z.object({ id: z.number() });
@@ -191,6 +215,83 @@ function usablePipelineStatus(mr: Mr): string | undefined {
   return mr.head_pipeline?.status ?? mr.pipeline?.status;
 }
 
+type ReviewVerdict = NonNullable<ChangeData['reviewers'][number]['state']>;
+
+/** Derive `owner/repo` (group/project path) from an MR `web_url`
+ * (`https://host/group/project/-/merge_requests/5` → `group/project`). The MR
+ * list carries only a numeric `project_id`, so the path comes from the URL. */
+function repoFromWebUrl(webUrl: string): string | undefined {
+  let pathname: string;
+  try {
+    pathname = new URL(webUrl).pathname;
+  } catch {
+    return undefined;
+  }
+  const sep = pathname.indexOf('/-/');
+  const slug = (sep >= 0 ? pathname.slice(0, sep) : pathname).replace(/^\/+|\/+$/g, '');
+  return slug || undefined;
+}
+
+/**
+ * Build the canonical Change bag for one MR (review-lens, D4/D5) plus one
+ * approvals request. Required identity fields (author/repo/updatedAt) must be
+ * present, else `change` is omitted rather than fabricated. Reviewers come from
+ * the MR `reviewers`, mapped `approved` when in `approved_by`, `changes` only
+ * where the instance exposes a requested-changes review-state, else `pending`;
+ * approvers not in `reviewers` are appended as `approved`.
+ */
+async function buildMrChange(
+  cfg: ResolvedLensSource,
+  mr: Mr,
+  auth: AuthMode,
+): Promise<ChangeData | undefined> {
+  const author = mr.author?.username;
+  const repo = repoFromWebUrl(mr.web_url);
+  const updatedAt = mr.updated_at !== undefined ? Date.parse(mr.updated_at) : Number.NaN;
+  if (author === undefined || repo === undefined || Number.isNaN(updatedAt)) return undefined;
+
+  let approved = new Set<string>();
+  if (mr.project_id !== undefined && mr.iid !== undefined) {
+    const outcome = await gitlabGet(
+      cfg.baseUrl,
+      `/api/v4/projects/${mr.project_id}/merge_requests/${mr.iid}/approvals`,
+      auth,
+    );
+    if (outcome.kind === 'ok') {
+      const parsed = ApprovalsSchema.safeParse(outcome.json);
+      if (parsed.success) {
+        approved = new Set(parsed.data.approved_by?.map((a) => a.user.username) ?? []);
+      }
+    }
+  }
+
+  const byLogin = new Map<string, ReviewVerdict>();
+  for (const r of mr.reviewers ?? []) {
+    const verdict: ReviewVerdict = approved.has(r.username)
+      ? 'approved'
+      : r.state === 'requested_changes'
+        ? 'changes'
+        : 'pending';
+    byLogin.set(r.username, verdict);
+  }
+  for (const username of approved) {
+    if (!byLogin.has(username)) byLogin.set(username, 'approved');
+  }
+  const reviewers = [...byLogin].map(([login, state]) => ({ login, state }));
+
+  const draft = mr.draft ?? mr.work_in_progress ?? false;
+  return {
+    author,
+    repo,
+    reviewers,
+    draft,
+    updatedAt,
+    ...(mr.additions !== undefined ? { additions: mr.additions } : {}),
+    ...(mr.deletions !== undefined ? { deletions: mr.deletions } : {}),
+    ...(mr.target_branch !== undefined ? { targetBranch: mr.target_branch } : {}),
+  };
+}
+
 /**
  * Fetch one smart folder section's results and normalize them into a
  * `LensSectionRuntime`. Never throws — every failure shape resolves to a
@@ -244,30 +345,39 @@ async function fetchRuntime(
     })
     .slice(0, maxItems);
 
-  // Bounded pipeline enrichment: only for listed items whose list row carries
-  // no usable pipeline field; skipped entirely when it does. An enrichment
-  // failure simply leaves that item glyph-less.
-  const statuses = await mapWithConcurrency(mrs, ENRICH_CONCURRENCY, async (mr) => {
-    const listed = usablePipelineStatus(mr);
-    if (listed !== undefined) return listed;
-    if (mr.project_id === undefined || mr.iid === undefined) return undefined;
-    const detail = await gitlabGet(
-      cfg.baseUrl,
-      `/api/v4/projects/${mr.project_id}/merge_requests/${mr.iid}`,
-      auth,
-    );
-    if (detail.kind !== 'ok') return undefined;
-    const parsed = MrSchema.safeParse(detail.json);
-    return parsed.success ? usablePipelineStatus(parsed.data) : undefined;
+  // review-lens (D4a): only a `review` lens builds the `change` bag (one extra
+  // approvals call per MR); a `general` gitlab lens stays unenriched.
+  const buildChange = cfg.lensKind === 'review';
+
+  // Bounded enrichment: the pipeline status (a detail fetch only for items whose
+  // list row carries no usable pipeline field) and, for review lenses, the
+  // `change` bag. Any enrichment failure simply leaves that item glyph-less.
+  const enriched = await mapWithConcurrency(mrs, ENRICH_CONCURRENCY, async (mr) => {
+    let statusRaw = usablePipelineStatus(mr);
+    if (statusRaw === undefined && mr.project_id !== undefined && mr.iid !== undefined) {
+      const detail = await gitlabGet(
+        cfg.baseUrl,
+        `/api/v4/projects/${mr.project_id}/merge_requests/${mr.iid}`,
+        auth,
+      );
+      if (detail.kind === 'ok') {
+        const parsed = MrSchema.safeParse(detail.json);
+        if (parsed.success) statusRaw = usablePipelineStatus(parsed.data);
+      }
+    }
+    const change = buildChange ? await buildMrChange(cfg, mr, auth) : undefined;
+    return { statusRaw, change };
   });
 
   const items: LensItem[] = mrs.map((mr, index) => {
-    const status = pipelineStatus(statuses[index]);
+    const status = pipelineStatus(enriched[index]?.statusRaw);
+    const change = enriched[index]?.change;
     return {
       id: String(mr.id),
       title: mr.title,
       url: mr.web_url,
       ...(status !== undefined ? { status } : {}),
+      ...(change !== undefined ? { change } : {}),
     };
   });
 

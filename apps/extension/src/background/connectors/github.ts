@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { requiredOriginsForConfig } from '../../shared/connector-origins';
 import { readConnectors } from '../../shared/connectors';
 import type {
+  ChangeData,
   LensItem,
   LensQuery,
   LensSectionRuntime,
@@ -23,7 +24,8 @@ import { boundedFetch, type ConnectorCaches, type SourceConnector } from './conn
  *     (fail > pending > ok > warn; unmapped conclusions ignored).
  */
 
-/** Check-run-enrichment fan-out bound (≤2 extra requests per listed PR). */
+/** Per-PR enrichment fan-out bound (≤2 extra requests per listed PR for a
+ * general lens — detail + check-runs; ≤3 for a review lens — plus reviews). */
 const ENRICH_CONCURRENCY = 5;
 
 /** The per-host token lookup key: hostname plus any explicit port. */
@@ -104,8 +106,27 @@ const SearchResponseSchema = z.object({ items: z.array(z.unknown()) });
 const PrDetailSchema = z.object({
   draft: z.boolean().optional(),
   head: z.object({ sha: z.string() }).optional(),
-  base: z.object({ repo: z.object({ full_name: z.string() }) }).optional(),
+  base: z
+    .object({ ref: z.string().optional(), repo: z.object({ full_name: z.string() }) })
+    .optional(),
+  // review-lens enrichment fields (D4) — all optional/lenient so a partial PR
+  // detail never fails the section.
+  user: z.object({ login: z.string() }).optional(),
+  additions: z.number().optional(),
+  deletions: z.number().optional(),
+  updated_at: z.string().optional(),
+  requested_reviewers: z.array(z.object({ login: z.string() })).optional(),
 });
+
+// The PR reviews list (review-lens, D4): one entry per submitted review. `state`
+// is GitHub's review verdict; `COMMENTED`/`PENDING` carry no verdict and are
+// skipped. Lenient — unknown keys stripped, a malformed entry costs only itself.
+const ReviewsSchema = z.array(
+  z.object({
+    user: z.object({ login: z.string() }).nullable().optional(),
+    state: z.string(),
+  }),
+);
 
 const CheckRunsSchema = z.object({
   check_runs: z.array(
@@ -171,20 +192,57 @@ async function mapWithConcurrency<T, R>(
 interface Enrichment {
   draft: boolean;
   status: LensItem['status'];
+  /** The canonical Change bag (review-lens) — present only for review-kind
+   * lenses, omitted when the PR detail lacks the required identity fields. */
+  change?: ChangeData;
+}
+
+type ReviewVerdict = NonNullable<ChangeData['reviewers'][number]['state']>;
+
+type PrDetail = z.infer<typeof PrDetailSchema>;
+
+/**
+ * Reduce the PR's reviews to one verdict per reviewer (review-lens, D4/D5):
+ * iterate in GitHub's ascending chronological order keeping the latest
+ * non-`COMMENTED`/`PENDING` review per login (`APPROVED` → `approved`,
+ * `CHANGES_REQUESTED` → `changes`, anything else — e.g. `DISMISSED` — degrades
+ * to `pending`, never a fabricated verdict). Requested reviewers with no review
+ * are then marked `pending`. Insertion order is preserved (reviewed first).
+ */
+function reduceReviewers(
+  reviews: z.infer<typeof ReviewsSchema>,
+  requested: PrDetail['requested_reviewers'],
+): ChangeData['reviewers'] {
+  const byLogin = new Map<string, ReviewVerdict>();
+  for (const r of reviews) {
+    const login = r.user?.login;
+    if (login == null) continue;
+    if (r.state === 'COMMENTED' || r.state === 'PENDING') continue;
+    byLogin.set(
+      login,
+      r.state === 'APPROVED' ? 'approved' : r.state === 'CHANGES_REQUESTED' ? 'changes' : 'pending',
+    );
+  }
+  for (const rr of requested ?? []) {
+    if (!byLogin.has(rr.login)) byLogin.set(rr.login, 'pending');
+  }
+  return [...byLogin].map(([login, state]) => ({ login, state }));
 }
 
 /**
- * Bounded per-PR enrichment (≤2 extra requests each): the search item's
- * `pull_request.url` → PR detail (carries `head.sha` and `draft`), then that
- * commit's check-runs at `per_page=100` (one page — the default 30 could hide
- * a failing run on check-heavy repos; 100 covers realistic suites without
- * pagination). Any failure leaves the item glyph-less, never failing the
- * folder.
+ * Bounded per-PR enrichment: the search item's `pull_request.url` → PR detail
+ * (carries `head.sha` and `draft`), then that commit's check-runs at
+ * `per_page=100` (one page — the default 30 could hide a failing run on
+ * check-heavy repos; 100 covers realistic suites without pagination). For a
+ * `review` lens it ALSO fetches `…/reviews` and builds the `change` bag (one
+ * extra request — the only kind-specific cost). Any failure leaves the item
+ * glyph-less, never failing the folder.
  */
 async function enrich(
   prUrl: string | undefined,
   apiRoot: string,
   token: string,
+  buildChange: boolean,
 ): Promise<Enrichment> {
   const none: Enrichment = { draft: false, status: undefined };
   if (prUrl === undefined) return none;
@@ -192,18 +250,48 @@ async function enrich(
   if (detailOutcome.kind !== 'ok') return none;
   const detail = PrDetailSchema.safeParse(detailOutcome.json);
   if (!detail.success) return none;
-  const draft = detail.data.draft === true;
-  const sha = detail.data.head?.sha;
-  const repo = detail.data.base?.repo.full_name;
-  if (sha === undefined || repo === undefined) return { draft, status: undefined };
-  const runsOutcome = await githubGet(
-    `${apiRoot}/repos/${repo}/commits/${sha}/check-runs?per_page=100`,
-    token,
-  );
-  if (runsOutcome.kind !== 'ok') return { draft, status: undefined };
-  const runs = CheckRunsSchema.safeParse(runsOutcome.json);
-  if (!runs.success) return { draft, status: undefined };
-  return { draft, status: aggregateCheckRuns(runs.data.check_runs) };
+  const d = detail.data;
+  const draft = d.draft === true;
+  const sha = d.head?.sha;
+  const repo = d.base?.repo.full_name;
+
+  let status: LensItem['status'];
+  if (sha !== undefined && repo !== undefined) {
+    const runsOutcome = await githubGet(
+      `${apiRoot}/repos/${repo}/commits/${sha}/check-runs?per_page=100`,
+      token,
+    );
+    if (runsOutcome.kind === 'ok') {
+      const runs = CheckRunsSchema.safeParse(runsOutcome.json);
+      if (runs.success) status = aggregateCheckRuns(runs.data.check_runs);
+    }
+  }
+
+  if (!buildChange) return { draft, status };
+
+  // review-kind only: the `change` bag + one reviews fetch (D4). The required
+  // identity fields (author/repo/updatedAt) must be present, else we omit
+  // `change` rather than fabricate it.
+  const author = d.user?.login;
+  const updatedAt = d.updated_at !== undefined ? Date.parse(d.updated_at) : Number.NaN;
+  if (author === undefined || repo === undefined || Number.isNaN(updatedAt)) {
+    return { draft, status };
+  }
+  const reviewsOutcome = await githubGet(`${prUrl}/reviews?per_page=100`, token);
+  const reviews =
+    reviewsOutcome.kind === 'ok' ? ReviewsSchema.safeParse(reviewsOutcome.json) : undefined;
+  const reviewers = reduceReviewers(reviews?.success ? reviews.data : [], d.requested_reviewers);
+  const change: ChangeData = {
+    author,
+    repo,
+    reviewers,
+    draft,
+    updatedAt,
+    ...(d.additions !== undefined ? { additions: d.additions } : {}),
+    ...(d.deletions !== undefined ? { deletions: d.deletions } : {}),
+    ...(d.base?.ref !== undefined ? { targetBranch: d.base.ref } : {}),
+  };
+  return { draft, status, change };
 }
 
 /**
@@ -263,8 +351,11 @@ async function fetchRuntime(
     })
     .slice(0, maxItems);
 
+  // review-lens (D4a): only a `review` lens pays the extra reviews call + builds
+  // the `change` bag; a `general` github lens stays unenriched (no `change`).
+  const buildChange = cfg.lensKind === 'review';
   const enrichments = await mapWithConcurrency(prs, ENRICH_CONCURRENCY, (pr) =>
-    enrich(pr.pull_request?.url, apiRoot, token),
+    enrich(pr.pull_request?.url, apiRoot, token, buildChange),
   );
 
   const items: LensItem[] = prs.map((pr, index) => {
@@ -276,6 +367,7 @@ async function fetchRuntime(
       title: enrichment.draft ? `Draft: ${pr.title}` : pr.title,
       url: pr.html_url,
       ...(enrichment.status !== undefined ? { status: enrichment.status } : {}),
+      ...(enrichment.change !== undefined ? { change: enrichment.change } : {}),
     };
   });
 

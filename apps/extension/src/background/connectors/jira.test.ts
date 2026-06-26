@@ -64,6 +64,7 @@ function node(overrides: Partial<ResolvedLensSource> = {}): ResolvedLensSource {
     source: 'jira',
     baseUrl: 'https://acme.atlassian.net',
     query: 'assigned',
+    lensKind: 'general',
     ...overrides,
   };
 }
@@ -290,7 +291,11 @@ describe('maxItems + listingUrl', () => {
 
   test('requiredOrigins is the same-origin baseUrl pattern (D8)', () => {
     expect(
-      jiraConnector.requiredOrigins({ source: 'jira', baseUrl: 'https://acme.atlassian.net' }),
+      jiraConnector.requiredOrigins({
+        source: 'jira',
+        baseUrl: 'https://acme.atlassian.net',
+        lensKind: 'general',
+      }),
     ).toEqual(['https://acme.atlassian.net/*']);
   });
 });

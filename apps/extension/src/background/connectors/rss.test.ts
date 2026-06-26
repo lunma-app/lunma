@@ -50,6 +50,7 @@ function node(overrides: Partial<ResolvedLensSource> = {}): ResolvedLensSource {
   return {
     source: 'rss',
     baseUrl: 'https://news.example.com/rss',
+    lensKind: 'general',
     ...overrides,
   };
 }
@@ -361,7 +362,11 @@ describe('listingUrl', () => {
 describe('requiredOrigins', () => {
   test('is the feed origin the connector fetches directly (D8/D9)', () => {
     expect(
-      rssConnector.requiredOrigins({ source: 'rss', baseUrl: 'https://blog.example.com/feed.xml' }),
+      rssConnector.requiredOrigins({
+        source: 'rss',
+        baseUrl: 'https://blog.example.com/feed.xml',
+        lensKind: 'general',
+      }),
     ).toEqual(['https://blog.example.com/*']);
   });
 });

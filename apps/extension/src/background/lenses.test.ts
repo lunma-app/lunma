@@ -152,38 +152,48 @@ describe('normalizeBaseUrl', () => {
 
 describe('sourceKey', () => {
   test('gitlab.com', () => {
-    expect(sourceKey({ source: 'gitlab', baseUrl: 'https://gitlab.com' })).toBe(
-      'gitlab:gitlab.com',
-    );
+    expect(
+      sourceKey({ source: 'gitlab', baseUrl: 'https://gitlab.com', lensKind: 'general' }),
+    ).toBe('gitlab:gitlab.com');
   });
 
   test('github.com uses the baseUrl host (not the fetch api origin)', () => {
-    expect(sourceKey({ source: 'github', baseUrl: 'https://github.com' })).toBe(
-      'github:github.com',
-    );
+    expect(
+      sourceKey({ source: 'github', baseUrl: 'https://github.com', lensKind: 'general' }),
+    ).toBe('github:github.com');
   });
 
   test('GitHub Enterprise uses the custom host', () => {
-    expect(sourceKey({ source: 'github', baseUrl: 'https://ghe.corp.example.com' })).toBe(
-      'github:ghe.corp.example.com',
-    );
+    expect(
+      sourceKey({ source: 'github', baseUrl: 'https://ghe.corp.example.com', lensKind: 'general' }),
+    ).toBe('github:ghe.corp.example.com');
   });
 
   test('rss with a path URL omits the query', () => {
-    expect(sourceKey({ source: 'rss', baseUrl: 'https://feeds.example.com/blog.xml' })).toBe(
-      'rss:feeds.example.com',
-    );
+    expect(
+      sourceKey({
+        source: 'rss',
+        baseUrl: 'https://feeds.example.com/blog.xml',
+        lensKind: 'general',
+      }),
+    ).toBe('rss:feeds.example.com');
   });
 
   test('a queue resolved config includes the filter axis (multi-filter)', () => {
     expect(
-      sourceKey({ source: 'gitlab', baseUrl: 'https://gitlab.example.com', query: 'authored' }),
+      sourceKey({
+        source: 'gitlab',
+        baseUrl: 'https://gitlab.example.com',
+        query: 'authored',
+        lensKind: 'general',
+      }),
     ).toBe('gitlab:gitlab.example.com:authored');
     expect(
       sourceKey({
         source: 'gitlab',
         baseUrl: 'https://gitlab.example.com',
         query: 'review-requested',
+        lensKind: 'general',
       }),
     ).toBe('gitlab:gitlab.example.com:review-requested');
   });
@@ -213,25 +223,39 @@ describe('the CONNECTORS registry', () => {
     // headline correctness case: gating on github.com would never authorize the
     // fetch. GitHub Enterprise is same-origin under the baseUrl.
     expect(
-      CONNECTORS.github.requiredOrigins({ source: 'github', baseUrl: 'https://github.com' }),
+      CONNECTORS.github.requiredOrigins({
+        source: 'github',
+        baseUrl: 'https://github.com',
+        lensKind: 'general',
+      }),
     ).toEqual(['https://api.github.com/*']);
     expect(
-      CONNECTORS.github.requiredOrigins({ source: 'github', baseUrl: 'https://ghe.acme.com' }),
+      CONNECTORS.github.requiredOrigins({
+        source: 'github',
+        baseUrl: 'https://ghe.acme.com',
+        lensKind: 'general',
+      }),
     ).toEqual(['https://ghe.acme.com/*']);
     // GitLab, Jira, and RSS each fetch their own baseUrl origin (port preserved).
     expect(
       CONNECTORS.gitlab.requiredOrigins({
         source: 'gitlab',
         baseUrl: 'https://gitlab.example.com:8443/g',
+        lensKind: 'general',
       }),
     ).toEqual(['https://gitlab.example.com:8443/*']);
     expect(
-      CONNECTORS.jira.requiredOrigins({ source: 'jira', baseUrl: 'https://acme.atlassian.net' }),
+      CONNECTORS.jira.requiredOrigins({
+        source: 'jira',
+        baseUrl: 'https://acme.atlassian.net',
+        lensKind: 'general',
+      }),
     ).toEqual(['https://acme.atlassian.net/*']);
     expect(
       CONNECTORS.rss.requiredOrigins({
         source: 'rss',
         baseUrl: 'https://blog.example.com/feed.xml',
+        lensKind: 'general',
       }),
     ).toEqual(['https://blog.example.com/*']);
   });
@@ -249,6 +273,7 @@ describe('the CONNECTORS registry', () => {
       source: 'github' as const,
       baseUrl: 'https://github.com',
       query: 'authored' as const,
+      lensKind: 'general' as const,
     };
 
     const { completion } = startLensRefresh({ store, enqueue: (e) => events.push(e) }, ghNode);
@@ -278,6 +303,7 @@ describe('the CONNECTORS registry', () => {
       source: 'jira' as const,
       baseUrl: 'https://acme.atlassian.net',
       query: 'assigned' as const,
+      lensKind: 'general' as const,
     };
 
     const { completion } = startLensRefresh({ store, enqueue: (e) => events.push(e) }, jiraNode);
@@ -312,7 +338,7 @@ describe('the host-permission gate', () => {
     chromeStub.permissions.contains.mockResolvedValue(false);
 
     const runtime = await fetchLensSectionRuntime(
-      { source: 'gitlab', baseUrl: 'https://gitlab.example.com' },
+      { source: 'gitlab', baseUrl: 'https://gitlab.example.com', lensKind: 'general' },
       20,
     );
 
@@ -326,7 +352,7 @@ describe('the host-permission gate', () => {
     chromeStub.permissions.contains.mockResolvedValue(false);
 
     const runtime = await fetchLensSectionRuntime(
-      { source: 'github', baseUrl: 'https://github.com' },
+      { source: 'github', baseUrl: 'https://github.com', lensKind: 'general' },
       20,
     );
 
@@ -343,7 +369,7 @@ describe('the host-permission gate', () => {
     chromeStub.permissions.contains.mockResolvedValue(false);
 
     const runtime = await fetchLensSectionRuntime(
-      { source: 'rss', baseUrl: 'https://blog.example.com/feed.xml' },
+      { source: 'rss', baseUrl: 'https://blog.example.com/feed.xml', lensKind: 'general' },
       20,
     );
 
@@ -359,7 +385,7 @@ describe('the host-permission gate', () => {
     chromeStub.permissions.contains.mockResolvedValue(false);
 
     const runtime = await fetchLensSectionRuntime(
-      { source: 'github', baseUrl: 'https://github.com' },
+      { source: 'github', baseUrl: 'https://github.com', lensKind: 'general' },
       20,
     );
 
@@ -371,7 +397,11 @@ describe('the host-permission gate', () => {
     const result = { state: 'ok' as const, items: [], fetchedAt: 1 };
     const glFetch = vi.spyOn(CONNECTORS.gitlab, 'fetchRuntime').mockResolvedValue(result);
     chromeStub.permissions.contains.mockResolvedValue(true);
-    const glCfg = { source: 'gitlab' as const, baseUrl: 'https://gitlab.example.com' };
+    const glCfg = {
+      source: 'gitlab' as const,
+      baseUrl: 'https://gitlab.example.com',
+      lensKind: 'general' as const,
+    };
 
     const runtime = await fetchLensSectionRuntime(glCfg, 20);
 

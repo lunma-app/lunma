@@ -58,6 +58,7 @@ function node(overrides: Partial<ResolvedLensSource> = {}): ResolvedLensSource {
     source: 'gitlab',
     baseUrl: 'https://gitlab.example.com',
     query: 'review-requested',
+    lensKind: 'general',
     ...overrides,
   };
 }
@@ -353,13 +354,120 @@ describe('maxItems + listingUrl', () => {
 
   test('requiredOrigins is the same-origin baseUrl pattern, port preserved (D8)', () => {
     expect(
-      gitlabConnector.requiredOrigins({ source: 'gitlab', baseUrl: 'https://gitlab.example.com' }),
+      gitlabConnector.requiredOrigins({
+        source: 'gitlab',
+        baseUrl: 'https://gitlab.example.com',
+        lensKind: 'general',
+      }),
     ).toEqual(['https://gitlab.example.com/*']);
     expect(
       gitlabConnector.requiredOrigins({
         source: 'gitlab',
         baseUrl: 'https://gitlab.example.com:8443/g',
+        lensKind: 'general',
       }),
     ).toEqual(['https://gitlab.example.com:8443/*']);
+  });
+});
+
+// ── review-lens enrichment (review-lens, D4/D5) ────────────────────────────────
+
+describe('fetchRuntime — review-lens change enrichment', () => {
+  /** Review-shaped MR list fields (author/reviewers/branch/diff/draft). */
+  function reviewMr(id: number, overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return mr(id, {
+      head_pipeline: { status: 'success' },
+      author: { username: 'octo' },
+      target_branch: 'main',
+      updated_at: '2026-06-24T10:00:00Z',
+      draft: false,
+      reviewers: [{ username: 'alice' }, { username: 'bob' }],
+      additions: 112,
+      deletions: 40,
+      ...overrides,
+    });
+  }
+
+  function approvals(usernames: string[]): unknown {
+    return jsonResponse({ approved_by: usernames.map((u) => ({ user: { username: u } })) });
+  }
+
+  test('a review lens populates change with identity, diff, draft, and reviewer states', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes('/api/v4/merge_requests?')) return jsonResponse([reviewMr(1)]);
+      if (url.includes('/approvals')) return approvals(['alice']);
+      throw new Error(`unrouted: ${url}`);
+    });
+    const runtime = await gitlabConnector.fetchRuntime(
+      node({ lensKind: 'review', query: 'authored' }),
+      20,
+    );
+    expect(runtime.state).toBe('ok');
+    const item = runtime.items[0];
+    expect(item?.change).toEqual({
+      author: 'octo',
+      repo: 'g/p',
+      reviewers: [
+        { login: 'alice', state: 'approved' },
+        { login: 'bob', state: 'pending' },
+      ],
+      draft: false,
+      additions: 112,
+      deletions: 40,
+      targetBranch: 'main',
+      updatedAt: Date.parse('2026-06-24T10:00:00Z'),
+    });
+    // CI tone stays on `status`, never duplicated into `change`.
+    expect(item?.status).toEqual({ tone: 'ok', label: 'Pipeline passed' });
+  });
+
+  test('an unknown reviewer review-state degrades to pending (never fabricated)', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes('/api/v4/merge_requests?')) {
+        return jsonResponse([reviewMr(1, { reviewers: [{ username: 'carol' }] })]);
+      }
+      if (url.includes('/approvals')) return approvals([]);
+      throw new Error(`unrouted: ${url}`);
+    });
+    const runtime = await gitlabConnector.fetchRuntime(
+      node({ lensKind: 'review', query: 'authored' }),
+      20,
+    );
+    expect(runtime.items[0]?.change?.reviewers).toEqual([{ login: 'carol', state: 'pending' }]);
+  });
+
+  test('an exposed requested_changes review-state maps to changes (D5)', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes('/api/v4/merge_requests?')) {
+        return jsonResponse([
+          reviewMr(1, { reviewers: [{ username: 'dave', state: 'requested_changes' }] }),
+        ]);
+      }
+      if (url.includes('/approvals')) return approvals([]);
+      throw new Error(`unrouted: ${url}`);
+    });
+    const runtime = await gitlabConnector.fetchRuntime(
+      node({ lensKind: 'review', query: 'authored' }),
+      20,
+    );
+    expect(runtime.items[0]?.change?.reviewers).toEqual([{ login: 'dave', state: 'changes' }]);
+  });
+
+  test('a general lens makes no approvals call and carries no change', async () => {
+    let approvalsCalled = false;
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes('/api/v4/merge_requests?')) return jsonResponse([reviewMr(1)]);
+      if (url.includes('/approvals')) {
+        approvalsCalled = true;
+        return approvals([]);
+      }
+      throw new Error(`unrouted: ${url}`);
+    });
+    const runtime = await gitlabConnector.fetchRuntime(
+      node({ lensKind: 'general', query: 'authored' }),
+      20,
+    );
+    expect(approvalsCalled).toBe(false);
+    expect(runtime.items[0]?.change).toBeUndefined();
   });
 });

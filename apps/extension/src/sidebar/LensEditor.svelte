@@ -3,10 +3,18 @@ import { dispatch } from '../shared/bus';
 import { requiredOriginsForConfig } from '../shared/connector-origins';
 import { parseOpml } from '../shared/opml';
 import { requestHostPermissions } from '../shared/permissions';
-import type { LensProvider, LensQuery, LensSource, PinNode, SpaceId } from '../shared/types';
+import type {
+  LensKind,
+  LensProvider,
+  LensQuery,
+  LensSource,
+  PinNode,
+  SpaceId,
+} from '../shared/types';
 import Button from '../ui/Button.svelte';
 import Chip from '../ui/Chip.svelte';
 import Icon from '../ui/Icon.svelte';
+import SegmentedControl from '../ui/SegmentedControl.svelte';
 import Select from '../ui/Select.svelte';
 import TextInput from '../ui/TextInput.svelte';
 
@@ -94,6 +102,14 @@ const SOURCE_OPTIONS: Array<{ value: AddSourceType; label: string }> = [
   { value: 'rss', label: 'RSS' },
   { value: 'opml', label: 'OPML file' },
 ];
+
+// review-lens (D9): the kind picker. A `review` lens normalises into the Change
+// entity, so it accepts only the github/gitlab providers (no rss/jira/opml).
+const KIND_OPTIONS = [
+  { value: 'general', label: 'General' },
+  { value: 'review', label: 'Review' },
+];
+const REVIEW_SOURCES: AddSourceType[] = ['github', 'gitlab'];
 
 const CADENCE_OPTIONS = [
   { value: '5', label: 'Every 5 minutes' },
@@ -185,6 +201,28 @@ let nameTouched = $state(node !== undefined);
 // svelte-ignore state_referenced_locally
 let refreshTouched = $state(node !== undefined);
 let opmlImportNote = $state<string | null>(null);
+// svelte-ignore state_referenced_locally
+let lensKind = $state<LensKind>(node?.lensKind ?? 'general');
+
+// The source-provider options, restricted to github/gitlab for a review lens (D9).
+const sourceOptions = $derived(
+  lensKind === 'review'
+    ? SOURCE_OPTIONS.filter((o) => REVIEW_SOURCES.includes(o.value))
+    : SOURCE_OPTIONS,
+);
+
+/** Switch the lens kind. Entering `review` coerces any non-github/gitlab card to
+ * a fresh github card so the queue's Change contract holds (D9). */
+function changeKind(next: string): void {
+  const kind = next === 'review' ? 'review' : 'general';
+  if (kind === lensKind) return;
+  lensKind = kind;
+  if (kind === 'review') {
+    sources = sources.map((s) =>
+      REVIEW_SOURCES.includes(s.source) ? s : { ...newCard('github'), id: s.id },
+    );
+  }
+}
 
 // Total resolved sections: rss → 1, queue → one per selected filter, opml → 0
 // (transient). Drives the "per section" labels and matches the engine's count.
@@ -498,6 +536,7 @@ function confirm(): void {
     sources: cleanSources,
     maxItems: Number(maxItems),
     refreshMinutes: Number(refreshMinutes),
+    lensKind,
   };
   // Save first (least-privilege-permissions design D4): create/update before
   // the permission dialog so a deny never loses the user's config.
@@ -520,6 +559,18 @@ function confirm(): void {
 </script>
 
 <div class="editor" data-testid="smart-folder-editor">
+  <div class="field">
+    <span class="field-label">Kind</span>
+    <SegmentedControl
+      name="lens-kind"
+      options={KIND_OPTIONS}
+      value={lensKind}
+      onchange={changeKind}
+      ariaLabel="Lens kind"
+      block
+    />
+  </div>
+
   <TextInput
     label="Name"
     bind:value={name}
@@ -594,7 +645,7 @@ function confirm(): void {
               <div class="field">
                 <span class="field-label">Source</span>
                 <Select
-                  options={SOURCE_OPTIONS}
+                  options={sourceOptions}
                   value={s.source}
                   onchange={(v) => changeCardSource(i, v)}
                   ariaLabel="Source type"

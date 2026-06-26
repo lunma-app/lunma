@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   AppStateV7Schema,
   AppStateV11Schema,
+  AppStateV12Schema,
   CURRENT_SCHEMA_VERSION,
   EnvelopeSchema,
 } from './schemas';
@@ -37,6 +38,48 @@ describe('EnvelopeSchema', () => {
     };
     const result = EnvelopeSchema.safeParse(envelope);
     expect(result.success).toBe(true);
+  });
+});
+
+// review-lens: the v12 schema widens the persisted lens node's `lensKind` enum.
+describe('AppStateV12Schema lensKind enum widening', () => {
+  function stateWithLens(lensKind: string) {
+    const state = createInitialState() as unknown as Record<string, unknown>;
+    state.spaces = [{ id: 'work', name: 'Work', color: 'blue', icon: 'star' }];
+    state.pinnedBySpace = {
+      work: [
+        {
+          kind: 'lens',
+          lensKind,
+          id: 'f1',
+          name: 'Review',
+          icon: 'folder-git-2',
+          sources: [
+            { source: 'github', baseUrl: 'https://github.com', queries: ['review-requested'] },
+          ],
+          maxItems: 20,
+          hideRead: true,
+          refreshMinutes: 10,
+        },
+      ],
+    };
+    return state;
+  }
+
+  test('a general lens node round-trips under v12', () => {
+    expect(AppStateV12Schema.safeParse(stateWithLens('general')).success).toBe(true);
+  });
+
+  test('a review lens node validates under v12 (widened enum)', () => {
+    expect(AppStateV12Schema.safeParse(stateWithLens('review')).success).toBe(true);
+  });
+
+  test('the frozen v11 schema rejects a review node (downgrade detectable)', () => {
+    expect(AppStateV11Schema.safeParse(stateWithLens('review')).success).toBe(false);
+  });
+
+  test('an unknown lensKind rejects under v12 (closed enum)', () => {
+    expect(AppStateV12Schema.safeParse(stateWithLens('tickets')).success).toBe(false);
   });
 });
 

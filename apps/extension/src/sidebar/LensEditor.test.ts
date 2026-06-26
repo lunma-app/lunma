@@ -184,6 +184,7 @@ describe('LensEditor — create mode', () => {
         name: 'My merge requests',
         maxItems: 50,
         refreshMinutes: 30,
+        lensKind: 'general',
       },
     });
     expect(onDone).toHaveBeenCalledTimes(1);
@@ -205,6 +206,7 @@ describe('LensEditor — create mode', () => {
         name: 'Review requests',
         maxItems: 10,
         refreshMinutes: 10,
+        lensKind: 'general',
       },
     });
   });
@@ -310,6 +312,7 @@ describe('LensEditor — create mode', () => {
         name: 'Watching',
         maxItems: 10,
         refreshMinutes: 10,
+        lensKind: 'general',
       },
     });
   });
@@ -372,6 +375,7 @@ describe('LensEditor — RSS adaptation (rss-connector)', () => {
         name: 'Hacker News',
         maxItems: 30,
         refreshMinutes: 30,
+        lensKind: 'general',
       },
     });
     expect(onDone).toHaveBeenCalledTimes(1);
@@ -420,6 +424,7 @@ describe('LensEditor — edit mode', () => {
         name: 'Assigned to me',
         maxItems: 50,
         refreshMinutes: 10,
+        lensKind: 'general',
       },
     });
   });
@@ -447,6 +452,7 @@ describe('LensEditor — edit mode', () => {
         name: 'Assigned to me',
         maxItems: 20,
         refreshMinutes: 10,
+        lensKind: 'general',
       },
     });
     expect(onDone).toHaveBeenCalledTimes(1);
@@ -471,6 +477,7 @@ describe('LensEditor — edit mode', () => {
         name: 'Assigned to me',
         maxItems: 20,
         refreshMinutes: 10,
+        lensKind: 'general',
       },
     });
   });
@@ -513,6 +520,7 @@ describe('LensEditor — edit mode', () => {
         name: 'Hacker News',
         maxItems: 30,
         refreshMinutes: 30,
+        lensKind: 'general',
       },
     });
   });
@@ -767,5 +775,58 @@ describe('LensEditor — host-permission request on confirm (least-privilege-per
     expect(permissionsRequestMock).toHaveBeenCalledWith({
       origins: ['https://gitlab.other.com/*'],
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Review kind (review-lens, D9)
+// ---------------------------------------------------------------------------
+
+const reviewRadio = (c: HTMLElement): HTMLInputElement =>
+  c.querySelector('input[type="radio"][value="review"]') as HTMLInputElement;
+
+describe('LensEditor — review kind', () => {
+  test('selecting the Review kind dispatches createLens with lensKind: review', async () => {
+    const { container } = render(LensEditorHarness, { props: { spaceId: 'work' } });
+    await fireEvent.click(reviewRadio(container));
+    await tick();
+    await setCardUrl(card(container), 'https://github.com');
+    await tick();
+    await fireEvent.click(confirmBtn(container));
+
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'createLens',
+        payload: expect.objectContaining({ lensKind: 'review' }),
+      }),
+    );
+  });
+
+  test('the Review kind restricts the source picker to github/gitlab (no rss/jira)', async () => {
+    const { container } = render(LensEditorHarness, { props: { spaceId: 'work' } });
+    await fireEvent.click(reviewRadio(container));
+    await tick();
+    // Open the card's source Select and read its offered options.
+    const trigger = card(container).querySelector(
+      '[data-testid="smart-source-type"]',
+    ) as HTMLButtonElement;
+    await fireEvent.click(trigger);
+    const root = trigger.closest('.select') as HTMLElement;
+    const offered = [...root.querySelectorAll('[role="option"]')].map((o) =>
+      o.getAttribute('data-value'),
+    );
+    expect(offered).toEqual(['gitlab', 'github']);
+    expect(offered).not.toContain('rss');
+    expect(offered).not.toContain('jira');
+  });
+
+  test('switching to Review coerces a non-github/gitlab card to github', async () => {
+    const { container } = render(LensEditorHarness, { props: { spaceId: 'work' } });
+    await pickCardSource(card(container), 'rss');
+    await tick();
+    expect(cardSourceValue(card(container))).toBe('rss');
+    await fireEvent.click(reviewRadio(container));
+    await tick();
+    expect(cardSourceValue(card(container))).toBe('github');
   });
 });

@@ -256,6 +256,15 @@ export const migrations: Migration[] = [
       return raw;
     },
   },
+  {
+    // v12 (review-lens): additive — the persisted lens node's `lensKind` enum
+    // widens from `'general'` to `'general' | 'review'`. Every existing node
+    // already carries `lensKind: 'general'`, valid under the widened enum, so
+    // there is nothing to transform; identity pass-through, present only to
+    // advance the version (so a downgrade past v12 is detectable).
+    toVersion: 12,
+    migrate: (raw: unknown): unknown => raw,
+  },
 ];
 
 export function assertMigrationsTerminal(list: Migration[], currentVersion: number): void {

@@ -140,7 +140,13 @@ enriches `change` (and makes the verdict call) only when `cfg.lensKind ===
 signature shape-stable; carrying it on the already-threaded resolved config is
 less invasive and keeps the single `resolvedConfigs` derivation authoritative.
 *Recorded as a deviation:* the `lenses` connector-contract requirement is
-MODIFIED to add `lensKind` to `ResolvedLensSource`.
+MODIFIED to add `lensKind` to `ResolvedLensSource`. A compile-forced consequence:
+the shared `requiredOriginsForConfig(cfg)` helper (not the connector method) now
+takes `Pick<ResolvedLensSource, 'source' | 'baseUrl'>` instead of the full
+`ResolvedLensSource`, so the editor can pass a raw `LensSource` for the origin
+union without minting a `lensKind`. Origins are source/host-only, so this is a
+pure relaxation; the connectors' own `requiredOrigins` members keep the full
+`ResolvedLensSource` signature the spec pins.
 
 ### D5 — Verdict fidelity differs by provider (degrade gracefully)
 GitHub yields the full `approved | changes | pending`. GitLab reliably yields
