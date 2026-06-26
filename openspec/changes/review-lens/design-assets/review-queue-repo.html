@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Review Queue — prototype</title>
+
+<!-- Real Lunma design tokens + recipes (absolute file paths) -->
+<link rel="stylesheet" href="file:///Users/emanuel.fonseca/Workspaces/lunma/.claude/worktrees/lenses/packages/tokens/tokens.css" />
+<link rel="stylesheet" href="file:///Users/emanuel.fonseca/Workspaces/lunma/.claude/worktrees/lenses/packages/tokens/recipes.css" />
+
+<style>
+  /* Brand faces, pointed at the bundled woff2 (fonts.css uses /fonts/*; override). */
+  @font-face {
+    font-family: 'Mona Sans'; font-style: normal; font-weight: 200 900; font-display: swap;
+    src: url('file:///Users/emanuel.fonseca/Workspaces/lunma/.claude/worktrees/lenses/packages/tokens/fonts/MonaSans-Variable.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Instrument Serif'; font-style: normal; font-weight: 400; font-display: swap;
+    src: url('file:///Users/emanuel.fonseca/Workspaces/lunma/.claude/worktrees/lenses/packages/tokens/fonts/InstrumentSerif-Regular.woff2') format('woff2');
+  }
+
+  html, body { margin: 0; height: 100%; background: var(--surface); }
+
+  /* ── Page shell — same atmosphere as the magazine LensPage ───────────────── */
+  .reviewpage {
+    position: relative; min-height: 100vh; margin: 0; overflow-x: hidden;
+    background: var(--surface); color: var(--text); font-family: var(--font-sans);
+    /* Work Space = blue */
+    --space-l: var(--space-blue-l); --space-chroma: var(--space-blue-c);
+    --space-h: var(--space-blue-h); --space-on: var(--space-blue-on);
+  }
+  .hearth {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.5;
+    background: radial-gradient(60% 50% at 50% 100%, var(--glow-hearth) 0%, transparent 70%);
+  }
+  /* Minimal aurora bloom (two soft hue blobs) so the backdrop isn't flat. */
+  .aurora { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+  .aurora b {
+    position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.30;
+    background: oklch(var(--space-l) var(--space-chroma) var(--space-h));
+  }
+  .aurora b:nth-child(1) { width: 46vw; height: 46vw; left: -8vw; top: -10vw; }
+  .aurora b:nth-child(2) { width: 38vw; height: 38vw; right: -6vw; top: 8vh; opacity: 0.20;
+    background: oklch(var(--space-l) var(--space-chroma) calc(var(--space-h) + 40)); }
+
+  .stage {
+    position: relative; z-index: var(--z-raised);
+    max-width: 880px; margin: 0 auto;
+    padding: clamp(var(--space-6), 6vw, var(--space-9)) var(--space-5) var(--space-8);
+    display: flex; flex-direction: column; gap: var(--space-6);
+  }
+
+  /* ── Hero: lens name + the triage summary (the thesis) ───────────────────── */
+  .page-head { display: grid; grid-template-columns: auto 1fr;
+    grid-template-areas: 'glyph name' 'glyph meta'; align-items: center; column-gap: var(--space-3); }
+  .head-glyph { grid-area: glyph; display: inline-flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px; border-radius: var(--r-lg);
+    background: var(--space-c-soft); color: var(--space-c); }
+  .page-name { grid-area: name; margin: 0; font-family: var(--font-display);
+    font-weight: var(--weight-regular); font-size: clamp(2rem, 4vw, 3rem); line-height: 1.05; color: var(--text); }
+  .page-meta { grid-area: meta; margin: var(--space-1) 0 0;
+    font: var(--weight-regular) var(--text-md) / 1.35 var(--font-sans); color: var(--text-muted); }
+  .page-meta strong { color: var(--text-2); font-weight: var(--weight-semibold); }
+
+  /* ── Source filter — toggle chips. Only rendered when the lens mixes sources;
+       a single-source lens has nothing to narrow, so the bar stays hidden. ──── */
+  .filterbar { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+    margin-top: calc(-1 * var(--space-3)); }
+  .fchip { appearance: none; border: 0; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px var(--space-3); border-radius: var(--r-pill);
+    background: var(--surface-2); color: var(--text-muted);
+    font: var(--weight-medium) var(--text-xs) / 1 var(--font-sans);
+    transition: background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard); }
+  .fchip:hover { background: var(--surface-3); color: var(--text); }
+  .fchip.active { color: var(--text);
+    background: color-mix(in oklch, var(--space-c) 22%, var(--surface-2));
+    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--space-c) 45%, transparent); }
+  .fchip .fcount { font-family: var(--font-mono); font-size: var(--text-2xs); opacity: 0.75; }
+  /* Repo tier — a quieter, secondary facet row beneath the source chips. */
+  .filterbar.repos { margin-top: calc(-1 * var(--space-4)); gap: var(--space-1); padding-left: var(--space-1); }
+  .filterbar.repos .ftier { font: var(--weight-medium) var(--text-2xs) / 1 var(--font-sans);
+    text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-faint); margin-right: var(--space-1); }
+  .fchip.repo { padding: 4px var(--space-2); background: transparent; color: var(--text-dim);
+    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--text-faint) 22%, transparent); }
+  .fchip.repo:hover { background: var(--surface-2); color: var(--text-2); }
+  .fchip.repo.active { color: var(--text);
+    background: color-mix(in oklch, var(--space-c) 18%, var(--surface-2));
+    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--space-c) 40%, transparent); }
+  .fchip.repo .fname { font-family: var(--font-mono); }
+
+  /* ── Priority lane ───────────────────────────────────────────────────────── */
+  .lane { display: flex; flex-direction: column; gap: var(--space-3); }
+  .lane-head { display: flex; align-items: center; gap: var(--space-3); padding: 0 var(--space-1); }
+  .lane-label { margin: 0; flex-shrink: 0;
+    font: var(--weight-semibold) var(--text-2xs) / 1 var(--font-sans);
+    letter-spacing: 0.10em; text-transform: uppercase; color: var(--text-dim); }
+  .lane-rule { flex: 1; height: 1px; background: linear-gradient(90deg,
+    color-mix(in oklch, var(--text-faint) 30%, transparent), transparent); }
+  .lane-count { flex-shrink: 0; min-width: 20px; text-align: center;
+    padding: 2px var(--space-2); border-radius: var(--r-pill);
+    background: var(--surface-2); color: var(--text-dim);
+    font: var(--weight-semibold) var(--text-2xs) / 1.4 var(--font-sans); }
+
+  .lane-panel { padding: var(--space-2); }
+  .rows { display: flex; flex-direction: column; }
+
+  /* ── The Change row — a triage dossier ───────────────────────────────────── */
+  .row {
+    appearance: none; border: 0; width: 100%; box-sizing: border-box; text-align: left;
+    display: grid; grid-template-columns: auto 1fr auto; align-items: start;
+    column-gap: var(--space-3); padding: var(--space-3); border-radius: var(--r-md);
+    background: transparent; color: var(--text-2); cursor: pointer;
+    transition: background var(--motion-fast) var(--ease-standard), transform var(--motion-fast) var(--ease-standard);
+  }
+  .row + .row { box-shadow: inset 0 1px 0 color-mix(in oklch, var(--text-faint) 12%, transparent); }
+  .row:hover { background: var(--surface-2); }
+
+  /* col 1 — CI light */
+  .ci { margin-top: 5px; width: 10px; height: 10px; border-radius: var(--r-pill); flex-shrink: 0; }
+  .ci.ok { background: var(--success); }
+  .ci.fail { background: var(--danger); }
+  .ci.warn { background: var(--warning); }
+  .ci.pending { background: var(--info); }
+  .ci.draft { background: transparent;
+    box-shadow: inset 0 0 0 2px var(--text-dim);
+    background-image: linear-gradient(135deg, var(--text-dim) 0 50%, transparent 50% 100%);
+    background-clip: content-box; }
+
+  /* col 2 — title + subline */
+  .main { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .title-line { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; }
+  .title { font: var(--weight-medium) var(--text-base) / 1.3 var(--font-sans); color: var(--text);
+    overflow-wrap: anywhere; }
+  .row.muted .title { color: var(--text-muted); font-weight: var(--weight-regular); }
+  .tag-draft { flex-shrink: 0; padding: 1px 6px; border-radius: var(--r-xs);
+    font: var(--weight-semibold) var(--text-2xs) / 1.4 var(--font-mono); letter-spacing: 0.04em;
+    color: var(--text-dim); background: var(--surface-3); text-transform: uppercase; }
+  .tag-ready { flex-shrink: 0; padding: 1px 6px; border-radius: var(--r-xs);
+    font: var(--weight-semibold) var(--text-2xs) / 1.4 var(--font-sans);
+    color: var(--success); background: color-mix(in oklch, var(--success) 16%, transparent); }
+  .subline { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+    font: var(--weight-regular) var(--text-xs) / 1.3 var(--font-sans); color: var(--text-dim); }
+  /* host carries the source identity (ties to the filter chips); owner/repo trails it. */
+  .repo { font-family: var(--font-mono); color: var(--text-muted); }
+  .repo .host { color: var(--text-dim); }
+  .sep { color: var(--text-faint); }
+  .author { display: inline-flex; align-items: center; gap: 5px; color: var(--text-muted); }
+  .author .disc {
+    width: 16px; height: 16px; border-radius: var(--r-pill); display: grid; place-items: center;
+    background: var(--surface-3); color: var(--text-dim);
+    font: var(--weight-semibold) 8px/1 var(--font-sans); }
+
+  /* col 3 — signals: fixed tracks so rail/diff/age align into clean columns
+     down the whole queue (the flight-board rhythm). */
+  .signals { display: grid; grid-template-columns: 104px 96px 30px;
+    align-items: center; column-gap: var(--space-4); padding-top: 2px; }
+
+  /* reviewer rail — one legible verdict icon (blocking state wins) leads
+     verdict-tinted initial discs. The icon is the non-colour signal (AA-safe). */
+  .rail { justify-self: end; display: flex; align-items: center; gap: 7px; }
+  .verdict { display: inline-flex; flex-shrink: 0; }
+  .verdict svg { width: 14px; height: 14px; }
+  .verdict.approved { color: var(--success); }
+  .verdict.changes  { color: var(--danger); }
+  .verdict.pending  { color: var(--text-dim); }
+  .discs { display: flex; }
+  .discs .rv { width: 19px; height: 19px; border-radius: var(--r-pill);
+    display: grid; place-items: center; margin-left: -6px;
+    font: var(--weight-semibold) 8px/1 var(--font-sans);
+    box-shadow: 0 0 0 1.5px var(--surface); }
+  .discs .rv:first-child { margin-left: 0; }
+  .rv.approved { background: color-mix(in oklch, var(--success) 22%, var(--surface-2));
+    color: color-mix(in oklch, var(--success) 70%, var(--text)); }
+  .rv.changes  { background: color-mix(in oklch, var(--danger) 22%, var(--surface-2));
+    color: color-mix(in oklch, var(--danger) 78%, var(--text)); }
+  .rv.pending  { background: var(--surface-3); color: var(--text-dim); }
+  .discs .more { width: 19px; height: 19px; border-radius: var(--r-pill); margin-left: -6px;
+    display: grid; place-items: center; background: var(--surface-2); color: var(--text-dim);
+    font: var(--weight-medium) 8px/1 var(--font-mono); box-shadow: 0 0 0 1.5px var(--surface); }
+
+  /* diffstat — THE signature: numerals + proportional two-tone bar */
+  .diff { justify-self: end; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+  .diff .nums { font: var(--weight-medium) var(--text-xs) / 1 var(--font-mono); white-space: nowrap; }
+  .diff .add { color: var(--success); }
+  .diff .del { color: var(--danger); }
+  .diff .bar { display: flex; gap: 1px; width: 72px; height: 5px; border-radius: var(--r-pill); overflow: hidden;
+    background: var(--surface-3); }
+  .diff .bar i { height: 100%; display: block; }
+  .diff .bar .ia { background: var(--success); }
+  .diff .bar .id { background: var(--danger); }
+
+  /* age — warms as the review rots */
+  .age { justify-self: end; text-align: right;
+    font: var(--weight-medium) var(--text-xs) / 1 var(--font-mono); color: var(--text-faint); }
+  .age.stale { color: var(--warning); }
+
+  @media (prefers-reduced-motion: reduce) { .aurora b { animation: none; } .row { transition: none; } }
+</style>
+</head>
+
+<body>
+<main class="reviewpage lunma-space-scope" data-tint="vivid">
+  <div class="aurora" aria-hidden="true"><b></b><b></b></div>
+  <div class="hearth" aria-hidden="true"></div>
+
+  <div class="stage">
+    <header class="page-head">
+      <span class="head-glyph" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/>
+        </svg>
+      </span>
+      <h1 class="page-name">Reviews</h1>
+      <p class="page-meta"><strong>6</strong> await your review · <strong>3</strong> you authored · oldest <strong>5d</strong></p>
+    </header>
+
+    <!-- Source filter: this lens pulls from two hosts, so the chips appear. -->
+    <div class="filterbar" role="group" aria-label="Filter by source">
+      <button class="fchip active">All <span class="fcount">9</span></button>
+      <button class="fchip">github.com <span class="fcount">6</span></button>
+      <button class="fchip">gitlab.example.com <span class="fcount">3</span></button>
+    </div>
+    <!-- Repo tier: a finer facet within the active source. -->
+    <div class="filterbar repos" role="group" aria-label="Filter by repository">
+      <span class="ftier">Repo</span>
+      <button class="fchip repo active"><span class="fname">all</span></button>
+      <button class="fchip repo"><span class="fname">lunma/lunma</span> <span class="fcount">7</span></button>
+      <button class="fchip repo"><span class="fname">lunma/ui</span> <span class="fcount">1</span></button>
+      <button class="fchip repo"><span class="fname">lunma/docs</span> <span class="fcount">1</span></button>
+    </div>
+
+    <!-- LANE 1 — your obligation, on top -->
+    <section class="lane">
+      <div class="lane-head">
+        <h2 class="lane-label">Requested your review</h2>
+        <span class="lane-rule"></span>
+        <span class="lane-count">6</span>
+      </div>
+      <div class="lunma-glass lane-panel">
+        <div class="rows">
+
+          <button class="row">
+            <span class="ci ok" aria-hidden="true"></span>
+            <span class="main">
+              <span class="title-line"><span class="title">Fix parser race in tokenizer</span></span>
+              <span class="subline"><span class="repo"><span class="host">github.com</span>/lunma/lunma</span>
+                <span class="sep">·</span><span class="author"><span class="disc">AX</span>@alex</span></span>
+            </span>
+            <span class="signals">
+              <span class="rail">
+                <span class="verdict pending" title="Awaiting full approval"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg></span>
+                <span class="discs"><span class="rv approved">JD</span><span class="rv approved">AK</span><span class="rv pending">SM</span></span>
+              </span>
+              <span class="diff"><span class="nums"><span class="add">+112</span> <span class="del">−40</span></span>
+                <span class="bar"><i class="ia" style="width:48px"></i><i class="id" style="width:17px"></i></span></span>
+              <span class="age">2h</span>
+            </span>
+          </button>
+
+          <button class="row">
+            <span class="ci draft" aria-hidden="true"></span>
+            <span class="main">
+              <span class="title-line"><span class="title">Rework lens registry</span><span class="tag-draft">draft</span></span>
+              <span class="subline"><span class="repo"><span class="host">github.com</span>/lunma/lunma</span>
+                <span class="sep">·</span><span class="author"><span class="disc">SM</span>@sam</span></span>
+            </span>
+            <span class="signals">
+              <span class="rail">
+                <span class="verdict pending" title="Awaiting review"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg></span>
+                <span class="discs"><span class="rv pending">AL</span></span>
+              </span>
+              <span class="diff"><span class="nums"><span class="add">+840</span> <span class="del">−210</span></span>
+                <span class="bar"><i class="ia" style="width:57px"></i><i class="id" style="width:14px"></i></span></span>
+              <span class="age stale">4d</span>
+            </span>
+          </button>
+
+          <button class="row">
+            <span class="ci fail" aria-hidden="true"></span>
+            <span class="main">
+              <span class="title-line"><span class="title">Migrate storage to the v11 schema</span></span>
+              <span class="subline"><span class="repo"><span class="host">gitlab.example.com</span>/lunma/lunma</span>
+                <span class="sep">·</span><span class="author"><span class="disc">RN</span>@rin</span></span>
+            </span>
+            <span class="signals">
+              <span class="rail">
+                <span class="verdict changes" title="Changes requested"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+                <span class="discs"><span class="rv changes">TK</span><span class="rv approved">JD</span></span>
+              </span>
+              <span class="diff"><span class="nums"><span class="add">+320</span> <span class="del">−95</span></span>
+                <span class="bar"><i class="ia" style="width:55px"></i><i class="id" style="width:16px"></i></span></span>
+              <span class="age">6h</span>
+            </span>
+          </button>
+
+          <button class="row">
+            <span class="ci ok" aria-hidden="true"></span>
+            <span class="main">
+              <span class="title-line"><span class="title">Add the reviewer-rail primitive</span></span>
+              <span class="subline"><span class="repo"><span class="host">github.com</span>/lunma/ui</span>
+                <span class="sep">·</span><span class="author"><span class="disc">MY</span>@maya</span></span>
+            </span>
+            <span class="signals">
+              <span class="rail">
+                <span class="verdict pending" title="No reviewers yet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg></span>
+              </span>
+              <span class="diff"><span class="nums"><span class="add">+64</span> <span class="del">−8</span></span>
+                <span class="bar"><i class="ia" style="width:64px"></i><i class="id" style="width:8px"></i></span></span>
+              <span class="age">1d</span>
+            </span>
+          </button>
+
+          <button class="row">
+            <span class="ci warn" aria-hidden="true"></span>
+            <span class="main">
+              <span class="title-line"><span class="title">Tighten OPML parser bounds</span></span>
+              <span class="subline"><span class="repo"><span class="host">github.com</span>/lunma/lunma</span>
+                <span class="sep">·</span><span class="author"><span class="disc">TH</span>@theo</span></span>
+            </span>
+            <span class="signals">
+              <span class="rail">
+                <span class="verdict approved" title="Approved"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span class="discs"><span class="rv approved">JD</span></span>
+              </span>
+              <span class="diff"><span class="nums"><span class="add">+28</span> <span class="del">−12</span></span>
+                <span class="bar"><i class="ia" style="width:50px"></i><i class="id" style="width:22px"></i></span></span>
+              <span class="age">3h</span>
+            </span>
+          </button>
+
+          <button class="row muted">
+            <span class="ci ok" aria-hidden="true"></span>
+            <span class="main">
+              <span class="title-line"><span class="title">Docs: lenses north-star revision</span></span>
+              <span class="subline"><span class="repo"><span class="host">gitlab.example.com</span>/lunma/docs</span>
+                <span class="sep">·</span><span class="author"><span class="disc">SM</span>@sam</span></span>
+            </span>
+            <span class="signals">
+              <span class="rail">
+                <span class="verdict pending" title="No reviewers yet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg></span>
+              </span>
+              <span class="diff"><span class="nums"><span class="add">+210</span> <span class="del">−0</span></span>
+                <span class="bar"><i class="ia" style="width:72px"></i><i class="id" style="width:0"></i></span></span>
+              <span class="age stale">5d</span>
+            </span>
+          </button>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- LANE 2 — what you're waiting on -->
+    <section class="lane">
+      <div class="lane-head">
+        <h2 class="lane-label">Authored by you</h2>
+        <span class="lane-rule"></span>
+        <span class="lane-count">3</span>
+      </div>
+      <div class="lunma-glass lane-panel">
+        <div class="rows">
+
+          <button class="row">
+            <span class="ci ok" aria-hidden="true"></span>
+            <span class="main">
+              <span class="title-line"><span class="title">Add OPML export</span><span class="tag-ready">ready to merge</span></span>
+              <span class="subline"><span class="repo"><span class="host">github.com</span>/lunma/lunma</span></span>
+            </span>
+            <span class="signals">
+              <span class="rail">
+                <span class="verdict approved" title="Approved"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span class="discs"><span class="rv approved">AK</span><span class="rv approved">JD</span></span>
+              </span>
+              <span class="diff"><span class="nums"><span class="add">+30</span> <span class="del">−4</span></span>
+                <span class="bar"><i class="ia" style="width:64px"></i><i class="id" style="width:8px"></i></span></span>
+              <span class="age">1d</span>
+            </span>
+          </button>
+
+          <button class="row">
+            <span class="ci fail" aria-hidden="true"></span>
+            <span class="main">
+              <span class="title-line"><span class="title">Fix lens-page CSS scope (.folderpage → .lenspage)</span></span>
+              <span class="subline"><span class="repo"><span class="host">github.com</span>/lunma/lunma</span></span>
+            </span>
+            <span class="signals">
+              <span class="rail">
+                <span class="verdict changes" title="Changes requested"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+                <span class="discs"><span class="rv changes">TK</span></span>
+              </span>
+              <span class="diff"><span class="nums"><span class="add">+6</span> <span class="del">−6</span></span>
+                <span class="bar"><i class="ia" style="width:36px"></i><i class="id" style="width:36px"></i></span></span>
+              <span class="age">3h</span>
+            </span>
+          </button>
+
+          <button class="row">
+            <span class="ci draft" aria-hidden="true"></span>
+            <span class="main">
+              <span class="title-line"><span class="title">Spike: review-queue page archetype</span><span class="tag-draft">draft</span></span>
+              <span class="subline"><span class="repo"><span class="host">gitlab.example.com</span>/lunma/lunma</span></span>
+            </span>
+            <span class="signals">
+              <span class="rail"></span>
+              <span class="diff"><span class="nums"><span class="add">+1.2k</span> <span class="del">−20</span></span>
+                <span class="bar"><i class="ia" style="width:71px"></i><i class="id" style="width:1px"></i></span></span>
+              <span class="age">2h</span>
+            </span>
+          </button>
+
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+</body>
+</html>
