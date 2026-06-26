@@ -194,6 +194,56 @@ describe('createLens handler', () => {
     });
   });
 
+  test('review-lens: a createLens carrying lensKind: review persists a review node', async () => {
+    const { coordinator, store } = makeWithSpace();
+    coordinator.enqueue(
+      sidebar(
+        {
+          kind: 'createLens',
+          payload: {
+            spaceId: 'work',
+            sources: [
+              { source: 'github', baseUrl: 'https://github.com', queries: ['review-requested'] },
+            ],
+            name: 'Reviews',
+            maxItems: 20,
+            refreshMinutes: 10,
+            lensKind: 'review',
+          },
+        },
+        'c1',
+      ),
+    );
+    await coordinator.idle();
+    const created = store.state.pinnedBySpace.work?.[0] as LensNode;
+    expect(created.kind).toBe('lens');
+    expect(created.lensKind).toBe('review');
+  });
+
+  test('review-lens: a createLens omitting lensKind defaults to general (back-compat)', async () => {
+    const { coordinator, store } = makeWithSpace();
+    coordinator.enqueue(
+      sidebar(
+        {
+          kind: 'createLens',
+          payload: {
+            spaceId: 'work',
+            sources: [
+              { source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['review-requested'] },
+            ],
+            name: 'X',
+            maxItems: 20,
+            refreshMinutes: 10,
+          },
+        },
+        'c1',
+      ),
+    );
+    await coordinator.idle();
+    const created = store.state.pinnedBySpace.work?.[0] as LensNode;
+    expect(created.lensKind).toBe('general');
+  });
+
   test('an invalid baseUrl rejects with an error ack and adds no node', async () => {
     const { coordinator, store, emitAck } = makeWithSpace();
     coordinator.enqueue(
@@ -288,6 +338,40 @@ describe('updateLens handler', () => {
       refreshMinutes: 30,
     });
     expect(fetchMock).toHaveBeenCalled(); // the immediate refetch
+  });
+
+  test('review-lens: an updateLens omitting lensKind preserves the existing kind', async () => {
+    const { coordinator, store } = makeWithSpace();
+    store.state.pinnedBySpace.work = [
+      lensNode({
+        lensKind: 'review',
+        sources: [
+          { source: 'github', baseUrl: 'https://github.com', queries: ['review-requested'] },
+        ],
+      }),
+    ];
+
+    coordinator.enqueue(
+      sidebar(
+        {
+          kind: 'updateLens',
+          payload: {
+            spaceId: 'work',
+            folderId: 'sf-1',
+            sources: [
+              { source: 'github', baseUrl: 'https://github.com', queries: ['review-requested'] },
+            ],
+            name: 'Renamed',
+            maxItems: 20,
+            refreshMinutes: 10,
+            // lensKind intentionally omitted — must preserve 'review'.
+          },
+        },
+        'c1',
+      ),
+    );
+    await coordinator.idle();
+    expect((store.state.pinnedBySpace.work?.[0] as LensNode).lensKind).toBe('review');
   });
 
   test('a source-only edit triggers the immediate refetch through the new connector', async () => {

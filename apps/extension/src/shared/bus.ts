@@ -6,6 +6,7 @@ import type {
   BackupEnvelope,
   FolderId,
   IconName,
+  LensKind,
   LensSource,
   PinNode,
   SavedTabId,
@@ -100,6 +101,9 @@ export type SidebarCommand =
         name: string;
         maxItems: number;
         refreshMinutes: number;
+        // The lens kind (review-lens). OPTIONAL on the wire for back-compat —
+        // the handler defaults an absent value to `'general'`.
+        lensKind?: LensKind;
       };
     }
   | {
@@ -111,6 +115,8 @@ export type SidebarCommand =
         name: string;
         maxItems: number;
         refreshMinutes: number;
+        /** The lens kind (review-lens); absent preserves the existing kind. */
+        lensKind?: LensKind;
       };
     }
   | { kind: 'deleteLens'; payload: { spaceId: SpaceId; folderId: FolderId } }
@@ -573,6 +579,8 @@ const COMMAND_SCHEMAS = {
       name: z.string(),
       maxItems: z.number(),
       refreshMinutes: z.number(),
+      // review-lens: optional on the wire; the handler defaults to `'general'`.
+      lensKind: z.enum(['general', 'review']).optional(),
     }),
   }),
   updateLens: z.strictObject({
@@ -584,6 +592,7 @@ const COMMAND_SCHEMAS = {
       name: z.string(),
       maxItems: z.number(),
       refreshMinutes: z.number(),
+      lensKind: z.enum(['general', 'review']).optional(),
     }),
   }),
   deleteLens: z.strictObject({

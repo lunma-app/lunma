@@ -106,10 +106,21 @@ const sections = $derived.by<ResolvedLensSource[]>(() => {
   const out: ResolvedLensSource[] = [];
   for (const cfg of node.sources) {
     if (cfg.queries.length === 0) {
-      out.push({ source: cfg.source, baseUrl: cfg.baseUrl, name: cfg.name });
+      out.push({
+        source: cfg.source,
+        baseUrl: cfg.baseUrl,
+        name: cfg.name,
+        lensKind: node.lensKind,
+      });
     } else {
       for (const query of cfg.queries) {
-        out.push({ source: cfg.source, baseUrl: cfg.baseUrl, query, name: cfg.name });
+        out.push({
+          source: cfg.source,
+          baseUrl: cfg.baseUrl,
+          query,
+          name: cfg.name,
+          lensKind: node.lensKind,
+        });
       }
     }
   }

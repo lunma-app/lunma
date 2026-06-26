@@ -6,6 +6,8 @@ import { requiredOriginsForConfig } from './connector-origins';
 // surfaces' grant request. The per-connector delegation is exercised in each
 // `connectors/*.test.ts`; this covers the derivation directly.
 
+// Origins are query- AND kind-independent — the helper reads only source/baseUrl
+// (review-lens, D4a relaxed its param), so the fixtures omit `lensKind`.
 describe('requiredOriginsForConfig', () => {
   test('github.com fetches the api origin, not github.com (the headline D8 case)', () => {
     expect(requiredOriginsForConfig({ source: 'github', baseUrl: 'https://github.com' })).toEqual([

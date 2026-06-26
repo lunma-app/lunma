@@ -90,7 +90,7 @@ export function lensHandlers(
 > {
   return {
     createLens: (ctx, event) => {
-      const { spaceId, sources, name, maxItems, refreshMinutes } = event.payload;
+      const { spaceId, sources, name, maxItems, refreshMinutes, lensKind } = event.payload;
       if (!spaceExists(ctx.store.state, spaceId)) {
         throw new Error(`createLens: unknown spaceId '${spaceId}'`);
       }
@@ -110,7 +110,9 @@ export function lensHandlers(
         id: crypto.randomUUID(),
         name,
         icon,
-        lensKind: 'general',
+        // review-lens (D9): stamp the chosen kind; absent defaults to 'general'
+        // so existing callers (and back-compat clients) keep their behaviour.
+        lensKind: lensKind ?? 'general',
         sources: normalizedSources,
         maxItems,
         hideRead: true,
@@ -125,7 +127,8 @@ export function lensHandlers(
       ctx.runSideEffect(() => completion);
     },
     updateLens: (ctx, event) => {
-      const { spaceId, folderId, sources, name, maxItems, refreshMinutes } = event.payload;
+      const { spaceId, folderId, sources, name, maxItems, refreshMinutes, lensKind } =
+        event.payload;
       const node = requireLensNode(ctx, 'updateLens', spaceId, folderId);
       const normalizedSources = normalizeAndValidateSources(sources, 'updateLens');
       // Capture the resolved-section keys BEFORE the store mutates `node.sources`,
@@ -145,7 +148,8 @@ export function lensHandlers(
         sources: normalizedSources,
         name,
         icon: newIcon,
-        lensKind: node.lensKind,
+        // review-lens (D9): an absent `lensKind` preserves the existing kind.
+        lensKind: lensKind ?? node.lensKind,
         maxItems,
         refreshMinutes: clampRefreshMinutes(refreshMinutes),
       });
@@ -356,8 +360,11 @@ export function lensHandlers(
     openLensListing: async (ctx, event) => {
       const { spaceId, folderId, windowId } = event.payload;
       const node = requireLensNode(ctx, 'openLensListing', spaceId, folderId);
-      // Multi-source: open the first source's listing URL.
-      const firstCfg = node.sources[0];
+      // Multi-source: open the first source's listing URL. Resolve it to a
+      // single-query config carrying the lens kind (review-lens, D4a) — listing
+      // URLs are query-independent for the queue sources, so the first source's
+      // resolved config suffices.
+      const firstCfg = resolvedConfigs(node)[0];
       if (!firstCfg) return;
       const url = CONNECTORS[firstCfg.source].listingUrl(firstCfg);
       let scheme: string;

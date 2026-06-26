@@ -133,7 +133,7 @@ interface LensItem {
 }
 
 interface ArticleData      { excerpt?: string; imageUrl?: string; publishedAt?: number }
-interface ChangeData       { author: string; reviewers: { login: string; state?: 'approved'|'changes'|'pending' }[]; draft: boolean; additions?: number; deletions?: number; targetBranch?: string; updatedAt: number }
+interface ChangeData       { author: string; repo: string; reviewers: { login: string; state?: 'approved'|'changes'|'pending' }[]; draft: boolean; additions?: number; deletions?: number; targetBranch?: string; updatedAt: number }
 interface TicketData       { key: string; statusCategory: 'todo'|'in-progress'|'done'; statusLabel: string; assignee?: string; priority?: 'low'|'med'|'high'|'urgent'; labels?: string[]; project?: string; updatedAt: number }
 interface RunData          { ref: string; commit?: string; durationMs?: number; triggeredBy?: string }
 interface NotificationData { reason: string; context: string; unread: boolean; updatedAt: number }
@@ -175,7 +175,7 @@ smallest plumbing for the *named* next phase — Lunma's no-stranded-infra rule)
 | # | Change | Delivers |
 |---|---|---|
 | 1 | **Establish the Lens model** — full `smart → lens` rename + `lensKind` field + `general` kind + one schema migration *(in progress — `establish-lens-model` change)* | Clean foundation; existing folders become `general` lenses, zero behaviour change. Plumbing for #2. |
-| 2 | **Review lens, end-to-end** — `Change` entity + `github-pr`/`gitlab-mr` adapters enriched + **Review Queue page** *(run `/frontend-design`)* | First typed lens; proves entity→adapter→page registry. |
+| 2 | **Review lens, end-to-end** — `Change` entity + `github-pr`/`gitlab-mr` adapters enriched + **Review Queue page** *(shipped — `review-lens` change)* | First typed lens; proves entity→adapter→page registry. |
 | 3 | **Tickets lens, end-to-end** — `Ticket` entity + `jira`(exists)/`github-issues`/`gitlab-issues` adapters + **Board page** *(run `/frontend-design`)* | Second kind validates the registry generalises. |
 | 4 | **Cross-entity refs, L0** — extract typed refs, render as chips linking to URLs | "This PR closes PROJ-123" becomes a click. |
 | 5 | **Cross-folder resolution, L1** — chip deep-links to the entity in another lens + hover preview | The felt ticket↔PR link. |

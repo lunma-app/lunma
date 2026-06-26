@@ -4,7 +4,9 @@
  * out as an editorial card grid. All colour comes from the --text-* ramp and the
  * scoped --space-* hue, so WCAG-AA holds at every tint; motion collapses to
  * instant under reduced-motion. Selectors are global (a plain imported sheet,
- * like newtab.css), so everything is scoped under `.folderpage`. */
+ * like newtab.css), so everything is scoped under `.lenspage` (the root class
+ * the component renders; a Phase-1 rename left these rules scoped to the old
+ * `.folderpage`, so they didn't apply — fixed by review-lens, D11). */
 
 /* Reset the document chrome so the dark page fills the viewport edge-to-edge —
  * the browser's default body margin (8px) + white canvas would otherwise show as
@@ -16,7 +18,7 @@ body {
   background: var(--surface);
 }
 
-.folderpage {
+.lenspage {
   position: relative;
   min-height: 100vh;
   margin: 0;
@@ -29,7 +31,7 @@ body {
 /* The hearth — a single low-centre radial bloom in the Space hue ("fire in the
  * nook"), above the ambient aurora but beneath the content, never interactive.
  * Calms with the tint level, like the new-tab hearth. */
-.folderpage .hearth {
+.lenspage .hearth {
   position: fixed;
   inset: 0;
   z-index: 0;
@@ -41,18 +43,18 @@ body {
   );
   opacity: 0.5;
 }
-.folderpage[data-tint='standard'] .hearth {
+.lenspage[data-tint='standard'] .hearth {
   opacity: 0.32;
 }
-.folderpage[data-tint='subtle'] .hearth {
+.lenspage[data-tint='subtle'] .hearth {
   opacity: 0.12;
 }
-.folderpage[data-show-glares='false'] .hearth {
+.lenspage[data-show-glares='false'] .hearth {
   opacity: 0;
 }
 
 /* Content stage — a centred editorial column with generous breathing room. */
-.folderpage .stage {
+.lenspage .stage {
   position: relative;
   z-index: var(--z-raised);
   max-width: 1080px;
@@ -64,7 +66,7 @@ body {
 }
 
 /* --- Page header: the folder is the hero (Instrument Serif) ------------------ */
-.folderpage .page-head {
+.lenspage .page-head {
   display: grid;
   grid-template-columns: auto 1fr;
   grid-template-areas:
@@ -74,13 +76,13 @@ body {
   column-gap: var(--space-3);
   animation: fp-head-in var(--motion-slow) var(--ease-emphasised) backwards;
 }
-.folderpage .head-glyph {
+.lenspage .head-glyph {
   grid-area: glyph;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
-.folderpage .page-name {
+.lenspage .page-name {
   grid-area: name;
   margin: 0;
   font-family: var(--font-display);
@@ -89,7 +91,7 @@ body {
   line-height: 1.05;
   color: var(--text);
 }
-.folderpage .page-meta {
+.lenspage .page-meta {
   grid-area: meta;
   margin: var(--space-1) 0 0;
   font: var(--weight-regular) var(--text-sm) / 1.3 var(--font-sans);
@@ -97,37 +99,37 @@ body {
 }
 
 /* --- Sections grid: glass panels, multi-column on wide viewports ------------- */
-.folderpage .sections {
+.lenspage .sections {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: var(--space-4);
   align-items: start;
 }
 
-.folderpage .section-panel {
+.lenspage .section-panel {
   /* Staggered entrance — each panel rises in turn (`--i` set per section). */
   animation: fp-panel-rise var(--motion-base) var(--ease-emphasised) backwards;
   animation-delay: calc(var(--i, 0) * 55ms + 80ms);
 }
 
-.folderpage .panel-inner {
+.lenspage .panel-inner {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-4);
 }
 
-.folderpage .section-head {
+.lenspage .section-head {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   padding: 0 var(--space-2) var(--space-1);
 }
-.folderpage .section-glyph {
+.lenspage .section-glyph {
   flex-shrink: 0;
   display: inline-flex;
 }
-.folderpage .section-label {
+.lenspage .section-label {
   flex: 1;
   min-width: 0;
   margin: 0;
@@ -137,7 +139,7 @@ body {
   font: var(--weight-semibold) var(--text-sm) / 1.2 var(--font-sans);
   color: var(--text-2);
 }
-.folderpage .section-count {
+.lenspage .section-count {
   flex-shrink: 0;
   padding: var(--space-1) var(--space-2);
   border-radius: var(--r-pill);
@@ -146,7 +148,7 @@ body {
   font: var(--weight-medium) var(--text-2xs) / 1 var(--font-sans);
 }
 
-.folderpage .card-grid {
+.lenspage .card-grid {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -154,16 +156,16 @@ body {
 
 /* The animated cell (FLIP + fade wrapper). A real box so flip can measure it;
  * min-width:0 lets its card's title ellipsis/clamp work inside a grid track. */
-.folderpage .card-cell {
+.lenspage .card-cell {
   min-width: 0;
 }
 
 /* Feed sections become a full-width magazine: the panel spans every column and
  * its cards tile in a responsive grid (image cards earn the room). */
-.folderpage .section-panel.feed {
+.lenspage .section-panel.feed {
   grid-column: 1 / -1;
 }
-.folderpage .card-grid.feed {
+.lenspage .card-grid.feed {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: var(--space-3);
@@ -171,14 +173,14 @@ body {
 }
 
 /* First-fetch ghosts: static low-alpha placeholders (no shimmer, no strobe). */
-.folderpage .ghost {
+.lenspage .ghost {
   height: calc(var(--row-h) + var(--space-3));
   border-radius: var(--r-md);
   background: color-mix(in oklch, var(--surface) 55%, transparent);
 }
 
 /* Calm sign-in / needs-access / notes — ported from the sidebar projection. */
-.folderpage .signin-row {
+.lenspage .signin-row {
   appearance: none;
   border: 0;
   width: 100%;
@@ -196,29 +198,29 @@ body {
     background var(--motion-fast) var(--ease-standard),
     color var(--motion-fast) var(--ease-standard);
 }
-.folderpage .signin-row:hover {
+.lenspage .signin-row:hover {
   background: var(--surface-2);
   color: var(--text);
 }
-.folderpage .signin-row:focus-visible {
+.lenspage .signin-row:focus-visible {
   outline: var(--focus-width) solid var(--focus-color);
   outline-offset: var(--focus-offset);
 }
 
-.folderpage .needs-access {
+.lenspage .needs-access {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   color: var(--text-muted);
 }
-.folderpage .needs-access-copy {
+.lenspage .needs-access-copy {
   flex: 1;
   min-width: 0;
   font: var(--weight-regular) var(--text-sm) / 1.3 var(--font-sans);
 }
 
-.folderpage .note-row {
+.lenspage .note-row {
   margin: 0;
   padding: var(--space-1) var(--space-3);
   color: var(--text-faint);
@@ -226,19 +228,19 @@ body {
 }
 
 /* Per-feed-section reading controls: Show more · Show/Hide read. */
-.folderpage .reading-controls {
+.lenspage .reading-controls {
   display: flex;
   align-items: center;
   gap: var(--space-1);
   padding: var(--space-1) var(--space-2) 0;
   margin-top: var(--space-1);
 }
-.folderpage .controls-spacer {
+.lenspage .controls-spacer {
   flex: 1 1 auto;
 }
 
 /* --- Missing/neutral state --- */
-.folderpage .missing {
+.lenspage .missing {
   margin: auto;
   padding: var(--space-8) var(--space-4);
   display: flex;
@@ -247,14 +249,14 @@ body {
   gap: var(--space-2);
   text-align: center;
 }
-.folderpage .missing-title {
+.lenspage .missing-title {
   margin: 0;
   font-family: var(--font-display);
   font-weight: var(--weight-regular);
   font-size: clamp(1.5rem, 3vw, 2rem);
   color: var(--text);
 }
-.folderpage .missing-copy {
+.lenspage .missing-copy {
   margin: 0;
   max-width: 36ch;
   font: var(--weight-regular) var(--text-sm) / 1.4 var(--font-sans);
@@ -283,8 +285,8 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .folderpage .page-head,
-  .folderpage .section-panel {
+  .lenspage .page-head,
+  .lenspage .section-panel {
     animation: none;
   }
 }

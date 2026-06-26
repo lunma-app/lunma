@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { assertMigrationsTerminal, type Migration, migrations, runMigrations } from './migrations';
-import { AppStateV10Schema, AppStateV11Schema, CURRENT_SCHEMA_VERSION } from './schemas';
+import {
+  AppStateV10Schema,
+  AppStateV11Schema,
+  AppStateV12Schema,
+  CURRENT_SCHEMA_VERSION,
+} from './schemas';
 import { createInitialState } from './store.svelte';
 
 // Snapshot of the REAL migration chain, captured at module load (before the
@@ -8,8 +13,8 @@ import { createInitialState } from './store.svelte';
 const realMigrations = [...migrations];
 
 describe('the real migration chain', () => {
-  test('holds exactly the v2 through v11 entries', () => {
-    expect(realMigrations).toHaveLength(10);
+  test('holds exactly the v2 through v12 entries', () => {
+    expect(realMigrations).toHaveLength(11);
     expect(realMigrations[0]?.toVersion).toBe(2);
     expect(realMigrations[1]?.toVersion).toBe(3);
     expect(realMigrations[2]?.toVersion).toBe(4);
@@ -20,7 +25,8 @@ describe('the real migration chain', () => {
     expect(realMigrations[7]?.toVersion).toBe(9);
     expect(realMigrations[8]?.toVersion).toBe(10);
     expect(realMigrations[9]?.toVersion).toBe(11);
-    expect(CURRENT_SCHEMA_VERSION).toBe(11);
+    expect(realMigrations[10]?.toVersion).toBe(12);
+    expect(CURRENT_SCHEMA_VERSION).toBe(12);
     // v2–v6 are pass-throughs (see comment in migrations.ts). v7 is the
     // smart-tab-boundary real transformation; v8 is the multi-source wrap.
     const input = { schemaVersion: 1, pinnedBySpace: { work: [{ kind: 'tab', id: 'a' }] } };
@@ -646,6 +652,84 @@ describe('v11 migration — establish-lens-model rename', () => {
     const parsed = AppStateV10Schema.parse(v10);
     const node = parsed.pinnedBySpace.s1?.[0];
     expect(node?.kind).toBe('smart');
+  });
+});
+
+describe('v12 migration — review-lens lensKind enum widening', () => {
+  const v12Migration = realMigrations.find((m) => m.toVersion === 12);
+  if (!v12Migration) throw new Error('expected v12 migration');
+
+  // A minimal valid v11 envelope carrying one `general` lens node.
+  function v11Envelope(): Record<string, unknown> {
+    return {
+      schemaVersion: 11,
+      spaces: [],
+      activeSpaceByWindow: {},
+      spaceInstancesByWindow: {},
+      tabBindings: {},
+      savedTabs: {},
+      lastActivatedSpaceId: null,
+      tabLastActivity: {},
+      archivedTabs: [],
+      trash: {},
+      pinnedBySpace: {
+        s1: [
+          {
+            kind: 'lens',
+            lensKind: 'general',
+            id: 'f1',
+            name: 'My MRs',
+            icon: 'folder-git-2',
+            sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored'] }],
+            maxItems: 20,
+            hideRead: true,
+            refreshMinutes: 10,
+          },
+        ],
+      },
+      faviconRow: [],
+      lensItemBindings: {},
+      lensReadState: {},
+    };
+  }
+
+  test('is structural identity — a v11 general node is unchanged apart from the bump', () => {
+    const input = v11Envelope();
+    const out = v12Migration.migrate(input) as typeof input;
+    // The v12 migration returns its input unchanged (identity pass-through).
+    expect(out).toBe(input);
+    const node = (out.pinnedBySpace as Record<string, Array<Record<string, unknown>>>).s1?.[0];
+    expect(node?.lensKind).toBe('general');
+  });
+
+  test('a migrated v11 envelope validates under AppStateV12Schema', () => {
+    const migrated = v12Migration.migrate(v11Envelope());
+    const parsed = AppStateV12Schema.parse(migrated);
+    const node = parsed.pinnedBySpace.s1?.[0];
+    expect(node?.kind).toBe('lens');
+    if (node?.kind === 'lens') expect(node.lensKind).toBe('general');
+  });
+
+  test('a lensKind: review node validates under AppStateV12Schema (the widened enum)', () => {
+    const env = v11Envelope();
+    const node = (env.pinnedBySpace as Record<string, Array<Record<string, unknown>>>).s1?.[0];
+    if (node) {
+      node.lensKind = 'review';
+      node.sources = [
+        { source: 'github', baseUrl: 'https://github.com', queries: ['review-requested'] },
+      ];
+    }
+    const parsed = AppStateV12Schema.parse(env);
+    const lens = parsed.pinnedBySpace.s1?.[0];
+    expect(lens?.kind).toBe('lens');
+    if (lens?.kind === 'lens') expect(lens.lensKind).toBe('review');
+  });
+
+  test('the v11 schema (frozen) rejects a review node — downgrade is detectable', () => {
+    const env = v11Envelope();
+    const node = (env.pinnedBySpace as Record<string, Array<Record<string, unknown>>>).s1?.[0];
+    if (node) node.lensKind = 'review';
+    expect(AppStateV11Schema.safeParse(env).success).toBe(false);
   });
 });
 

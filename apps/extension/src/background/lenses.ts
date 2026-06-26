@@ -65,12 +65,16 @@ export function sourceKey(cfg: ResolvedLensSource): string {
  */
 export function resolvedConfigs(node: LensNode): ResolvedLensSource[] {
   const out: ResolvedLensSource[] = [];
+  // Stamp the owning lens's kind on every resolved config (review-lens, D4a) so
+  // a connector can gate kind-specific enrichment (the `change` bag + verdict
+  // fetch) without a `fetchRuntime` signature change.
+  const { lensKind } = node;
   for (const cfg of node.sources) {
     if (cfg.queries.length === 0) {
-      out.push({ source: cfg.source, baseUrl: cfg.baseUrl });
+      out.push({ source: cfg.source, baseUrl: cfg.baseUrl, lensKind });
     } else {
       for (const query of cfg.queries) {
-        out.push({ source: cfg.source, baseUrl: cfg.baseUrl, query });
+        out.push({ source: cfg.source, baseUrl: cfg.baseUrl, query, lensKind });
       }
     }
   }

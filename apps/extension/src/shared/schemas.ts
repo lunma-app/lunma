@@ -23,9 +23,12 @@ import type { AppState, BackupEnvelope, SpaceColor } from './types';
 // `SmartSourceConfig`. v11 (establish-lens-model) renames the `smart` PinNode
 // discriminant to `lens`, adds `lensKind: 'general'`, and renames the persisted
 // top-level keys `smartItemBindings`→`lensItemBindings`,
-// `smartReadState`→`lensReadState`. Each bump is deliberate: it makes a
-// downgrade detectable.
-export const CURRENT_SCHEMA_VERSION = 11;
+// `smartReadState`→`lensReadState`. v12 (review-lens) widens the persisted lens
+// node's `lensKind` enum from `'general'` to `'general' | 'review'` — an additive
+// enum widening, structurally identical for existing nodes (its migration is an
+// identity pass-through). Each bump is deliberate: it makes a downgrade
+// detectable.
+export const CURRENT_SCHEMA_VERSION = 12;
 
 const SpaceInstanceSchema = z.strictObject({
   spaceId: z.string(),
@@ -133,9 +136,10 @@ const SmartSourceConfigV8Schema = z.strictObject({
   query: z.enum(['authored', 'assigned', 'review-requested']).optional(),
 });
 
-// A pinned-tab placement node (CURRENT/v11 shape): a tab node, a single-level
+// A pinned-tab placement node (CURRENT/v12 shape): a tab node, a single-level
 // folder node, or a lens config node whose `sources[]` entries carry `queries[]`
 // (lenses — configuration only; results are ephemeral and never persisted).
+// v12 (review-lens) widens the lens node's `lensKind` enum to admit `'review'`.
 // Folder `icon`/`color` are plain strings on the record (as on `Space`); the
 // narrow `IconName`/`SpaceColor` unions live only at the bus boundary.
 const PinNodeSchema = z.discriminatedUnion('kind', [
@@ -153,10 +157,37 @@ const PinNodeSchema = z.discriminatedUnion('kind', [
     id: z.string(),
     name: z.string(),
     icon: z.string(),
-    lensKind: z.enum(['general']),
+    lensKind: z.enum(['general', 'review']),
     // One or more connector instance entries (multi-filter-smart-connectors).
     // `.min(1)` enforced at the schema boundary; the editor also blocks
     // confirming with an empty list.
+    sources: z.array(LensSourceSchema).min(1),
+    maxItems: z.number().default(20),
+    hideRead: z.boolean().default(true),
+    refreshMinutes: z.number(),
+  }),
+]);
+
+// Historical (v11) pinned-tab node (establish-lens-model): identical to the
+// current `PinNodeSchema` except the lens branch's `lensKind` enum is the narrow
+// `z.enum(['general'])` — frozen so pre-v12 envelopes (or v11-migration output)
+// validate exactly as they did before review-lens widened the enum.
+const PinNodeV11Schema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('tab'), id: z.string() }),
+  z.strictObject({
+    kind: z.literal('folder'),
+    id: z.string(),
+    name: z.string(),
+    icon: z.string(),
+    color: z.string(),
+    children: z.array(z.string()),
+  }),
+  z.strictObject({
+    kind: z.literal('lens'),
+    id: z.string(),
+    name: z.string(),
+    icon: z.string(),
+    lensKind: z.enum(['general']),
     sources: z.array(LensSourceSchema).min(1),
     maxItems: z.number().default(20),
     hideRead: z.boolean().default(true),
@@ -235,6 +266,26 @@ const LiveTabSchema = z.strictObject({
 // coerced from their JSON string form.
 const TabBindingsSchema = z.record(z.string(), z.record(z.coerce.number(), z.number()));
 
+// The canonical Change entity mirror (review-lens) — populated by the
+// github/gitlab connectors for review-kind lenses. Ephemeral like the rest of
+// the `lenses` slice (never persisted → no migration). `state` on a reviewer is
+// optional (absent = unknown, rendered `pending`).
+const ChangeDataSchema = z.strictObject({
+  author: z.string(),
+  repo: z.string(),
+  reviewers: z.array(
+    z.strictObject({
+      login: z.string(),
+      state: z.enum(['approved', 'changes', 'pending']).optional(),
+    }),
+  ),
+  draft: z.boolean(),
+  additions: z.number().optional(),
+  deletions: z.number().optional(),
+  targetBranch: z.string().optional(),
+  updatedAt: z.number(),
+});
+
 // The lens runtime slice (lenses, design D2). Ephemeral like `liveTabsById`: the
 // schema ACCEPTS it when present so a broadcast/runtime state round-trips, but it
 // is `.optional()` because `persist()` strips it — on-disk envelopes never carry
@@ -254,6 +305,9 @@ const LensItemSchema = z.strictObject({
   excerpt: z.string().optional(),
   imageUrl: z.string().optional(),
   publishedAt: z.number().optional(),
+  // The canonical Change entity (review-lens) — populated by the github/gitlab
+  // connectors for review-kind lenses only; ephemeral (never persisted).
+  change: ChangeDataSchema.optional(),
 });
 
 // Per-section runtime (multi-source-smart-folders). The slice is ephemeral
@@ -399,8 +453,35 @@ export const AppStateV10Schema = z.strictObject({
 // v11 (establish-lens-model): renames the `smart` PinNode discriminant to `lens`,
 // adds `lensKind: z.enum(['general'])`, and renames the persisted top-level keys
 // `smartItemBindings`→`lensItemBindings`, `smartReadState`→`lensReadState`.
-// The ephemeral `smartFolders`→`lenses` slice needs only the code rename.
+// The ephemeral `smartFolders`→`lenses` slice needs only the code rename. Frozen
+// at the narrow `PinNodeV11Schema` (general-only `lensKind`); v12 widens it.
 export const AppStateV11Schema = z.strictObject({
+  schemaVersion: z.number(),
+  spaces: z.array(SpaceSchema),
+  activeSpaceByWindow: z.record(z.coerce.number(), z.string().nullable()),
+  spaceInstancesByWindow: z.record(
+    z.coerce.number(),
+    z.record(z.string(), SpaceInstanceSchema).optional(),
+  ),
+  tabBindings: TabBindingsSchema,
+  savedTabs: z.record(z.string(), SavedTabSchema),
+  lastActivatedSpaceId: z.string().nullable(),
+  tabLastActivity: z.record(z.coerce.number(), z.number()),
+  archivedTabs: z.array(ArchivedTabSchema),
+  trash: z.record(z.string(), TrashedSpaceSchema),
+  pinnedBySpace: z.record(z.string(), z.array(PinNodeV11Schema)),
+  liveTabsById: z.record(z.coerce.number(), LiveTabSchema).default({}),
+  faviconRow: z.array(z.string()),
+  lensItemBindings: LensItemBindingsSchema.default({}),
+  lensReadState: LensReadStateSchema.default({}),
+  lenses: z.record(z.string(), LensRuntimeSchema).default({}),
+});
+
+// v12 (review-lens): the v11 schema with the lens node's `lensKind` enum widened
+// to `z.enum(['general', 'review'])` (via the current `PinNodeSchema`). Otherwise
+// identical to `AppStateV11Schema`. This is the CURRENT-version schema — the
+// migration runner validates against it after running the v12 identity migration.
+export const AppStateV12Schema = z.strictObject({
   schemaVersion: z.number(),
   spaces: z.array(SpaceSchema),
   activeSpaceByWindow: z.record(z.coerce.number(), z.string().nullable()),
@@ -424,7 +505,7 @@ export const AppStateV11Schema = z.strictObject({
 
 export const EnvelopeSchema = z.strictObject({
   schemaVersion: z.number(),
-  state: AppStateV11Schema,
+  state: AppStateV12Schema,
 });
 
 export type AppStateV6 = z.infer<typeof AppStateV6Schema>;
@@ -432,12 +513,13 @@ export type AppStateV7 = z.infer<typeof AppStateV7Schema>;
 export type AppStateV8 = z.infer<typeof AppStateV8Schema>;
 export type AppStateV10 = z.infer<typeof AppStateV10Schema>;
 export type AppStateV11 = z.infer<typeof AppStateV11Schema>;
+export type AppStateV12 = z.infer<typeof AppStateV12Schema>;
 export type Envelope = z.infer<typeof EnvelopeSchema>;
 
 type AssertEqual<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
-const _schemaMatchesAppState: AssertEqual<AppStateV11, AppState> = true;
+const _schemaMatchesAppState: AssertEqual<AppStateV12, AppState> = true;
 void _schemaMatchesAppState;
 
 // ── Data-backup: BackupEnvelopeSchema ────────────────────────────────────────

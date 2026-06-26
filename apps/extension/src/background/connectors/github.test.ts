@@ -41,6 +41,7 @@ function node(overrides: Partial<ResolvedLensSource> = {}): ResolvedLensSource {
     source: 'github',
     baseUrl: 'https://github.com',
     query: 'authored',
+    lensKind: 'general',
     ...overrides,
   };
 }
@@ -443,10 +444,115 @@ describe('maxItems + listingUrl', () => {
     // github.com folder fetches api.github.com, so the gate must request that —
     // never github.com, which would never authorize the fetch.
     expect(
-      githubConnector.requiredOrigins({ source: 'github', baseUrl: 'https://github.com' }),
+      githubConnector.requiredOrigins({
+        source: 'github',
+        baseUrl: 'https://github.com',
+        lensKind: 'general',
+      }),
     ).toEqual(['https://api.github.com/*']);
     expect(
-      githubConnector.requiredOrigins({ source: 'github', baseUrl: 'https://ghe.example.com' }),
+      githubConnector.requiredOrigins({
+        source: 'github',
+        baseUrl: 'https://ghe.example.com',
+        lensKind: 'general',
+      }),
     ).toEqual(['https://ghe.example.com/*']);
+  });
+});
+
+// ── review-lens enrichment (review-lens, D4/D5) ────────────────────────────────
+
+describe('fetchRuntime — review-lens change enrichment', () => {
+  /** A PR detail carrying the review-lens fields. */
+  function reviewPrDetail(id: number, overrides: Record<string, unknown> = {}): unknown {
+    return jsonResponse({
+      draft: false,
+      head: { sha: `sha-${id}` },
+      base: { ref: 'main', repo: { full_name: 'o/r' } },
+      user: { login: 'octo' },
+      additions: 112,
+      deletions: 40,
+      updated_at: '2026-06-24T10:00:00Z',
+      requested_reviewers: [{ login: 'pending-rev' }],
+      ...overrides,
+    });
+  }
+
+  function reviewsResponse(reviews: Array<{ login: string; state: string }>): unknown {
+    return jsonResponse(reviews.map((r) => ({ user: { login: r.login }, state: r.state })));
+  }
+
+  test('a review lens populates change with identity, diff, draft, and reviewer states', async () => {
+    storageData = { ...TOKEN };
+    routeFetch([
+      [(u) => u.includes('/search/issues'), () => searchResponse([pr(7)])],
+      [
+        (u) => u.includes('/reviews'),
+        () => reviewsResponse([{ login: 'alice', state: 'APPROVED' }]),
+      ],
+      [(u) => u.includes('/pulls/'), () => reviewPrDetail(7)],
+      [
+        (u) => u.includes('/check-runs'),
+        () => checkRunsResponse([{ status: 'completed', conclusion: 'success' }]),
+      ],
+    ]);
+    const runtime = await githubConnector.fetchRuntime(node({ lensKind: 'review' }), 20);
+    expect(runtime.state).toBe('ok');
+    const item = runtime.items[0];
+    expect(item?.change).toEqual({
+      author: 'octo',
+      repo: 'o/r',
+      reviewers: [
+        { login: 'alice', state: 'approved' },
+        { login: 'pending-rev', state: 'pending' },
+      ],
+      draft: false,
+      additions: 112,
+      deletions: 40,
+      targetBranch: 'main',
+      updatedAt: Date.parse('2026-06-24T10:00:00Z'),
+    });
+    // CI tone stays on `status`, never duplicated into `change`.
+    expect(item?.status).toEqual({ tone: 'ok', label: 'Checks passed' });
+  });
+
+  test('CHANGES_REQUESTED maps to changes; COMMENTED carries no verdict', async () => {
+    storageData = { ...TOKEN };
+    routeFetch([
+      [(u) => u.includes('/search/issues'), () => searchResponse([pr(7)])],
+      [
+        (u) => u.includes('/reviews'),
+        () =>
+          reviewsResponse([
+            { login: 'bob', state: 'CHANGES_REQUESTED' },
+            { login: 'carol', state: 'COMMENTED' },
+          ]),
+      ],
+      [(u) => u.includes('/pulls/'), () => reviewPrDetail(7, { requested_reviewers: [] })],
+      [(u) => u.includes('/check-runs'), () => checkRunsResponse([])],
+    ]);
+    const runtime = await githubConnector.fetchRuntime(node({ lensKind: 'review' }), 20);
+    // carol only COMMENTED and is not a requested reviewer → absent from the rail.
+    expect(runtime.items[0]?.change?.reviewers).toEqual([{ login: 'bob', state: 'changes' }]);
+  });
+
+  test('a general lens makes no reviews call and carries no change', async () => {
+    storageData = { ...TOKEN };
+    let reviewsCalled = false;
+    routeFetch([
+      [(u) => u.includes('/search/issues'), () => searchResponse([pr(7)])],
+      [
+        (u) => u.includes('/reviews'),
+        () => {
+          reviewsCalled = true;
+          return reviewsResponse([]);
+        },
+      ],
+      [(u) => u.includes('/pulls/'), () => reviewPrDetail(7)],
+      [(u) => u.includes('/check-runs'), () => checkRunsResponse([])],
+    ]);
+    const runtime = await githubConnector.fetchRuntime(node({ lensKind: 'general' }), 20);
+    expect(reviewsCalled).toBe(false);
+    expect(runtime.items[0]?.change).toBeUndefined();
   });
 });

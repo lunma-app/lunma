@@ -185,15 +185,47 @@ export type ResolvedLensSource = {
   /** The owning source's optional display name (smart-source-rename) — when set,
    * labels this section in place of the host. */
   name?: string | undefined;
+  /** The owning lens's kind (review-lens, design D4a), stamped by
+   * `resolvedConfigs(node)` so a connector can gate kind-specific enrichment
+   * (the review-lens `change` bag and its per-reviewer verdict fetch) without a
+   * `fetchRuntime` signature change. */
+  lensKind: LensKind;
 };
 
 /**
  * The kind of lens (lenses). A closed union widened by later typed-kind
  * changes. `'general'` is today's untyped multi-provider bag — the only kind
- * that may mix providers. Later typed kinds (e.g. `'review'`) are narrower and
- * single-provider.
+ * that may mix providers. `'review'` is the first typed kind (review-lens): its
+ * sources are github/gitlab only, each normalised into the `Change` entity, and
+ * it renders the Review Queue page archetype.
  */
-export type LensKind = 'general';
+export type LensKind = 'general' | 'review';
+
+/**
+ * The canonical Change entity (review-lens) — a GitHub PR or GitLab MR
+ * normalised into one shape so the Review Queue renders both identically. Rides
+ * the optional `LensItem.change` bag on the **ephemeral** `lenses` runtime slice
+ * (never persisted → no schema migration). The CI/pipeline tone stays on
+ * `LensItem.status` and is NOT duplicated here.
+ */
+export interface ChangeData {
+  /** PR/MR author login/username. */
+  author: string;
+  /** `"owner/repo"` slug; the host comes from the source `baseUrl`. */
+  repo: string;
+  /** Per-reviewer verdicts. `state` is absent until known; the rail renders an
+   * unknown verdict as `pending` (never fabricated). Optional fields are typed
+   * `| undefined` to match the ephemeral `ChangeDataSchema`'s `.optional()`
+   * inference under `exactOptionalPropertyTypes` (see the equality guard in
+   * `schemas.ts`). */
+  reviewers: { login: string; state?: 'approved' | 'changes' | 'pending' | undefined }[];
+  draft: boolean;
+  additions?: number | undefined;
+  deletions?: number | undefined;
+  targetBranch?: string | undefined;
+  /** Last-updated time as epoch ms (the row's warming age reads this). */
+  updatedAt: number;
+}
 
 /**
  * A pinned-tab placement node. The pinned list for a Space is an ordered tree
@@ -256,6 +288,11 @@ export interface LensItem {
   imageUrl?: string | undefined;
   /** Publication time as epoch ms (RSS pubDate / Atom published|updated). */
   publishedAt?: number | undefined;
+  /** The canonical Change entity (review-lens) — populated by the github/gitlab
+   * connectors for `review`-kind lenses only; absent for `general` lenses. Rides
+   * the ephemeral runtime slice (never persisted); the Review Queue page reads
+   * it, the sidebar projection ignores it. */
+  change?: ChangeData | undefined;
 }
 
 /**

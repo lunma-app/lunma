@@ -19,11 +19,15 @@ import type { ResolvedLensSource } from './types';
  *   - `gitlab`, `jira`, and `rss` fetch their own `baseUrl` origin.
  *
  * Pure and total: a malformed `baseUrl` yields an empty pattern (treated as
- * ungranted by `hasHostPermissions`) rather than throwing. Origins are
- * query-independent, so it accepts a {@link ResolvedLensSource} and the
- * folder-level union dedups to one entry per connector instance.
+ * ungranted by `hasHostPermissions`) rather than throwing. Origins are query-
+ * AND kind-independent, so it accepts the `source`/`baseUrl` of a
+ * {@link ResolvedLensSource} (review-lens, D4a — the editor can pass a raw
+ * `LensSource` too without minting a `lensKind`), and the folder-level union
+ * dedups to one entry per connector instance.
  */
-export function requiredOriginsForConfig(cfg: ResolvedLensSource): string[] {
+export function requiredOriginsForConfig(
+  cfg: Pick<ResolvedLensSource, 'source' | 'baseUrl'>,
+): string[] {
   if (cfg.source === 'github') {
     let isDotCom = false;
     try {

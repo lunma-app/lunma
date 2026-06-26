@@ -552,6 +552,39 @@ describe('readPersistedState', () => {
     expect(backupKey).toBeUndefined();
   });
 
+  test('a v12 state with a review lens node round-trips without quarantine', async () => {
+    // review-lens: the widened `lensKind` enum admits `'review'`; a persisted
+    // review node must survive the load path (validate, no quarantine).
+    const state = createInitialState();
+    state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    state.pinnedBySpace.work = [
+      {
+        kind: 'lens',
+        lensKind: 'review',
+        id: 'sf-rev',
+        name: 'My reviews',
+        icon: 'folder-git-2',
+        sources: [
+          { source: 'github', baseUrl: 'https://github.com', queries: ['review-requested'] },
+        ],
+        maxItems: 20,
+        hideRead: false,
+        refreshMinutes: 10,
+      },
+    ];
+    await persist(state);
+
+    const result = await readPersistedState();
+
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+    const node = result.state.pinnedBySpace.work?.[0];
+    expect(node?.kind).toBe('lens');
+    if (node?.kind === 'lens') expect(node.lensKind).toBe('review');
+    const backupKey = Object.keys(chromeMock.data).find((k) => k.startsWith('__corrupt_backup_'));
+    expect(backupKey).toBeUndefined();
+  });
+
   test('a v4 envelope (github lens node) migrates and writes back as v11', async () => {
     // A pre-jira-connector envelope: schemaVersion 4, a github smart node.
     chromeMock.data['lunma.state'] = {
@@ -1056,6 +1089,41 @@ describe('persist', () => {
     // The rest of the persisted state is exactly what it would be without the slice.
     const { liveTabsById: _l, lenses: _s, ...persistable } = createInitialState();
     expect(envelope.state).toEqual(persistable);
+  });
+
+  test('review-lens: a change bag never reaches disk (the whole lenses slice is stripped)', async () => {
+    const state = createInitialState();
+    state.lenses['rev-1'] = {
+      sections: {
+        'github:github.com:review-requested': {
+          state: 'ok',
+          items: [
+            {
+              id: '7',
+              title: 'Fix parser',
+              url: 'https://github.com/o/r/pull/7',
+              status: { tone: 'ok', label: 'Checks passed' },
+              change: {
+                author: 'octo',
+                repo: 'o/r',
+                reviewers: [{ login: 'jd', state: 'approved' }],
+                draft: false,
+                additions: 112,
+                deletions: 40,
+                updatedAt: 1234,
+              },
+            },
+          ],
+          fetchedAt: 1234,
+        },
+      },
+    };
+    await persist(state);
+    const envelope = chromeMock.data['lunma.state'] as { state: Record<string, unknown> };
+    // The ephemeral lenses slice (and thus every `change` bag) is stripped.
+    expect(envelope.state).not.toHaveProperty('lenses');
+    expect(JSON.stringify(envelope)).not.toContain('octo');
+    expect(JSON.stringify(envelope)).not.toContain('"change"');
   });
 
   test('persisted shape does not bump CURRENT_SCHEMA_VERSION', async () => {
