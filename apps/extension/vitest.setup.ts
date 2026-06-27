@@ -1,3 +1,15 @@
+import { afterAll } from 'vitest';
+
+// bits-ui's body-scroll-lock (Dialog / BottomSheet) defers `resetBodyStyle` to a
+// ~24ms timer (its `scheduleCleanupIfNoNewLocks`). When the last Dialog in a file
+// unmounts, that timer can fire AFTER vitest disposes the file's env → an
+// uncaught `ReferenceError: document is not defined` that fails the run even
+// though every test passed. Hold the env open one macrotask past that delay so
+// the timer fires (and resets the body) while `document` still exists.
+afterAll(async () => {
+  await new Promise((resolve) => setTimeout(resolve, 30));
+});
+
 // jsdom doesn't ship `matchMedia`. Svelte's `svelte/motion` module reads it
 // at import time (for the global `prefers-reduced-motion` `MediaQuery`), so
 // without this stub any test that transitively imports a component using

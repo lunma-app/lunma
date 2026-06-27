@@ -15,6 +15,10 @@ import { expect, test } from './fixtures';
 // engine's immediate fetch lands a real result item.
 
 const FORGE = 'https://forge.e2e.test';
+// A review-shaped MR: `author` + parseable `updated_at` (+ repo from `web_url`)
+// are the identity fields `buildMrChange` requires before it builds the Change
+// bag — without them the connector (correctly) leaves the item unenriched and it
+// buckets to "Other" instead of Changes.
 const MR = {
   id: 42,
   iid: 7,
@@ -22,6 +26,8 @@ const MR = {
   title: 'E2E page merge request',
   web_url: `${FORGE}/group/proj/-/merge_requests/7`,
   head_pipeline: { status: 'success' },
+  author: { username: 'octo' },
+  updated_at: '2026-06-24T10:00:00Z',
 };
 
 /** Force the SW's host-permission gate to report the forge origin granted (a real
@@ -55,7 +61,7 @@ async function ids(page: Page): Promise<{ spaceId: string | null; folderIds: str
   });
 }
 
-test('the lens page loads at its URL and renders the folder section + card', async ({
+test('the lens page loads at its URL and renders the overview section + change row', async ({
   context,
   page,
   extensionId,
@@ -121,10 +127,10 @@ test('the lens page loads at its URL and renders the folder section + card', asy
 
   // The page mounts, mirrors SW state, and renders the entity-merged overview.
   await expect(page.getByTestId('lenspage-root')).toBeVisible();
-  await expect(page.getByTestId('lenspage-name')).toHaveText('E2E page queue');
+  await expect(page.getByTestId('lens-name')).toHaveText('E2E page queue');
   // The gitlab source buckets to a single Changes entity section…
-  await expect(page.getByTestId('overview-entity')).toHaveCount(1);
-  await expect(page.getByTestId('overview-entity')).toHaveAttribute('data-entity', 'change');
+  await expect(page.getByTestId('overview-section')).toHaveCount(1);
+  await expect(page.getByTestId('overview-section')).toHaveAttribute('data-entity', 'change');
   // …and the mocked MR rendered as a Review-Queue change row — proof the live
   // runtime reached the page.
   await expect(page.getByTestId('change-row')).toContainText('E2E page merge request');
