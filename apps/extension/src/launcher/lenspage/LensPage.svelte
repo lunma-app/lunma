@@ -156,7 +156,10 @@ function toggleRead(t: Tagged, makeRead: boolean): void {
   }
   .main {
     width: 100%;
-    max-width: 740px;
+    /* Responsive: fills the viewport (minus a small gutter) up to a 1080px cap, so
+       the overview breathes on wide screens (the article grid gains columns) while
+       single-column change/issue lists keep a sane measure. */
+    max-width: min(94vw, 1080px);
     margin: 0 auto;
     padding: 34px 28px 80px;
     display: flex;

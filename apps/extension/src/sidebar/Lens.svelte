@@ -4,6 +4,7 @@ import { PROVIDER_AUTH_METHODS } from '../shared/auth-method';
 import { dispatch } from '../shared/bus';
 import { requiredOriginsForConfig } from '../shared/connector-origins';
 import { setAccountToken } from '../shared/connectors';
+import { entityForItem, type LensEntity } from '../shared/lens-entity';
 import { requestHostPermissions } from '../shared/permissions';
 import type {
   AppState,
@@ -69,9 +70,16 @@ const {
 
 const store = useStore();
 
-// This lens's overview is the active "peek" tab in this window (lens-overview-peek)
-// → drives the lens row's active treatment. Delivered via the broadcast AppState.
-const isActivePeek = $derived(store.state.lensPeekByWindow[windowId]?.folderId === node.id);
+// Active treatment ONLY while this lens's overview peek is the window's ACTIVE
+// tab — mirrors a result row's `isActiveItem`. The peek RECORD persists after focus
+// moves (so reopening focuses the same tab), but the header must not read "selected"
+// once you switch to another tab.
+const isActivePeek = $derived.by(() => {
+  const peek = store.state.lensPeekByWindow[windowId];
+  if (peek?.folderId !== node.id) return false;
+  const live = store.state.liveTabsById[peek.tabId];
+  return live !== undefined && live.windowId === windowId && live.active;
+});
 
 const spaceColor = $derived(store.state.spaces.find((s) => s.id === spaceId)?.color ?? 'gray');
 
@@ -227,6 +235,20 @@ function dismissFeedItem(cfg: ResolvedLensSource, item: LensItem): void {
 }
 
 /** Live items + held items during reloads + binding-held rows per section. */
+// Sidebar grouping: changes (PRs/MRs) before tickets (issues), then articles, then
+// generic — so a mixed queue section reads as two clean blocks, never interleaved.
+const ENTITY_RANK: Record<LensEntity, number> = { change: 0, ticket: 1, article: 2, generic: 3 };
+
+// Per-item leading glyph for a code lens row: a PR/MR shows a pull-request mark, an
+// issue the issue dot — so a (sorted) mixed section reads apart at a glance. Feeds /
+// generic items return null and keep their source favicon.
+function itemGlyph(item: LensItem): string | null {
+  const entity = entityForItem(item);
+  if (entity === 'change') return 'git-pull-request';
+  if (entity === 'ticket') return 'circle-dot';
+  return null;
+}
+
 function displayItemsForSection(cfg: ResolvedLensSource): LensItem[] {
   const sk = sourceKey(cfg);
   const sec = folderRuntime?.sections[sk];
@@ -247,7 +269,11 @@ function displayItemsForSection(cfg: ResolvedLensSource): LensItem[] {
     const seen = lastSeenById[namespacedId];
     if (seen) held.push(seen);
   }
-  return held.length === 0 ? base : [...base, ...held];
+  const ordered = held.length === 0 ? base : [...base, ...held];
+  // Stable sort by entity → changes group ahead of tickets; each connector's order
+  // holds within a type. Single-entity sections (rss → article, jira → ticket) are
+  // a no-op, so feed windowing/ordering downstream is unaffected.
+  return [...ordered].sort((a, b) => ENTITY_RANK[entityForItem(a)] - ENTITY_RANK[entityForItem(b)]);
 }
 
 /** Feed windowing: newest N unread + interleaved read rows (identical to the
@@ -621,6 +647,7 @@ export function onContextMenu(_e: MouseEvent): void {
           {@const itemFavSrc = isSectionFeed
             ? (() => { try { return faviconFor(new URL(item.url).origin); } catch { return faviconFor(cfg.baseUrl); } })()
             : faviconFor(cfg.baseUrl)}
+          {@const glyph = itemGlyph(item)}
 
           {#snippet closeSlot()}
             {#if bound || isSectionFeed}
@@ -665,7 +692,7 @@ export function onContextMenu(_e: MouseEvent): void {
                     onclick={() => openItem(cfg, item)}
                   >
                     <span class="result-favicon" data-tone={status.tone} aria-hidden="true">
-                      <Favicon src={itemFavSrc} size={14} />
+                      {#if glyph}<Icon name={glyph} size={14} />{:else}<Favicon src={itemFavSrc} size={14} />{/if}
                     </span>
                     <span class="result-title">{item.title}</span>
                     <span class="dot {status.tone}" data-testid="smart-status-dot"></span>
@@ -687,7 +714,7 @@ export function onContextMenu(_e: MouseEvent): void {
                 onclick={() => openItem(cfg, item)}
               >
                 <span class="result-favicon" aria-hidden="true">
-                  <Favicon src={itemFavSrc} size={14} />
+                  {#if glyph}<Icon name={glyph} size={14} />{:else}<Favicon src={itemFavSrc} size={14} />{/if}
                 </span>
                 <span class="result-title">{item.title}</span>
               </button>
@@ -828,8 +855,10 @@ export function onContextMenu(_e: MouseEvent): void {
       box-shadow var(--motion-fast) var(--ease-standard),
       transform var(--motion-fast) var(--ease-standard);
   }
+  /* Hover mirrors the active wash (`--space-c-soft`) without the ring; `.result-row.active`
+     (later in source) keeps its ring while hovered. */
   .result-row:hover {
-    background: var(--hover);
+    background: var(--space-c-soft);
   }
   .result-row:active {
     transform: scale(var(--press-scale));
@@ -855,11 +884,12 @@ export function onContextMenu(_e: MouseEvent): void {
   .close-slot {
     position: absolute;
     top: 50%;
-    /* Centre the (--icon-btn-wide) dismiss button's glyph on the status dot's
-       CENTRE — the dot sits at --space-3 + half-dot (4px) from the right; offsetting
-       by half the button width lands the X exactly over it, so hover swaps dot → X
-       in place. */
-    right: calc(var(--space-3) + 4px - var(--icon-btn) / 2);
+    /* Right-align the dismiss glyph to the trailing column (--space-3) — the same
+       right edge as the status dot, the feed/lens counts, and the kebab glyphs
+       above — so every trailing element shares one column. The 14px glyph sits
+       centred in the --icon-btn box, so back off by that centring padding
+       (--icon-btn / 4 = 7px) to land the glyph's right edge on --space-3. */
+    right: calc(var(--space-3) - var(--icon-btn) / 4);
     translate: 0 -50%;
     display: inline-flex;
     opacity: 0;

@@ -11,7 +11,8 @@ import IconButton from './IconButton.svelte';
  *    crossfades type-icon → chevron on hover; the chevron rotates with state).
  *  - A trailing icon, revealed on hover/focus, OPENS THE LENS OVERVIEW (the page).
  *  - Lens actions live in the right-click context menu (the row carries no kebab).
- * There is no coloured hue fill — the row reads as a plain collapsible header.
+ * Hover and the active peek share the lens-hue wash (`--lens-fill`); only the
+ * active peek adds the inset hue ring.
  */
 interface Props {
   /** Lens name (the row label). */
@@ -120,9 +121,12 @@ const ring = $derived(`oklch(${ok.l} ${ok.c} ${ok.h} / 0.5)`);
     color: var(--text-2);
     transition: background var(--motion-fast) var(--ease-standard);
   }
-  /* Plain neutral hover — the row is the toggle target; no hue fill. */
+  /* Hover mirrors the selected wash (the same `--lens-fill`) but WITHOUT the inset
+     ring — the ring is reserved for the active "peek". `.lens-row.active` below is
+     equal specificity but later in source, so an active row keeps its ring while
+     hovered. */
   .lens-row:hover {
-    background: var(--hover);
+    background: var(--lens-fill);
   }
   /* Active "peek": the selected hue wash + inset hue ring (the comp's ACTIVE_STYLE).
      More specific than :hover, so it holds while hovered too. */
@@ -183,12 +187,10 @@ const ring = $derived(`oklch(${ok.l} ${ok.c} ${ok.h} / 0.5)`);
     display: none;
     transition: transform var(--motion-base) var(--ease-emphasised);
   }
-  .lens-row:hover .tile-mark,
-  .lens-row:focus-within .tile-mark {
+  .lens-row:hover .tile-mark {
     display: none;
   }
-  .lens-row:hover .tile-caret,
-  .lens-row:focus-within .tile-caret {
+  .lens-row:hover .tile-caret {
     display: inline-flex;
   }
   .tile.expanded .tile-caret {
@@ -237,12 +239,14 @@ const ring = $derived(`oklch(${ok.l} ${ok.c} ${ok.h} / 0.5)`);
   .trailing > * {
     grid-area: 1 / 1;
   }
+  /* Plain count (not a pill): a pill's side padding would inset the digits, so they
+     couldn't share a right edge with the plain feed-section counts below. The
+     `--space-1` margin lands the digits' right edge on the same `--space-3` (12px)
+     trailing column as the feed counts + status dots. Brighter than the feed counts
+     (`--text-2` vs `--text-dim`) to keep the lens's own total prominent. */
   .badge {
     margin-right: var(--space-1);
-    padding: 1px var(--space-2);
-    border-radius: var(--r-pill);
-    background: var(--surface-2);
-    color: var(--text-muted);
+    color: var(--text-2);
     font: var(--weight-semibold) var(--text-xs) / 1 var(--font-sans);
     pointer-events: none;
     transition: opacity var(--motion-fast) var(--ease-standard);
@@ -254,13 +258,17 @@ const ring = $derived(`oklch(${ok.l} ${ok.c} ${ok.h} / 0.5)`);
     pointer-events: none;
     transition: opacity var(--motion-fast) var(--ease-standard);
   }
-  /* Crossfade: hover / focus hides the badge, reveals the open-overview icon. */
+  /* Crossfade: hover (or the open-overview button's own focus) hides the count and
+     reveals the icon. */
   .lens-row:hover .badge,
-  .lens-row:focus-within .badge {
+  .lens-row:has(.open-page:focus-within) .badge {
     opacity: 0;
   }
+  /* Reveal on hover, or when the open-overview button ITSELF is focused (so it stays
+     Tab-reachable) — scoped to `.open-page`, NOT the row's `:focus-within`, so a
+     click/focus on the row body never sticks the icon visible. */
   .lens-row:hover .open-page,
-  .lens-row:focus-within .open-page {
+  .open-page:focus-within {
     opacity: 1;
     pointer-events: auto;
   }

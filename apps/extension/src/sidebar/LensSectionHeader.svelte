@@ -115,7 +115,7 @@ const ariaLabel = $derived(
     padding-top: calc(var(--space-1) + 1px);
   }
   .section-header:hover {
-    background: var(--hover);
+    background: var(--space-c-soft);
   }
   .section-header:hover .section-host {
     color: var(--text-2);
