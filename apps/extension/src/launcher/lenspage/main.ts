@@ -2,7 +2,7 @@ import { mount } from 'svelte';
 import { log } from '../../shared/logger';
 import { onStateBroadcast, requestStateSnapshot } from '../../shared/messages';
 import { readSettings, type Settings, watchSettings } from '../../shared/settings';
-import { applyDensityToDocument } from '../../shared/surface-boot';
+import { applyDensityToDocument, applyThemeToDocument } from '../../shared/surface-boot';
 import type { AppState } from '../../shared/types';
 import { getCurrentWindowId } from '../../shared/window-id';
 import LensPage from './LensPage.svelte';
@@ -26,18 +26,11 @@ function applyDensity(settings: Settings): void {
   applyDensityToDocument(settings.density);
 }
 
-/** Reflect the colour-intensity + glare preferences onto the page root so its
- * `[data-tint=…]` / `[data-show-glares=…]` glass overrides apply. LensPage
- * renders the first-paint value from its `tint` prop; this keeps the live glass
- * cast in sync when the user changes the setting in the options page. */
-function applyTint(settings: Settings): void {
-  const root = target.querySelector<HTMLElement>('[data-testid="lenspage-root"]');
-  if (root) root.dataset.tint = settings.tint;
-}
-
-function applyShowGlares(settings: Settings): void {
-  const root = target.querySelector<HTMLElement>('[data-testid="lenspage-root"]');
-  if (root) root.dataset.showGlares = String(settings.showGlares);
+/** Reflect the light/dark theme onto `<html>` (the redesigned lens page is flat +
+ * fully token-driven, so theme is the only document-level presentation hook —
+ * tint/aurora no longer apply here). */
+function applyTheme(settings: Settings): void {
+  applyThemeToDocument(settings.theme);
 }
 
 /** The folder this page renders, from `?folderId=…`. Null when the param is
@@ -53,6 +46,7 @@ async function boot(): Promise<void> {
   // saved density BEFORE mount so the first paint is at the right rhythm.
   const initialSettings = await readSettings();
   applyDensity(initialSettings);
+  applyTheme(initialSettings);
 
   // windowId resolves against chrome.windows.* and doesn't depend on the SW.
   let windowId: number;
@@ -64,13 +58,11 @@ async function boot(): Promise<void> {
     log.error('lenspage boot failed: getCurrentWindowId', { err });
     mount(LensPage, {
       target,
-      props: { windowId: -1, folderId, initialState: null, tint: initialSettings.tint },
+      props: { windowId: -1, folderId, initialState: null },
     });
-    applyShowGlares(initialSettings);
     watchSettings((settings) => {
       applyDensity(settings);
-      applyTint(settings);
-      applyShowGlares(settings);
+      applyTheme(settings);
     });
     return;
   }
@@ -100,16 +92,14 @@ async function boot(): Promise<void> {
   const initialState = pendingBroadcast ?? snapshot;
   mount(LensPage, {
     target,
-    props: { windowId, folderId, initialState, tint: initialSettings.tint },
+    props: { windowId, folderId, initialState },
   });
-  applyShowGlares(initialSettings);
 
-  // Re-apply on change (e.g. the user switches density or colour intensity in
-  // the options page). Registered once per boot, after mount.
+  // Re-apply on change (e.g. the user switches density or theme in the options
+  // page). Registered once per boot, after mount.
   watchSettings((settings) => {
     applyDensity(settings);
-    applyTint(settings);
-    applyShowGlares(settings);
+    applyTheme(settings);
   });
 }
 

@@ -1,37 +1,47 @@
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/svelte';
-import { tick } from 'svelte';
+import { cleanup, fireEvent, render } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createInitialState } from '../../shared/store.svelte';
-import type { AppState, LensSectionRuntime, PinNode, Space } from '../../shared/types';
+import type {
+  AppState,
+  LensItem,
+  LensProvider,
+  LensQuery,
+  LensSectionRuntime,
+  LensSourceRef,
+  PinNode,
+  SourceAccount,
+  Space,
+} from '../../shared/types';
 import LensPage from './LensPage.svelte';
 
 type LensNode = Extract<PinNode, { kind: 'lens' }>;
 
+// LensPage is the SINGLE-lens page: it renders the lens its `?folderId` opened as
+// a single collapsible inline overview (no drill-down sub-pages). Lens-to-lens
+// navigation is the sidebar's job (no in-page rail). These tests assert that shell
+// + the per-item bucketing that lets ONE github section feed both Changes +
+// Issues, and the activation dispatch.
+
+const ACCOUNTS: Record<string, SourceAccount> = {};
+function ref(provider: LensProvider, baseUrl: string, queries: LensQuery[]): LensSourceRef {
+  const id = `acc:${provider}:${baseUrl}`;
+  ACCOUNTS[id] = { id, provider, baseUrl, name: provider === 'github' ? 'Work' : undefined };
+  return { sourceId: id, queries };
+}
+
 let sendMessage: ReturnType<typeof vi.fn>;
-/** The `onStateBroadcast` listener the page registered, captured so a test can
- * simulate a live `state-broadcast` (exercises read-while-open lingering). */
-let broadcastListener: ((raw: unknown) => void) | undefined;
 
 function installChrome(): void {
   sendMessage = vi.fn(() => Promise.resolve());
-  broadcastListener = undefined;
   (globalThis as unknown as { chrome: unknown }).chrome = {
     runtime: {
       sendMessage,
       getURL: (path: string) => `chrome-extension://test/${path}`,
-      onMessage: {
-        addListener: vi.fn((cb: (raw: unknown) => void) => {
-          broadcastListener = cb;
-        }),
-        removeListener: vi.fn(),
-      },
+      onMessage: { addListener: vi.fn(), removeListener: vi.fn() },
     },
     tabs: { query: vi.fn(() => Promise.resolve([])), create: vi.fn(), update: vi.fn() },
     windows: { update: vi.fn() },
   };
-  // Report reduced motion so the card FLIP/fade runs at duration 0 — the layout
-  // settles instantly, which keeps these DOM-count assertions deterministic
-  // (jsdom doesn't advance Svelte's rAF-driven transitions otherwise).
   (window as unknown as { matchMedia: (q: string) => MediaQueryList }).matchMedia = (q: string) =>
     ({
       matches: q.includes('reduce'),
@@ -41,12 +51,6 @@ function installChrome(): void {
     }) as unknown as MediaQueryList;
 }
 
-/** Fire a `state-broadcast` to the page's listener (a live SW update). */
-function broadcast(state: AppState): void {
-  broadcastListener?.({ type: 'lunma/state-broadcast', method: 'test', state });
-}
-
-/** The most recent bus command dispatched via chrome.runtime.sendMessage. */
 function lastCommand(): { kind: string; payload: Record<string, unknown> } | undefined {
   const commands = sendMessage.mock.calls
     .map((c) => c[0] as { type?: string; cmd?: { kind: string; payload: Record<string, unknown> } })
@@ -55,28 +59,53 @@ function lastCommand(): { kind: string; payload: Record<string, unknown> } | und
 }
 
 const WORK: Space = { id: 'work', name: 'Work', color: 'blue', icon: 'briefcase' };
-const GITLAB_AUTHORED_SK = 'gitlab:gitlab.example.com:authored';
-const GITLAB_REVIEW_SK = 'gitlab:gitlab.example.com:review-requested';
+const GH_SK = 'github:github.com:authored';
 
-function twoFilterNode(): LensNode {
+function ghNode(): LensNode {
   return {
     kind: 'lens',
-    lensKind: 'general',
+    lensKind: 'review',
     id: 'sf-1',
-    name: 'My work',
+    name: 'Payments',
     icon: 'folder-git-2',
-    sources: [
-      {
-        source: 'gitlab',
-        baseUrl: 'https://gitlab.example.com',
-        queries: ['authored', 'review-requested'],
-      },
-    ],
+    sources: [ref('github', 'https://github.com', ['authored'])],
     maxItems: 20,
     hideRead: false,
     refreshMinutes: 10,
   };
 }
+
+// A PR (Change) + an issue (Ticket) in the SAME github section — the per-item
+// bucketing must split them across Changes and Issues.
+const PR: LensItem = {
+  id: '42',
+  title: 'Fix the parser',
+  url: 'https://github.com/o/r/pull/42',
+  status: { tone: 'fail', label: 'Checks failed' },
+  change: {
+    author: 'me',
+    repo: 'o/r',
+    reviewers: [],
+    draft: false,
+    additions: 10,
+    deletions: 2,
+    updatedAt: 1,
+  },
+  refs: [{ kind: 'ticket', key: 'PAY-88', url: '', label: 'PAY-88' }],
+};
+const ISSUE: LensItem = {
+  id: 'i5',
+  title: '#5 Crash on empty config',
+  url: 'https://github.com/o/r/issues/5',
+  ticket: {
+    key: '#5',
+    statusCategory: 'todo',
+    statusLabel: 'Open',
+    priority: 'high',
+    project: 'o/r',
+    updatedAt: 1,
+  },
+};
 
 function stateWith(node: LensNode, sections: Record<string, LensSectionRuntime>): AppState {
   const state = createInitialState();
@@ -84,265 +113,73 @@ function stateWith(node: LensNode, sections: Record<string, LensSectionRuntime>)
   state.activeSpaceByWindow[100] = 'work';
   state.pinnedBySpace.work = [node];
   state.lenses[node.id] = { sections };
+  for (const [id, account] of Object.entries(ACCOUNTS)) state.sources[id] = account;
   return state;
 }
 
 beforeEach(() => installChrome());
 afterEach(() => cleanup());
 
-describe('LensPage (smart-folder-page)', () => {
-  test('renders the folder name and every resolved section in order', () => {
-    const node = twoFilterNode();
-    const initialState = stateWith(node, {
-      [GITLAB_AUTHORED_SK]: {
-        state: 'ok',
-        items: [{ id: '42', title: 'Fix the parser', url: 'https://gitlab.example.com/mr/42' }],
-        fetchedAt: 1,
-      },
-      [GITLAB_REVIEW_SK]: {
-        state: 'ok',
-        items: [{ id: '7', title: 'Review me', url: 'https://gitlab.example.com/mr/7' }],
-        fetchedAt: 1,
-      },
+describe('LensPage — single-lens shell + per-item bucketing', () => {
+  test('renders the lens identity + the overview (no in-page rail)', () => {
+    const initialState = stateWith(ghNode(), {
+      [GH_SK]: { state: 'ok', items: [PR], fetchedAt: 1 },
     });
-    const { container, getByText } = render(LensPage, {
-      props: { windowId: 100, folderId: 'sf-1', initialState, tint: 'vivid' as const },
+    const { getByTestId, queryByTestId } = render(LensPage, {
+      props: { windowId: 100, folderId: 'sf-1', initialState },
     });
-
-    expect(getByText('My work')).toBeTruthy();
-    const sectionKeys = [...container.querySelectorAll('[data-testid="lenspage-section"]')].map(
-      (el) => el.getAttribute('data-source-key'),
-    );
-    expect(sectionKeys).toEqual([GITLAB_AUTHORED_SK, GITLAB_REVIEW_SK]);
-    // Section labels carry host · filter.
-    expect(getByText('gitlab.example.com · authored')).toBeTruthy();
-    expect(getByText('gitlab.example.com · reviewing')).toBeTruthy();
+    expect(getByTestId('lens-name').textContent).toBe('Payments');
+    expect(getByTestId('overview-section')).toBeTruthy();
+    // The lens rail belongs to the sidebar, not this page.
+    expect(queryByTestId('lens-rail')).toBeNull();
   });
 
-  test('activating a result card dispatches openSmartItem with the namespaced id', async () => {
-    const node = twoFilterNode();
-    const initialState = stateWith(node, {
-      [GITLAB_AUTHORED_SK]: {
-        state: 'ok',
-        items: [{ id: '42', title: 'Fix the parser', url: 'https://gitlab.example.com/mr/42' }],
-        fetchedAt: 1,
-      },
+  test('one github section feeds BOTH a Changes row and an Issues row', () => {
+    const initialState = stateWith(ghNode(), {
+      [GH_SK]: { state: 'ok', items: [PR, ISSUE], fetchedAt: 1 },
     });
     const { container } = render(LensPage, {
-      props: { windowId: 100, folderId: 'sf-1', initialState, tint: 'vivid' as const },
+      props: { windowId: 100, folderId: 'sf-1', initialState },
     });
+    const sections = [...container.querySelectorAll('[data-testid="overview-section"]')].map((s) =>
+      s.getAttribute('data-entity'),
+    );
+    expect(sections).toContain('change');
+    expect(sections).toContain('ticket');
+    expect(container.querySelector('[data-testid="change-row"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="issue-row"]')).not.toBeNull();
+    // The Change row carries the review-state pill, a failing CI circle, + its ticket chip.
+    expect(container.querySelector('[data-testid="verdict"]')?.textContent).toContain('open');
+    expect(container.querySelector('[data-entity="change"] .ci')?.textContent).toBe('✕');
+    expect(container.querySelector('[data-testid="ticket-ref"]')?.textContent).toBe('PAY-88');
+  });
 
+  test('activating a change row dispatches openLensItem with the namespaced id', async () => {
+    const initialState = stateWith(ghNode(), {
+      [GH_SK]: { state: 'ok', items: [PR], fetchedAt: 1 },
+    });
+    const { container } = render(LensPage, {
+      props: { windowId: 100, folderId: 'sf-1', initialState },
+    });
     await fireEvent.click(
-      container.querySelector('[data-testid="lenspage-item"]') as HTMLButtonElement,
+      container.querySelector('[data-testid="change-row"]') as HTMLButtonElement,
     );
     expect(lastCommand()).toEqual({
       kind: 'openLensItem',
       payload: {
         spaceId: 'work',
         folderId: 'sf-1',
-        itemId: `${GITLAB_AUTHORED_SK}:42`,
+        itemId: `${GH_SK}:42`,
         windowId: 100,
-        // Page-originated open → closing returns to the page (no auto-advance).
         fromPage: true,
       },
     });
   });
 
-  test('a signed-out github section renders the Connectors affordance, not a red error', () => {
-    const node: LensNode = {
-      ...twoFilterNode(),
-      icon: 'folder-git-2',
-      sources: [{ source: 'github', baseUrl: 'https://github.com', queries: ['authored'] }],
-    };
-    const initialState = stateWith(node, {
-      'github:github.com:authored': { state: 'signed-out', items: [], fetchedAt: null },
-    });
+  test('no folderId renders the calm missing state', () => {
+    const initialState = stateWith(ghNode(), {});
     const { getByTestId } = render(LensPage, {
-      props: { windowId: 100, folderId: 'sf-1', initialState, tint: 'vivid' as const },
-    });
-    expect(getByTestId('lenspage-signin').textContent).toContain('Add a token');
-  });
-
-  test('first-fetch pending renders static ghost cards', () => {
-    const node = twoFilterNode();
-    const initialState = stateWith(node, {
-      [GITLAB_AUTHORED_SK]: { state: 'pending', items: [], fetchedAt: null },
-      [GITLAB_REVIEW_SK]: { state: 'pending', items: [], fetchedAt: null },
-    });
-    const { container } = render(LensPage, {
-      props: { windowId: 100, folderId: 'sf-1', initialState, tint: 'vivid' as const },
-    });
-    expect(container.querySelectorAll('[data-testid="lenspage-ghost"]').length).toBeGreaterThan(0);
-  });
-
-  test('a feed section renders rich magazine cards (hero image + excerpt + date)', () => {
-    const node: LensNode = {
-      kind: 'lens',
-      lensKind: 'general',
-      id: 'sf-1',
-      name: 'Reading',
-      icon: 'rss',
-      sources: [{ source: 'rss', baseUrl: 'https://news.example.com/rss', queries: [] }],
-      maxItems: 20,
-      hideRead: false,
-      refreshMinutes: 30,
-    };
-    const initialState = stateWith(node, {
-      'rss:news.example.com': {
-        state: 'ok',
-        items: [
-          {
-            id: 'e1',
-            title: 'A big story',
-            url: 'https://news.example.com/a',
-            excerpt: 'A short summary of the story.',
-            imageUrl: 'https://img.example.com/a.jpg',
-            publishedAt: Date.now() - 2 * 3_600_000, // ~2h ago
-          },
-        ],
-        fetchedAt: 1,
-      },
-    });
-    const { container, getByText, getByTestId } = render(LensPage, {
-      props: { windowId: 100, folderId: 'sf-1', initialState, tint: 'vivid' as const },
-    });
-
-    // Magazine grid + hero image (lazy + no-referrer) + excerpt + relative date.
-    expect(container.querySelector('.card-grid.feed')).not.toBeNull();
-    const hero = getByTestId('lenspage-hero').querySelector('img') as HTMLImageElement;
-    expect(hero.getAttribute('src')).toBe('https://img.example.com/a.jpg');
-    expect(hero.getAttribute('loading')).toBe('lazy');
-    expect(hero.getAttribute('referrerpolicy')).toBe('no-referrer');
-    expect(getByText('A short summary of the story.')).toBeTruthy();
-    expect(getByTestId('lenspage-date').textContent).toContain('h ago');
-  });
-
-  test('reading controls: read hidden by default, reveal shows them, toggle marks read/unread', async () => {
-    const node: LensNode = {
-      kind: 'lens',
-      lensKind: 'general',
-      id: 'sf-1',
-      name: 'Reading',
-      icon: 'rss',
-      sources: [{ source: 'rss', baseUrl: 'https://news.example.com/rss', queries: [] }],
-      maxItems: 10,
-      hideRead: true,
-      refreshMinutes: 30,
-    };
-    const SK = 'rss:news.example.com';
-    const initialState = stateWith(node, {
-      [SK]: {
-        state: 'ok',
-        items: [
-          { id: 'u1', title: 'Unread one', url: 'https://news.example.com/u1' },
-          { id: 'u2', title: 'Unread two', url: 'https://news.example.com/u2' },
-          { id: 'r1', title: 'Read one', url: 'https://news.example.com/r1' },
-        ],
-        fetchedAt: 1,
-      },
-    });
-    initialState.lensReadState['sf-1'] = [`${SK}:r1`];
-
-    const { container, getByText, getByRole, getAllByRole } = render(LensPage, {
-      props: { windowId: 100, folderId: 'sf-1', initialState, tint: 'vivid' as const },
-    });
-
-    // Default: read hidden → only the two unread cards render.
-    expect(container.querySelectorAll('[data-testid="lenspage-item"]')).toHaveLength(2);
-
-    // Reveal read → all three render; the toggle flips to "Hide read".
-    await fireEvent.click(getByText('Show 1 read'));
-    expect(container.querySelectorAll('[data-testid="lenspage-item"]')).toHaveLength(3);
-    expect(getByText('Hide read')).toBeTruthy();
-
-    // Toggling the first (unread) card marks it read.
-    await fireEvent.click(getAllByRole('button', { name: 'Mark as read' })[0] as HTMLElement);
-    expect(lastCommand()).toEqual({
-      kind: 'markLensItemRead',
-      payload: { folderId: 'sf-1', itemId: `${SK}:u1` },
-    });
-
-    // Toggling the read card marks it unread.
-    await fireEvent.click(getByRole('button', { name: 'Mark as unread' }));
-    expect(lastCommand()).toEqual({
-      kind: 'markLensItemUnread',
-      payload: { folderId: 'sf-1', itemId: `${SK}:r1` },
-    });
-  });
-
-  test('an item read while the page is open lingers (dimmed), then Clear read drains it', async () => {
-    const node: LensNode = {
-      kind: 'lens',
-      lensKind: 'general',
-      id: 'sf-1',
-      name: 'Reading',
-      icon: 'rss',
-      sources: [{ source: 'rss', baseUrl: 'https://news.example.com/rss', queries: [] }],
-      maxItems: 10,
-      hideRead: true,
-      refreshMinutes: 30,
-    };
-    const SK = 'rss:news.example.com';
-    const items = [
-      { id: 'u1', title: 'Unread one', url: 'https://news.example.com/u1' },
-      { id: 'u2', title: 'Unread two', url: 'https://news.example.com/u2' },
-    ];
-    const initialState = stateWith(node, { [SK]: { state: 'ok', items, fetchedAt: 1 } });
-    const { container, getByText } = render(LensPage, {
-      props: { windowId: 100, folderId: 'sf-1', initialState, tint: 'vivid' as const },
-    });
-    expect(container.querySelectorAll('[data-testid="lenspage-item"]')).toHaveLength(2);
-
-    // u1 becomes read WHILE the page is open (a live broadcast) — it lingers,
-    // staying visible (dimmed), not vanishing.
-    const afterRead = stateWith(node, { [SK]: { state: 'ok', items, fetchedAt: 1 } });
-    afterRead.lensReadState['sf-1'] = [`${SK}:u1`];
-    broadcast(afterRead);
-    await tick();
-    expect(container.querySelectorAll('[data-testid="lenspage-item"]')).toHaveLength(2);
-
-    // Clear read drains the lingering item; only u2 remains (await the leave
-    // transition — the card fades out before it's removed).
-    await fireEvent.click(getByText('Clear read'));
-    await waitFor(() =>
-      expect(container.querySelectorAll('[data-testid="lenspage-item"]')).toHaveLength(1),
-    );
-  });
-
-  test('the page shows more than the sidebar budget and pages with Show more', async () => {
-    const node: LensNode = {
-      kind: 'lens',
-      lensKind: 'general',
-      id: 'sf-1',
-      name: 'Reading',
-      icon: 'rss',
-      sources: [{ source: 'rss', baseUrl: 'https://news.example.com/rss', queries: [] }],
-      maxItems: 10, // the sidebar budget — the page must NOT inherit it
-      hideRead: true,
-      refreshMinutes: 30,
-    };
-    const SK = 'rss:news.example.com';
-    const items = Array.from({ length: 30 }, (_, i) => ({
-      id: `e${i}`,
-      title: `Entry ${i}`,
-      url: `https://news.example.com/e${i}`,
-    }));
-    const initialState = stateWith(node, { [SK]: { state: 'ok', items, fetchedAt: 1 } });
-
-    const { container, getByText } = render(LensPage, {
-      props: { windowId: 100, folderId: 'sf-1', initialState, tint: 'vivid' as const },
-    });
-
-    // Default page window is 24 (grid-friendly), not the folder's maxItems of 10.
-    expect(container.querySelectorAll('[data-testid="lenspage-item"]')).toHaveLength(24);
-    await fireEvent.click(getByText('Show more'));
-    expect(container.querySelectorAll('[data-testid="lenspage-item"]')).toHaveLength(30);
-  });
-
-  test('no folderId renders the calm missing state (never an error card)', () => {
-    const initialState = stateWith(twoFilterNode(), {});
-    const { getByTestId } = render(LensPage, {
-      props: { windowId: 100, folderId: null, initialState, tint: 'vivid' as const },
+      props: { windowId: 100, folderId: null, initialState },
     });
     expect(getByTestId('lenspage-missing')).toBeTruthy();
   });
