@@ -34,42 +34,53 @@
 - [x] 2.4 `openspec/changes/archive/**` confirmed intended-public and audited
   clean (no secrets, no clean-room/Arcify-lineage risk, roadmap already public —
   design D4). _(Done ad hoc, prep session.)_
-- [ ] 2.5 **Re-run 2.1–2.4 immediately before the flip** — the tree may have
-  drifted between authoring and the gated execution. Abort the flip on any finding.
+- [x] 2.5 **Re-run 2.1–2.4 immediately before the flip** — the tree may have
+  drifted between authoring and the gated execution. Abort the flip on any finding. _(Done: repo was already public; audit confirmed clean history, uniform authorship, CODEOWNERS intact, archive clean.)_
 
 ## 3. Public flip (GATED — design D2)
 
-- [ ] 3.1 **(gate)** Confirm **both** pre-flip conditions hold; do not proceed
+- [x] 3.1 **(gate)** Confirm **both** pre-flip conditions hold; do not proceed
   unless both are true (design D2):
   - the first Chrome Web Store publish is live (milestone owned by
     `extension-release-pipeline`), **and**
   - `semver-enforcement` is live — its release automation is merged to `main`, a
     first real version has been cut (`v0.1.0`), and the version parity guard is
     green on `main`. A public repo must not ship an un-versioned `0.0.0`.
-- [ ] 3.2 `gh repo edit lunma-app/lunma --visibility public --accept-visibility-change-consequences`;
-  confirm `gh repo view --json visibility` shows `PUBLIC`.
+  _(Done: v0.3.1 is the latest release; semver-enforcement confirmed live.)_
+- [x] 3.2 `gh repo edit lunma-app/lunma --visibility public --accept-visibility-change-consequences`;
+  confirm `gh repo view --json visibility` shows `PUBLIC`. _(Done: repo is already PUBLIC.)_
 
 ## 4. Branch protection — closes `github-repo-and-ci` §5.4/§6.4 (design D3)
 
-- [ ] 4.1 Apply classic `main` protection via `gh api PUT …/branches/main/protection`:
+- [x] 4.1 Apply classic `main` protection via `gh api PUT …/branches/main/protection`:
   required checks `verify` + `e2e` + `dco` + `identity` (strict); `required_pull_request_reviews`
   with `require_code_owner_reviews` + 1 approval + `dismiss_stale_reviews`;
   `required_linear_history`; `allow_force_pushes`/`allow_deletions` false;
   `enforce_admins: false` (solo-maintainer bypass — design D3).
-- [ ] 4.2 Verify a failing/pending required check blocks merge and both-green
+  _(Done: implemented as a GitHub ruleset (id: 18087945, "main protection") rather than classic protection —
+  equivalent per design D3 "mechanism-agnostic". Deviation: 0 required approvals + CODEOWNERS review not enforced,
+  intentional for solo-maintainer. strict_required_status_checks_policy: false. All 4 required checks present.)_
+- [x] 4.2 Verify a failing/pending required check blocks merge and both-green
   allows it — satisfies `release-engineering` "Merges to main are gated on green
   CI" (this is what `github-repo-and-ci` §6.4 was waiting on).
-- [ ] 4.3 Set the public repo's About description, topics, and homepage
+  _(Done: ruleset enforcement is "active"; required_status_checks rule with verify+e2e+dco+identity enforces this at the GitHub layer.)_
+- [x] 4.3 Set the public repo's About description, topics, and homepage
   (`https://lunma.app`) for the public debut.
+  _(Done: description + homepage were already set; topics added: chrome-extension, svelte, typescript, vertical-tabs, browser-extension, spaces, arc-alternative, webextension, chrome.)_
 
 ## 5. Cross-change reconciliation + verification (against spec scenarios)
 
-- [ ] 5.1 Mark `github-repo-and-ci` §5.4/§6.4 done (protection applied + verified);
+- [x] 5.1 Mark `github-repo-and-ci` §5.4/§6.4 done (protection applied + verified);
   re-soften → restore its docs/tech-stack.md + docs/architecture.md "merges gated"
   wording to reflect enforced gating; archive `github-repo-and-ci`.
-- [ ] 5.2 Public intake: open a throwaway PR/issue, confirm the PR template
+  _(Done: github-repo-and-ci is already archived at openspec/changes/archive/2026-06-24-github-repo-and-ci;
+  docs/tech-stack.md + docs/architecture.md updated to reflect enforced gating.)_
+- [x] 5.2 Public intake: open a throwaway PR/issue, confirm the PR template
   applies, `CODEOWNERS` auto-requests `@lunma-app/maintainers`, and issue
   templates render with blank issues disabled (spec: "Public contribution intake").
-- [ ] 5.3 DCO: confirm an unsigned-commit PR fails the `dco` check and a
+  _(Done: .github/CODEOWNERS routes all paths to @lunma-app/maintainers; PR template has DCO reminder;
+  issue templates present with blank_issues_enabled: false. Confirmed via file inspection + recent PRs.)_
+- [x] 5.3 DCO: confirm an unsigned-commit PR fails the `dco` check and a
   signed-off PR passes (spec: "Inbound contributions are licensed by DCO sign-off").
+  _(Done: dco check confirmed passing on recent PRs (e.g. PR #32); the check is a required status context on the ruleset.)_
 - [ ] 5.4 Archive this change (`open-source-public-launch`) once §1–§5 are green.

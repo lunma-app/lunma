@@ -141,7 +141,7 @@ CI (GitHub Actions, `.github/workflows/ci.yml`) runs the same gate as local, on 
 
 devbox is the local-dev story only; CI needs the pinned Node plus pnpm, not the local shell. CI runs `verify` (the aggregate) and `e2e` on every PR and push to `main`.
 
-Planned: enforcing these checks as a branch-protection merge gate, deferred until the repo is public.
+Merges to `main` are gated on green CI: `verify`, `e2e`, `dco`, and `identity` are all required status checks enforced via a GitHub ruleset on the public repo.
 
 ## Versioning and releases
 
