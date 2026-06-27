@@ -335,6 +335,38 @@ describe('sourceKey', () => {
   });
 });
 
+// ── cross-surface sourceKey consistency (dedup-lens-ui spec requirement) ────────
+// background/lenses re-exports sourceKey from shared/lens-labels; this test
+// documents the spec's consistency scenario: a self-hosted source on a
+// non-default port MUST key identically in the SW and the overview page.
+
+describe('sourceKey — cross-surface consistency', () => {
+  test('self-hosted source on a non-default port includes the port', () => {
+    // This is the drifted case: old overview-vm used .hostname (no port),
+    // SW/sidebar used .host (with port). Canonical key must include the port.
+    expect(
+      sourceKey({
+        source: 'gitlab',
+        baseUrl: 'https://git.example.com:8443',
+        query: 'review-requested',
+        lensKind: 'general',
+        sourceId: 'acc-test',
+      }),
+    ).toBe('gitlab:git.example.com:8443:review-requested');
+  });
+
+  test('malformed baseUrl produces a stable key (no throw)', () => {
+    expect(
+      sourceKey({
+        source: 'github',
+        baseUrl: 'not-a-valid-url',
+        lensKind: 'general',
+        sourceId: 'acc-test',
+      }),
+    ).toBe('github:not-a-valid-url');
+  });
+});
+
 // ── registry dispatch ──────────────────────────────────────────────────────────
 
 describe('the CONNECTORS registry', () => {
