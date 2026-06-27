@@ -6,6 +6,7 @@ import type {
   BackupEnvelope,
   FolderId,
   IconName,
+  LensFilter,
   LensProvider,
   LensSourceRef,
   PinNode,
@@ -158,6 +159,10 @@ export type SidebarCommand =
       payload: { spaceId: SpaceId; folderId: FolderId; hideRead: boolean };
     }
   | {
+      kind: 'setLensFilter';
+      payload: { spaceId: SpaceId; folderId: FolderId; filter: LensFilter };
+    }
+  | {
       kind: 'openLensListing';
       payload: { spaceId: SpaceId; folderId: FolderId; windowId: WindowId };
     }
@@ -282,6 +287,7 @@ export const SIDEBAR_COMMAND_KINDS: ReadonlySet<SidebarCommandKind> = new Set<Si
   'markLensItemUnread',
   'markAllLensItemsRead',
   'setLensHideRead',
+  'setLensFilter',
   'openLensListing',
   'openLensPage',
   'reorderTemp',
@@ -345,6 +351,7 @@ const _kindExhaustiveness = {
   markLensItemUnread: true,
   markAllLensItemsRead: true,
   setLensHideRead: true,
+  setLensFilter: true,
   openLensListing: true,
   openLensPage: true,
   reorderTemp: true,
@@ -433,6 +440,14 @@ const LensSourceRefSchema = z.strictObject({
   queries: z.array(LensQuerySchema),
 });
 
+// Per-lens view filter schema (lens-view-filters) — mirrors `LensFilter` in
+// `types.ts` for the bus boundary (no coerce/default quirks from `schemas.ts`).
+const LensFilterSchema = z.strictObject({
+  entities: z.array(z.enum(['change', 'ticket', 'article', 'generic'])).optional(),
+  repos: z.array(z.string()).optional(),
+  projects: z.array(z.string()).optional(),
+});
+
 // A pinned-tab placement node — mirrors `PinNode` in `types.ts` (all three
 // kinds, so `reorderPinned` round-trips lens nodes losslessly with their
 // config fields intact). Folder `icon`/`color` are plain strings on the record
@@ -456,11 +471,13 @@ const PinNodeSchema = z.discriminatedUnion('kind', [
     // review-lens widened the persisted enum; reorderPinned must round-trip a
     // `review` lens node losslessly (this previously lagged at `general`-only).
     lensKind: z.enum(['general', 'review']),
-    // Account references (connector-accounts) — the v13 lens node shape.
+    // Account references (connector-accounts) — the v14 lens node shape.
     sources: z.array(LensSourceRefSchema).min(1),
     maxItems: z.number(),
     hideRead: z.boolean(),
     refreshMinutes: z.number(),
+    // Optional view filter (lens-view-filters, v14) — must round-trip for reorderPinned.
+    filter: LensFilterSchema.optional(),
   }),
 ]);
 
@@ -683,6 +700,14 @@ const COMMAND_SCHEMAS = {
       hideRead: z.boolean(),
     }),
   }),
+  setLensFilter: z.strictObject({
+    kind: z.literal('setLensFilter'),
+    payload: z.strictObject({
+      spaceId: z.string(),
+      folderId: z.string(),
+      filter: LensFilterSchema,
+    }),
+  }),
   openLensListing: z.strictObject({
     kind: z.literal('openLensListing'),
     payload: z.strictObject({
@@ -847,6 +872,7 @@ export const SidebarCommandSchema = z.discriminatedUnion('kind', [
   COMMAND_SCHEMAS.markLensItemUnread,
   COMMAND_SCHEMAS.markAllLensItemsRead,
   COMMAND_SCHEMAS.setLensHideRead,
+  COMMAND_SCHEMAS.setLensFilter,
   COMMAND_SCHEMAS.openLensListing,
   COMMAND_SCHEMAS.openLensPage,
   COMMAND_SCHEMAS.reorderTemp,

@@ -1446,3 +1446,99 @@ describe('Lens — per-section collapse (collapsible-smart-folder-sections)', ()
     expect(container.querySelector('.section-header')).toBeNull();
   });
 });
+
+describe('Lens — persisted filter application (lens-view-filters)', () => {
+  function changeItem(i: number): LensItem {
+    return {
+      id: `mr-${i}`,
+      title: `MR ${i}`,
+      url: `https://gitlab.example.com/org/repo/-/merge_requests/${i}`,
+      change: {
+        author: 'me',
+        repo: 'org/repo',
+        reviewers: [],
+        draft: false,
+        additions: 1,
+        deletions: 0,
+        updatedAt: 1,
+      },
+    };
+  }
+  function ticketItem(i: number): LensItem {
+    return {
+      id: `tk-${i}`,
+      title: `Ticket ${i}`,
+      url: `https://jira.example.com/browse/TK-${i}`,
+      ticket: {
+        key: `TK-${i}`,
+        statusCategory: 'todo',
+        statusLabel: 'To Do',
+        updatedAt: 1,
+      },
+    };
+  }
+
+  test('entity filter hides non-matching rows', () => {
+    const node = lensNode({ filter: { entities: ['change'] } });
+    const store = makeStore({ state: 'ok', items: [changeItem(1), ticketItem(1)], fetchedAt: 1 });
+    store.state.pinnedBySpace.work = [node];
+    const { container } = renderLens(store, { node });
+    const rows = container.querySelectorAll('[data-testid="lens-result-row"]');
+    // Only the change row should render; ticket is excluded by the entity filter.
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.textContent).toContain('MR 1');
+  });
+
+  test('badge counts only rows that survive the filter', () => {
+    const node = lensNode({ filter: { entities: ['change'] } });
+    const store = makeStore({
+      state: 'ok',
+      items: [changeItem(1), changeItem(2), ticketItem(1)],
+      fetchedAt: 1,
+    });
+    store.state.pinnedBySpace.work = [node];
+    const { container } = renderLens(store, { node });
+    expect(container.querySelector('[data-testid="lens-row-badge"]')?.textContent).toBe('2');
+  });
+
+  test('filtered affordance appears when filter is active', () => {
+    const node = lensNode({ filter: { entities: ['change'] } });
+    const store = makeStore({ state: 'ok', items: [changeItem(1)], fetchedAt: 1 });
+    store.state.pinnedBySpace.work = [node];
+    const { container } = renderLens(store, { node });
+    expect(container.querySelector('[data-testid="smart-filtered-note"]')).not.toBeNull();
+  });
+
+  test('filtered affordance is absent when no filter is set', () => {
+    const node = lensNode();
+    const store = makeStore({ state: 'ok', items: [changeItem(1)], fetchedAt: 1 });
+    store.state.pinnedBySpace.work = [node];
+    const { container } = renderLens(store, { node });
+    expect(container.querySelector('[data-testid="smart-filtered-note"]')).toBeNull();
+  });
+
+  test('repo filter narrows changes to the matching host-qualified repo', () => {
+    const repoKey = 'gitlab.example.com/org/repo';
+    const node = lensNode({ filter: { repos: [repoKey] } });
+    const otherChange: LensItem = {
+      id: 'mr-other',
+      title: 'Other MR',
+      url: 'https://gitlab.example.com/other/repo/-/merge_requests/1',
+      change: {
+        author: 'me',
+        repo: 'other/repo',
+        reviewers: [],
+        draft: false,
+        additions: 0,
+        deletions: 0,
+        updatedAt: 1,
+      },
+    };
+    const store = makeStore({ state: 'ok', items: [changeItem(1), otherChange], fetchedAt: 1 });
+    store.state.pinnedBySpace.work = [node];
+    const { container } = renderLens(store, { node });
+    const rows = container.querySelectorAll('[data-testid="lens-result-row"]');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.textContent).toContain('MR 1');
+  });
+});

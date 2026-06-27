@@ -31,7 +31,7 @@ import type { AppState, BackupEnvelope, SpaceColor } from './types';
 // `sources` from embedded `LensSource[]` to `LensSourceRef[]` references — a REAL
 // transformation that extracts the embedded `(provider, baseUrl)` pairs into
 // first-class accounts. Each bump is deliberate: it makes a downgrade detectable.
-export const CURRENT_SCHEMA_VERSION = 13;
+export const CURRENT_SCHEMA_VERSION = 14;
 
 const SpaceInstanceSchema = z.strictObject({
   spaceId: z.string(),
@@ -160,13 +160,50 @@ const SmartSourceConfigV8Schema = z.strictObject({
   query: z.enum(['authored', 'assigned', 'review-requested']).optional(),
 });
 
-// A pinned-tab placement node (CURRENT/v13 shape): a tab node, a single-level
+// Per-lens view filter (lens-view-filters, v14). All axes optional; an absent
+// or fully-empty filter means "no narrowing". `repos` stores host-qualified
+// keys (`${host}/${owner}/${repo}`) so the same slug on two hosts never merges.
+const LensFilterSchema = z.strictObject({
+  entities: z.array(z.enum(['change', 'ticket', 'article', 'generic'])).optional(),
+  repos: z.array(z.string()).optional(),
+  projects: z.array(z.string()).optional(),
+});
+
+// Historical (v13) pinned-tab node: identical to the current `PinNodeSchema`
+// except the lens branch has no `filter` field. Frozen so pre-v14 envelopes
+// (or v13-migration output) validate exactly as they did before
+// lens-view-filters added the optional filter.
+const PinNodeV13Schema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('tab'), id: z.string() }),
+  z.strictObject({
+    kind: z.literal('folder'),
+    id: z.string(),
+    name: z.string(),
+    icon: z.string(),
+    color: z.string(),
+    children: z.array(z.string()),
+  }),
+  z.strictObject({
+    kind: z.literal('lens'),
+    id: z.string(),
+    name: z.string(),
+    icon: z.string(),
+    lensKind: z.enum(['general', 'review']),
+    sources: z.array(LensSourceRefSchema).min(1),
+    maxItems: z.number().default(20),
+    hideRead: z.boolean().default(true),
+    refreshMinutes: z.number(),
+  }),
+]);
+
+// A pinned-tab placement node (CURRENT/v14 shape): a tab node, a single-level
 // folder node, or a lens config node whose `sources[]` entries are account
 // REFERENCES (`{ sourceId, queries }`) into the top-level `sources` map
 // (connector-accounts — configuration only; results are ephemeral and never
-// persisted). Folder `icon`/`color` are plain strings on the record (as on
-// `Space`); the narrow `IconName`/`SpaceColor` unions live only at the bus
-// boundary.
+// persisted). The lens branch carries the optional `filter` added by
+// lens-view-filters (v14). Folder `icon`/`color` are plain strings on the
+// record (as on `Space`); the narrow `IconName`/`SpaceColor` unions live only
+// at the bus boundary.
 const PinNodeSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('tab'), id: z.string() }),
   z.strictObject({
@@ -189,6 +226,8 @@ const PinNodeSchema = z.discriminatedUnion('kind', [
     maxItems: z.number().default(20),
     hideRead: z.boolean().default(true),
     refreshMinutes: z.number(),
+    // Optional view filter (lens-view-filters, v14).
+    filter: LensFilterSchema.optional(),
   }),
 ]);
 
@@ -590,10 +629,42 @@ export const AppStateV12Schema = z.strictObject({
 // v13 (decouple-source-accounts): the v12 schema PLUS the top-level `sources`
 // slice (the `SourceAccount` map, `.default({})` so a migrated/older state with
 // no accounts parses) AND the lens node's `sources` validated as account
-// references (`LensSourceRef[]`, via the current `PinNodeSchema`) rather than
-// embedded `LensSource[]`. This is the CURRENT-version schema — the migration
-// runner validates against it after running the v13 migration.
+// references (`LensSourceRef[]`, via the frozen `PinNodeV13Schema`) rather than
+// embedded `LensSource[]`. Frozen at the pre-v14 lens shape (no `filter`); v14
+// adds the optional `filter` field via the current `PinNodeSchema`.
 export const AppStateV13Schema = z.strictObject({
+  schemaVersion: z.number(),
+  spaces: z.array(SpaceSchema),
+  sources: z.record(z.string(), SourceAccountSchema).default({}),
+  activeSpaceByWindow: z.record(z.coerce.number(), z.string().nullable()),
+  spaceInstancesByWindow: z.record(
+    z.coerce.number(),
+    z.record(z.string(), SpaceInstanceSchema).optional(),
+  ),
+  tabBindings: TabBindingsSchema,
+  savedTabs: z.record(z.string(), SavedTabSchema),
+  lastActivatedSpaceId: z.string().nullable(),
+  tabLastActivity: z.record(z.coerce.number(), z.number()),
+  archivedTabs: z.array(ArchivedTabSchema),
+  trash: z.record(z.string(), TrashedSpaceSchema),
+  pinnedBySpace: z.record(z.string(), z.array(PinNodeV13Schema)),
+  liveTabsById: z.record(z.coerce.number(), LiveTabSchema).default({}),
+  faviconRow: z.array(z.string()),
+  lensItemBindings: LensItemBindingsSchema.default({}),
+  lensReadState: LensReadStateSchema.default({}),
+  lenses: z.record(z.string(), LensRuntimeSchema).default({}),
+  lensPeekByWindow: z
+    .record(z.coerce.number(), z.object({ folderId: z.string(), tabId: z.number() }).nullable())
+    .default({}),
+});
+
+// v14 (lens-view-filters): the v13 schema with the lens node's optional
+// `filter?: LensFilter` field added (via the current `PinNodeSchema`). The
+// field is fully additive — pre-v14 nodes simply lack `filter` and remain
+// valid; the v14 migration is an identity pass-through. This is the
+// CURRENT-version schema — the migration runner validates against it after
+// running the v14 migration.
+export const AppStateV14Schema = z.strictObject({
   schemaVersion: z.number(),
   spaces: z.array(SpaceSchema),
   sources: z.record(z.string(), SourceAccountSchema).default({}),
@@ -624,7 +695,7 @@ export const AppStateV13Schema = z.strictObject({
 
 export const EnvelopeSchema = z.strictObject({
   schemaVersion: z.number(),
-  state: AppStateV13Schema,
+  state: AppStateV14Schema,
 });
 
 export type AppStateV6 = z.infer<typeof AppStateV6Schema>;
@@ -634,12 +705,13 @@ export type AppStateV10 = z.infer<typeof AppStateV10Schema>;
 export type AppStateV11 = z.infer<typeof AppStateV11Schema>;
 export type AppStateV12 = z.infer<typeof AppStateV12Schema>;
 export type AppStateV13 = z.infer<typeof AppStateV13Schema>;
+export type AppStateV14 = z.infer<typeof AppStateV14Schema>;
 export type Envelope = z.infer<typeof EnvelopeSchema>;
 
 type AssertEqual<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
-const _schemaMatchesAppState: AssertEqual<AppStateV13, AppState> = true;
+const _schemaMatchesAppState: AssertEqual<AppStateV14, AppState> = true;
 void _schemaMatchesAppState;
 
 // ── Data-backup: BackupEnvelopeSchema ────────────────────────────────────────

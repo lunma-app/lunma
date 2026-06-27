@@ -5,6 +5,7 @@ import {
   AppStateV11Schema,
   AppStateV12Schema,
   AppStateV13Schema,
+  AppStateV14Schema,
   CURRENT_SCHEMA_VERSION,
 } from './schemas';
 import { createInitialState } from './store.svelte';
@@ -14,8 +15,8 @@ import { createInitialState } from './store.svelte';
 const realMigrations = [...migrations];
 
 describe('the real migration chain', () => {
-  test('holds exactly the v2 through v13 entries', () => {
-    expect(realMigrations).toHaveLength(12);
+  test('holds exactly the v2 through v14 entries', () => {
+    expect(realMigrations).toHaveLength(13);
     expect(realMigrations[0]?.toVersion).toBe(2);
     expect(realMigrations[1]?.toVersion).toBe(3);
     expect(realMigrations[2]?.toVersion).toBe(4);
@@ -28,7 +29,8 @@ describe('the real migration chain', () => {
     expect(realMigrations[9]?.toVersion).toBe(11);
     expect(realMigrations[10]?.toVersion).toBe(12);
     expect(realMigrations[11]?.toVersion).toBe(13);
-    expect(CURRENT_SCHEMA_VERSION).toBe(13);
+    expect(realMigrations[12]?.toVersion).toBe(14);
+    expect(CURRENT_SCHEMA_VERSION).toBe(14);
     // v2–v6 are pass-throughs (see comment in migrations.ts). v7 is the
     // smart-tab-boundary real transformation; v8 is the multi-source wrap.
     const input = { schemaVersion: 1, pinnedBySpace: { work: [{ kind: 'tab', id: 'a' }] } };
@@ -838,6 +840,82 @@ describe('v13 migration — decouple-source-accounts extract + rewrite', () => {
     // The pre-migration v12 envelope's lens node carries the embedded
     // `{ source, baseUrl, queries }` shape — invalid under the ref-only v13 schema.
     expect(AppStateV13Schema.safeParse(v12Envelope()).success).toBe(false);
+  });
+});
+
+describe('v14 migration — lens-view-filters pass-through', () => {
+  const v14Migration = realMigrations.find((m) => m.toVersion === 14);
+  if (!v14Migration) throw new Error('expected v14 migration');
+
+  function v13Envelope(): Record<string, unknown> {
+    return {
+      schemaVersion: 13,
+      spaces: [],
+      sources: { 'acc-1': { id: 'acc-1', provider: 'github', baseUrl: 'https://github.com' } },
+      activeSpaceByWindow: {},
+      spaceInstancesByWindow: {},
+      tabBindings: {},
+      savedTabs: {},
+      lastActivatedSpaceId: null,
+      tabLastActivity: {},
+      archivedTabs: [],
+      trash: {},
+      pinnedBySpace: {
+        s1: [
+          {
+            kind: 'lens',
+            lensKind: 'general',
+            id: 'f1',
+            name: 'Authored',
+            icon: 'folder-git-2',
+            sources: [{ sourceId: 'acc-1', queries: ['authored'] }],
+            maxItems: 20,
+            hideRead: true,
+            refreshMinutes: 10,
+          },
+        ],
+      },
+      faviconRow: [],
+      lensItemBindings: {},
+      lensReadState: {},
+    };
+  }
+
+  test('the v14 migration is an identity pass-through (returns the same reference)', () => {
+    const input = v13Envelope();
+    expect(v14Migration.migrate(input)).toBe(input);
+  });
+
+  test('a migrated v13 envelope validates under AppStateV14Schema with no filter', () => {
+    const migrated = v14Migration.migrate(v13Envelope());
+    const parsed = AppStateV14Schema.parse(migrated);
+    const node = parsed.pinnedBySpace.s1?.[0];
+    expect(node?.kind).toBe('lens');
+    if (node?.kind === 'lens') {
+      expect(node.filter).toBeUndefined();
+    }
+  });
+
+  test('a v14 state with a lens carrying a filter round-trips under AppStateV14Schema', () => {
+    const env = v13Envelope();
+    const nodes = (env.pinnedBySpace as Record<string, unknown[]>).s1;
+    (nodes?.[0] as Record<string, unknown>).filter = {
+      entities: ['ticket'],
+      projects: ['Payments'],
+    };
+    const parsed = AppStateV14Schema.parse(v14Migration.migrate(env));
+    const node = parsed.pinnedBySpace.s1?.[0];
+    expect(node?.kind === 'lens' && node.filter).toEqual({
+      entities: ['ticket'],
+      projects: ['Payments'],
+    });
+  });
+
+  test('AppStateV13Schema rejects a v14 lens node carrying a filter (downgrade detectable)', () => {
+    const env = v13Envelope();
+    const nodes = (env.pinnedBySpace as Record<string, unknown[]>).s1;
+    (nodes?.[0] as Record<string, unknown>).filter = { entities: ['change'] };
+    expect(AppStateV13Schema.safeParse(env).success).toBe(false);
   });
 });
 

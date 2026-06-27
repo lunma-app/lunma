@@ -1,20 +1,23 @@
 <script lang="ts">
+import { applyLensFilter } from '../../shared/lens-filter';
+import type { LensEntity, LensFilter } from '../../shared/types';
 import Diffstat from '../../ui/Diffstat.svelte';
 import Icon from '../../ui/Icon.svelte';
 import Pill from '../../ui/Pill.svelte';
 import ReviewerRail from '../../ui/ReviewerRail.svelte';
+import LensFilterBar from './LensFilterBar.svelte';
 import {
+  bucketByEntity,
   changeMeta,
   ciLight,
   feedLabel,
-  feedsOf,
   groupByRelation,
   groupByStatus,
+  hostOf,
   type LensNode,
   priorityHue,
   RELATION_LABEL,
   relTime,
-  reposOf,
   reviewersForRail,
   statusDot,
   statusVM,
@@ -25,15 +28,19 @@ import {
 // OverviewPage (lens-overview): the active lens's overview — a single collapsible
 // inline page (the redesign handoff's model; no drill-down sub-pages). A serif
 // identity row, then one collapsible card per non-empty entity: Changes
-// (relation-grouped, with reviewer avatars + CI circle + state pill + repo filter),
-// Issues (status-grouped, priority pill), Articles (feed filter + unread toggle +
-// Grid/List). Item-merged: a github source's PRs land in Changes, its issues in
-// Issues. The page shell (--lens-h, rail) lives in LensPage. (No connection-chips
-// row: the per-section filters already name the sources.)
+// (relation-grouped, with reviewer avatars + CI circle + state pill), Issues
+// (status-grouped, priority pill), Articles (unread toggle + Grid/List). A
+// persistent LensFilterBar (lens-view-filters) sits between the identity row and
+// the first section; it replaces the former ephemeral repo/feed chip rows.
+// Item-merged: a github source's PRs land in Changes, its issues in Issues.
+// The page shell (--lens-h, rail) lives in LensPage.
 interface Props {
   node: LensNode;
-  /** Items pre-bucketed by canonical entity (LensPage derives + passes them). */
-  byEntity: Record<import('../../shared/lens-entity').LensEntity, Tagged[]>;
+  /** All items from the lens (flat, unfiltered). LensPage supplies them so
+   * OverviewPage can apply applyLensFilter before bucketing by entity. */
+  tagged: Tagged[];
+  /** Available facets derived from all current items (from LensPage). */
+  facets: { entities: LensEntity[]; repos: string[]; projects: string[] };
   /** The identity sub-line (derived provider summary). */
   lensSub: string;
   /** Unread keys (`${sk}:${id}`) — drives the Articles unread count + dots. */
@@ -42,11 +49,24 @@ interface Props {
   openItem: (t: Tagged) => void;
   /** Toggle an item's read state (`makeRead` true → mark read, false → unread). */
   toggleRead: (t: Tagged, makeRead: boolean) => void;
+  /** Dispatch setLensFilter (wired by LensPage). */
+  setFilter: (filter: LensFilter) => void;
 }
 
-const { node, byEntity, lensSub, readSet, openItem, toggleRead }: Props = $props();
+const { node, tagged, facets, lensSub, readSet, openItem, toggleRead, setFilter }: Props = $props();
 
 const lensLetter = $derived((node.name.trim()[0] ?? '·').toUpperCase());
+const filter = $derived(node.filter ?? {});
+
+// Apply the persisted lens filter before bucketing so both the count and the
+// entity sections reflect exactly what the filter allows.
+const filteredTagged = $derived.by(() => {
+  if (!filter.entities?.length && !filter.repos?.length && !filter.projects?.length) return tagged;
+  const rows = tagged.map((t) => ({ item: t.item, host: hostOf(t.cfg.baseUrl) }));
+  const passedItems = new Set(applyLensFilter(rows, filter).map((r) => r.item));
+  return tagged.filter((t) => passedItems.has(t.item));
+});
+const byEntity = $derived(bucketByEntity(filteredTagged));
 
 const changes = $derived(byEntity.change);
 const tickets = $derived(byEntity.ticket);
@@ -59,20 +79,13 @@ const toggle = (key: string): void => {
   collapsed[key] = !collapsed[key];
 };
 
-// Changes: repo filter + relation groups (over the filtered set).
-const repos = $derived(reposOf(changes));
-let repoFilter = $state('all');
-const visChanges = $derived(
-  repoFilter === 'all' ? changes : changes.filter((t) => t.item.change?.repo === repoFilter),
-);
-const changeGroups = $derived(groupByRelation(visChanges));
+// Changes: relation groups.
+const changeGroups = $derived(groupByRelation(changes));
 
 // Issues: status groups (todo / in-progress / done).
 const issueGroups = $derived(groupByStatus(tickets));
 
-// Articles: feed filter + unread toggle + Grid/List.
-const feeds = $derived(feedsOf(articles));
-let feedFilter = $state('all');
+// Articles: unread toggle + Grid/List.
 let unreadOnly = $state(false);
 let articleView = $state<'grid' | 'list'>('grid');
 const itemKey = (t: Tagged): string => `${t.sk}:${t.item.id}`;
@@ -81,11 +94,7 @@ const isUnread = (t: Tagged): boolean => !readSet.has(itemKey(t));
 // instead of vanishing under the cursor; re-applying the filter clears the set.
 let stickyKeys = $state(new Set<string>());
 const visArticles = $derived(
-  articles.filter(
-    (t) =>
-      (feedFilter === 'all' || feedLabel(t) === feedFilter) &&
-      (!unreadOnly || isUnread(t) || stickyKeys.has(itemKey(t))),
-  ),
+  articles.filter((t) => !unreadOnly || isUnread(t) || stickyKeys.has(itemKey(t))),
 );
 const unreadCount = $derived(articles.filter(isUnread).length);
 
@@ -106,8 +115,7 @@ const empty = $derived(
 </script>
 
 <div class="overview" data-testid="lens-overview">
-  <!-- Lens identity row. (No connection chips: the per-section filters below — feed
-       chips, repo chips — already name the sources, so a chips row is redundant.) -->
+  <!-- Lens identity row. -->
   <header class="identity">
     <span class="lens-tile" aria-hidden="true">{lensLetter}</span>
     <div class="identity-text">
@@ -115,6 +123,11 @@ const empty = $derived(
       <p class="lens-sub">{lensSub}</p>
     </div>
   </header>
+
+  <!-- Persistent per-lens filter bar (lens-view-filters). Sits between identity
+       and the first section. Only renders when the lens has multiple entity types
+       or scope facets (repos/projects). -->
+  <LensFilterBar {filter} {facets} onfilter={setFilter} />
 
   <!-- Changes -->
   {#if changes.length > 0}
@@ -124,21 +137,11 @@ const empty = $derived(
         <span class="chev" class:open aria-hidden="true"><Icon name="chevron-right" size={11} /></span>
         <span class="sec-dot" style:--dot-h="252" aria-hidden="true"></span>
         <span class="sec-title">Changes</span>
-        <span class="count" data-testid="section-count">{visChanges.length}</span>
+        <span class="count" data-testid="section-count">{changes.length}</span>
         <span class="sec-trail">incl. CI</span>
       </button>
       {#if open}
         <div class="sec-body">
-          {#if repos.length > 1}
-            <div class="filter-row">
-              <span class="filter-label">Repo</span>
-              <button class="chip-btn" class:on={repoFilter === 'all'} type="button" onclick={() => (repoFilter = 'all')}>All repos</button>
-              {#each repos as repo (repo)}
-                <button class="chip-btn" class:on={repoFilter === repo} type="button" onclick={() => (repoFilter = repo)}>{repo}</button>
-              {/each}
-            </div>
-          {/if}
-
           {#each changeGroups as group (group.relation)}
             <div class="group">
               <div class="group-head">
@@ -230,12 +233,6 @@ const empty = $derived(
       {#if open}
         <div class="sec-body">
           <div class="filter-row article-controls">
-            {#if feeds.length > 1}
-              <button class="chip-btn" class:on={feedFilter === 'all'} type="button" onclick={() => (feedFilter = 'all')}>All feeds</button>
-              {#each feeds as feed (feed)}
-                <button class="chip-btn" class:on={feedFilter === feed} type="button" onclick={() => (feedFilter = feed)}>{feed}</button>
-              {/each}
-            {/if}
             <span class="controls-right">
               <button class="chip-btn" class:on={unreadOnly} type="button" onclick={toggleUnreadFilter}>Unread · {unreadCount}</button>
               <span class="seg" role="group" aria-label="Article layout">
@@ -447,14 +444,7 @@ const empty = $derived(
     align-items: center;
     gap: 6px;
   }
-  .filter-label {
-    margin-right: 3px;
-    font-size: 10px;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: var(--text-faint);
-  }
-  .chip-btn {
+.chip-btn {
     appearance: none;
     padding: 4px 11px;
     border-radius: var(--r-pill);

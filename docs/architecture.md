@@ -23,7 +23,7 @@ lunma/                              # pnpm workspace root (private)
 ├─ apps/
 │  ├─ extension/                    # the Chrome MV3 extension — @lunma/extension
 │  │  ├─ src/
-│  │  │  ├─ shared/                 # cross-surface: types · schemas (+migrations) · store.svelte.ts · messages · settings · onboarding · logger
+│  │  │  ├─ shared/                 # cross-surface: types · schemas (+migrations) · store.svelte.ts · messages · settings · onboarding · logger · lens-filter.ts
 │  │  │  │  └─ chrome/              # thin typed wrappers over chrome.* APIs
 │  │  │  ├─ ui/                     # cross-surface primitives (build primitives, compose features)
 │  │  │  │  ├─ Button.svelte        # …+ Icon · Tooltip · Stack · Kbd · SegmentedControl · TabRow · RowMenu · ContextMenu
@@ -80,7 +80,7 @@ that mutate the store. Everything else is read-only or settings-only.
 | Sidebar | DOM, user interaction, drag-drop | yes (subscriber via state broadcast) | yes (calls store methods through the SW message bridge); also mints accounts (`createAccount`) + writes a per-source token inline (`setAccountToken` via `shared/connectors.ts`) from the lens editor's "+ Connect an account" and a section's signed-out reconnect |
 | Launcher overlay | `Alt+L` page injection, search UI | no (queries the suggestions channel) | no — dispatches `focusTab` / `focusSavedTab` / `openSavedTab` / `openUrl` over the bus |
 | Launcher newtab | Empty-Space home (Space identity) + inline search | yes (read-only: snapshot + `state-broadcast`, like the sidebar) + queries the suggestions channel | no — dispatches result actions over the bus |
-| Lens page | One lens's spacious read-only dashboard (`launcher/lenspage/`, `?folderId=…`) | yes (read-only: snapshot + `state-broadcast`, like newtab) + writes a per-source token inline (`setAccountToken`) when a section's signed-out reconnect is used | no — dispatches `openLensItem` / `openLensListing` / `refreshLens` over the bus |
+| Lens page | One lens's spacious read-only dashboard (`launcher/lenspage/`, `?folderId=…`) | yes (read-only: snapshot + `state-broadcast`, like newtab) + writes a per-source token inline (`setAccountToken`) when a section's signed-out reconnect is used | no — dispatches `openLensItem` / `openLensListing` / `refreshLens` / `setLensFilter` over the bus |
 | Options | Settings UI + one **Connections** manager (`ConnectionsCard`: an Accounts group for auth Accounts with per-**source** PATs, and a Feeds group for rss Feeds with OPML import/export), via the shared `ui/ServiceConnectPicker` connect picker | reads `chrome.storage.sync` directly; reads `chrome.storage.local` for archived tabs, the persisted `AppState` (for `AppState.sources` + `pinnedBySpace` reach), and the `lunma.connectors` record | writes `chrome.storage.sync`; account entity over the bus (`createAccount`/`renameAccount`/`deleteAccount`); writes the per-`sourceId` token in `lunma.connectors` via `shared/connectors.ts` (`setAccountToken`) |
 | Onboarding | Static content + open links (Planned) | no | no |
 
@@ -296,7 +296,14 @@ const initial: AppState = {
   pinnedBySpace: {},           // { [spaceId]: PinNode[] } — ordered tree of tab|folder|lens nodes
                                //   PinNode = { kind:'tab'; id }
                                //           | { kind:'folder'; id; name; icon; color; children: savedTabId[] }
-                               //           | {  kind:'lens'; id; name; icon; sources: LensSourceRef[]; maxItems; hideRead; refreshMinutes }
+                               //           | {  kind:'lens'; id; name; icon; sources: LensSourceRef[]; maxItems; hideRead; refreshMinutes; filter?: LensFilter }
+                               //               LensFilter = { entities?: LensEntity[]; repos?: string[]; projects?: string[] }
+                               //               — a global-per-lens persistent view filter (lens-view-filters). entities narrows by
+                               //                 item type ('change'|'ticket'|'article'|'generic'); repos narrows Changes by
+                               //                 host-qualified key `${host}/${owner}/${repo}`; projects narrows Issues by project key.
+                               //                 All axes are AND'd; within an axis values are OR'd; absent or empty = identity.
+                               //                 Applied in both surfaces: overview (applyLensFilter before bucketByEntity) and
+                               //                 sidebar (displayItemsForSection before ENTITY_RANK sort and feed windowing).
                                //               LensSourceRef = { sourceId; queries: LensQuery[] }
                                //               — a REFERENCE to an AppState.sources account; `queries` is its set of
                                //                 canned filters (queue: non-empty; rss: []). resolvedConfigs(node, sources)
@@ -769,7 +776,7 @@ import-graph tool is needed.
 
 | Layer (`apps/extension/src/…`) | May import | Must NOT import |
 |---|---|---|
-| `shared` — foundation: `types`, `store`, `bus`, `messages`, `settings`, `schemas`, `migrations`, `logger`, `space-hue` (colour math), `icon-names`, `launcher-contract`, `window-id` | nothing else in `apps/extension/src/` | every other layer |
+| `shared` — foundation: `types`, `store`, `bus`, `messages`, `settings`, `schemas`, `migrations`, `logger`, `space-hue` (colour math), `icon-names`, `launcher-contract`, `window-id`, `lens-filter` (pure filter predicate + facet derivation, shared by both surfaces so no DAG violation) | nothing else in `apps/extension/src/` | every other layer |
 | `ui` — primitives (design tokens come from `@lunma/tokens`) | `shared` | `background`, any surface |
 | `background` — service worker | `shared`, `launcher/shared` (the launcher engine) | `ui`, any surface, a launcher page |
 | `sidebar`, `options` — feature surfaces | `ui`, `shared` | `background`, another surface |

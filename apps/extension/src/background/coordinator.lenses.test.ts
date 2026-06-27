@@ -1303,6 +1303,78 @@ describe('feed read-state handlers', () => {
     expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'c1', result: 'ok' });
   });
 
+  test('setLensFilter persists the filter and acks without a refetch', async () => {
+    installActivationChrome();
+    const { coordinator, store, emitAck } = makeWithSpace();
+    store.state.pinnedBySpace.work = [feedNode()];
+    store.state.lenses['feed-1'] = {
+      sections: { [FEED_SK]: { state: 'ok', items: [], fetchedAt: 5 } },
+    };
+
+    coordinator.enqueue(
+      sidebar(
+        {
+          kind: 'setLensFilter',
+          payload: { spaceId: 'work', folderId: 'feed-1', filter: { entities: ['change'] } },
+        },
+        'c1',
+      ),
+    );
+    await coordinator.idle();
+
+    expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({ filter: { entities: ['change'] } });
+    expect(store.state.lenses['feed-1']?.sections[FEED_SK]?.fetchedAt).toBe(5);
+    expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'c1', result: 'ok' });
+  });
+
+  test('setLensFilter with empty filter clears the stored filter', async () => {
+    installActivationChrome();
+    const { coordinator, store, emitAck } = makeWithSpace();
+    const node = feedNode();
+    (node as Record<string, unknown>).filter = { entities: ['change'] };
+    store.state.pinnedBySpace.work = [node];
+
+    coordinator.enqueue(
+      sidebar(
+        {
+          kind: 'setLensFilter',
+          payload: { spaceId: 'work', folderId: 'feed-1', filter: {} },
+        },
+        'c2',
+      ),
+    );
+    await coordinator.idle();
+
+    const stored = store.state.pinnedBySpace.work?.[0] as Record<string, unknown> | undefined;
+    expect(stored?.['filter']).toBeUndefined();
+    expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'c2', result: 'ok' });
+  });
+
+  test('setLensFilter with unknown folderId is a no-op', async () => {
+    installActivationChrome();
+    const { coordinator, store, emitAck } = makeWithSpace();
+    store.state.pinnedBySpace.work = [feedNode()];
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    coordinator.enqueue(
+      sidebar(
+        {
+          kind: 'setLensFilter',
+          payload: {
+            spaceId: 'work',
+            folderId: 'does-not-exist',
+            filter: { entities: ['change'] },
+          },
+        },
+        'c3',
+      ),
+    );
+    await coordinator.idle();
+
+    expect(store.state.pinnedBySpace.work?.[0]).not.toMatchObject({ filter: expect.anything() });
+    expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'c3', result: 'ok' });
+  });
+
   test('openLensListing opens the feed listing URL in a tab', async () => {
     const stub = installActivationChrome();
     const { coordinator, store, emitAck } = makeWithSpace();
