@@ -17,7 +17,7 @@ const lens = (id: string, name: string): PinNode => ({
   id,
   name,
   icon: 'git-pull-request',
-  sources: [{ source: 'github', baseUrl: 'https://github.com', queries: ['authored'] }],
+  sources: [{ sourceId: 'acc-gh', queries: ['authored'] }],
   maxItems: 20,
   hideRead: false,
   refreshMinutes: 10,
