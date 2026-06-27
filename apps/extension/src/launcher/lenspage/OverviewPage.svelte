@@ -436,6 +436,9 @@ const empty = $derived(
     color: var(--text-faint);
   }
   .sec-body {
+    /* Recessed darker body (the page --bg) beneath the lifted --surface header, so
+       chips, state pills, and rows stand out against it; the header keeps the card lift. */
+    background: var(--bg);
     border-top: 1px solid var(--border-soft);
     padding: 13px;
     display: flex;
