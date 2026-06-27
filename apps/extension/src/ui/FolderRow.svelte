@@ -3,12 +3,13 @@ import type { Snippet } from 'svelte';
 import type { IconName } from '../shared/icon-names';
 import { colourToHue } from '../shared/space-hue';
 import type { SpaceColor } from '../shared/types';
+import BitsMenu from './BitsMenu.svelte';
+import BottomSheet from './BottomSheet.svelte';
 import ColorSwatch from './ColorSwatch.svelte';
 import EditableLabel from './EditableLabel.svelte';
 import Icon from './Icon.svelte';
-import IconButton from './IconButton.svelte';
 import IconPicker from './IconPicker.svelte';
-import RowMenu, { type RowMenuItem } from './RowMenu.svelte';
+import type { MenuItem } from './menu-types';
 
 interface Props {
   /** Folder name (the row label). */
@@ -25,13 +26,6 @@ interface Props {
   dropTarget?: boolean | undefined;
   /** Toggle expand/collapse (chevron + label click). */
   onToggle?: (() => void) | undefined;
-  /** When provided (smart folders, smart-folder-page), a hover/focus-revealed
-   * "open as page" icon button renders in the trailing cluster. The row body and
-   * chevron keep their normal expand/collapse behavior — only this icon (and the
-   * kebab item) open the page. Absent (every regular folder) → no icon. */
-  onOpenPage?: (() => void) | undefined;
-  /** Accessible label + tooltip for the open-as-page icon. */
-  openPageLabel?: string | undefined;
   /** Accessible label override; defaults to `name`. */
   label?: string | undefined;
   /** When true, the name becomes an inline editable field (rename in place). */
@@ -42,9 +36,9 @@ interface Props {
   onRenameCancel?: (() => void) | undefined;
   /** Begin rename-in-place (the "Rename" action). */
   onStartRename?: (() => void) | undefined;
-  /** Set the folder colour (an "Icon & colour" swatch pick). */
+  /** Set the folder colour (an "Appearance" swatch pick). */
   onSetColor?: ((color: SpaceColor) => void) | undefined;
-  /** Set the folder icon (an "Icon & colour" picker pick). */
+  /** Set the folder icon (an "Appearance" picker pick). */
   onSetIcon?: ((icon: IconName) => void) | undefined;
   /** Delete the folder (the destructive action, gated behind a two-step confirm). */
   onDelete?: (() => void) | undefined;
@@ -61,23 +55,27 @@ interface Props {
    * no badge element renders, the prior layout byte-for-byte. */
   badge?: string | undefined;
   /** Menu override: when provided, REPLACES the built-in folder action morph
-   * (rename / Icon & colour / Move / two-step Delete) wholesale — for rows
+   * (rename / Appearance / Move / two-step Delete) wholesale — for rows
    * whose actions are not folder-shaped (e.g. a smart folder). */
-  menuItems?: RowMenuItem[] | undefined;
+  menuItems?: MenuItem[] | undefined;
   /** Spins the glyph at the established 0.8s-linear cadence while an in-flight
    * refresh runs; static `--text-dim` under reduced motion (a refresh indicator
    * is decoration, not information — calmer than a loading spinner). */
   busy?: boolean | undefined;
-  /** Pass-throughs to RowMenu's drill-in API: a titled `panel` replaces the
-   * action list with `‹ panelTitle` + the panel (e.g. a smart folder's Edit…
-   * editor). Absent → the built-in Icon & colour panel behavior, unchanged. */
+  /** Forwarded editor surface: when a `panel` snippet + `panelTitle` are given
+   * (e.g. a smart folder's "Edit lens" editor), FolderRow renders that editor in
+   * a {@link BottomSheet} titled `panelTitle`. The sheet is open exactly while
+   * `panel` is set — the host owns that (it toggles the snippet on/off) — and any
+   * dismissal (scrim / ✕ / Escape) calls `onPanelBack`. Absent → the built-in
+   * Appearance sheet (icon + colour), opened by the kebab's "Appearance" item. */
   panel?: Snippet | undefined;
   panelTitle?: string | undefined;
   onPanelBack?: (() => void) | undefined;
-  /** Optional bindable kebab-menu open state (the `SectionHeader` precedent):
-   * lets a host close the menu programmatically — e.g. a smart folder's
-   * editor confirm dismissing the whole morph. Unbound callers keep the
-   * prior internal open/close behavior unchanged. */
+  /** Optional bindable kebab-menu open state. bits-ui owns the menu's own open
+   * lifecycle now, so this is a read-only mirror a host may observe (the
+   * `SectionHeader` precedent): it reflects opens/closes via `onOpenChange` but
+   * writing it back does NOT drive bits-ui (a forwarded editor dismisses by
+   * toggling `panel`, not by closing the menu). Kept for API stability. */
   menuOpen?: boolean;
 }
 
@@ -88,8 +86,6 @@ let {
   expanded = false,
   dropTarget = false,
   onToggle,
-  onOpenPage,
-  openPageLabel = 'Open as page',
   label,
   editing = false,
   onRename,
@@ -109,31 +105,34 @@ let {
   panel,
   panelTitle,
   onPanelBack,
-  // Action-morph open state — bindable so hosts can dismiss; defaults to the
-  // same internal `false` the previous private $state held.
+  // Read-only mirror of the kebab open state — bindable so existing hosts keep
+  // their binding; driven by BitsMenu's `onOpenChange`.
   menuOpen = $bindable(false),
 }: Props = $props();
 
 const hue = $derived(colourToHue(color));
 
-// The in-drawer icon/colour panel toggle.
+// The built-in Appearance editor (icon + colour) now opens in a BottomSheet.
 let showAppearance = $state(false);
 // Two-step Delete arm — Delete folder arms into a danger confirm before dispatching.
 let confirmingDelete = $state(false);
 
+// A forwarded editor (`panel` + `panelTitle`) drives its own sheet, open exactly
+// while the host passes the snippet. The built-in Appearance sheet is internal.
+const forwardedOpen = $derived(panel !== undefined && panelTitle !== undefined);
+
 // Move entries are plain text (no icon) per the change's visual language; the
 // destructive Delete stays last and arms before firing. A caller-provided
 // `menuItems` override replaces this list wholesale.
-const builtinMenuItems = $derived<RowMenuItem[]>([
+const builtinMenuItems = $derived<MenuItem[]>([
   { id: 'rename', label: 'Rename', icon: 'pencil', onSelect: () => onStartRename?.() },
   {
     id: 'appearance',
-    label: 'Icon & colour',
+    label: 'Appearance',
     icon: 'palette',
-    keepOpen: true,
     onSelect: () => {
       confirmingDelete = false; // selecting another entry disarms a pending Delete
-      showAppearance = !showAppearance;
+      showAppearance = true;
     },
   },
   {
@@ -164,7 +163,7 @@ const builtinMenuItems = $derived<RowMenuItem[]>([
         label: 'Delete folder',
         icon: 'trash-2',
         danger: true,
-        keepOpen: true, // arm in place, keep the drawer open
+        keepOpen: true, // arm in place, keep the menu open
         onSelect: () => {
           confirmingDelete = true;
         },
@@ -172,31 +171,78 @@ const builtinMenuItems = $derived<RowMenuItem[]>([
 ]);
 
 function onMenuOpenChange(open: boolean): void {
+  menuOpen = open;
   if (!open) {
-    showAppearance = false;
     confirmingDelete = false; // closing / Escape disarms a pending Delete
-    // A forwarded drill-in is dismissed with the menu, so the parent's flag
-    // resets and the next open lands on the action list, not a stale panel.
-    if (panel) onPanelBack?.();
   }
 }
 </script>
 
-<RowMenu
-  items={menuItems ?? builtinMenuItems}
-  label="Folder actions"
-  bind:open={menuOpen}
-  onOpenChange={onMenuOpenChange}
-  testidPrefix="folder-row-menu"
-  header={folderHeader}
-  panel={panel ?? appearancePanel}
-  {panelTitle}
-  {onPanelBack}
-/>
+<div
+  class="folder-row"
+  class:drop-target={dropTarget}
+  class:editing
+  class:menu-open={menuOpen}
+  data-testid="folder-row"
+  style:--folder-c={`oklch(var(--folder-l, 0.62) var(--folder-chroma, 0.16) ${hue})`}
+>
+  {#if editing}
+    <span class="chevron" class:expanded aria-hidden="true">
+      <Icon name="chevron-right" size={12} />
+    </span>
+    <span class="glyph" class:busy aria-hidden="true">
+      <Icon name={icon} size={16} />
+    </span>
+    <EditableLabel
+      value={name}
+      editing
+      ariaLabel="Folder name"
+      testid="folder-rename-input"
+      oncommit={(next) => onRename?.(next)}
+      oncancel={() => onRenameCancel?.()}
+    />
+  {:else}
+    <button
+      type="button"
+      class="hit"
+      aria-label={label ?? name}
+      aria-expanded={expanded}
+      onclick={onToggle}
+    >
+      <span class="chevron" class:expanded aria-hidden="true">
+        <Icon name="chevron-right" size={12} />
+      </span>
+      <span class="glyph" class:busy aria-hidden="true">
+        <Icon name={icon} size={16} />
+      </span>
+      <span class="name">{name}</span>
+    </button>
+  {/if}
+  <span class="trailing">
+    {#if badge !== undefined}
+      <span class="badge" data-testid="folder-row-badge">{badge}</span>
+    {/if}
+    <span class="kebab">
+      <BitsMenu
+        items={menuItems ?? builtinMenuItems}
+        label="Folder actions"
+        onOpenChange={onMenuOpenChange}
+      />
+    </span>
+  </span>
+</div>
 
-{#snippet appearancePanel()}
-  {#if showAppearance}
-    <div class="appearance" data-testid="folder-appearance">
+<!-- Built-in Appearance editor — icon + colour, in a sheet (no forwarded panel). -->
+{#if !forwardedOpen}
+  <BottomSheet
+    open={showAppearance}
+    title="Appearance"
+    onClose={() => {
+      showAppearance = false;
+    }}
+    testid="folder-appearance"
+  >
+    <div class="appearance">
       <div class="swatch-row" role="radiogroup" aria-label="Folder colour">
         {#each colors as c (c)}
           <ColorSwatch color={c} selected={c === color} onclick={() => onSetColor?.(c)} />
@@ -204,79 +250,20 @@ function onMenuOpenChange(open: boolean): void {
       </div>
       <IconPicker value={icon} onselect={(i) => onSetIcon?.(i)} />
     </div>
-  {/if}
-{/snippet}
+  </BottomSheet>
+{/if}
 
-{#snippet folderHeader({ trigger }: { trigger: Snippet; expanded: boolean })}
-  <div
-    class="folder-row"
-    class:drop-target={dropTarget}
-    class:editing
-    class:menu-open={menuOpen}
-    data-testid="folder-row"
-    style:--folder-c={`oklch(var(--folder-l, 0.62) var(--folder-chroma, 0.16) ${hue})`}
+<!-- Forwarded editor (e.g. a smart folder's Edit lens) — host toggles `panel`. -->
+{#if forwardedOpen && panel}
+  <BottomSheet
+    open={forwardedOpen}
+    title={panelTitle}
+    onClose={() => onPanelBack?.()}
+    testid="folder-forwarded-panel"
   >
-    {#if editing}
-      <span class="chevron" class:expanded aria-hidden="true">
-        <Icon name="chevron-right" size={12} />
-      </span>
-      <span class="glyph" class:busy aria-hidden="true">
-        <Icon name={icon} size={16} />
-      </span>
-      <EditableLabel
-        value={name}
-        editing
-        ariaLabel="Folder name"
-        testid="folder-rename-input"
-        oncommit={(next) => onRename?.(next)}
-        oncancel={() => onRenameCancel?.()}
-      />
-    {:else}
-      <button
-        type="button"
-        class="hit"
-        aria-label={label ?? name}
-        aria-expanded={expanded}
-        onclick={onToggle}
-      >
-        <span class="chevron" class:expanded aria-hidden="true">
-          <Icon name="chevron-right" size={12} />
-        </span>
-        <span class="glyph" class:busy aria-hidden="true">
-          <Icon name={icon} size={16} />
-        </span>
-        <span class="name">{name}</span>
-      </button>
-    {/if}
-    {#if onOpenPage}
-      <span class="trailing trailing-split">
-        <span class="open-page">
-          <IconButton
-            icon="maximize-2"
-            ariaLabel={openPageLabel}
-            title={openPageLabel}
-            size={14}
-            testid="folder-open-page"
-            onclick={onOpenPage}
-          />
-        </span>
-        <span class="cluster">
-          {#if badge !== undefined}
-            <span class="badge" data-testid="folder-row-badge">{badge}</span>
-          {/if}
-          <span class="kebab">{@render trigger()}</span>
-        </span>
-      </span>
-    {:else}
-      <span class="trailing">
-        {#if badge !== undefined}
-          <span class="badge" data-testid="folder-row-badge">{badge}</span>
-        {/if}
-        <span class="kebab">{@render trigger()}</span>
-      </span>
-    {/if}
-  </div>
-{/snippet}
+    {@render panel()}
+  </BottomSheet>
+{/if}
 
 <style>
   /* Columns mirror TabRow: the chevron sits in a leading gutter of width
@@ -290,14 +277,15 @@ function onMenuOpenChange(open: boolean): void {
     width: 100%;
     height: var(--row-h);
     padding: 0 var(--space-2) 0 0;
-    border-radius: var(--r-md);
+    /* Redesign rounds the row harder — the nav/card radius (comp's lens rows). */
+    border-radius: var(--r-lg);
     color: var(--text-2);
     transition:
       background var(--motion-fast) var(--ease-standard),
       box-shadow var(--motion-fast) var(--ease-standard);
   }
   .folder-row:hover {
-    background: var(--surface-2);
+    background: var(--hover);
   }
   .folder-row.drop-target {
     background: color-mix(in oklch, var(--folder-c) 22%, transparent);
@@ -335,6 +323,9 @@ function onMenuOpenChange(open: boolean): void {
 
   /* Leading gutter — same width as TabRow's left padding, so the glyph aligns
    * with a tab favicon and the chevron never displaces it. */
+  /* The disclosure chevron is NOT shown at rest (it read as visual noise on
+     every row); it fades in on row hover / focus / open menu. The 12px gutter is
+     kept reserved so the glyph tile never shifts when the chevron appears. */
   .chevron {
     flex-shrink: 0;
     width: var(--space-3);
@@ -343,27 +334,54 @@ function onMenuOpenChange(open: boolean): void {
     align-items: center;
     justify-content: center;
     color: var(--text-dim);
-    transition: transform var(--motion-base) var(--ease-emphasised);
+    opacity: 0;
+    transition:
+      opacity var(--motion-fast) var(--ease-standard),
+      transform var(--motion-base) var(--ease-emphasised);
+  }
+  .folder-row:hover .chevron,
+  .folder-row:focus-within .chevron,
+  .folder-row.menu-open .chevron,
+  .folder-row.editing .chevron {
+    opacity: 1;
   }
   .chevron.expanded {
     transform: rotate(90deg);
   }
 
+  @media (prefers-reduced-motion: reduce) {
+    .chevron {
+      transition: none;
+    }
+  }
+
+  /* The glyph sits in a rounded tile in the folder's own hue — mirrors the comp's
+   * lens-header icon tile (a ~24-26px rounded plate, `--space-soft`/`--space-text`)
+   * and TabRow's favicon tile, so folders and tabs share one leading-mark anatomy.
+   * The icon inside stays --favicon-size (16px). */
   .glyph {
+    --glyph-tile: 24px;
     flex-shrink: 0;
-    width: var(--favicon-size);
-    height: var(--favicon-size);
+    width: var(--glyph-tile);
+    height: var(--glyph-tile);
     margin-right: var(--space-2);
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    border-radius: var(--r-md);
+    background: color-mix(in oklch, var(--folder-c) 16%, transparent);
     color: var(--folder-c);
   }
+  .glyph :global(svg) {
+    width: var(--favicon-size);
+    height: var(--favicon-size);
+  }
 
-  /* In-flight refresh — TabRow's 0.8s-linear spinner cadence. Under reduced
+  /* In-flight refresh — TabRow's 0.8s-linear spinner cadence. Spins the inner
+   * glyph (not the tile plate) so the rounded tile stays put. Under reduced
    * motion the indicator holds STATIC at --text-dim (a refresh indicator is
    * decoration, not information — calmer than FaviconTile's slowed spin). */
-  .glyph.busy {
+  .glyph.busy :global(svg) {
     animation: folder-row-busy 0.8s linear infinite;
   }
   @keyframes folder-row-busy {
@@ -372,8 +390,10 @@ function onMenuOpenChange(open: boolean): void {
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    .glyph.busy {
+    .glyph.busy :global(svg) {
       animation: none;
+    }
+    .glyph.busy {
       color: var(--text-dim);
     }
   }
@@ -384,7 +404,8 @@ function onMenuOpenChange(open: boolean): void {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
-    font: var(--weight-regular) var(--text-base) / 1 var(--font-sans);
+    /* Comp's lens/folder header name sits at semibold. */
+    font: var(--weight-semibold) var(--text-base) / 1 var(--font-sans);
   }
 
   /* Trailing slot — the quiet count badge and the kebab share one right-aligned
@@ -401,37 +422,6 @@ function onMenuOpenChange(open: boolean): void {
   }
   .trailing > * {
     grid-area: 1 / 1; /* stack badge + kebab in the same cell */
-  }
-
-  /* Smart-folder split trailing (smart-folder-page): the open-as-page button
-   * sits beside the badge/kebab stack. The `.cluster` reproduces the badge/kebab
-   * stacking; `.trailing-split` lays it out in a flex row beside the open-page
-   * button. (Only rendered when `onActivate` is set, so regular folders keep the
-   * plain `.trailing` above untouched.) */
-  .trailing-split {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-  }
-  .cluster {
-    display: inline-grid;
-    align-items: center;
-    justify-items: end;
-  }
-  .cluster > * {
-    grid-area: 1 / 1;
-  }
-  /* The open-page button reveals on row hover / keyboard focus, like the kebab. */
-  .open-page {
-    display: inline-flex;
-    align-items: center;
-    opacity: 0;
-    transition: opacity var(--motion-fast) var(--ease-standard);
-  }
-  .folder-row:hover .open-page,
-  .folder-row.menu-open .open-page,
-  .trailing-split:focus-within .open-page {
-    opacity: 1;
   }
 
   /* Quiet trailing count badge — a soft pill that never competes with the name.
@@ -470,7 +460,7 @@ function onMenuOpenChange(open: boolean): void {
     opacity: 0;
   }
 
-  /* In-drawer icon/colour editor (revealed by "Icon & colour"). */
+  /* Appearance editor body (icon + colour), rendered inside the BottomSheet. */
   .appearance {
     display: flex;
     flex-direction: column;

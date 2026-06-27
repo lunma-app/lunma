@@ -36,23 +36,16 @@ const { heading, actions, testid }: Props = $props();
 
 <style>
   /* Editorial hierarchy: identity in the display serif at `--text-xl`, sentence
-   * case — serif carries identity, the sans body and controls carry information
-   * (the established pairing). */
+   * case, in the cool editorial accent (`--accent-heading`) — the redesign's
+   * section-card heading colour, fixed across Spaces and themed dark/light by the
+   * token. Serif carries identity; the sans body and controls carry information. */
   .card-heading {
     margin: 0;
     font-family: var(--font-display);
     font-size: var(--text-xl);
     font-weight: var(--weight-regular);
     line-height: 1.1;
-    color: var(--text-2);
-  }
-  /* Identity-hue treatment under the immersive tints — the heading renders in the
-   * active Space's hue at the same `0.72` lightness floor the sidebar section
-   * headers use, so it stays ≥ WCAG AA over the glass card; `subtle`/off read
-   * neutral. `data-tint` is written on `:root` (`<html>`). */
-  :global(:root[data-tint='standard']) .card-heading,
-  :global(:root[data-tint='vivid']) .card-heading {
-    color: oklch(from var(--space-c) max(l, 0.72) c h);
+    color: var(--accent-heading);
   }
 
   /* When the heading shares its row with an action, the two sit on one line with

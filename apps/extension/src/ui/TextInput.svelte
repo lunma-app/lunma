@@ -92,19 +92,22 @@ function handleKeydown(event: KeyboardEvent): void {
     color: var(--text-muted);
   }
 
-  /* A soft *filled* field — no hard idle border line. The fill lifts slightly
-   * on hover; focus glides in a gentle accent halo + faint accent border over
-   * --motion-base, so the whole interaction reads smooth rather than snapping
-   * from a grey box to a saturated blue one. */
+  /* A recessed *dark* field with a crisp idle border (sources-redesign — matched
+   * to the comp's inset input treatment): the fill sits a step BELOW the surface
+   * it's on, with a hairline border that strengthens on hover; focus glides in a
+   * gentle accent halo + accent border over --motion-base, so the interaction
+   * reads smooth rather than snapping from a grey box to a saturated blue one. */
   .input {
     appearance: none;
     width: 100%;
     box-sizing: border-box;
-    height: var(--control-h-md);
+    /* Comp form input: 40px tall, 11px radius, recessed --input fill (the comp
+       draws every form field this way — sheets + options). */
+    height: 40px;
     padding: 0 var(--space-3);
-    border: 1px solid transparent;
-    border-radius: var(--r-md);
-    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    background: var(--input);
     color: var(--text);
     font: var(--weight-medium) var(--text-base) / 1 var(--font-sans);
     transition:
@@ -118,14 +121,14 @@ function handleKeydown(event: KeyboardEvent): void {
   }
 
   .input:hover:not(:focus) {
-    background: var(--surface-3);
+    border-color: var(--border-strong);
   }
 
   .input:focus {
     outline: none;
     border-color: oklch(from var(--accent) l c h / 0.55);
     box-shadow: 0 0 0 3px var(--accent-soft);
-    background: var(--surface-2);
+    background: var(--bg-elev);
   }
 
   /* Invalid state: a danger-hued border that holds whether or not the field is

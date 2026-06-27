@@ -5,11 +5,11 @@ import SettingsCardHarness from './SettingsCard.test.harness.svelte';
 afterEach(() => cleanup());
 
 describe('SettingsCard', () => {
-  test('composes a glass Surface with the heading and body', () => {
+  test('composes a solid section Surface with the heading and body', () => {
     const { container } = render(SettingsCardHarness, { props: { heading: 'Result sources' } });
     const surface = container.querySelector('.surface') as HTMLElement;
     expect(surface).not.toBeNull();
-    expect(surface.getAttribute('data-variant')).toBe('glass');
+    expect(surface.getAttribute('data-variant')).toBe('section');
     expect(container.querySelector('h2.card-heading')?.textContent?.trim()).toBe('Result sources');
     expect(container.querySelector('[data-testid="card-body"]')).not.toBeNull();
   });

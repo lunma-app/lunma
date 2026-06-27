@@ -60,16 +60,21 @@ function readTokens(): Map<string, string> {
 }
 
 /** Evaluate the small `calc()` / `clamp()` math the identity tokens use
- * (space-palette-refresh): `calc(<a> + <b>)` and `clamp(0, <v>, 1)`. Runs calc
- * first so an inner `calc()` inside a `clamp()` collapses before the clamp. */
+ * (space-palette-refresh + the warm-substrate redesign): `calc(<a> * <b>)`,
+ * `calc(<a> + <b>)`, and `clamp(0, <v>, 1)`. Runs calc first (multiply before
+ * add) so an inner `calc()` inside a `clamp()` collapses before the clamp. */
 function evalMath(s: string): string {
   let out = s;
   let prev: string;
   do {
     prev = out;
-    out = out.replace(/calc\(\s*([\d.]+)\s*\+\s*([\d.]+)\s*\)/g, (_m, a, b) =>
-      String(Number(a) + Number(b)),
-    );
+    out = out
+      .replace(/calc\(\s*([\d.]+)\s*\*\s*([\d.]+)\s*\)/g, (_m, a, b) =>
+        String(Number(a) * Number(b)),
+      )
+      .replace(/calc\(\s*([\d.]+)\s*\+\s*([\d.]+)\s*\)/g, (_m, a, b) =>
+        String(Number(a) + Number(b)),
+      );
   } while (out !== prev);
   return out.replace(/clamp\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)/g, (_m, lo, v, hi) =>
     String(Math.min(Number(hi), Math.max(Number(lo), Number(v)))),
@@ -77,17 +82,22 @@ function evalMath(s: string): string {
 }
 
 /** Resolve `oklch(L C H ...)` strings, substituting the hue-axis custom
- * properties to their documented `:root` defaults (`--base-hue`/`--space-h` → 235,
- * `--space-l` → 0.62, `--space-chroma` → 0.15) and evaluating the `calc()` /
- * `clamp()` the identity tokens use. Strip optional `/ alpha` since for contrast
- * we test the opaque colour. */
-function resolveOklch(expr: string, baseHue = 235): string {
+ * properties to their documented `:root` defaults (warm-substrate redesign:
+ * `--base-hue`/`--ds-warm-h`/`--space-h` → 60, `--ds-warm-amt` → 1,
+ * `--ds-primary-h` → 233, `--ds-primary-c` → 0.15, `--space-l` → 0.62,
+ * `--space-chroma` → 0.15) and evaluating the `calc()` / `clamp()` math. Strip
+ * optional `/ alpha` since for contrast we test the opaque colour. */
+function resolveOklch(expr: string, baseHue = 60): string {
   // Drop trailing `/ <alpha>` — contrast for opacities folds into bg below
   // for borders/dividers, but for the text/bg pairs we test here we want
   // the opaque colour.
   const stripped = expr.replace(/\s*\/\s*[\d.]+\s*\)/, ')');
   const substituted = stripped
     .replace(/var\(--base-hue\)/g, String(baseHue))
+    .replace(/var\(--ds-warm-h\)/g, String(baseHue))
+    .replace(/var\(--ds-warm-amt\)/g, '1')
+    .replace(/var\(--ds-primary-h\)/g, '233')
+    .replace(/var\(--ds-primary-c\)/g, '0.15')
     .replace(/var\(--space-h(?:,\s*[\d.]+)?\)/g, String(baseHue))
     .replace(/var\(--space-l(?:,\s*[\d.]+)?\)/g, '0.62')
     .replace(/var\(--space-chroma(?:,\s*[\d.]+)?\)/g, '0.15');
@@ -291,10 +301,18 @@ describe('immersive surfaces — text on glass over aurora (WCAG AA per tint)', 
   }
 
   function subst(expr: string): string {
-    return expr
-      .replace(/var\(--base-hue\)/g, String(HUE))
-      .replace(/var\(--space-h[^)]*\)/g, String(HUE))
-      .replace(/var\(--space-chroma[^)]*\)/g, String(CHROMA));
+    // Keep alpha (the over() blends below use it); just substitute the hue-axis
+    // vars and collapse the warm-substrate calc() math so culori can parse.
+    return evalMath(
+      expr
+        .replace(/var\(--base-hue\)/g, String(HUE))
+        .replace(/var\(--ds-warm-h\)/g, String(HUE))
+        .replace(/var\(--ds-warm-amt\)/g, '1')
+        .replace(/var\(--ds-primary-h\)/g, '233')
+        .replace(/var\(--ds-primary-c\)/g, '0.15')
+        .replace(/var\(--space-h[^)]*\)/g, String(HUE))
+        .replace(/var\(--space-chroma[^)]*\)/g, String(CHROMA)),
+    );
   }
 
   function toRgba(expr: string): Rgba {

@@ -3,8 +3,9 @@ import type { Snippet } from 'svelte';
 
 interface Props {
   variant?: 'primary' | 'secondary' | 'ghost' | undefined;
-  /** Control density. `md` (default) is the standard control; `sm` is a compact
-   * variant for tertiary / inline affordances (smaller height + `--text-xs`). */
+  /** Control density. `md` (default) is the standard control — the 36px button
+   * the design system specs (`--control-h-md`); `sm` is a compact 28px variant
+   * (`--control-h-sm`) for tertiary / inline affordances (smaller `--text-xs`). */
   size?: 'sm' | 'md' | undefined;
   disabled?: boolean | undefined;
   type?: 'button' | 'submit' | undefined;
@@ -51,20 +52,27 @@ function handleClick(): void {
     border: 0;
     margin: 0;
     border-radius: var(--r-md);
-    padding: 0 var(--space-3);
-    height: var(--control-h-sm);
+    padding: 0 var(--space-4);
+    height: var(--control-h-md);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: var(--space-2);
     font: var(--weight-medium) var(--text-base) / 1 var(--font-sans);
     cursor: pointer;
+    /* Smooth hover/press/disabled transitions (150–250ms motion policy) — the
+       base control had none, so md buttons snapped on hover. */
+    transition:
+      background var(--motion-fast) var(--ease-standard),
+      color var(--motion-fast) var(--ease-standard),
+      border-color var(--motion-fast) var(--ease-standard),
+      transform var(--motion-fast) var(--ease-standard);
   }
 
   /* Compact density for tertiary / inline affordances. */
   .btn[data-size='sm'] {
-    height: var(--control-h-xs);
-    padding: 0 var(--space-2);
+    height: var(--control-h-sm);
+    padding: 0 var(--space-3);
     font: var(--weight-medium) var(--text-xs) / 1 var(--font-sans);
     transition:
       background var(--motion-fast) var(--ease-standard),
@@ -78,13 +86,19 @@ function handleClick(): void {
     outline-offset: var(--focus-offset);
   }
 
+  /* Commit / CTA buttons take the fixed cool `--primary` (the redesign reserves it
+     for commits), distinct from the per-Space `--accent` identity hue. */
   .btn[data-variant='primary'] {
-    background: var(--accent);
-    color: var(--accent-on);
+    background: var(--primary);
+    color: var(--primary-on);
     border: 1px solid transparent;
+    /* The CTA reads as the dominant, raised action (comp: semibold + a top
+       highlight and short drop). */
+    font-weight: var(--weight-semibold);
+    box-shadow: var(--shadow-raise);
   }
   .btn[data-variant='primary']:hover:not(:disabled) {
-    background: var(--accent);
+    background: var(--primary);
     filter: brightness(1.06);
   }
   .btn[data-variant='primary']:active:not(:disabled) {
@@ -92,12 +106,12 @@ function handleClick(): void {
   }
 
   .btn[data-variant='secondary'] {
-    background: var(--surface);
-    color: var(--text);
-    border: 1px solid var(--border-soft);
+    background: transparent;
+    color: var(--text-2);
+    border: 1px solid var(--border);
   }
   .btn[data-variant='secondary']:hover:not(:disabled) {
-    background: var(--hover);
+    background: var(--surface-2);
   }
   .btn[data-variant='secondary']:active:not(:disabled) {
     background: var(--press);
@@ -105,6 +119,8 @@ function handleClick(): void {
   }
 
   .btn[data-variant='ghost'] {
+    /* Ghost is tertiary — the comp gives it tighter padding than primary/secondary. */
+    padding: 0 var(--space-3);
     background: transparent;
     color: var(--text-muted);
     border: 1px solid transparent;
@@ -118,8 +134,13 @@ function handleClick(): void {
     transform: scale(var(--press-scale));
   }
 
+  /* Comp disabled palette (explicit muted fill, not a blanket opacity). Placed
+     after the variant rules so it wins on equal specificity for every variant. */
   .btn:disabled {
-    opacity: 0.4;
+    background: var(--disabled-bg);
+    color: var(--text-faint);
+    border-color: transparent;
+    box-shadow: none;
     cursor: not-allowed;
   }
   .btn:disabled:hover {

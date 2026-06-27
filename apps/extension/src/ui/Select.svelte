@@ -8,6 +8,7 @@ export interface SelectOption {
 
 <script lang="ts">
 import { onDestroy, tick } from 'svelte';
+import { scrollFade } from './scroll-fade';
 import Surface from './Surface.svelte';
 
 interface Props {
@@ -167,7 +168,7 @@ function removeOutside(): void {
   {#if open}
     <div class="popover">
       <Surface variant="elevated" radius="md">
-        <ul class="list" role="listbox" aria-label={ariaLabel} tabindex={-1}>
+        <ul class="list" role="listbox" aria-label={ariaLabel} tabindex={-1} use:scrollFade>
           {#each options as option (option.value)}
             <li>
               <button
@@ -226,9 +227,11 @@ function removeOutside(): void {
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    border: 1px solid transparent;
+    /* Recessed dark trigger with a crisp idle border — matches the evolved
+       TextInput (sources-redesign / comp). */
+    border: 1px solid var(--border);
     border-radius: var(--r-md);
-    background: var(--surface-2);
+    background: var(--bg);
     color: var(--text);
     font: var(--weight-medium) var(--text-base) / 1 var(--font-sans);
     text-align: left;
@@ -239,14 +242,14 @@ function removeOutside(): void {
       background var(--motion-base) var(--ease-standard);
   }
   .trigger:hover {
-    background: var(--surface-3);
+    border-color: var(--border-strong);
   }
   .trigger:focus-visible,
   .trigger.open {
     outline: none;
     border-color: oklch(from var(--accent) l c h / 0.55);
     box-shadow: 0 0 0 3px var(--accent-soft);
-    background: var(--surface-2);
+    background: var(--bg-elev);
   }
 
   .value {
