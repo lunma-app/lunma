@@ -127,10 +127,11 @@ describe('LensEditor — connection-first (sources-redesign)', () => {
     });
     await fireEvent.click(toggleFor(container, GL.id));
     await tick();
-    expect(entityChips(container)).toEqual(['Changes']);
+    // A gitlab source emits BOTH Changes (MRs) and Issues (tickets).
+    expect(entityChips(container)).toEqual(['Changes', 'Issues']);
     await fireEvent.click(toggleFor(container, RSS.id));
     await tick();
-    expect(entityChips(container)).toEqual(['Changes', 'Articles']);
+    expect(entityChips(container)).toEqual(['Changes', 'Issues', 'Articles']);
   });
 
   test('Create dispatches sources WITHOUT lensKind and opens the overview page', async () => {
