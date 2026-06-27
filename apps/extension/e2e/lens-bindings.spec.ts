@@ -64,7 +64,9 @@ async function openFolderMenu(page: Page): Promise<void> {
   const deleteItem = page.locator('[data-menu-id="delete"]');
   await expect(async () => {
     if (!(await deleteItem.isVisible())) {
-      await page.getByTestId('folder-row-menu-trigger').click();
+      // The lens kebab is gone (sources-redesign) — the row's actions live on its
+      // right-click context menu now.
+      await page.getByTestId('lens-row').click({ button: 'right' });
     }
     await expect(deleteItem).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 15_000 });
@@ -178,11 +180,11 @@ test('a lens row activates like a pinned tab: open bound, re-click focuses, dele
   await expect.poll(async () => (await snapshot(page)).folderIds.length).toBe(1);
   const folderId = (await snapshot(page)).folderIds[0] as string;
 
-  // Expand the folder (the toggle is the folder-row's hit button) and wait for
-  // the mocked result row to render — proof the SW fetch was intercepted. Target
-  // `.hit` directly: the header also carries an "open as page" icon button whose
-  // aria-label contains the folder name, so a name-based role query is ambiguous.
-  await page.getByTestId('folder-row').locator('.hit').click();
+  // Expand the lens (the whole LensRow is the toggle; `.toggle` is its button)
+  // and wait for the mocked result row to render — proof the SW fetch was
+  // intercepted. Target `.toggle` directly: the row also carries a trailing
+  // "open as page" icon button.
+  await page.getByTestId('lens-row').locator('.toggle').click();
   await expect(page.getByTestId('lens-result-row')).toHaveCount(1);
 
   const before = await snapshot(page);

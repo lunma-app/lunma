@@ -89,7 +89,7 @@ async function lockToSite(sidebar: Page): Promise<void> {
   await expect(editor.getByTestId('chip')).toBeVisible();
 }
 
-test('the menu drills into the boundary editor, seeds the domain, and back returns', async ({
+test('the menu opens the boundary editor sheet, seeds the domain, and dismiss returns', async ({
   page,
   context,
   extensionId,
@@ -99,15 +99,13 @@ test('the menu drills into the boundary editor, seeds the domain, and back retur
 
   await pinnedRows(page).first().click({ button: 'right' });
   await expect(lockItem(page)).toBeVisible(); // actions list
-  // The drill-in row advertises its submenu (chevron + aria-haspopup).
-  await expect(lockItem(page)).toHaveAttribute('aria-haspopup', 'menu');
 
   await lockItem(page).click();
+  // Selecting "Lock to its site…" CLOSES the menu and opens the editor as a
+  // BottomSheet (sources-redesign: an editor, not an in-menu drill).
   const editor = page.getByTestId('tab-boundary-editor');
   await expect(editor).toBeVisible();
-  // Drill-in REPLACES the actions with a back affordance.
-  await expect(page.getByTestId('pinned-menu-item')).toHaveCount(0);
-  await expect(page.getByTestId('pinned-menu-back')).toBeVisible();
+  await expect(page.getByTestId('pinned-menu-item')).toHaveCount(0); // menu closed
   // Default mode surfaces a discoverability link to the global default.
   await expect(editor.getByTestId('boundary-options-link')).toBeVisible();
 
@@ -116,9 +114,8 @@ test('the menu drills into the boundary editor, seeds the domain, and back retur
   await expect(editor.getByTestId('chip')).toBeVisible();
   await expect(editor.getByTestId('chip')).toHaveText(/localhost/);
 
-  // Back returns to the action list (editor gone).
-  await page.getByTestId('pinned-menu-back').click();
-  await expect(lockItem(page)).toBeVisible();
+  // Dismissing the sheet (✕) returns to the sidebar (editor gone).
+  await page.locator('.bottom-sheet-close').click();
   await expect(editor).toHaveCount(0);
 });
 

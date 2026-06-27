@@ -368,7 +368,7 @@ describe('sources-redesign: mixed-lens Change enrichment gates per section (D8)'
       if (url.includes('/approvals')) {
         return jsonResponse({ approved_by: [{ user: { username: 'alice' } }] });
       }
-      if (url.includes('news.example.com')) return feedResponse(FEED_XML);
+      if (new URL(url).hostname === 'news.example.com') return feedResponse(FEED_XML);
       throw new Error(`unrouted: ${url}`);
     });
 
