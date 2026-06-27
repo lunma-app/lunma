@@ -1,16 +1,20 @@
 import { fireEvent, render } from '@testing-library/svelte';
 import { describe, expect, test, vi } from 'vitest';
+import { ICON_NAMES } from '../shared/icon-names';
 import IconPickerHarness from './IconPicker.test.harness.svelte';
-import { SPACE_ICONS } from './space-icons';
 
 function tiles(container: HTMLElement): HTMLButtonElement[] {
   return Array.from(container.querySelectorAll<HTMLButtonElement>('[data-testid="icon-tile"]'));
 }
 
 describe('IconPicker', () => {
-  test('renders the curated shortlist with the selected tile checked', () => {
+  test('renders the full catalogue with the selected tile checked', () => {
     const { container } = render(IconPickerHarness, { props: { value: 'star' } });
-    expect(tiles(container)).toHaveLength(SPACE_ICONS.length);
+    // The empty state shows the whole catalogue (curated defaults first), not a
+    // short list — every icon is a tile, browsable by scroll.
+    expect(tiles(container)).toHaveLength(ICON_NAMES.length);
+    // 'star' leads the curated defaults, so it's the first tile.
+    expect(tiles(container)[0]?.getAttribute('data-icon')).toBe('star');
     const selected = container.querySelector('[data-selected="true"]') as HTMLButtonElement;
     expect(selected.getAttribute('data-icon')).toBe('star');
     expect(selected.getAttribute('aria-checked')).toBe('true');
@@ -47,18 +51,22 @@ describe('IconPicker', () => {
     expect(onselect).toHaveBeenCalledWith('rocket');
   });
 
-  test('typing in the search box filters the full catalogue, beyond the shortlist', async () => {
+  test('typing in the search box narrows the catalogue to matches', async () => {
     const { container } = render(IconPickerHarness, { props: { value: 'star' } });
     const search = container.querySelector('[data-testid="icon-search"]') as HTMLInputElement;
 
-    // 'anchor' is in the full catalogue but NOT in the curated shortlist.
-    expect(container.querySelector('[data-icon="anchor"]')).toBeNull();
-    await fireEvent.input(search, { target: { value: 'anchor' } });
+    // Empty state shows the whole catalogue, including 'anchor'.
     expect(container.querySelector('[data-icon="anchor"]')).not.toBeNull();
 
-    // Clearing the box returns to the shortlist.
+    await fireEvent.input(search, { target: { value: 'anchor' } });
+    // The query narrows to matches: 'anchor' stays, a non-matching icon drops.
+    expect(container.querySelector('[data-icon="anchor"]')).not.toBeNull();
+    expect(container.querySelector('[data-icon="star"]')).toBeNull();
+    expect(tiles(container).length).toBeLessThan(ICON_NAMES.length);
+
+    // Clearing the box returns to the full catalogue.
     await fireEvent.input(search, { target: { value: '' } });
-    expect(tiles(container)).toHaveLength(SPACE_ICONS.length);
+    expect(tiles(container)).toHaveLength(ICON_NAMES.length);
   });
 
   test('a search with no matches shows the empty message', async () => {

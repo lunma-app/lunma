@@ -189,6 +189,10 @@ const returnable = $derived(drifted && !!homeHost);
 
 <style>
   .tab-row {
+    /* Local plate size for the leading favicon tile (comp §5f ≈ 24px). Scoped to
+     * this primitive rather than a new global token — it is the row's own
+     * leading-mark geometry, not a shared control size. */
+    --fav-tile: 24px;
     position: relative;
     display: flex;
     align-items: center;
@@ -196,28 +200,31 @@ const returnable = $derived(drifted && !!homeHost);
      * line — the home-host subtitle's grid-rows tween drives the visible grow;
      * a non-drifted row stays exactly one --row-h tall. */
     min-height: var(--row-h);
-    padding: 0 var(--space-3);
-    border-radius: var(--r-md);
-    /* Active background glides on the slower curve; min-height eases too so a
-     * density change reflows rather than snaps (reduced motion collapses
+    padding: 0 var(--space-2) 0 var(--space-2);
+    /* Redesign rounds the row harder — the nav/card radius (comp's 12px rows). */
+    border-radius: var(--r-lg);
+    /* Active background + ring glide on the slower curve; min-height eases too so
+     * a density change reflows rather than snaps (reduced motion collapses
      * --motion-base to the fast tick via the global rule). */
     transition:
       background var(--motion-base) var(--ease-emphasised),
+      box-shadow var(--motion-base) var(--ease-emphasised),
       min-height var(--motion-base) var(--ease-standard);
   }
 
   .tab-row:hover {
-    background: var(--surface-2);
+    background: var(--hover);
   }
 
-  /* Active fill is a soft Space-coloured wash — distinct in HUE from the neutral
-   * hover (`--surface-2`), so the two never read alike. The wash plus the
-   * heavier active title (below) carry the active identity on their own; there is
-   * deliberately no leading accent bar (a short floated tick read as a stray
-   * artifact against the wash). Identity comes from colour + weight, never from
-   * moving content, so activation never reflows the favicon/title. */
+  /* Active treatment matches the redesign comp: a soft Space-coloured fill
+   * (`--space-c-soft` ≈ the comp's `--space-soft`) plus a single crisp inset ring
+   * in the Space hue (`--space-c-dim` ≈ the comp's `--space-line`). Distinct in
+   * HUE from the neutral hover (`--hover`), so the two never read alike; the ring
+   * + the heavier active title (below) carry the identity. No leading accent bar
+   * and no moving content, so activation never reflows the favicon/title. */
   .tab-row.active {
     background: var(--space-c-soft);
+    box-shadow: inset 0 0 0 1px var(--space-c-dim);
   }
 
   /* The row body: a container holding the favicon button + the title button as
@@ -278,7 +285,7 @@ const returnable = $derived(drifted && !!homeHost);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: var(--r-sm);
+    border-radius: var(--r-md);
     transition: transform var(--motion-fast) var(--ease-standard);
   }
   /* The visible favicon is only --favicon-size (16px) — far too small a click/hover
@@ -291,9 +298,9 @@ const returnable = $derived(drifted && !!homeHost);
   .favicon-btn::before {
     content: '';
     position: absolute;
-    top: calc((var(--row-h) - var(--favicon-size)) / -2);
-    bottom: calc((var(--row-h) - var(--favicon-size)) / -2);
-    left: calc(-1 * var(--space-3));
+    top: calc((var(--row-h) - var(--fav-tile)) / -2);
+    bottom: calc((var(--row-h) - var(--fav-tile)) / -2);
+    left: calc(-1 * var(--space-2));
     right: calc(var(--space-2) / -2);
   }
   .favicon-btn:active {
@@ -302,7 +309,7 @@ const returnable = $derived(drifted && !!homeHost);
   .favicon-btn:focus-visible {
     outline: var(--focus-width) solid var(--focus-color);
     outline-offset: var(--focus-offset);
-    border-radius: var(--r-sm);
+    border-radius: var(--r-md);
   }
 
   /* Title button — stacks the title over the drifted-only subtitle and stays the
@@ -354,29 +361,49 @@ const returnable = $derived(drifted && !!homeHost);
    * container is a div (not a button), so drop the pointer cursor. */
   .tab-row.editing {
     background: var(--surface-2);
-    box-shadow: inset 0 0 0 1.5px color-mix(in oklch, var(--space-c) 55%, transparent);
+    box-shadow: inset 0 0 0 1.5px var(--space-c-dim);
   }
   .hit.editing {
     cursor: default;
   }
 
+  /* The favicon now sits inside a rounded tile (comp §5f: a ~24px rounded-square
+   * plate holding the favicon), so the leading mark reads as a deliberate tile
+   * rather than a bare 16px glyph. The image/spinner/globe inside stay
+   * `--favicon-size` (16px); the tile is the larger plate around them. */
   .favicon {
     position: relative;
     flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: var(--favicon-size);
-    height: var(--favicon-size);
+    width: var(--fav-tile);
+    height: var(--fav-tile);
+    border-radius: var(--r-md);
+    background: var(--surface-2);
     color: var(--text-muted);
     /* Rest favicons sit a touch back; hover/active bring them fully forward so
      * the active row clearly owns the foreground. */
     opacity: 0.85;
-    transition: opacity var(--motion-fast) var(--ease-standard);
+    transition:
+      opacity var(--motion-fast) var(--ease-standard),
+      background var(--motion-fast) var(--ease-standard);
   }
   .tab-row:hover .favicon,
   .tab-row.active .favicon {
     opacity: 1;
+  }
+  /* The active tile picks up the Space-soft wash so the leading mark joins the
+   * row's active identity. */
+  .tab-row.active .favicon {
+    background: var(--space-c-soft);
+  }
+  /* The inner mark (favicon image, globe, or spinner) is the 16px glyph, centred
+   * in the tile. */
+  .favicon :global(img),
+  .favicon :global(svg) {
+    width: var(--favicon-size);
+    height: var(--favicon-size);
   }
 
   /* Drifted-only home-host subtitle. The grid-rows shell animates 0fr↔1fr so the
@@ -423,7 +450,8 @@ const returnable = $derived(drifted && !!homeHost);
     text-overflow: ellipsis;
     white-space: nowrap;
     text-align: left;
-    font: var(--weight-regular) var(--text-base) / 1 var(--font-sans);
+    /* Comp §5f: rest tabs sit at medium, the active tab steps up to semibold. */
+    font: var(--weight-medium) var(--text-base) / 1 var(--font-sans);
     color: inherit;
     transition: font-weight var(--motion-fast) var(--ease-standard);
   }
@@ -487,7 +515,7 @@ const returnable = $derived(drifted && !!homeHost);
    * that vertical gap. Holds at every row density (the gap tracks `--row-h`). Swap
    * rows (`.has-swap`) keep meta↔action in place, so they are excluded. */
   .row-end:not(.has-swap) > .trailing {
-    margin-right: calc((var(--row-h) - var(--icon-btn)) / 2 - var(--space-3));
+    margin-right: calc((var(--row-h) - var(--icon-btn)) / 2 - var(--space-2));
   }
   /* Reveal the actions on row hover, when forced visible, or when an action is
    * keyboard-focused (so it's reachable by Tab) — but NOT on row :focus-within,

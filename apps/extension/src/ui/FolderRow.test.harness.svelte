@@ -2,7 +2,7 @@
 import type { IconName } from '../shared/icon-names';
 import type { SpaceColor } from '../shared/types';
 import FolderRow from './FolderRow.svelte';
-import type { RowMenuItem } from './RowMenu.svelte';
+import type { MenuItem } from './menu-types';
 
 interface Props {
   name: string;
@@ -11,28 +11,30 @@ interface Props {
   expanded?: boolean;
   dropTarget?: boolean;
   onToggle?: () => void;
-  onOpenPage?: () => void;
-  openPageLabel?: string;
   label?: string;
   editing?: boolean;
   onRename?: (name: string) => void;
   onRenameCancel?: () => void;
   onStartRename?: () => void;
+  onSetColor?: (color: SpaceColor) => void;
+  onSetIcon?: (icon: IconName) => void;
+  colors?: readonly SpaceColor[];
   onDelete?: () => void;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
   canMoveUp?: boolean;
   canMoveDown?: boolean;
   badge?: string;
-  menuItems?: RowMenuItem[];
+  menuItems?: MenuItem[];
   busy?: boolean;
-  /** When set, the harness passes a forwarded drill-in panel rendering this text. */
+  /** When set, the harness passes a forwarded editor snippet rendering this text
+   * (FolderRow renders it inside a BottomSheet titled `panelTitle`). */
   panelContent?: string;
   panelTitle?: string;
   onPanelBack?: () => void;
-  /** When true, the harness BINDS `menuOpen` and renders a host-side mirror +
-   * close control, exercising the bindable pass-through; the default branch
-   * keeps every other test on the unbound path. */
+  /** When true, the harness BINDS `menuOpen` and renders a host-side mirror,
+   * exercising the bindable open mirror; the default branch keeps every other
+   * test on the unbound path. */
   bindMenuOpen?: boolean;
 }
 
@@ -43,13 +45,14 @@ const {
   expanded,
   dropTarget,
   onToggle,
-  onOpenPage,
-  openPageLabel,
   label,
   editing,
   onRename,
   onRenameCancel,
   onStartRename,
+  onSetColor,
+  onSetIcon,
+  colors,
   onDelete,
   onMoveUp,
   onMoveDown,
@@ -73,15 +76,6 @@ let menuOpen = $state(false);
 
 {#if bindMenuOpen}
   <span data-testid="host-menu-open">{String(menuOpen)}</span>
-  <button
-    type="button"
-    data-testid="host-close-menu"
-    onclick={() => {
-      menuOpen = false;
-    }}
-  >
-    host close
-  </button>
   <FolderRow
     {name}
     {icon}
@@ -100,13 +94,14 @@ let menuOpen = $state(false);
     {expanded}
     {dropTarget}
     {onToggle}
-    {onOpenPage}
-    {openPageLabel}
     {label}
     {editing}
     {onRename}
     {onRenameCancel}
     {onStartRename}
+    {onSetColor}
+    {onSetIcon}
+    colors={colors ?? []}
     {onDelete}
     {onMoveUp}
     {onMoveDown}

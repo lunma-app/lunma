@@ -40,47 +40,52 @@ const ok = $derived(colourToOklch(color));
 </button>
 
 <style>
+  /* Comp §8: a fixed 30px swatch (matches the dot) so the palette keeps its true
+   * size and the selection ring isn't clipped. */
   .swatch {
     appearance: none;
     margin: 0;
     padding: 0;
-    width: var(--icon-btn);
-    height: var(--icon-btn);
+    width: 30px;
+    height: 30px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     border: 0;
-    border-radius: var(--r-pill);
+    border-radius: 9px;
     background: transparent;
     cursor: pointer;
     transition: transform var(--motion-fast) var(--ease-standard);
   }
 
+  /* Comp (Sidebar Redesign §8): a 30px rounded-SQUARE filled with the colour's
+   * true hue. Unselected swatches sit at scale .92; the selected one pops to full
+   * size with a 2px gap + a 2px ring in a lightened cut of its own hue. */
   .dot {
-    width: 20px;
-    height: 20px;
-    border-radius: var(--r-pill);
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
     background: oklch(var(--swatch-l) var(--swatch-c) var(--swatch-h));
     box-shadow: inset 0 0 0 1px oklch(0 0 0 / 0.18);
-    transition: transform var(--motion-fast) var(--ease-standard);
+    transform: scale(0.92);
+    transition:
+      transform var(--motion-fast) var(--ease-standard),
+      box-shadow var(--motion-fast) var(--ease-standard);
   }
 
-  .swatch:hover {
-    background: var(--hover);
-  }
   .swatch:active .dot {
-    transform: scale(var(--press-scale));
+    transform: scale(calc(0.92 * var(--press-scale)));
   }
   .swatch:focus-visible {
     outline: var(--focus-width) solid var(--focus-color);
     outline-offset: var(--focus-offset);
+    border-radius: 9px;
   }
 
-  /* Selected = a ring in --text around the dot, plus a subtle lift. */
   .swatch.selected .dot {
     box-shadow:
       0 0 0 2px var(--bg-elev),
-      0 0 0 4px var(--text);
-    transform: scale(1.05);
+      0 0 0 4px oklch(calc(var(--swatch-l) + 0.04) var(--swatch-c) var(--swatch-h));
+    transform: scale(1);
   }
 </style>
