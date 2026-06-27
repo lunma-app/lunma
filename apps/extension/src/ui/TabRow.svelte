@@ -212,8 +212,12 @@ const returnable = $derived(drifted && !!homeHost);
       min-height var(--motion-base) var(--ease-standard);
   }
 
+  /* Hover mirrors the active wash (the same Space-hue `--space-c-soft`) WITHOUT the
+     inset ring — the ring stays reserved for the active tab. `.tab-row.active` below
+     is later in source at equal specificity, so an active tab keeps its ring while
+     hovered. */
   .tab-row:hover {
-    background: var(--hover);
+    background: var(--space-c-soft);
   }
 
   /* Active treatment matches the redesign comp: a soft Space-coloured fill
@@ -521,12 +525,14 @@ const returnable = $derived(drifted && !!homeHost);
    * keyboard-focused (so it's reachable by Tab) — but NOT on row :focus-within,
    * which would keep them stuck visible after a click focuses the row body. */
   .tab-row:hover .trailing,
+  .tab-row.active .trailing,
   .tab-row.trailing-visible .trailing,
   .row-end:focus-within .trailing {
     opacity: 1;
   }
   /* In swap mode the meta fades out as the actions fade in (same cell). */
   .tab-row:hover .row-end.has-swap .meta,
+  .tab-row.active .row-end.has-swap .meta,
   .tab-row.trailing-visible .row-end.has-swap .meta,
   .row-end.has-swap:focus-within .meta {
     opacity: 0;

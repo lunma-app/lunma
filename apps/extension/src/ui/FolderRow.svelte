@@ -284,8 +284,11 @@ function onMenuOpenChange(open: boolean): void {
       background var(--motion-fast) var(--ease-standard),
       box-shadow var(--motion-fast) var(--ease-standard);
   }
+  /* Hover washes in the folder's own hue (matching its drop/editing washes) WITHOUT
+     a ring — the ring stays reserved for the drop-target / editing states, which are
+     later in source so they win while hovered. */
   .folder-row:hover {
-    background: var(--hover);
+    background: color-mix(in oklch, var(--folder-c) 22%, transparent);
   }
   .folder-row.drop-target {
     background: color-mix(in oklch, var(--folder-c) 22%, transparent);

@@ -55,7 +55,9 @@ function handleClick(): void {
   }
 
   .row-button:hover:not(:disabled) {
-    background: var(--surface-2);
+    /* Same Space-hue wash as the tab/lens rows; falls back to the neutral surface
+       outside a Space scope (where `--space-c-soft` isn't defined). */
+    background: var(--space-c-soft, var(--surface-2));
     color: var(--text);
   }
 
