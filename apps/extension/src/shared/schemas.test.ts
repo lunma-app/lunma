@@ -3,30 +3,58 @@ import {
   AppStateV7Schema,
   AppStateV11Schema,
   AppStateV12Schema,
+  AppStateV13Schema,
   CURRENT_SCHEMA_VERSION,
   EnvelopeSchema,
 } from './schemas';
 import { createInitialState } from './store.svelte';
 
-// Validates the freshly-minted initial state against the current persisted schema.
-describe('AppStateV11Schema validation', () => {
+// Validates the freshly-minted initial state against the current persisted
+// schema (v13 — `createInitialState` now seeds the `sources` account map).
+describe('AppStateV13Schema validation', () => {
   test('valid initial AppState parses', () => {
     const state = createInitialState();
-    const result = AppStateV11Schema.safeParse(state);
+    const result = AppStateV13Schema.safeParse(state);
     expect(result.success).toBe(true);
   });
 
   test('missing required field rejects', () => {
     const state = createInitialState() as unknown as Record<string, unknown>;
     delete state.spaces;
-    const result = AppStateV11Schema.safeParse(state);
+    const result = AppStateV13Schema.safeParse(state);
     expect(result.success).toBe(false);
   });
 
   test('unknown extra field rejects (strict)', () => {
     const state = { ...createInitialState(), extra: 'nope' };
-    const result = AppStateV11Schema.safeParse(state);
+    const result = AppStateV13Schema.safeParse(state);
     expect(result.success).toBe(false);
+  });
+
+  // connector-accounts: an account in the broadcast-safe `sources` map carries NO
+  // secret — a `token` field on the account is rejected (the schema is strict),
+  // so a token can never ride `AppState` / a state broadcast.
+  test('a SourceAccount carrying a token is rejected (no secret reaches AppState)', () => {
+    const state = createInitialState() as unknown as Record<string, unknown>;
+    state.sources = {
+      'acc-1': {
+        id: 'acc-1',
+        provider: 'github',
+        baseUrl: 'https://github.com',
+        token: 'ghp-leaked',
+      },
+    };
+    const result = AppStateV13Schema.safeParse(state);
+    expect(result.success).toBe(false);
+  });
+
+  test('a tokenless SourceAccount round-trips in the broadcast-safe sources map', () => {
+    const state = createInitialState() as unknown as Record<string, unknown>;
+    state.sources = {
+      'acc-1': { id: 'acc-1', provider: 'github', baseUrl: 'https://github.com', name: 'Work' },
+    };
+    const result = AppStateV13Schema.safeParse(state);
+    expect(result.success).toBe(true);
   });
 });
 
@@ -45,6 +73,10 @@ describe('EnvelopeSchema', () => {
 describe('AppStateV12Schema lensKind enum widening', () => {
   function stateWithLens(lensKind: string) {
     const state = createInitialState() as unknown as Record<string, unknown>;
+    // V12 is frozen pre-`sources` (strict) — drop the v13 account map and the
+    // ephemeral peek slice so the historical schema validates the embedded lens shape.
+    delete state.sources;
+    delete state.lensPeekByWindow;
     state.spaces = [{ id: 'work', name: 'Work', color: 'blue', icon: 'star' }];
     state.pinnedBySpace = {
       work: [
@@ -132,7 +164,9 @@ describe('saved-tab boundary', () => {
 describe('AppStateV7Schema smartItemBindings slot shape', () => {
   function stateWithBindings(bindings: unknown) {
     const state = createInitialState() as unknown as Record<string, unknown>;
-    // V7Schema uses old field names; strip V11 fields and add V7-compatible ones.
+    // V7Schema uses old field names; strip V11/V13 fields and add V7-compatible ones.
+    delete state.sources;
+    delete state.lensPeekByWindow;
     delete state.lensItemBindings;
     delete state.lensReadState;
     delete state.lenses;

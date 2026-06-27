@@ -265,6 +265,80 @@ export const migrations: Migration[] = [
     toVersion: 12,
     migrate: (raw: unknown): unknown => raw,
   },
+  {
+    // v13 (decouple-source-accounts): extract each lens node's EMBEDDED
+    // `sources: LensSource[]` (`{ source, baseUrl, queries, name? }`) into
+    // first-class `SourceAccount` records under a new top-level `sources` map,
+    // and rewrite each lens's `sources` entries to `LensSourceRef`
+    // (`{ sourceId, queries }`). One account is minted per DISTINCT
+    // `(provider, baseUrl)` pair across ALL lenses (de-duplicated by that
+    // composite key, so two lenses on the same host share one account); a
+    // source's `name` migrates onto its account (first occurrence wins). The
+    // separate, unversioned `lunma.connectors` secrets store is re-keyed
+    // host→sourceId by the boot-chain `reconcileAccountSecrets` step, NOT here
+    // (a pure migrate fn cannot touch a different storage key).
+    toVersion: 13,
+    migrate: (raw: unknown): unknown => {
+      if (typeof raw !== 'object' || raw === null) return raw;
+      const state = raw as Record<string, unknown>;
+
+      // Seed the new top-level accounts map (idempotent: keep an existing one).
+      const sources =
+        typeof state.sources === 'object' && state.sources !== null
+          ? (state.sources as Record<string, unknown>)
+          : {};
+      state.sources = sources;
+
+      const pinnedBySpace = state.pinnedBySpace;
+      if (typeof pinnedBySpace !== 'object' || pinnedBySpace === null) return raw;
+
+      // Dedupe minted accounts by the composite `${provider}:${baseUrl}` key.
+      const accountIdByKey = new Map<string, string>();
+
+      // Iterate Spaces, then nodes, then sources in order so minting is
+      // deterministic (a Space/node/source order-stable id assignment).
+      for (const nodes of Object.values(pinnedBySpace as Record<string, unknown>)) {
+        if (!Array.isArray(nodes)) continue;
+        for (const node of nodes) {
+          if (typeof node !== 'object' || node === null) continue;
+          const n = node as Record<string, unknown>;
+          if (n.kind !== 'lens') continue;
+          const entries = n.sources;
+          if (!Array.isArray(entries)) continue;
+          const refs: Array<{ sourceId: string; queries: unknown }> = [];
+          for (const entry of entries) {
+            if (typeof entry !== 'object' || entry === null) continue;
+            const e = entry as Record<string, unknown>;
+            // Idempotent: an entry already in the v13 ref shape is left as-is.
+            if (typeof e.sourceId === 'string') {
+              refs.push({
+                sourceId: e.sourceId,
+                queries: Array.isArray(e.queries) ? e.queries : [],
+              });
+              continue;
+            }
+            const provider = e.source;
+            const baseUrl = e.baseUrl;
+            const queries = Array.isArray(e.queries) ? e.queries : [];
+            if (typeof provider !== 'string' || typeof baseUrl !== 'string') continue;
+            const key = `${provider}:${baseUrl}`;
+            let sourceId = accountIdByKey.get(key);
+            if (sourceId === undefined) {
+              sourceId = crypto.randomUUID();
+              accountIdByKey.set(key, sourceId);
+              const account: Record<string, unknown> = { id: sourceId, provider, baseUrl };
+              if (typeof e.name === 'string') account.name = e.name;
+              sources[sourceId] = account;
+            }
+            refs.push({ sourceId, queries });
+          }
+          n.sources = refs;
+        }
+      }
+
+      return raw;
+    },
+  },
 ];
 
 export function assertMigrationsTerminal(list: Migration[], currentVersion: number): void {

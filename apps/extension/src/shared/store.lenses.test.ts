@@ -1,8 +1,20 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { LunmaStore } from './store.svelte';
-import type { LensItem, PinNode } from './types';
+import type { LensItem, PinNode, SourceAccount } from './types';
 
 type LensNode = Extract<PinNode, { kind: 'lens' }>;
+
+// Connected accounts the fixtures reference (connector-accounts). Seeded into
+// `store.state.sources` in `beforeEach` so each lens reference resolves to a
+// provider/baseUrl when the store derives section keys / feed-folder status.
+const ACCOUNTS: SourceAccount[] = [
+  { id: 'acc-gl-ex', provider: 'gitlab', baseUrl: 'https://gitlab.example.com' },
+  { id: 'acc-gl-other', provider: 'gitlab', baseUrl: 'https://gitlab.other.com' },
+  { id: 'acc-gl-forge', provider: 'gitlab', baseUrl: 'https://forge.example.com' },
+  { id: 'acc-gh-forge', provider: 'github', baseUrl: 'https://forge.example.com' },
+  { id: 'acc-rss-news', provider: 'rss', baseUrl: 'https://news.example.com/rss' },
+  { id: 'acc-rss-feed', provider: 'rss', baseUrl: 'https://news.example.com/feed.xml' },
+];
 
 function lensNode(overrides: Partial<LensNode> = {}): LensNode {
   return {
@@ -11,9 +23,7 @@ function lensNode(overrides: Partial<LensNode> = {}): LensNode {
     id: 'sf-1',
     name: 'Review requests',
     icon: 'folder-git-2',
-    sources: [
-      { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['review-requested'] },
-    ],
+    sources: [{ sourceId: 'acc-gl-ex', queries: ['review-requested'] }],
     maxItems: 20,
     hideRead: false,
     refreshMinutes: 10,
@@ -35,6 +45,7 @@ beforeEach(() => {
   let counter = 0;
   store = new LunmaStore({ idFactory: () => `id-${++counter}` });
   store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+  for (const account of ACCOUNTS) store.addSource({ ...account });
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
 });
 
@@ -58,6 +69,68 @@ describe('addLens', () => {
   });
 });
 
+describe('reconcileLensKinds (sources-redesign D9)', () => {
+  test('a pre-existing general lens holding a git source flips to review', () => {
+    // Buildable before this change: a general lens that contains a github source.
+    store.addLens(
+      'work',
+      lensNode({
+        lensKind: 'general',
+        sources: [{ sourceId: 'acc-gh-forge', queries: ['authored'] }],
+      }),
+    );
+    const changed = store.reconcileLensKinds();
+    expect(changed).toBe(true);
+    expect((store.state.pinnedBySpace.work?.[0] as LensNode).lensKind).toBe('review');
+  });
+
+  test('a feed-only general lens is left general (no change)', () => {
+    store.addLens(
+      'work',
+      lensNode({ lensKind: 'general', sources: [{ sourceId: 'acc-rss-news', queries: [] }] }),
+    );
+    const changed = store.reconcileLensKinds();
+    expect(changed).toBe(false);
+    expect((store.state.pinnedBySpace.work?.[0] as LensNode).lensKind).toBe('general');
+  });
+
+  test('a review lens whose git source was removed flips back to general', () => {
+    store.addLens(
+      'work',
+      lensNode({ lensKind: 'review', sources: [{ sourceId: 'acc-rss-news', queries: [] }] }),
+    );
+    const changed = store.reconcileLensKinds();
+    expect(changed).toBe(true);
+    expect((store.state.pinnedBySpace.work?.[0] as LensNode).lensKind).toBe('general');
+  });
+});
+
+describe('account mutators (connector-accounts)', () => {
+  test('addSource / renameSource / removeSource round-trip', () => {
+    store.removeSource('acc-gl-ex'); // start from a clean known state
+    store.addSource({ id: 'acc-x', provider: 'github', baseUrl: 'https://github.com' });
+    expect(store.state.sources['acc-x']).toEqual({
+      id: 'acc-x',
+      provider: 'github',
+      baseUrl: 'https://github.com',
+    });
+    store.renameSource('acc-x', 'Work');
+    expect(store.state.sources['acc-x']?.name).toBe('Work');
+    store.removeSource('acc-x');
+    expect(store.state.sources['acc-x']).toBeUndefined();
+  });
+
+  test('removeSource leaves a referencing lens ref dangling (no crash)', () => {
+    store.addLens('work', lensNode()); // references acc-gl-ex
+    store.removeSource('acc-gl-ex');
+    expect(store.state.sources['acc-gl-ex']).toBeUndefined();
+    // The lens node keeps its (now dangling) reference.
+    expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({
+      sources: [{ sourceId: 'acc-gl-ex' }],
+    });
+  });
+});
+
 describe('updateLens', () => {
   test('edits config fields in place', () => {
     store.addLens('work', lensNode());
@@ -65,7 +138,7 @@ describe('updateLens', () => {
       lensKind: 'general',
       icon: 'folder-git-2',
       name: 'Assigned',
-      sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['assigned'] }],
+      sources: [{ sourceId: 'acc-gl-ex', queries: ['assigned'] }],
       maxItems: 20,
       refreshMinutes: 30,
     });
@@ -80,9 +153,7 @@ describe('updateLens', () => {
     store.addLens(
       'work',
       lensNode({
-        sources: [
-          { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['assigned'] },
-        ],
+        sources: [{ sourceId: 'acc-gl-ex', queries: ['assigned'] }],
       }),
     );
     store.setLensSectionRuntime('sf-1', 'gitlab:gitlab.example.com:assigned', {
@@ -94,9 +165,7 @@ describe('updateLens', () => {
       lensKind: 'general',
       icon: 'folder-git-2',
       name: 'Review requests',
-      sources: [
-        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['review-requested'] },
-      ],
+      sources: [{ sourceId: 'acc-gl-ex', queries: ['review-requested'] }],
       maxItems: 20,
       refreshMinutes: 10,
     });
@@ -119,9 +188,7 @@ describe('updateLens', () => {
       lensKind: 'general',
       icon: 'folder-git-2',
       name: 'Renamed only',
-      sources: [
-        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['review-requested'] },
-      ],
+      sources: [{ sourceId: 'acc-gl-ex', queries: ['review-requested'] }],
       maxItems: 20,
       refreshMinutes: 10,
     });
@@ -133,9 +200,7 @@ describe('updateLens', () => {
       lensKind: 'general',
       icon: 'folder-git-2',
       name: 'Renamed only',
-      sources: [
-        { source: 'gitlab', baseUrl: 'https://gitlab.other.com', queries: ['review-requested'] },
-      ],
+      sources: [{ sourceId: 'acc-gl-other', queries: ['review-requested'] }],
       maxItems: 20,
       refreshMinutes: 10,
     });
@@ -155,9 +220,7 @@ describe('updateLens', () => {
       lensKind: 'general',
       icon: 'folder-git-2',
       name: 'Review requests',
-      sources: [
-        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['review-requested'] },
-      ],
+      sources: [{ sourceId: 'acc-gl-ex', queries: ['review-requested'] }],
       maxItems: 50,
       refreshMinutes: 10,
     });
@@ -171,9 +234,7 @@ describe('updateLens', () => {
     store.addLens(
       'work',
       lensNode({
-        sources: [
-          { source: 'gitlab', baseUrl: 'https://forge.example.com', queries: ['review-requested'] },
-        ],
+        sources: [{ sourceId: 'acc-gl-forge', queries: ['review-requested'] }],
       }),
     );
     store.setLensSectionRuntime('sf-1', 'gitlab:forge.example.com:review-requested', {
@@ -185,13 +246,13 @@ describe('updateLens', () => {
       lensKind: 'general',
       icon: 'folder-git-2',
       name: 'Review requests',
-      sources: [
-        { source: 'github', baseUrl: 'https://forge.example.com', queries: ['review-requested'] },
-      ],
+      sources: [{ sourceId: 'acc-gh-forge', queries: ['review-requested'] }],
       maxItems: 20,
       refreshMinutes: 10,
     });
-    expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({ sources: [{ source: 'github' }] });
+    expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({
+      sources: [{ sourceId: 'acc-gh-forge' }],
+    });
     expect(
       store.state.lenses['sf-1']?.sections['gitlab:forge.example.com:review-requested'],
     ).toBeUndefined();
@@ -204,9 +265,7 @@ describe('updateLens', () => {
       lensKind: 'general',
       icon: 'folder-git-2',
       name: 'Renamed',
-      sources: [
-        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['review-requested'] },
-      ],
+      sources: [{ sourceId: 'acc-gl-ex', queries: ['review-requested'] }],
       maxItems: 20,
       refreshMinutes: 10,
     });
@@ -218,7 +277,7 @@ describe('updateLens', () => {
       lensKind: 'general',
       icon: 'folder-git-2',
       name: 'X',
-      sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['authored'] }],
+      sources: [{ sourceId: 'acc-gl-ex', queries: ['authored'] }],
       maxItems: 20,
       refreshMinutes: 10,
     });
@@ -230,7 +289,7 @@ describe('feed read-state (rss-connector design D3)', () => {
   function feedNode() {
     return lensNode({
       id: 'feed-1',
-      sources: [{ source: 'rss', baseUrl: 'https://news.example.com/rss', queries: [] }],
+      sources: [{ sourceId: 'acc-rss-news', queries: [] }],
     });
   }
 
@@ -509,7 +568,7 @@ function feedNode(overrides: Partial<LensNode> = {}): LensNode {
     id: 'sf-feed',
     name: 'News',
     icon: 'rss',
-    sources: [{ source: 'rss', baseUrl: 'https://news.example.com/feed.xml', queries: [] }],
+    sources: [{ sourceId: 'acc-rss-feed', queries: [] }],
     maxItems: 10,
     hideRead: false,
     refreshMinutes: 30,
@@ -584,7 +643,7 @@ describe('nextUnreadFeedItemAfterClose', () => {
   test('returns undefined for a non-feed folder (e.g. GitLab)', () => {
     store.addLens('work', {
       ...lensNode({ id: 'sf-gl' }),
-      sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['authored'] }],
+      sources: [{ sourceId: 'acc-gl-ex', queries: ['authored'] }],
     });
     store.bindLensItem('sf-gl', 'gitlab:gitlab.example.com:mr-1', W, 20, '');
     expect(store.nextUnreadFeedItemAfterClose(20, W)).toBeUndefined();

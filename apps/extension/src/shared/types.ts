@@ -3,6 +3,9 @@ export type TabId = number;
 export type SpaceId = string;
 export type SavedTabId = string;
 export type FolderId = string;
+/** A connected Account's stable id (connector-accounts). Client-minted UUID at
+ * create time; the secrets store and lens references both key on it. */
+export type SourceId = string;
 
 /**
  * Space colour palette. The values are bus-contract identifiers; the visual
@@ -15,6 +18,7 @@ export type SpaceColor =
   | 'orange'
   | 'yellow'
   | 'green'
+  | 'teal'
   | 'cyan'
   | 'blue'
   | 'purple'
@@ -168,6 +172,49 @@ export type LensSource = {
 };
 
 /**
+ * A connected **Account** (connector-accounts) — a first-class, persisted,
+ * broadcast-safe source identity. Carries NO secret (the token lives only in the
+ * separate `lunma.connectors` secrets store, keyed by `id`) and NO stored auth
+ * method (the effective method is derived from the provider's `authMethods` +
+ * token presence). Stored in `AppState.sources`, referenced by lenses via
+ * {@link LensSourceRef}. Two accounts MAY share a `baseUrl`/host (personal +
+ * work), distinguished by `id`.
+ */
+export interface SourceAccount {
+  id: SourceId;
+  provider: LensProvider;
+  /** Normalized absolute http(s) URL (trailing slash stripped), validated at the
+   * create/update boundary. */
+  baseUrl: string;
+  /** Optional display name — labels the account's sections in place of the host.
+   * Typed `| undefined` to match the persisted schema's `.optional()` under
+   * `exactOptionalPropertyTypes`. */
+  name?: string | undefined;
+}
+
+/**
+ * A lens's per-instance **reference** to a connected Account (connector-accounts).
+ * Replaces the embedded {@link LensSource} on a lens node: the provider/baseUrl
+ * are read from `AppState.sources[sourceId]` at resolve time. `queries` stays on
+ * the reference so one account feeds different filters in different lenses (the
+ * many-to-many seam): a **queue** account carries a non-empty `queries`, a
+ * **feed** (rss) account carries `queries: []`.
+ */
+export interface LensSourceRef {
+  sourceId: SourceId;
+  queries: LensQuery[];
+}
+
+/**
+ * A connector's auth method (connector-accounts). `session` rides the browser's
+ * existing sign-in cookies (the zero-config default when a provider supports it);
+ * `pat` is a per-source personal access token. The provider declares which it
+ * supports (`SourceConnector.authMethods`); the effective method for an account
+ * is DERIVED (never stored) by `deriveAuthMethod`.
+ */
+export type AuthMethod = 'session' | 'pat';
+
+/**
  * The per-**section** connector unit (multi-filter-smart-connectors), produced
  * by expanding a {@link LensSource} over its `queries[]` (one resolved config
  * per filter; a single resolved config for a feed entry). This is the unit a
@@ -190,6 +237,11 @@ export type ResolvedLensSource = {
    * (the review-lens `change` bag and its per-reviewer verdict fetch) without a
    * `fetchRuntime` signature change. */
   lensKind: LensKind;
+  /** The referenced account's id (connector-accounts) — stamped by
+   * `resolvedConfigs(node, sources)` so a connector looks the per-source token up
+   * by `sourceId` (not by host), letting two accounts on one host hold distinct
+   * tokens. */
+  sourceId: SourceId;
 };
 
 /**
@@ -228,6 +280,58 @@ export interface ChangeData {
 }
 
 /**
+ * The canonical Ticket entity (lens-overview) — a Jira issue OR a GitHub/GitLab
+ * issue normalised into one shape so the Issues board renders all sources
+ * identically (the `tickets` kind / `Ticket` entity from `docs/lenses-vision.md`).
+ * Rides the optional `LensItem.ticket` bag on the **ephemeral** `lenses` runtime
+ * slice (never persisted → no schema migration). The kanban column lives in
+ * `statusCategory` (a coarse 3-way lane, DISTINCT from `LensItem.status.tone`
+ * which issues do not use); `statusLabel` is the raw provider status name for
+ * display. Optional fields are typed `| undefined` to match the ephemeral
+ * `TicketDataSchema`'s `.optional()` inference under `exactOptionalPropertyTypes`.
+ */
+export interface TicketData {
+  /** Issue key — `PAY-91` (Jira) or `#212` (GitHub/GitLab issue number). */
+  key: string;
+  /** Kanban column. Jira `status.statusCategory.key`: new→todo,
+   *  indeterminate→in-progress, done→done. GitHub/GitLab issues are open/closed
+   *  only → todo/done (in-progress unreachable without label heuristics). */
+  statusCategory: 'todo' | 'in-progress' | 'done';
+  /** Raw provider status name (Jira `status.name`; git issue state). */
+  statusLabel: string;
+  /** Project/repo grouping shown under the title — Jira `fields.project.name`;
+   *  git `owner/repo`. */
+  project?: string | undefined;
+  /** Single assignee login/display name; absent = unassigned. */
+  assignee?: string | undefined;
+  /** Normalised priority pill. Jira priority name → bucket; git issues have no
+   *  native priority → absent (never faked). */
+  priority?: 'low' | 'med' | 'high' | 'urgent' | undefined;
+  /** Label/tag names (Jira labels, git issue labels). Carried for future
+   *  heuristics; not rendered by the v1 board. */
+  labels?: string[] | undefined;
+  /** Last-updated epoch ms (board ordering + row age). */
+  updatedAt: number;
+}
+
+/**
+ * A cross-entity reference (lens-overview, L0 of `docs/lenses-vision.md`) — e.g.
+ * a PR's linked-ticket chip. Extracted by the connector from the PR/MR
+ * title/body; rendered as a chip linking to `url`. L0 = URL-only, no cross-lens
+ * resolution. `kind` is the referenced entity. Rides the ephemeral slice.
+ */
+export interface EntityRef {
+  /** The referenced entity's kind. */
+  kind: 'ticket' | 'change' | 'run';
+  /** Display/lookup key — e.g. `PAY-88` or a normalised url-key. */
+  key: string;
+  /** Canonical target url (L0). Empty string when unresolvable (bare chip). */
+  url: string;
+  /** Display text (usually === key). */
+  label: string;
+}
+
+/**
  * A pinned-tab placement node. The pinned list for a Space is an ordered tree
  * of these: a `tab` node points at a `SavedTab` record; a `folder` node groups
  * tab ids; a `lens` node is connector configuration (lenses) whose displayed
@@ -253,9 +357,11 @@ export type PinNode =
       name: string;
       icon: string;
       lensKind: LensKind;
-      /** The ordered list of connector sub-sources. At least one entry is
-       * required; the editor blocks confirming with an empty list. */
-      sources: LensSource[];
+      /** The ordered list of account REFERENCES (connector-accounts). At least
+       * one entry is required; the editor blocks confirming with an empty list.
+       * Each entry references an `AppState.sources` account by `sourceId`; the
+       * provider/baseUrl are read from that account at resolve time. */
+      sources: LensSourceRef[];
       /** Per-section result cap (multi-source-smart-folders design D3): each
        * section shows up to `maxItems` rows. Migrated nodes default to 20. */
       maxItems: number;
@@ -288,11 +394,23 @@ export interface LensItem {
   imageUrl?: string | undefined;
   /** Publication time as epoch ms (RSS pubDate / Atom published|updated). */
   publishedAt?: number | undefined;
+  /** Article genre/category pill (lens-overview) — RSS `<category>` / Atom
+   * `<category term>`, first term, decoded. Ephemeral; only the magazine
+   * projection renders it. Absent when the feed declares none. */
+  genre?: string | undefined;
   /** The canonical Change entity (review-lens) — populated by the github/gitlab
    * connectors for `review`-kind lenses only; absent for `general` lenses. Rides
    * the ephemeral runtime slice (never persisted); the Review Queue page reads
    * it, the sidebar projection ignores it. */
   change?: ChangeData | undefined;
+  /** The canonical Ticket entity (lens-overview) — Jira issues, and github/gitlab
+   * issues from the connectors' issue pass; absent otherwise. Rides the ephemeral
+   * runtime slice (never persisted); the Issues board reads it, the sidebar
+   * projection ignores it. */
+  ticket?: TicketData | undefined;
+  /** Cross-entity references (lens-overview, L0) — e.g. the linked-ticket chip on
+   * a Change. The renderer reads `refs[0]`. Absent when none extracted. Ephemeral. */
+  refs?: EntityRef[] | undefined;
 }
 
 /**
@@ -379,6 +497,14 @@ export interface LiveTab {
 export interface AppState {
   schemaVersion: number;
   spaces: Space[];
+  /**
+   * Connected **Accounts** (connector-accounts), keyed by `SourceId`. A
+   * first-class, persisted, broadcast-safe source identity referenced by lenses
+   * (`LensSourceRef.sourceId`). Carries NO secret — the access token lives only
+   * in the separate `lunma.connectors` secrets store (keyed by the same id), so
+   * `AppState.sources` is safe to broadcast and back up.
+   */
+  sources: { [id: SourceId]: SourceAccount };
   activeSpaceByWindow: { [windowId: WindowId]: SpaceId | null };
   /**
    * Per-(window, Space) instance map. A window's entry holds an instance for
@@ -453,6 +579,15 @@ export interface AppState {
    * disk.
    */
   lenses: { [folderId: FolderId]: LensRuntime };
+  /**
+   * The lens whose launcher overview is currently open as a tab in this window
+   * (lens-overview-peek), plus that tab's id. Never persisted (stripped in
+   * `persist()` like `liveTabsById`); broadcast so the sidebar renders that lens
+   * row active while the overview is open. Cleared when the overview tab is closed
+   * (`tabs.onRemoved`); a SW restart resets it to empty. Opening a different lens's
+   * overview replaces (closes) the previous one. `null`/absent → no open overview.
+   */
+  lensPeekByWindow: { [windowId: WindowId]: { folderId: FolderId; tabId: TabId } | null };
 }
 
 // Data-backup: the portable backup envelope types (data-backup capability).
@@ -468,6 +603,7 @@ export interface AppState {
 export type PortableAppState = Pick<
   AppState,
   | 'spaces'
+  | 'sources'
   | 'savedTabs'
   | 'pinnedBySpace'
   | 'faviconRow'

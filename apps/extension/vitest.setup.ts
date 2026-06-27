@@ -33,6 +33,30 @@ if (typeof Element !== 'undefined' && typeof Element.prototype.getAnimations !==
   });
 }
 
+// jsdom doesn't implement `IntersectionObserver`. IconPicker uses it to lazily
+// mount each tile's glyph only when scrolled into view. A no-op stub (never
+// fires) is the right headless behaviour: the tiles still render as buttons —
+// which is all the DOM-level tests assert — while no per-icon dynamic imports
+// fire, keeping the suite fast and quiet.
+if (typeof globalThis.IntersectionObserver === 'undefined') {
+  class NoopIntersectionObserver {
+    readonly root = null;
+    readonly rootMargin = '';
+    readonly thresholds: readonly number[] = [];
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+    takeRecords(): IntersectionObserverEntry[] {
+      return [];
+    }
+  }
+  Object.defineProperty(globalThis, 'IntersectionObserver', {
+    writable: true,
+    configurable: true,
+    value: NoopIntersectionObserver,
+  });
+}
+
 // jsdom also lacks `Element.animate` (the rest of the Web Animations API). Svelte
 // 5's `animate:` directive (FLIP) calls it to play the position tween, so a test
 // that mutates a keyed list using `animate:flip` (e.g. the folder page's card

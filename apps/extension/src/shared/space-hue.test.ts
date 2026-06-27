@@ -17,6 +17,7 @@ const CANONICAL: Array<[SpaceColor, SpaceOklch]> = [
   ['orange', { l: 0.73, c: 0.16, h: 55 }],
   ['yellow', { l: 0.87, c: 0.16, h: 98 }],
   ['green', { l: 0.74, c: 0.17, h: 150 }],
+  ['teal', { l: 0.78, c: 0.12, h: 188 }],
   ['cyan', { l: 0.77, c: 0.12, h: 210 }],
   ['blue', { l: 0.55, c: 0.16, h: 252 }],
   ['purple', { l: 0.56, c: 0.17, h: 295 }],
@@ -39,7 +40,7 @@ describe('colourToOklch', () => {
   });
 
   test('covers every SpaceColor variant exhaustively', () => {
-    expect(ALL_COLORS).toHaveLength(9);
+    expect(ALL_COLORS).toHaveLength(10);
     for (const c of ALL_COLORS) {
       const ok = colourToOklch(c);
       expect(typeof ok.l).toBe('number');

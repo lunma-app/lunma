@@ -26,9 +26,12 @@ import type { AppState, BackupEnvelope, SpaceColor } from './types';
 // `smartReadState`→`lensReadState`. v12 (review-lens) widens the persisted lens
 // node's `lensKind` enum from `'general'` to `'general' | 'review'` — an additive
 // enum widening, structurally identical for existing nodes (its migration is an
-// identity pass-through). Each bump is deliberate: it makes a downgrade
-// detectable.
-export const CURRENT_SCHEMA_VERSION = 12;
+// identity pass-through). v13 (decouple-source-accounts) adds the top-level
+// `sources` slice (the `SourceAccount` map) and rewrites each lens node's
+// `sources` from embedded `LensSource[]` to `LensSourceRef[]` references — a REAL
+// transformation that extracts the embedded `(provider, baseUrl)` pairs into
+// first-class accounts. Each bump is deliberate: it makes a downgrade detectable.
+export const CURRENT_SCHEMA_VERSION = 13;
 
 const SpaceInstanceSchema = z.strictObject({
   spaceId: z.string(),
@@ -55,6 +58,7 @@ export const SPACE_COLORS = [
   'orange',
   'yellow',
   'green',
+  'teal',
   'cyan',
   'blue',
   'purple',
@@ -126,6 +130,26 @@ const LensSourceSchema = z.strictObject({
   name: z.string().optional(),
 });
 
+// A connected Account (connector-accounts, v13). `z.strictObject` carrying NO
+// token field — the secret lives only in the separate `lunma.connectors` store,
+// keyed by this account's `id`. `baseUrl` is a normalized absolute http(s) URL
+// (validated at the create/update boundary; the schema only types the shape).
+const SourceAccountSchema = z.strictObject({
+  id: z.string(),
+  provider: z.enum(['gitlab', 'github', 'jira', 'rss']),
+  baseUrl: z.string(),
+  name: z.string().optional(),
+});
+
+// A lens's per-instance REFERENCE to a connected Account (connector-accounts,
+// v13) — replaces the embedded `LensSourceSchema` on a lens node. The
+// provider/baseUrl are read from the referenced account at resolve time; only the
+// `sourceId` and the per-reference `queries` live here.
+const LensSourceRefSchema = z.strictObject({
+  sourceId: z.string(),
+  queries: z.array(z.enum(['authored', 'assigned', 'review-requested'])),
+});
+
 // Historical (v6–v8) per-entry connector sub-source — the flat `query?` shape
 // the multi-filter-smart-connectors change replaced with `queries[]`. Kept as a
 // stable parse target for the V6/V7/V8 schemas the migration tests build
@@ -136,12 +160,13 @@ const SmartSourceConfigV8Schema = z.strictObject({
   query: z.enum(['authored', 'assigned', 'review-requested']).optional(),
 });
 
-// A pinned-tab placement node (CURRENT/v12 shape): a tab node, a single-level
-// folder node, or a lens config node whose `sources[]` entries carry `queries[]`
-// (lenses — configuration only; results are ephemeral and never persisted).
-// v12 (review-lens) widens the lens node's `lensKind` enum to admit `'review'`.
-// Folder `icon`/`color` are plain strings on the record (as on `Space`); the
-// narrow `IconName`/`SpaceColor` unions live only at the bus boundary.
+// A pinned-tab placement node (CURRENT/v13 shape): a tab node, a single-level
+// folder node, or a lens config node whose `sources[]` entries are account
+// REFERENCES (`{ sourceId, queries }`) into the top-level `sources` map
+// (connector-accounts — configuration only; results are ephemeral and never
+// persisted). Folder `icon`/`color` are plain strings on the record (as on
+// `Space`); the narrow `IconName`/`SpaceColor` unions live only at the bus
+// boundary.
 const PinNodeSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('tab'), id: z.string() }),
   z.strictObject({
@@ -158,9 +183,37 @@ const PinNodeSchema = z.discriminatedUnion('kind', [
     name: z.string(),
     icon: z.string(),
     lensKind: z.enum(['general', 'review']),
-    // One or more connector instance entries (multi-filter-smart-connectors).
-    // `.min(1)` enforced at the schema boundary; the editor also blocks
-    // confirming with an empty list.
+    // One or more account references (connector-accounts). `.min(1)` enforced at
+    // the schema boundary; the editor also blocks confirming with an empty list.
+    sources: z.array(LensSourceRefSchema).min(1),
+    maxItems: z.number().default(20),
+    hideRead: z.boolean().default(true),
+    refreshMinutes: z.number(),
+  }),
+]);
+
+// Historical (v2–v12) pinned-tab node: the lens/smart branch carries EMBEDDED
+// `sources: LensSource[]` (provider/baseUrl on each entry) rather than the v13
+// `LensSourceRef[]`. Frozen so pre-v13 envelopes (or v12-migration output)
+// validate exactly as they did before decouple-source-accounts moved sources
+// onto first-class accounts. The v13 migration reads this shape to extract
+// accounts; the V12 AppState schema references it.
+const PinNodeV12Schema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('tab'), id: z.string() }),
+  z.strictObject({
+    kind: z.literal('folder'),
+    id: z.string(),
+    name: z.string(),
+    icon: z.string(),
+    color: z.string(),
+    children: z.array(z.string()),
+  }),
+  z.strictObject({
+    kind: z.literal('lens'),
+    id: z.string(),
+    name: z.string(),
+    icon: z.string(),
+    lensKind: z.enum(['general', 'review']),
     sources: z.array(LensSourceSchema).min(1),
     maxItems: z.number().default(20),
     hideRead: z.boolean().default(true),
@@ -286,6 +339,29 @@ const ChangeDataSchema = z.strictObject({
   updatedAt: z.number(),
 });
 
+// The canonical Ticket entity mirror (lens-overview) — Jira issues + github/gitlab
+// issues, normalised. Ephemeral like the rest of the `lenses` slice (never
+// persisted → no migration). Optional fields mirror `TicketData`'s `| undefined`.
+const TicketDataSchema = z.strictObject({
+  key: z.string(),
+  statusCategory: z.enum(['todo', 'in-progress', 'done']),
+  statusLabel: z.string(),
+  project: z.string().optional(),
+  assignee: z.string().optional(),
+  priority: z.enum(['low', 'med', 'high', 'urgent']).optional(),
+  labels: z.array(z.string()).optional(),
+  updatedAt: z.number(),
+});
+
+// A cross-entity reference mirror (lens-overview, L0) — the linked-ticket chip on
+// a Change. Ephemeral.
+const EntityRefSchema = z.strictObject({
+  kind: z.enum(['ticket', 'change', 'run']),
+  key: z.string(),
+  url: z.string(),
+  label: z.string(),
+});
+
 // The lens runtime slice (lenses, design D2). Ephemeral like `liveTabsById`: the
 // schema ACCEPTS it when present so a broadcast/runtime state round-trips, but it
 // is `.optional()` because `persist()` strips it — on-disk envelopes never carry
@@ -305,9 +381,17 @@ const LensItemSchema = z.strictObject({
   excerpt: z.string().optional(),
   imageUrl: z.string().optional(),
   publishedAt: z.number().optional(),
+  // Article genre/category (lens-overview) — RSS `<category>`; ephemeral.
+  genre: z.string().optional(),
   // The canonical Change entity (review-lens) — populated by the github/gitlab
   // connectors for review-kind lenses only; ephemeral (never persisted).
   change: ChangeDataSchema.optional(),
+  // The canonical Ticket entity (lens-overview) — Jira + github/gitlab issues;
+  // ephemeral.
+  ticket: TicketDataSchema.optional(),
+  // Cross-entity references (lens-overview, L0) — the linked-ticket chip on a
+  // Change; ephemeral.
+  refs: z.array(EntityRefSchema).optional(),
 });
 
 // Per-section runtime (multi-source-smart-folders). The slice is ephemeral
@@ -478,12 +562,41 @@ export const AppStateV11Schema = z.strictObject({
 });
 
 // v12 (review-lens): the v11 schema with the lens node's `lensKind` enum widened
-// to `z.enum(['general', 'review'])` (via the current `PinNodeSchema`). Otherwise
-// identical to `AppStateV11Schema`. This is the CURRENT-version schema — the
-// migration runner validates against it after running the v12 identity migration.
+// to `z.enum(['general', 'review'])` (via the frozen embedded-source
+// `PinNodeV12Schema`). Frozen at the embedded-`LensSource[]` lens shape; v13
+// rewrites it to account references.
 export const AppStateV12Schema = z.strictObject({
   schemaVersion: z.number(),
   spaces: z.array(SpaceSchema),
+  activeSpaceByWindow: z.record(z.coerce.number(), z.string().nullable()),
+  spaceInstancesByWindow: z.record(
+    z.coerce.number(),
+    z.record(z.string(), SpaceInstanceSchema).optional(),
+  ),
+  tabBindings: TabBindingsSchema,
+  savedTabs: z.record(z.string(), SavedTabSchema),
+  lastActivatedSpaceId: z.string().nullable(),
+  tabLastActivity: z.record(z.coerce.number(), z.number()),
+  archivedTabs: z.array(ArchivedTabSchema),
+  trash: z.record(z.string(), TrashedSpaceSchema),
+  pinnedBySpace: z.record(z.string(), z.array(PinNodeV12Schema)),
+  liveTabsById: z.record(z.coerce.number(), LiveTabSchema).default({}),
+  faviconRow: z.array(z.string()),
+  lensItemBindings: LensItemBindingsSchema.default({}),
+  lensReadState: LensReadStateSchema.default({}),
+  lenses: z.record(z.string(), LensRuntimeSchema).default({}),
+});
+
+// v13 (decouple-source-accounts): the v12 schema PLUS the top-level `sources`
+// slice (the `SourceAccount` map, `.default({})` so a migrated/older state with
+// no accounts parses) AND the lens node's `sources` validated as account
+// references (`LensSourceRef[]`, via the current `PinNodeSchema`) rather than
+// embedded `LensSource[]`. This is the CURRENT-version schema — the migration
+// runner validates against it after running the v13 migration.
+export const AppStateV13Schema = z.strictObject({
+  schemaVersion: z.number(),
+  spaces: z.array(SpaceSchema),
+  sources: z.record(z.string(), SourceAccountSchema).default({}),
   activeSpaceByWindow: z.record(z.coerce.number(), z.string().nullable()),
   spaceInstancesByWindow: z.record(
     z.coerce.number(),
@@ -501,11 +614,17 @@ export const AppStateV12Schema = z.strictObject({
   lensItemBindings: LensItemBindingsSchema.default({}),
   lensReadState: LensReadStateSchema.default({}),
   lenses: z.record(z.string(), LensRuntimeSchema).default({}),
+  // Ephemeral lens-overview "peek" per window (lens-overview-peek). Like
+  // `liveTabsById`/`lenses`: `.default({})` so persisted envelopes (which strip it)
+  // and broadcasts both parse; never written to disk.
+  lensPeekByWindow: z
+    .record(z.coerce.number(), z.object({ folderId: z.string(), tabId: z.number() }).nullable())
+    .default({}),
 });
 
 export const EnvelopeSchema = z.strictObject({
   schemaVersion: z.number(),
-  state: AppStateV12Schema,
+  state: AppStateV13Schema,
 });
 
 export type AppStateV6 = z.infer<typeof AppStateV6Schema>;
@@ -514,12 +633,13 @@ export type AppStateV8 = z.infer<typeof AppStateV8Schema>;
 export type AppStateV10 = z.infer<typeof AppStateV10Schema>;
 export type AppStateV11 = z.infer<typeof AppStateV11Schema>;
 export type AppStateV12 = z.infer<typeof AppStateV12Schema>;
+export type AppStateV13 = z.infer<typeof AppStateV13Schema>;
 export type Envelope = z.infer<typeof EnvelopeSchema>;
 
 type AssertEqual<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
-const _schemaMatchesAppState: AssertEqual<AppStateV12, AppState> = true;
+const _schemaMatchesAppState: AssertEqual<AppStateV13, AppState> = true;
 void _schemaMatchesAppState;
 
 // ── Data-backup: BackupEnvelopeSchema ────────────────────────────────────────
@@ -531,6 +651,11 @@ void _schemaMatchesAppState;
 const PortableAppStateSchema = z.strictObject({
   schemaVersion: z.number(),
   spaces: z.array(SpaceSchema),
+  // Connected Accounts travel in the backup so a restored lens's account
+  // references resolve (connector-accounts) — tokens are NOT carried (they live
+  // in the separate secrets store, never in `AppState`). `.default({})` so a
+  // pre-v13 backup with no accounts (migrated forward) parses cleanly.
+  sources: z.record(z.string(), SourceAccountSchema).default({}),
   savedTabs: z.record(z.string(), SavedTabSchema),
   pinnedBySpace: z.record(z.string(), z.array(PinNodeSchema)),
   faviconRow: z.array(z.string()),

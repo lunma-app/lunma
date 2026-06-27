@@ -1,5 +1,5 @@
 import { SaxesParser } from 'saxes';
-import type { PinNode } from './types';
+import type { AppState, PinNode } from './types';
 
 export type LensNode = Extract<PinNode, { kind: 'lens' }>;
 
@@ -49,12 +49,15 @@ function fixBareAmpersands(xml: string): string {
 }
 
 /**
- * Serialise RSS smart-folder nodes to an OPML 1.0 XML string. Non-RSS sources
- * are excluded; each rss entry in `sources[]` becomes one `<outline>`. For
- * folders with >1 rss source the outline `text` is qualified with the host
- * (`${node.name} — ${host}`) to disambiguate. `htmlUrl` is set to `baseUrl`.
+ * Serialise RSS lens nodes to an OPML 1.0 XML string (connector-accounts). Each
+ * lens reference is resolved against `AppState.sources`; one `<outline>` is
+ * emitted per reference whose resolved account has `provider === 'rss'`. A
+ * reference whose `sourceId` is absent from `sources` (dangling) is skipped, as
+ * are non-rss references. For a folder resolving to >1 rss account the outline
+ * `text` is qualified with the host (`${node.name} — ${host}`) to disambiguate;
+ * `xmlUrl`/`htmlUrl` are the resolved account's `baseUrl`.
  */
-export function buildOpml(folders: LensNode[]): string {
+export function buildOpml(folders: LensNode[], sources: AppState['sources']): string {
   const lines: string[] = [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<opml version="1.0">',
@@ -63,18 +66,21 @@ export function buildOpml(folders: LensNode[]): string {
   ];
 
   for (const node of folders) {
-    const rssSources = node.sources.filter((s) => s.source === 'rss');
-    const isMulti = node.sources.length >= 2 || rssSources.length > 1;
-    for (const src of rssSources) {
+    const rssAccounts = node.sources.flatMap((ref) => {
+      const account = sources[ref.sourceId];
+      return account && account.provider === 'rss' ? [account] : [];
+    });
+    const isMulti = rssAccounts.length > 1;
+    for (const account of rssAccounts) {
       let host: string;
       try {
-        host = new URL(src.baseUrl).host;
+        host = new URL(account.baseUrl).host;
       } catch {
-        host = src.baseUrl;
+        host = account.baseUrl;
       }
       const label = isMulti ? `${node.name} — ${host}` : node.name;
       const text = escapeXml(label);
-      const url = escapeXml(src.baseUrl);
+      const url = escapeXml(account.baseUrl);
       lines.push(`    <outline type="rss" text="${text}" xmlUrl="${url}" htmlUrl="${url}"/>`);
     }
   }
