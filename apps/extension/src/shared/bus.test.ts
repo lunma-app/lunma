@@ -298,9 +298,7 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
     kind: 'createLens',
     payload: {
       spaceId: 'sp',
-      sources: [
-        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['review-requested'] },
-      ],
+      sources: [{ sourceId: 'acc-1', queries: ['review-requested'] }],
       name: 'Review requests',
       maxItems: 20,
       refreshMinutes: 10,
@@ -311,13 +309,19 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
     payload: {
       spaceId: 'sp',
       folderId: 'sf',
-      sources: [{ source: 'github', baseUrl: 'https://github.com', queries: ['assigned'] }],
+      sources: [{ sourceId: 'acc-1', queries: ['assigned'] }],
       name: 'Assigned to me',
       maxItems: 30,
       refreshMinutes: 30,
     },
   },
   deleteLens: { kind: 'deleteLens', payload: { spaceId: 'sp', folderId: 'sf' } },
+  createAccount: {
+    kind: 'createAccount',
+    payload: { id: 'acc-1', provider: 'github', baseUrl: 'https://github.com' },
+  },
+  renameAccount: { kind: 'renameAccount', payload: { id: 'acc-1', name: 'Work' } },
+  deleteAccount: { kind: 'deleteAccount', payload: { id: 'acc-1' } },
   refreshLens: { kind: 'refreshLens', payload: { spaceId: 'sp', folderId: 'sf' } },
   markLensItemRead: {
     kind: 'markLensItemRead',
@@ -385,6 +389,7 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
         state: {
           schemaVersion: 5,
           spaces: [],
+          sources: {},
           savedTabs: {},
           pinnedBySpace: {},
           faviconRow: [],
@@ -453,6 +458,19 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
         payload: { spaceId: 'sp', autoArchive: null },
       }).success,
     ).toBe(true);
+    // createSpace accepts an optional auto-archive override (absent = inherit).
+    expect(
+      SidebarCommandSchema.safeParse({
+        kind: 'createSpace',
+        payload: {
+          name: 'Focus',
+          color: 'blue',
+          icon: 'star',
+          windowId: 1,
+          autoArchive: { mode: 'custom', idleMinutes: 20 },
+        },
+      }).success,
+    ).toBe(true);
   });
 
   test('rejects a missing required field', () => {
@@ -516,7 +534,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
         kind: 'createLens',
         payload: {
           spaceId: 'sp',
-          sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['merged-by-me'] }],
+          sources: [{ sourceId: 'acc-1', queries: ['merged-by-me'] }],
           name: 'X',
           maxItems: 20,
           refreshMinutes: 10,
@@ -559,41 +577,37 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     expect(parsed.success).toBe(false);
   });
 
-  test('createLens and updateLens round-trip with each queue source', () => {
-    for (const source of ['gitlab', 'github', 'jira'] as const) {
-      const create = {
-        kind: 'createLens',
-        payload: {
-          spaceId: 'sp',
-          sources: [
-            { source, baseUrl: 'https://forge.example.com', queries: ['authored'] as const },
-          ],
-          name: 'X',
-          maxItems: 20,
-          refreshMinutes: 10,
-        },
-      };
-      const update = {
-        kind: 'updateLens',
-        payload: { ...create.payload, folderId: 'sf-1' },
-      };
-      const parsedCreate = SidebarCommandSchema.safeParse(create);
-      expect(parsedCreate.success, `create with ${source}`).toBe(true);
-      if (parsedCreate.success) expect(parsedCreate.data).toEqual(create);
-      const parsedUpdate = SidebarCommandSchema.safeParse(update);
-      expect(parsedUpdate.success, `update with ${source}`).toBe(true);
-      if (parsedUpdate.success) expect(parsedUpdate.data).toEqual(update);
-    }
+  test('createLens and updateLens round-trip with a queue reference', () => {
+    const create = {
+      kind: 'createLens',
+      payload: {
+        spaceId: 'sp',
+        sources: [{ sourceId: 'acc-1', queries: ['authored'] as const }],
+        name: 'X',
+        maxItems: 20,
+        refreshMinutes: 10,
+      },
+    };
+    const update = {
+      kind: 'updateLens',
+      payload: { ...create.payload, folderId: 'sf-1' },
+    };
+    const parsedCreate = SidebarCommandSchema.safeParse(create);
+    expect(parsedCreate.success).toBe(true);
+    if (parsedCreate.success) expect(parsedCreate.data).toEqual(create);
+    const parsedUpdate = SidebarCommandSchema.safeParse(update);
+    expect(parsedUpdate.success).toBe(true);
+    if (parsedUpdate.success) expect(parsedUpdate.data).toEqual(update);
   });
 
-  test('multi-source createLens round-trips (gitlab + rss)', () => {
+  test('multi-reference createLens round-trips (queue + feed refs)', () => {
     const create = {
       kind: 'createLens',
       payload: {
         spaceId: 'sp',
         sources: [
-          { source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored'] as const },
-          { source: 'rss', baseUrl: 'https://hnrss.org/frontpage', queries: [] },
+          { sourceId: 'acc-gl', queries: ['authored'] as const },
+          { sourceId: 'acc-rss', queries: [] },
         ],
         name: 'Work + News',
         maxItems: 20,
@@ -605,12 +619,12 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     if (parsed.success) expect(parsed.data).toEqual(create);
   });
 
-  test('an rss createLens round-trips with no query (feed source, rss-connector D2)', () => {
+  test('a feed reference round-trips with no query (empty queries)', () => {
     const create = {
       kind: 'createLens',
       payload: {
         spaceId: 'sp',
-        sources: [{ source: 'rss', baseUrl: 'https://news.ycombinator.com/rss', queries: [] }],
+        sources: [{ sourceId: 'acc-rss', queries: [] }],
         name: 'Hacker News',
         maxItems: 30,
         refreshMinutes: 30,
@@ -621,7 +635,9 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     if (parsed.success) expect(parsed.data).toEqual(create);
   });
 
-  test('rejects an out-of-vocabulary lens source in sources[]', () => {
+  test('rejects a source reference carrying an embedded source key (strict)', () => {
+    // The provider/baseUrl live on the account, not the reference — a stray
+    // embedded key fails the strict ref schema.
     for (const kind of ['createLens', 'updateLens'] as const) {
       expect(
         SidebarCommandSchema.safeParse({
@@ -629,19 +645,36 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
           payload: {
             spaceId: 'sp',
             ...(kind === 'updateLens' ? { folderId: 'sf-1' } : {}),
-            sources: [
-              {
-                source: 'bitbucket',
-                baseUrl: 'https://bitbucket.example.com',
-                queries: ['authored'],
-              },
-            ],
+            sources: [{ sourceId: 'acc-1', source: 'gitlab', queries: ['authored'] }],
             name: 'X',
             maxItems: 20,
             refreshMinutes: 10,
           },
         }).success,
-        `${kind} with source bitbucket`,
+        `${kind} with an embedded source key`,
+      ).toBe(false);
+    }
+  });
+
+  test('rejects a createLens/updateLens carrying lensKind (the SW derives it — sources-redesign)', () => {
+    // The kind is no longer part of the lens-command contract: neither payload
+    // schema declares a `lensKind` field, so a caller sending one fails the
+    // strict parse (the handler derives the kind from the sources).
+    for (const kind of ['createLens', 'updateLens'] as const) {
+      expect(
+        SidebarCommandSchema.safeParse({
+          kind,
+          payload: {
+            spaceId: 'sp',
+            ...(kind === 'updateLens' ? { folderId: 'sf-1' } : {}),
+            sources: [{ sourceId: 'acc-1', queries: ['authored'] }],
+            name: 'X',
+            maxItems: 20,
+            refreshMinutes: 10,
+            lensKind: 'review',
+          },
+        }).success,
+        `${kind} carrying lensKind`,
       ).toBe(false);
     }
   });
@@ -669,7 +702,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
         payload: {
           spaceId: 'sp',
           folderId: 'sf-1',
-          sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored'] }],
+          sources: [{ sourceId: 'acc-1', queries: ['authored'] }],
           name: 'X',
           maxItems: 20,
           refreshMinutes: 10,
@@ -684,7 +717,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
         kind: 'updateLens',
         payload: {
           spaceId: 'sp',
-          sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored'] }],
+          sources: [{ sourceId: 'acc-1', queries: ['authored'] }],
           name: 'X',
           maxItems: 20,
           refreshMinutes: 10,
@@ -700,9 +733,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
       id: 'sf-1',
       name: 'Review requests',
       icon: 'folder-git-2',
-      sources: [
-        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['review-requested'] },
-      ],
+      sources: [{ sourceId: 'acc-1', queries: ['review-requested'] }],
       maxItems: 20,
       hideRead: false,
       refreshMinutes: 5,
@@ -736,8 +767,8 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
             name: 'Work + News',
             icon: 'layers',
             sources: [
-              { source: 'github', baseUrl: 'https://github.com', queries: ['authored'] },
-              { source: 'rss', baseUrl: 'https://hnrss.org/frontpage', queries: [] },
+              { sourceId: 'acc-gh', queries: ['authored'] },
+              { sourceId: 'acc-rss', queries: [] },
             ],
             maxItems: 20,
             hideRead: false,
@@ -763,9 +794,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
             id: 'sf-jira',
             name: 'My reported issues',
             icon: 'folder-kanban',
-            sources: [
-              { source: 'jira', baseUrl: 'https://acme.atlassian.net', queries: ['authored'] },
-            ],
+            sources: [{ sourceId: 'acc-jira', queries: ['authored'] }],
             maxItems: 20,
             hideRead: false,
             refreshMinutes: 10,
@@ -790,7 +819,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
             id: 'feed-1',
             name: 'Hacker News',
             icon: 'rss',
-            sources: [{ source: 'rss', baseUrl: 'https://news.ycombinator.com/rss', queries: [] }],
+            sources: [{ sourceId: 'acc-rss', queries: [] }],
             maxItems: 30,
             hideRead: true,
             refreshMinutes: 30,
@@ -803,7 +832,7 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     if (parsed.success) expect(parsed.data).toEqual(cmd);
   });
 
-  test('rejects a lens PinNode with an out-of-vocabulary source in sources[]', () => {
+  test('rejects a lens PinNode whose reference is missing its sourceId', () => {
     expect(
       SidebarCommandSchema.safeParse({
         kind: 'reorderPinned',
@@ -812,16 +841,13 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
           nodes: [
             {
               kind: 'lens',
+              lensKind: 'general',
               id: 'sf-1',
               name: 'X',
               icon: 'folder-git-2',
-              sources: [
-                {
-                  source: 'bitbucket',
-                  baseUrl: 'https://bitbucket.example.com',
-                  queries: ['authored'],
-                },
-              ],
+              // A reference without `sourceId` (embedded legacy shape) fails the
+              // strict ref schema.
+              sources: [{ baseUrl: 'https://gitlab.com', queries: ['authored'] }],
               maxItems: 20,
               hideRead: false,
               refreshMinutes: 10,
@@ -830,6 +856,46 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
         },
       }).success,
     ).toBe(false);
+  });
+
+  test('createAccount validates and round-trips (client-minted id)', () => {
+    const cmd = {
+      kind: 'createAccount',
+      payload: { id: 'acc-1', provider: 'github', baseUrl: 'https://github.com', name: 'Work' },
+    };
+    const parsed = SidebarCommandSchema.safeParse(cmd);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data).toEqual(cmd);
+  });
+
+  test('createAccount rejects an out-of-vocabulary provider', () => {
+    expect(
+      SidebarCommandSchema.safeParse({
+        kind: 'createAccount',
+        payload: { id: 'acc-1', provider: 'bitbucket', baseUrl: 'https://bitbucket.org' },
+      }).success,
+    ).toBe(false);
+  });
+
+  test('createAccount rejects an extra key (strict payload)', () => {
+    expect(
+      SidebarCommandSchema.safeParse({
+        kind: 'createAccount',
+        payload: {
+          id: 'acc-1',
+          provider: 'github',
+          baseUrl: 'https://github.com',
+          token: 'ghp-x', // the token never rides the bus
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  test('renameAccount and deleteAccount round-trip', () => {
+    const rename = { kind: 'renameAccount', payload: { id: 'acc-1', name: 'Personal' } };
+    const remove = { kind: 'deleteAccount', payload: { id: 'acc-1' } };
+    expect(SidebarCommandSchema.safeParse(rename).success).toBe(true);
+    expect(SidebarCommandSchema.safeParse(remove).success).toBe(true);
   });
 });
 

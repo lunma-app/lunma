@@ -80,6 +80,42 @@ describe('parseBackup', () => {
     expect(result.settings).toBeUndefined();
   });
 
+  test('connected accounts (sources) travel with the backup and round-trip', () => {
+    const state = makeState({
+      sources: {
+        'acc-1': { id: 'acc-1', provider: 'github', baseUrl: 'https://github.com', name: 'Work' },
+      },
+      pinnedBySpace: {
+        'sp-1': [
+          {
+            kind: 'lens',
+            id: 'lens-1',
+            name: 'Reviews',
+            icon: 'folder-git-2',
+            lensKind: 'review',
+            sources: [{ sourceId: 'acc-1', queries: ['review-requested'] }],
+            maxItems: 20,
+            hideRead: true,
+            refreshMinutes: 10,
+          },
+        ],
+      },
+    });
+    const envelope = buildBackup(state);
+    // The account entity is carried in the portable state (no token).
+    expect(envelope.state.sources).toEqual(state.sources);
+
+    const result = parseBackup(envelope);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // The restored lens reference resolves against the restored account.
+    expect(result.state.sources['acc-1']?.baseUrl).toBe('https://github.com');
+    expect(result.state.pinnedBySpace['sp-1']?.[0]).toMatchObject({
+      kind: 'lens',
+      sources: [{ sourceId: 'acc-1', queries: ['review-requested'] }],
+    });
+  });
+
   test('round-trips settings when included', () => {
     const state = makeState();
     const envelope = buildBackup(state, SAMPLE_SETTINGS);
@@ -99,6 +135,7 @@ describe('parseBackup', () => {
       state: {
         schemaVersion: 1,
         spaces: [],
+        sources: {},
         savedTabs: {},
         pinnedBySpace: {},
         faviconRow: [],

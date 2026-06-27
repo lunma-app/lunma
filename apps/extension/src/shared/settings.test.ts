@@ -104,7 +104,9 @@ describe('writeSetting', () => {
     expect(chromeMock.data['lunma.settings']).toEqual({
       density: 'comfort',
       tint: 'vivid',
+      theme: 'dark',
       showGlares: true,
+      reduceMotion: false,
       pinnedTabBoundaryDefault: 'off',
       defaultSearchEngine: 'google',
       customSearchUrl: '',
@@ -126,7 +128,9 @@ describe('writeSetting', () => {
     expect(chromeMock.data['lunma.settings']).toEqual({
       density: 'comfort',
       tint: 'subtle',
+      theme: 'dark',
       showGlares: true,
+      reduceMotion: false,
       pinnedTabBoundaryDefault: 'off',
       defaultSearchEngine: 'google',
       customSearchUrl: '',
@@ -158,7 +162,9 @@ describe('watchSettings', () => {
     expect(cb).toHaveBeenCalledWith({
       density: 'comfort',
       tint: 'vivid',
+      theme: 'dark',
       showGlares: true,
+      reduceMotion: false,
       pinnedTabBoundaryDefault: 'off',
       defaultSearchEngine: 'google',
       customSearchUrl: '',
@@ -209,7 +215,9 @@ describe('watchSettings', () => {
     expect(cb).toHaveBeenCalledWith({
       density: 'normal',
       tint: 'vivid',
+      theme: 'dark',
       showGlares: true,
+      reduceMotion: false,
       pinnedTabBoundaryDefault: 'off',
       defaultSearchEngine: 'google',
       customSearchUrl: '',
@@ -263,7 +271,9 @@ describe('tint setting', () => {
     expect(cb).toHaveBeenCalledWith({
       density: 'normal',
       tint: 'standard',
+      theme: 'dark',
       showGlares: true,
+      reduceMotion: false,
       pinnedTabBoundaryDefault: 'off',
       defaultSearchEngine: 'google',
       customSearchUrl: '',

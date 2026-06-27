@@ -360,7 +360,7 @@ describe('readPersistedState', () => {
       currentURL: null,
     };
     state.pinnedBySpace.work = [{ kind: 'tab', id: 'st-1' }];
-    const { liveTabsById: _l, lenses: _s, ...persistable } = state;
+    const { liveTabsById: _l, lenses: _s, lensPeekByWindow: _p, ...persistable } = state;
     chromeMock.data['lunma.state'] = { schemaVersion: 1, state: persistable };
     chromeMock.set.mockClear();
 
@@ -375,6 +375,7 @@ describe('readPersistedState', () => {
       ...persistable,
       liveTabsById: {},
       lenses: {},
+      lensPeekByWindow: {},
     });
     // The envelope is written back at the current (v11) version.
     expect(chromeMock.set).toHaveBeenCalledWith({
@@ -499,9 +500,14 @@ describe('readPersistedState', () => {
     expect(backupKey).toBeUndefined();
   });
 
-  test('a v11 state with a gitlab lens node round-trips without quarantine', async () => {
+  test('a v13 state with a gitlab lens node (account reference) round-trips without quarantine', async () => {
     const state = createInitialState();
     state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    state.sources['acc-gl'] = {
+      id: 'acc-gl',
+      provider: 'gitlab',
+      baseUrl: 'https://gitlab.example.com',
+    };
     state.pinnedBySpace.work = [
       {
         kind: 'lens',
@@ -509,13 +515,7 @@ describe('readPersistedState', () => {
         id: 'sf-1',
         name: 'Review requests',
         icon: 'folder-git-2',
-        sources: [
-          {
-            source: 'gitlab',
-            baseUrl: 'https://gitlab.example.com',
-            queries: ['review-requested'],
-          },
-        ],
+        sources: [{ sourceId: 'acc-gl', queries: ['review-requested'] }],
         maxItems: 20,
         hideRead: false,
         refreshMinutes: 10,
@@ -535,15 +535,18 @@ describe('readPersistedState', () => {
 
     expect(result.kind).toBe('ok');
     if (result.kind !== 'ok') return;
+    expect(result.state.sources['acc-gl']).toEqual({
+      id: 'acc-gl',
+      provider: 'gitlab',
+      baseUrl: 'https://gitlab.example.com',
+    });
     expect(result.state.pinnedBySpace.work?.[0]).toEqual({
       kind: 'lens',
       lensKind: 'general',
       id: 'sf-1',
       name: 'Review requests',
       icon: 'folder-git-2',
-      sources: [
-        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['review-requested'] },
-      ],
+      sources: [{ sourceId: 'acc-gl', queries: ['review-requested'] }],
       maxItems: 20,
       hideRead: false,
       refreshMinutes: 10,
@@ -552,11 +555,12 @@ describe('readPersistedState', () => {
     expect(backupKey).toBeUndefined();
   });
 
-  test('a v12 state with a review lens node round-trips without quarantine', async () => {
+  test('a v13 state with a review lens node round-trips without quarantine', async () => {
     // review-lens: the widened `lensKind` enum admits `'review'`; a persisted
     // review node must survive the load path (validate, no quarantine).
     const state = createInitialState();
     state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    state.sources['acc-gh'] = { id: 'acc-gh', provider: 'github', baseUrl: 'https://github.com' };
     state.pinnedBySpace.work = [
       {
         kind: 'lens',
@@ -564,9 +568,7 @@ describe('readPersistedState', () => {
         id: 'sf-rev',
         name: 'My reviews',
         icon: 'folder-git-2',
-        sources: [
-          { source: 'github', baseUrl: 'https://github.com', queries: ['review-requested'] },
-        ],
+        sources: [{ sourceId: 'acc-gh', queries: ['review-requested'] }],
         maxItems: 20,
         hideRead: false,
         refreshMinutes: 10,
@@ -640,9 +642,14 @@ describe('readPersistedState', () => {
     expect(backupKey).toBeUndefined();
   });
 
-  test('a v11 state with a jira lens node round-trips without quarantine', async () => {
+  test('a v13 state with a jira lens node round-trips without quarantine', async () => {
     const state = createInitialState();
     state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    state.sources['acc-jira'] = {
+      id: 'acc-jira',
+      provider: 'jira',
+      baseUrl: 'https://acme.atlassian.net',
+    };
     state.pinnedBySpace.work = [
       {
         kind: 'lens',
@@ -650,7 +657,7 @@ describe('readPersistedState', () => {
         id: 'sf-jira',
         name: 'My reported issues',
         icon: 'folder-kanban',
-        sources: [{ source: 'jira', baseUrl: 'https://acme.atlassian.net', queries: ['authored'] }],
+        sources: [{ sourceId: 'acc-jira', queries: ['authored'] }],
         maxItems: 20,
         hideRead: false,
         refreshMinutes: 10,
@@ -668,7 +675,7 @@ describe('readPersistedState', () => {
       id: 'sf-jira',
       name: 'My reported issues',
       icon: 'folder-kanban',
-      sources: [{ source: 'jira', baseUrl: 'https://acme.atlassian.net', queries: ['authored'] }],
+      sources: [{ sourceId: 'acc-jira', queries: ['authored'] }],
       maxItems: 20,
       hideRead: false,
       refreshMinutes: 10,
@@ -683,6 +690,11 @@ describe('readPersistedState', () => {
     // intact, no migration, no write-back, no quarantine.
     const state = createInitialState();
     state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    state.sources['acc-gl'] = {
+      id: 'acc-gl',
+      provider: 'gitlab',
+      baseUrl: 'https://gitlab.example.com',
+    };
     state.pinnedBySpace.work = [
       {
         kind: 'lens',
@@ -690,13 +702,7 @@ describe('readPersistedState', () => {
         id: 'sf-1',
         name: 'Review requests',
         icon: 'folder-git-2',
-        sources: [
-          {
-            source: 'gitlab',
-            baseUrl: 'https://gitlab.example.com',
-            queries: ['review-requested'],
-          },
-        ],
+        sources: [{ sourceId: 'acc-gl', queries: ['review-requested'] }],
         maxItems: 20,
         hideRead: false,
         refreshMinutes: 10,
@@ -724,6 +730,11 @@ describe('readPersistedState', () => {
     // `lenses` runtime slice is stripped before write and never read back.
     const state = createInitialState();
     state.spaces.push({ id: 'read', name: 'Reading', color: 'orange', icon: 'rss' });
+    state.sources['acc-hn'] = {
+      id: 'acc-hn',
+      provider: 'rss',
+      baseUrl: 'https://news.ycombinator.com/rss',
+    };
     state.pinnedBySpace.read = [
       {
         kind: 'lens',
@@ -731,7 +742,7 @@ describe('readPersistedState', () => {
         id: 'feed-1',
         name: 'Hacker News',
         icon: 'rss',
-        sources: [{ source: 'rss', baseUrl: 'https://news.ycombinator.com/rss', queries: [] }],
+        sources: [{ sourceId: 'acc-hn', queries: [] }],
         maxItems: 30,
         hideRead: false,
         refreshMinutes: 30,
@@ -970,53 +981,61 @@ describe('salvagePersistedState', () => {
     expect(out?.spaces).toEqual([]);
   });
 
-  test('a pinned tree containing a lens node survives slice-wise salvage intact (either source)', () => {
-    // The scenario admits BOTH shipped sources — run the same salvage for each.
-    for (const source of ['gitlab', 'github'] as const) {
+  test('a pinned tree containing a ref-shaped lens node survives slice-wise salvage intact (either provider)', () => {
+    // The scenario admits BOTH shipped queue providers — run the same salvage for
+    // each account provider.
+    for (const provider of ['gitlab', 'github'] as const) {
+      const account = { id: 'acc-1', provider, baseUrl: 'https://forge.example.com' };
       const lensNode = {
         kind: 'lens',
         lensKind: 'general',
         id: 'sf-1',
         name: 'Assigned to me',
         icon: 'folder-git-2',
-        sources: [{ source, baseUrl: 'https://forge.example.com', queries: ['assigned'] }],
+        sources: [{ sourceId: 'acc-1', queries: ['assigned'] }],
         maxItems: 20,
         hideRead: false,
         refreshMinutes: 5,
       };
       const out = salvagePersistedState({
         ...validPersistedState(),
+        sources: { 'acc-1': account },
         spaces: [{ id: 'work', name: 'Work', color: 'blue', icon: 'star' }],
         pinnedBySpace: { work: [lensNode, { kind: 'tab', id: 'st-1' }] },
         savedTabs: { bad: { id: 'bad' } }, // malformed → whole-state validation fails
       });
-      expect(out, `salvage with source ${source}`).not.toBeNull();
+      expect(out, `salvage with provider ${provider}`).not.toBeNull();
+      // The `sources` slice AND the ref-shaped lens node both salvage intact.
+      expect(out?.sources).toEqual({ 'acc-1': account });
       expect(out?.pinnedBySpace.work).toEqual([lensNode, { kind: 'tab', id: 'st-1' }]);
       expect(out?.savedTabs).toEqual({});
     }
   });
 
-  test('a pinned tree containing a lens node survives slice-wise salvage intact', () => {
+  test('a pinned tree containing a ref-shaped lens node survives slice-wise salvage intact', () => {
+    const account = { id: 'acc-1', provider: 'gitlab', baseUrl: 'https://gitlab.example.com' };
     const lensNode = {
       kind: 'lens',
       lensKind: 'general',
       id: 'sf-1',
       name: 'Assigned to me',
       icon: 'folder-git-2',
-      sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['assigned'] }],
+      sources: [{ sourceId: 'acc-1', queries: ['assigned'] }],
       maxItems: 20,
       hideRead: false,
       refreshMinutes: 5,
     };
     const out = salvagePersistedState({
       ...validPersistedState(),
+      sources: { 'acc-1': account },
       spaces: [{ id: 'work', name: 'Work', color: 'blue', icon: 'star' }],
       pinnedBySpace: { work: [lensNode, { kind: 'tab', id: 'st-1' }] },
       savedTabs: { bad: { id: 'bad' } }, // malformed → whole-state validation fails
     });
     expect(out).not.toBeNull();
-    // The valid pinnedBySpace slice — lens node config included — is preserved,
-    // not reset by stale v1 slice validation.
+    // The valid pinnedBySpace slice — ref-shaped lens node config included — is
+    // preserved, not reset by stale v1 slice validation.
+    expect(out?.sources).toEqual({ 'acc-1': account });
     expect(out?.pinnedBySpace.work).toEqual([lensNode, { kind: 'tab', id: 'st-1' }]);
     expect(out?.savedTabs).toEqual({});
   });
@@ -1049,7 +1068,7 @@ describe('salvagePersistedState', () => {
 describe('persist', () => {
   test('writes envelope to lunma.state (without the ephemeral liveTabsById/lenses slices)', async () => {
     const state = createInitialState();
-    const { liveTabsById: _drop, lenses: _drop2, ...persistable } = state;
+    const { liveTabsById: _drop, lenses: _drop2, lensPeekByWindow: _drop3, ...persistable } = state;
     await persist(state);
     expect(chromeMock.data['lunma.state']).toEqual({
       schemaVersion: CURRENT_SCHEMA_VERSION,
@@ -1087,7 +1106,12 @@ describe('persist', () => {
     const envelope = chromeMock.data['lunma.state'] as { state: Record<string, unknown> };
     expect(envelope.state).not.toHaveProperty('lenses');
     // The rest of the persisted state is exactly what it would be without the slice.
-    const { liveTabsById: _l, lenses: _s, ...persistable } = createInitialState();
+    const {
+      liveTabsById: _l,
+      lenses: _s,
+      lensPeekByWindow: _p,
+      ...persistable
+    } = createInitialState();
     expect(envelope.state).toEqual(persistable);
   });
 

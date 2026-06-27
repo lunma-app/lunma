@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { buildOpml, type LensNode, parseOpml } from './opml';
+import type { AppState, SourceAccount } from './types';
 
 // ── parseOpml ──────────────────────────────────────────────────────────────────
 
@@ -110,6 +111,16 @@ describe('parseOpml', () => {
 
 // ── buildOpml ─────────────────────────────────────────────────────────────────
 
+// Lens nodes now carry account REFERENCES (`{ sourceId, queries }`); buildOpml
+// resolves each against the `AppState.sources` account map (connector-accounts).
+function acct(id: string, provider: SourceAccount['provider'], baseUrl: string): SourceAccount {
+  return { id, provider, baseUrl };
+}
+
+function sourcesOf(...accts: SourceAccount[]): AppState['sources'] {
+  return Object.fromEntries(accts.map((a) => [a.id, a]));
+}
+
 function node(overrides: Partial<LensNode> & { sources?: LensNode['sources'] } = {}): LensNode {
   const { sources, ...rest } = overrides;
   return {
@@ -118,7 +129,7 @@ function node(overrides: Partial<LensNode> & { sources?: LensNode['sources'] } =
     id: 'sf-1',
     name: 'HN',
     icon: 'rss',
-    sources: sources ?? [{ source: 'rss', baseUrl: 'https://hnrss.org/frontpage', queries: [] }],
+    sources: sources ?? [{ sourceId: 'acc-hn', queries: [] }],
     maxItems: 10,
     hideRead: false,
     refreshMinutes: 30,
@@ -127,8 +138,9 @@ function node(overrides: Partial<LensNode> & { sources?: LensNode['sources'] } =
 }
 
 describe('buildOpml', () => {
-  test('single-source rss node → 1 outline (task 8.6)', () => {
-    const output = buildOpml([node()]);
+  test('single rss reference → 1 outline (task 3.7)', () => {
+    const sources = sourcesOf(acct('acc-hn', 'rss', 'https://hnrss.org/frontpage'));
+    const output = buildOpml([node()], sources);
     expect(output).toContain('<outline type="rss"');
     expect(output).toContain('text="HN"');
     expect(output).toContain('xmlUrl="https://hnrss.org/frontpage"');
@@ -138,30 +150,53 @@ describe('buildOpml', () => {
     expect(output.match(/<outline /g) ?? []).toHaveLength(1);
   });
 
-  test('multi-source (rss + gitlab) → 1 outline, gitlab excluded (task 8.6)', () => {
+  test('multi-source (rss + gitlab) → 1 outline, gitlab excluded (task 3.7)', () => {
+    const sources = sourcesOf(
+      acct('acc-hn', 'rss', 'https://hnrss.org/frontpage'),
+      acct('acc-gl', 'gitlab', 'https://gitlab.com'),
+    );
     const mixed = node({
       name: 'Work',
       sources: [
-        { source: 'rss', baseUrl: 'https://hnrss.org/frontpage', queries: [] },
-        { source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored'] },
+        { sourceId: 'acc-hn', queries: [] },
+        { sourceId: 'acc-gl', queries: ['authored'] },
       ],
     });
-    const output = buildOpml([mixed]);
+    const output = buildOpml([mixed], sources);
     const outlines = output.match(/<outline /g) ?? [];
     expect(outlines).toHaveLength(1);
     expect(output).not.toContain('gitlab');
     expect(output).toContain('xmlUrl="https://hnrss.org/frontpage"');
   });
 
-  test('multi-source (rss + rss) → 2 outlines with host-qualified text (task 8.6)', () => {
+  test('a dangling rss reference (account absent) is skipped (task 3.7)', () => {
+    const sources = sourcesOf(acct('acc-hn', 'rss', 'https://hnrss.org/frontpage'));
+    const withDangling = node({
+      name: 'Work',
+      sources: [
+        { sourceId: 'acc-hn', queries: [] },
+        { sourceId: 'acc-missing', queries: [] },
+      ],
+    });
+    const output = buildOpml([withDangling], sources);
+    const outlines = output.match(/<outline /g) ?? [];
+    expect(outlines).toHaveLength(1);
+    expect(output).toContain('xmlUrl="https://hnrss.org/frontpage"');
+  });
+
+  test('multi-source (rss + rss) → 2 outlines with host-qualified text (task 3.7)', () => {
+    const sources = sourcesOf(
+      acct('acc-hn', 'rss', 'https://hnrss.org/frontpage'),
+      acct('acc-lob', 'rss', 'https://lobste.rs/rss'),
+    );
     const dual = node({
       name: 'Feeds',
       sources: [
-        { source: 'rss', baseUrl: 'https://hnrss.org/frontpage', queries: [] },
-        { source: 'rss', baseUrl: 'https://lobste.rs/rss', queries: [] },
+        { sourceId: 'acc-hn', queries: [] },
+        { sourceId: 'acc-lob', queries: [] },
       ],
     });
-    const output = buildOpml([dual]);
+    const output = buildOpml([dual], sources);
     const outlines = output.match(/<outline /g) ?? [];
     expect(outlines).toHaveLength(2);
     // Both outlines qualify the name with the host.
@@ -169,31 +204,30 @@ describe('buildOpml', () => {
     expect(output).toContain('text="Feeds — lobste.rs"');
   });
 
-  test('folder with only non-rss sources emits no outlines', () => {
+  test('folder with only non-rss references emits no outlines', () => {
+    const sources = sourcesOf(acct('acc-gh', 'github', 'https://github.com'));
     const githubOnly = node({
       name: 'GH',
-      sources: [{ source: 'github', baseUrl: 'https://api.github.com', queries: ['assigned'] }],
+      sources: [{ sourceId: 'acc-gh', queries: ['assigned'] }],
     });
-    const output = buildOpml([githubOnly]);
+    const output = buildOpml([githubOnly], sources);
     expect(output).not.toContain('<outline');
     expect(output).not.toContain('GH');
   });
 
   test('htmlUrl equals baseUrl', () => {
-    const output = buildOpml([
-      node({ sources: [{ source: 'rss', baseUrl: 'https://example.com/feed', queries: [] }] }),
-    ]);
+    const sources = sourcesOf(acct('acc-x', 'rss', 'https://example.com/feed'));
+    const output = buildOpml([node({ sources: [{ sourceId: 'acc-x', queries: [] }] })], sources);
     expect(output).toContain('xmlUrl="https://example.com/feed"');
     expect(output).toContain('htmlUrl="https://example.com/feed"');
   });
 
   test('XML special characters in name and URL are escaped', () => {
-    const output = buildOpml([
-      node({
-        name: 'A & B',
-        sources: [{ source: 'rss', baseUrl: 'https://example.com/feed?a=1&b=2', queries: [] }],
-      }),
-    ]);
+    const sources = sourcesOf(acct('acc-x', 'rss', 'https://example.com/feed?a=1&b=2'));
+    const output = buildOpml(
+      [node({ name: 'A & B', sources: [{ sourceId: 'acc-x', queries: [] }] })],
+      sources,
+    );
     expect(output).toContain('text="A &amp; B"');
     expect(output).toContain('xmlUrl="https://example.com/feed?a=1&amp;b=2"');
   });

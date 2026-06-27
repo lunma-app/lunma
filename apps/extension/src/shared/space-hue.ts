@@ -43,9 +43,12 @@ interface PaletteEntry extends SpaceOklch {
 }
 
 /**
- * The nine canonical Space colours — one per `chrome.tabGroups.Color`, so every
- * `SpaceColor` maps 1:1 to a Chrome tab-group colour and no two Spaces collide
- * in the tab strip. Each carries a per-colour OKLCH lightness/chroma/hue tuned
+ * The ten canonical Space colours. Nine are exactly Chrome's `tabGroups.Color`
+ * set; `teal` is Lunma-only — Chrome has no teal, so `toGroupColor` folds it onto
+ * Chrome's `cyan` in the NATIVE tab strip (so a teal and a cyan Space share that
+ * one native colour). Everywhere Lunma draws its own identity (picker swatch,
+ * chip, wash, aurora, glow, accent) teal renders as its true hue. Each carries a
+ * per-colour OKLCH lightness/chroma/hue tuned
  * so the colour reads true to its name across the whole identity (the picker
  * swatch, the chip, the wash, the aurora, the glow, the accent), not a single
  * flat lightness that muddies the warm hues. `on` records whether text on the
@@ -58,6 +61,7 @@ const PALETTE: Record<SpaceColor, PaletteEntry> = {
   orange: { l: 0.73, c: 0.16, h: 55, on: 'dark' },
   yellow: { l: 0.87, c: 0.16, h: 98, on: 'dark' },
   green: { l: 0.74, c: 0.17, h: 150, on: 'dark' },
+  teal: { l: 0.78, c: 0.12, h: 188, on: 'dark' },
   cyan: { l: 0.77, c: 0.12, h: 210, on: 'dark' },
   blue: { l: 0.55, c: 0.16, h: 252, on: 'light' },
   purple: { l: 0.56, c: 0.17, h: 295, on: 'light' },

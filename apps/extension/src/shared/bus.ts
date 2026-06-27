@@ -6,10 +6,11 @@ import type {
   BackupEnvelope,
   FolderId,
   IconName,
-  LensKind,
-  LensSource,
+  LensProvider,
+  LensSourceRef,
   PinNode,
   SavedTabId,
+  SourceId,
   SpaceAutoArchive,
   SpaceColor,
   SpaceId,
@@ -23,7 +24,16 @@ import type {
 export type SidebarCommand =
   | {
       kind: 'createSpace';
-      payload: { name: string; color: SpaceColor; icon: IconName; windowId: WindowId };
+      payload: {
+        name: string;
+        color: SpaceColor;
+        icon: IconName;
+        windowId: WindowId;
+        /** Optional per-Space auto-archive override applied at mint. Absent =
+         * inherit the global default (the common case; the New Space form leaves
+         * it absent unless the user picks Off/Custom up front). */
+        autoArchive?: SpaceAutoArchive | undefined;
+      };
     }
   | { kind: 'renameSpace'; payload: { spaceId: SpaceId; newName: string } }
   | { kind: 'recolourSpace'; payload: { spaceId: SpaceId; color: SpaceColor } }
@@ -97,13 +107,19 @@ export type SidebarCommand =
       kind: 'createLens';
       payload: {
         spaceId: SpaceId;
-        sources: LensSource[];
+        // OPTIONAL client-minted node id (sources-redesign — mirrors
+        // `createAccount`): when present the SW uses it, so the editor can open
+        // the new lens's overview page without awaiting an id; absent → the SW
+        // mints `crypto.randomUUID()`.
+        id?: FolderId;
+        // Account REFERENCES (connector-accounts) — not embedded configs. The SW
+        // validates each `sourceId` resolves to an `AppState.sources` account.
+        sources: LensSourceRef[];
         name: string;
         maxItems: number;
         refreshMinutes: number;
-        // The lens kind (review-lens). OPTIONAL on the wire for back-compat —
-        // the handler defaults an absent value to `'general'`.
-        lensKind?: LensKind;
+        // No `lensKind` (sources-redesign): the SW derives it from the source set
+        // (any github/gitlab source ⇒ 'review', else 'general') — never sent.
       };
     }
   | {
@@ -111,15 +127,26 @@ export type SidebarCommand =
       payload: {
         spaceId: SpaceId;
         folderId: FolderId;
-        sources: LensSource[];
+        sources: LensSourceRef[];
         name: string;
         maxItems: number;
         refreshMinutes: number;
-        /** The lens kind (review-lens); absent preserves the existing kind. */
-        lensKind?: LensKind;
+        // No `lensKind` (sources-redesign): the SW re-derives it from the sources.
       };
     }
   | { kind: 'deleteLens'; payload: { spaceId: SpaceId; folderId: FolderId } }
+  // Account lifecycle (connector-accounts). The token is NOT carried over the bus
+  // — it is written directly via `setAccountToken`. `createAccount` carries a
+  // CLIENT-minted `id` (a UUID generated on the surface) so a surface can
+  // reference the new account inline in a following `createLens` without awaiting
+  // the `void` ack. The SW normalizes/validates `baseUrl` and rejects a duplicate
+  // `id`.
+  | {
+      kind: 'createAccount';
+      payload: { id: SourceId; provider: LensProvider; baseUrl: string; name?: string };
+    }
+  | { kind: 'renameAccount'; payload: { id: SourceId; name: string } }
+  | { kind: 'deleteAccount'; payload: { id: SourceId } }
   // Feed read-state (rss-connector design D3). Mark one item read (the open path
   // also marks read SW-side), mark every current item read, toggle the persisted
   // hide-read preference, and open the source's full listing in a tab.
@@ -246,6 +273,9 @@ export const SIDEBAR_COMMAND_KINDS: ReadonlySet<SidebarCommandKind> = new Set<Si
   'createLens',
   'updateLens',
   'deleteLens',
+  'createAccount',
+  'renameAccount',
+  'deleteAccount',
   'refreshLens',
   'openLensItem',
   'markLensItemRead',
@@ -306,6 +336,9 @@ const _kindExhaustiveness = {
   createLens: true,
   updateLens: true,
   deleteLens: true,
+  createAccount: true,
+  renameAccount: true,
+  deleteAccount: true,
   refreshLens: true,
   openLensItem: true,
   markLensItemRead: true,
@@ -352,6 +385,7 @@ const SPACE_COLORS = [
   'orange',
   'yellow',
   'green',
+  'teal',
   'cyan',
   'blue',
   'purple',
@@ -388,17 +422,15 @@ const LensQuerySchema = z.enum(['authored', 'assigned', 'review-requested']);
 // out-of-vocabulary source (e.g. 'bitbucket') rejects at the bus boundary.
 const LensProviderSchema = z.enum(['gitlab', 'github', 'jira', 'rss']);
 
-// Per-instance config entry — mirrors `LensSource` in `types.ts`
-// (multi-filter-smart-connectors): each entry carries the set of canned filters
-// (`queries`) for one connector instance. Queue sources carry a non-empty
-// `queries`; rss carries `[]` — the per-source split is enforced by the SW's
-// create/update handlers, not at the wire boundary.
-const LensSourceSchema = z.strictObject({
-  source: LensProviderSchema,
-  baseUrl: z.string(),
+// Per-instance account REFERENCE — mirrors `LensSourceRef` in `types.ts`
+// (connector-accounts): each entry references a connected Account by `sourceId`
+// and carries the set of canned filters (`queries`) this reference contributes.
+// Queue accounts carry a non-empty `queries`; rss carries `[]` — the per-source
+// split (and that each `sourceId` resolves) is enforced by the SW's create/update
+// handlers, not at the wire boundary.
+const LensSourceRefSchema = z.strictObject({
+  sourceId: z.string(),
   queries: z.array(LensQuerySchema),
-  // Optional per-source display name (smart-source-rename).
-  name: z.string().optional(),
 });
 
 // A pinned-tab placement node — mirrors `PinNode` in `types.ts` (all three
@@ -421,8 +453,11 @@ const PinNodeSchema = z.discriminatedUnion('kind', [
     id: z.string(),
     name: z.string(),
     icon: z.string(),
-    lensKind: z.literal('general'),
-    sources: z.array(LensSourceSchema).min(1),
+    // review-lens widened the persisted enum; reorderPinned must round-trip a
+    // `review` lens node losslessly (this previously lagged at `general`-only).
+    lensKind: z.enum(['general', 'review']),
+    // Account references (connector-accounts) — the v13 lens node shape.
+    sources: z.array(LensSourceRefSchema).min(1),
     maxItems: z.number(),
     hideRead: z.boolean(),
     refreshMinutes: z.number(),
@@ -444,6 +479,7 @@ const COMMAND_SCHEMAS = {
       color: SpaceColorSchema,
       icon: IconNameSchema,
       windowId: z.number(),
+      autoArchive: SpaceAutoArchiveSchema.optional(),
     }),
   }),
   renameSpace: z.strictObject({
@@ -575,12 +611,13 @@ const COMMAND_SCHEMAS = {
     kind: z.literal('createLens'),
     payload: z.strictObject({
       spaceId: z.string(),
-      sources: z.array(LensSourceSchema).min(1),
+      // Optional client-minted node id (sources-redesign) — see the payload type.
+      id: z.string().optional(),
+      sources: z.array(LensSourceRefSchema).min(1),
       name: z.string(),
       maxItems: z.number(),
       refreshMinutes: z.number(),
-      // review-lens: optional on the wire; the handler defaults to `'general'`.
-      lensKind: z.enum(['general', 'review']).optional(),
+      // No `lensKind` (sources-redesign): the SW derives it from the sources.
     }),
   }),
   updateLens: z.strictObject({
@@ -588,16 +625,36 @@ const COMMAND_SCHEMAS = {
     payload: z.strictObject({
       spaceId: z.string(),
       folderId: z.string(),
-      sources: z.array(LensSourceSchema).min(1),
+      sources: z.array(LensSourceRefSchema).min(1),
       name: z.string(),
       maxItems: z.number(),
       refreshMinutes: z.number(),
-      lensKind: z.enum(['general', 'review']).optional(),
+      // No `lensKind` (sources-redesign): the SW re-derives it from the sources.
     }),
   }),
   deleteLens: z.strictObject({
     kind: z.literal('deleteLens'),
     payload: z.strictObject({ spaceId: z.string(), folderId: z.string() }),
+  }),
+  // Account lifecycle (connector-accounts). `createAccount` carries a
+  // client-minted `id`; the token is NOT on the wire (written via
+  // `setAccountToken`).
+  createAccount: z.strictObject({
+    kind: z.literal('createAccount'),
+    payload: z.strictObject({
+      id: z.string(),
+      provider: LensProviderSchema,
+      baseUrl: z.string(),
+      name: z.string().optional(),
+    }),
+  }),
+  renameAccount: z.strictObject({
+    kind: z.literal('renameAccount'),
+    payload: z.strictObject({ id: z.string(), name: z.string() }),
+  }),
+  deleteAccount: z.strictObject({
+    kind: z.literal('deleteAccount'),
+    payload: z.strictObject({ id: z.string() }),
   }),
   refreshLens: z.strictObject({
     kind: z.literal('refreshLens'),
@@ -781,6 +838,9 @@ export const SidebarCommandSchema = z.discriminatedUnion('kind', [
   COMMAND_SCHEMAS.createLens,
   COMMAND_SCHEMAS.updateLens,
   COMMAND_SCHEMAS.deleteLens,
+  COMMAND_SCHEMAS.createAccount,
+  COMMAND_SCHEMAS.renameAccount,
+  COMMAND_SCHEMAS.deleteAccount,
   COMMAND_SCHEMAS.refreshLens,
   COMMAND_SCHEMAS.openLensItem,
   COMMAND_SCHEMAS.markLensItemRead,

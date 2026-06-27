@@ -18,6 +18,11 @@ const SETTINGS_KEY = 'lunma.settings';
 
 export type DensityMode = 'compact' | 'normal' | 'comfort';
 export type Tint = 'subtle' | 'standard' | 'vivid';
+/** The app's light/dark surface theme (redesign — Look & feel). `dark` is the
+ * warm-night default (`tokens.css` `:root`); `light` flips to the warm-paper
+ * `[data-theme="light"]` set. Driven only by this setting (no OS auto), reflected
+ * onto `<html>` via `applyThemeToDocument`. */
+export type ThemeMode = 'dark' | 'light';
 /** Global baseline for keeping pinned tabs on their site (pinned-tab-url-
  * boundary). `'off'` = pins drift freely (today's behaviour); `'domain'` = a pin
  * with no explicit boundary is confined to its registrable domain (a whole-host
@@ -39,10 +44,18 @@ export type LauncherScope = 'global' | 'prefer-current-space' | 'current-space-o
 export interface Settings {
   density: DensityMode;
   tint: Tint;
-  /** Show aurora backdrop and hue-glow light effects (appearance-disable-glares).
-   * When `false`, the aurora is not mounted and glow tokens resolve to transparent
-   * on every surface, regardless of the `tint` setting. */
+  /** Light/dark surface theme (redesign — Look & feel). Reflected onto `<html>`
+   * by `applyThemeToDocument`; `dark` is the token default. */
+  theme: ThemeMode;
+  /** Show the immersive backdrop + hue-glow light effects (appearance-disable-glares,
+   * surfaced in Look & feel as "Atmosphere glow"). When `false`, the aurora/atmosphere
+   * is not mounted and glow tokens resolve to transparent on every surface, regardless
+   * of the `tint` setting. */
   showGlares: boolean;
+  /** Hold drifting/looping motion and ease transitions (redesign — Look & feel),
+   * independent of the OS `prefers-reduced-motion`. When `true`, the options
+   * atmosphere glow stops drifting. */
+  reduceMotion: boolean;
   pinnedTabBoundaryDefault: PinnedTabBoundaryDefault;
   defaultSearchEngine: DefaultSearchEngine;
   customSearchUrl: string;
@@ -223,13 +236,36 @@ export const SETTINGS: readonly SettingDeclaration[] = [
       { value: 'vivid', label: 'Vivid' },
     ],
   },
+  // Look & feel (redesign): local, per-machine presentation — theme, atmosphere
+  // glow, reduce-motion. Not part of a Space. Declared adjacently so the registry
+  // renders them as one card, in this order, matching the comp.
+  {
+    key: 'theme',
+    type: 'enum',
+    default: 'dark',
+    label: 'Theme',
+    description: 'Deep warm night, or frosted daylight.',
+    group: 'Look & feel',
+    options: [
+      { value: 'dark', label: 'Dark' },
+      { value: 'light', label: 'Light' },
+    ],
+  },
   {
     key: 'showGlares',
     type: 'toggle',
     default: true,
-    label: 'Background effects',
-    description: 'Show aurora backdrop and colour glow effects',
-    group: 'Appearance',
+    label: 'Atmosphere glow',
+    description: 'Soft aurora glare behind the app.',
+    group: 'Look & feel',
+  },
+  {
+    key: 'reduceMotion',
+    type: 'toggle',
+    default: false,
+    label: 'Reduce motion',
+    description: 'Hold the drifting glow and ease transitions.',
+    group: 'Look & feel',
   },
   {
     key: 'pinnedTabBoundaryDefault',
@@ -311,7 +347,9 @@ export const DEFAULTS: Settings = {
   launcherScope: 'prefer-current-space',
   density: 'normal',
   tint: 'vivid',
+  theme: 'dark',
   showGlares: true,
+  reduceMotion: false,
   pinnedTabBoundaryDefault: 'off',
   dedupNewTabNavigations: true,
   autoArchiveEnabled: true,

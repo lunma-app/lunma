@@ -19,6 +19,23 @@ describe('LunmaStore.createSpace', () => {
     expect(store.state.spaces[0]?.id).not.toBe(store.state.spaces[1]?.id);
   });
 
+  test('an absent autoArchive leaves the Space inheriting the global default', () => {
+    const store = makeStore();
+    store.createSpace({ name: 'Work', color: 'blue', icon: 'star' });
+    expect(store.state.spaces[0]?.autoArchive).toBeUndefined();
+  });
+
+  test('a supplied autoArchive override is set on the new Space at mint', () => {
+    const store = makeStore();
+    store.createSpace({
+      name: 'Focus',
+      color: 'blue',
+      icon: 'star',
+      autoArchive: { mode: 'custom', idleMinutes: 20 },
+    });
+    expect(store.state.spaces[0]?.autoArchive).toEqual({ mode: 'custom', idleMinutes: 20 });
+  });
+
   test('throws on a duplicate name and adds no second Space (casefold + trim)', () => {
     const store = makeStore();
     store.createSpace({ name: 'Work', color: 'blue', icon: 'star' });

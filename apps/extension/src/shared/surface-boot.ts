@@ -4,7 +4,7 @@
  * in three separate main.ts / Options.svelte files.
  */
 
-import type { DensityMode } from './settings';
+import type { DensityMode, ThemeMode } from './settings';
 
 /**
  * Reflect the density preference onto `<html>` so `tokens.css`'s
@@ -17,5 +17,21 @@ export function applyDensityToDocument(density: DensityMode): void {
     delete document.documentElement.dataset.density;
   } else {
     document.documentElement.dataset.density = density;
+  }
+}
+
+/**
+ * Reflect the light/dark theme onto `<html>` so `tokens.css`'s
+ * `:root[data-theme="light"]` set takes over. `dark` is the token default, so the
+ * attribute is omitted for it (keeping the DOM clean); `color-scheme` is set both
+ * ways so native form controls / scrollbars match the surface.
+ */
+export function applyThemeToDocument(theme: ThemeMode): void {
+  if (theme === 'light') {
+    document.documentElement.dataset.theme = 'light';
+    document.documentElement.style.colorScheme = 'light';
+  } else {
+    delete document.documentElement.dataset.theme;
+    document.documentElement.style.colorScheme = 'dark';
   }
 }

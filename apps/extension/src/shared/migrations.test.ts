@@ -4,6 +4,7 @@ import {
   AppStateV10Schema,
   AppStateV11Schema,
   AppStateV12Schema,
+  AppStateV13Schema,
   CURRENT_SCHEMA_VERSION,
 } from './schemas';
 import { createInitialState } from './store.svelte';
@@ -13,8 +14,8 @@ import { createInitialState } from './store.svelte';
 const realMigrations = [...migrations];
 
 describe('the real migration chain', () => {
-  test('holds exactly the v2 through v12 entries', () => {
-    expect(realMigrations).toHaveLength(11);
+  test('holds exactly the v2 through v13 entries', () => {
+    expect(realMigrations).toHaveLength(12);
     expect(realMigrations[0]?.toVersion).toBe(2);
     expect(realMigrations[1]?.toVersion).toBe(3);
     expect(realMigrations[2]?.toVersion).toBe(4);
@@ -26,7 +27,8 @@ describe('the real migration chain', () => {
     expect(realMigrations[8]?.toVersion).toBe(10);
     expect(realMigrations[9]?.toVersion).toBe(11);
     expect(realMigrations[10]?.toVersion).toBe(12);
-    expect(CURRENT_SCHEMA_VERSION).toBe(12);
+    expect(realMigrations[11]?.toVersion).toBe(13);
+    expect(CURRENT_SCHEMA_VERSION).toBe(13);
     // v2–v6 are pass-throughs (see comment in migrations.ts). v7 is the
     // smart-tab-boundary real transformation; v8 is the multi-source wrap.
     const input = { schemaVersion: 1, pinnedBySpace: { work: [{ kind: 'tab', id: 'a' }] } };
@@ -87,7 +89,7 @@ describe('the real migration chain', () => {
     };
 
     const migrated = runMigrations(v5State, 5);
-    const parsed = AppStateV11Schema.parse(migrated);
+    const parsed = AppStateV13Schema.parse(migrated);
     const node = parsed.pinnedBySpace.work?.[0];
     expect(node?.kind).toBe('lens');
     if (node?.kind === 'lens') {
@@ -141,8 +143,8 @@ describe('v7 migration — smart-tab-boundary slot widening', () => {
     };
 
     const migrated = runMigrations(v6State, 6);
-    // Parse against V11 since the full chain now ends at v11.
-    const parsed = AppStateV11Schema.parse(migrated);
+    // Parse against V13 since the full chain now ends at v13.
+    const parsed = AppStateV13Schema.parse(migrated);
     // v7 widened the slot; v8 namespaced the item id (`gitlab:gitlab.com:item-a`);
     // v9 inserted the per-filter axis from the node's single migrated filter;
     // v11 renamed smartItemBindings → lensItemBindings.
@@ -171,11 +173,11 @@ describe('v7 migration — smart-tab-boundary slot widening', () => {
     };
 
     const migrated = runMigrations(v6State, 6);
-    const parsed = AppStateV11Schema.parse(migrated);
+    const parsed = AppStateV13Schema.parse(migrated);
     expect(parsed.lensItemBindings).toEqual({});
   });
 
-  test('v1 envelope migrates through all ten entries cleanly (no smartItemBindings)', () => {
+  test('v1 envelope migrates through all twelve entries cleanly (no smartItemBindings)', () => {
     migrations.push(...realMigrations);
     const v1State = {
       ...createInitialState(),
@@ -183,7 +185,7 @@ describe('v7 migration — smart-tab-boundary slot widening', () => {
     } as unknown as Record<string, unknown>;
     // No smart nodes in v1 — v7 and v8 migrations are both no-ops.
     const migrated = runMigrations(v1State, 1);
-    const parsed = AppStateV11Schema.parse(migrated);
+    const parsed = AppStateV13Schema.parse(migrated);
     expect(parsed.lensItemBindings).toEqual({});
     expect(parsed.schemaVersion).toBe(1); // the schema version field itself is from the state
   });
@@ -377,7 +379,7 @@ describe('v9 migration — multi-filter-smart-connectors queries[] rewrite + per
     expect(node.kind).toBe('tab');
   });
 
-  test('a full v1 → v11 chain validates against the v11 schema', () => {
+  test('a full v1 → v13 chain validates against the v13 schema', () => {
     migrations.push(...realMigrations);
     const v1State: Record<string, unknown> = {
       schemaVersion: 1,
@@ -410,12 +412,22 @@ describe('v9 migration — multi-filter-smart-connectors queries[] rewrite + per
     };
 
     const migrated = runMigrations(v1State, 1);
-    const parsed = AppStateV11Schema.parse(migrated);
+    const parsed = AppStateV13Schema.parse(migrated);
     const node = parsed.pinnedBySpace.s1?.[0];
     expect(node?.kind).toBe('lens');
     if (node?.kind === 'lens') {
       expect(node.lensKind).toBe('general');
       expect(node.sources[0]?.queries).toEqual(['authored']);
+      // v13 extracted the embedded gitlab/gitlab.com source into an account the
+      // lens now references.
+      const sourceId = node.sources[0]?.sourceId;
+      expect(sourceId).toBeDefined();
+      if (sourceId) {
+        expect(parsed.sources[sourceId]).toMatchObject({
+          provider: 'gitlab',
+          baseUrl: 'https://gitlab.com',
+        });
+      }
     }
   });
 });
@@ -730,6 +742,102 @@ describe('v12 migration — review-lens lensKind enum widening', () => {
     const node = (env.pinnedBySpace as Record<string, Array<Record<string, unknown>>>).s1?.[0];
     if (node) node.lensKind = 'review';
     expect(AppStateV11Schema.safeParse(env).success).toBe(false);
+  });
+});
+
+describe('v13 migration — decouple-source-accounts extract + rewrite', () => {
+  const v13Migration = realMigrations.find((m) => m.toVersion === 13);
+  if (!v13Migration) throw new Error('expected v13 migration');
+
+  // A minimal valid v12 envelope carrying two lens nodes that each embed the
+  // SAME (provider, baseUrl) source — so the migration must dedupe to one account.
+  function v12Envelope(): Record<string, unknown> {
+    return {
+      schemaVersion: 12,
+      spaces: [],
+      activeSpaceByWindow: {},
+      spaceInstancesByWindow: {},
+      tabBindings: {},
+      savedTabs: {},
+      lastActivatedSpaceId: null,
+      tabLastActivity: {},
+      archivedTabs: [],
+      trash: {},
+      pinnedBySpace: {
+        s1: [
+          {
+            kind: 'lens',
+            lensKind: 'general',
+            id: 'f1',
+            name: 'Authored',
+            icon: 'folder-git-2',
+            sources: [
+              {
+                source: 'github',
+                baseUrl: 'https://github.com',
+                queries: ['authored'],
+                name: 'GH',
+              },
+            ],
+            maxItems: 20,
+            hideRead: true,
+            refreshMinutes: 10,
+          },
+          {
+            kind: 'lens',
+            lensKind: 'review',
+            id: 'f2',
+            name: 'Reviews',
+            icon: 'folder-git-2',
+            sources: [
+              { source: 'github', baseUrl: 'https://github.com', queries: ['review-requested'] },
+            ],
+            maxItems: 20,
+            hideRead: true,
+            refreshMinutes: 10,
+          },
+        ],
+      },
+      faviconRow: [],
+      lensItemBindings: {},
+      lensReadState: {},
+    };
+  }
+
+  test('extracts ONE account both lenses reference by the same sourceId; carries the name', () => {
+    const out = v13Migration.migrate(v12Envelope()) as Record<string, unknown>;
+    const sources = out.sources as Record<
+      string,
+      { provider: string; baseUrl: string; name?: string }
+    >;
+    const ids = Object.keys(sources);
+    expect(ids).toHaveLength(1);
+    const accId = ids[0] as string;
+    expect(sources[accId]).toMatchObject({ provider: 'github', baseUrl: 'https://github.com' });
+    // The source `name` migrated onto the account (first occurrence wins).
+    expect(sources[accId]?.name).toBe('GH');
+
+    const nodes = (out.pinnedBySpace as Record<string, Array<Record<string, unknown>>>).s1;
+    expect(nodes?.[0]?.sources).toEqual([{ sourceId: accId, queries: ['authored'] }]);
+    expect(nodes?.[1]?.sources).toEqual([{ sourceId: accId, queries: ['review-requested'] }]);
+  });
+
+  test('a migrated v12 envelope validates under AppStateV13Schema', () => {
+    const migrated = v13Migration.migrate(v12Envelope());
+    const parsed = AppStateV13Schema.parse(migrated);
+    expect(Object.keys(parsed.sources)).toHaveLength(1);
+    const node = parsed.pinnedBySpace.s1?.[0];
+    expect(node?.kind).toBe('lens');
+    if (node?.kind === 'lens') {
+      expect(node.sources[0]).toHaveProperty('sourceId');
+      expect(node.sources[0]).not.toHaveProperty('source');
+    }
+  });
+
+  test('AppStateV13Schema rejects a v12 embedded-source lens node (downgrade is detectable)', () => {
+    // The pre-migration v12 envelope's lens node carries the embedded
+    // `{ source, baseUrl, queries }` shape — invalid under the ref-only v13 schema.
+    expect(AppStateV13Schema.safeParse(v12Envelope()).success).toBe(false);
   });
 });
 

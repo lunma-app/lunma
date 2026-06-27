@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'vitest';
-import { applyDensityToDocument } from './surface-boot';
+import { applyDensityToDocument, applyThemeToDocument } from './surface-boot';
 
 describe('applyDensityToDocument', () => {
   afterEach(() => {
@@ -20,5 +20,25 @@ describe('applyDensityToDocument', () => {
   test('comfort: sets density attribute to "comfort"', () => {
     applyDensityToDocument('comfort');
     expect(document.documentElement.dataset.density).toBe('comfort');
+  });
+});
+
+describe('applyThemeToDocument', () => {
+  afterEach(() => {
+    delete document.documentElement.dataset.theme;
+    document.documentElement.style.colorScheme = '';
+  });
+
+  test('dark: removes the theme attribute and sets color-scheme dark', () => {
+    document.documentElement.dataset.theme = 'light';
+    applyThemeToDocument('dark');
+    expect(document.documentElement.dataset.theme).toBeUndefined();
+    expect(document.documentElement.style.colorScheme).toBe('dark');
+  });
+
+  test('light: sets the theme attribute and color-scheme light', () => {
+    applyThemeToDocument('light');
+    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(document.documentElement.style.colorScheme).toBe('light');
   });
 });

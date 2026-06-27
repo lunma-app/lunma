@@ -1,3 +1,4 @@
+import { deriveLensKind } from './lens-entity';
 import { log } from './logger';
 import { CURRENT_SCHEMA_VERSION } from './schemas';
 import { disambiguateSpaceName, normalizeSpaceName } from './space-names';
@@ -7,12 +8,14 @@ import type {
   FolderId,
   LensKind,
   LensSectionRuntime,
-  LensSource,
+  LensSourceRef,
   LiveTab,
   PinNode,
   SavedTab,
   SavedTabId,
   SidebarLocalState,
+  SourceAccount,
+  SourceId,
   Space,
   SpaceAutoArchive,
   SpaceColor,
@@ -58,6 +61,7 @@ export const ARCHIVE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 export const createInitialState = (): AppState => ({
   schemaVersion: SCHEMA_VERSION,
   spaces: [],
+  sources: {},
   activeSpaceByWindow: {},
   spaceInstancesByWindow: {},
   tabBindings: {},
@@ -72,6 +76,7 @@ export const createInitialState = (): AppState => ({
   lensReadState: {},
   liveTabsById: {},
   lenses: {},
+  lensPeekByWindow: {},
 });
 
 const defaultIdFactory: IdFactory = () =>
@@ -106,7 +111,12 @@ export class LunmaStore {
     return $state.snapshot(this.state) as AppState;
   }
 
-  createSpace(params: { name: string; color: SpaceColor; icon: string }): void {
+  createSpace(params: {
+    name: string;
+    color: SpaceColor;
+    icon: string;
+    autoArchive?: SpaceAutoArchive | undefined;
+  }): void {
     // Space names are unique under normalization (trim + casefold) — see the
     // `spaces-and-tabs` "Space names are unique" requirement. Interactive
     // creation REJECTS a collision (the throw surfaces through the command ack);
@@ -121,6 +131,11 @@ export class LunmaStore {
       color: params.color,
       icon: params.icon,
     };
+    // An absent override means "inherit the global default", so only set the
+    // field when a concrete override was supplied (keeps the record minimal).
+    if (params.autoArchive !== undefined) {
+      space.autoArchive = params.autoArchive;
+    }
     this.state.spaces.push(space);
     if (this.state.lastActivatedSpaceId === null) {
       this.state.lastActivatedSpaceId = space.id;
@@ -907,6 +922,33 @@ export class LunmaStore {
   }
 
   /**
+   * Connected Account mutators (connector-accounts) — single-writer like the
+   * lens mutators. The token is NOT `AppState` (it lives in the separate secrets
+   * store), so these touch only the broadcast-safe entity. The handler validates
+   * the `baseUrl` and duplicate-`id` rules BEFORE calling `addSource`.
+   */
+  addSource(account: SourceAccount): void {
+    this.state.sources[account.id] = { ...account };
+  }
+
+  renameSource(id: SourceId, name: string): void {
+    const account = this.state.sources[id];
+    if (!account) {
+      log.error('renameSource: unknown account', { id });
+      return;
+    }
+    account.name = name;
+  }
+
+  /** Remove an account entity. Lens references to `id` are left DANGLING (design
+   * D9) — they render the calm "account removed" state and resolve to no section
+   * until reconnected or repointed. The surface pairs this with
+   * `setAccountToken(id, null)` to clear the secret. */
+  removeSource(id: SourceId): void {
+    delete this.state.sources[id];
+  }
+
+  /**
    * Edit a lens's config in place (lenses, design D12; multi-filter-smart-
    * connectors design D6). Runtime sections whose resolved key is no longer in
    * the new `sources × queries` set (a removed filter or instance) are DROPPED.
@@ -921,7 +963,7 @@ export class LunmaStore {
       name: string;
       icon: string;
       lensKind: LensKind;
-      sources: LensSource[];
+      sources: LensSourceRef[];
       maxItems: number;
       refreshMinutes: number;
     },
@@ -942,20 +984,25 @@ export class LunmaStore {
     node.refreshMinutes = config.refreshMinutes;
     const runtime = this.state.lenses[folderId];
     if (runtime) {
-      // Drop sections no longer in the resolved set (removed filters/instances).
+      // Drop sections no longer in the resolved set (removed filters/refs, or a
+      // ref whose account was deleted). Resolve each reference against the
+      // accounts map (connector-accounts) to derive its `${provider}:${host}`
+      // section key prefix; a dangling ref contributes no valid key.
       const validKeys = new Set<string>();
-      for (const cfg of config.sources) {
+      for (const ref of config.sources) {
+        const account = this.state.sources[ref.sourceId];
+        if (!account) continue;
         let host: string;
         try {
-          host = new URL(cfg.baseUrl).host;
+          host = new URL(account.baseUrl).host;
         } catch {
           continue;
         }
-        const base = `${cfg.source}:${host}`;
-        if (cfg.queries.length === 0) {
+        const base = `${account.provider}:${host}`;
+        if (ref.queries.length === 0) {
           validKeys.add(base);
         } else {
-          for (const q of cfg.queries) validKeys.add(`${base}:${q}`);
+          for (const q of ref.queries) validKeys.add(`${base}:${q}`);
         }
       }
       for (const key of Object.keys(runtime.sections)) {
@@ -968,6 +1015,30 @@ export class LunmaStore {
         }
       }
     }
+  }
+
+  /**
+   * One-time boot re-derivation (sources-redesign D9): re-derive every lens
+   * node's `lensKind` from its current source set via `deriveLensKind` and
+   * persist any change, so a pre-existing `'general'` lens that holds a git
+   * source becomes `'review'` and renders enriched Changes without an edit.
+   * Pure over the persisted projection (no runtime/section mutation — the kind
+   * gates per-section enrichment on the next fetch). Returns whether any node
+   * changed, so the boot chain only persists when there is a real change.
+   */
+  reconcileLensKinds(): boolean {
+    let changed = false;
+    for (const nodes of Object.values(this.state.pinnedBySpace)) {
+      for (const node of nodes) {
+        if (node.kind !== 'lens') continue;
+        const derived = deriveLensKind(node.sources, (id) => this.state.sources[id]);
+        if (node.lensKind !== derived) {
+          node.lensKind = derived;
+          changed = true;
+        }
+      }
+    }
+    return changed;
   }
 
   /** Remove a lens node AND drop its runtime entry and item bindings (lenses
@@ -1451,12 +1522,42 @@ export class LunmaStore {
     this.state.lensReadState = next.lensReadState;
     this.state.liveTabsById = next.liveTabsById;
     this.state.lenses = next.lenses;
+    this.state.lensPeekByWindow = next.lensPeekByWindow ?? {};
 
     // Arrays: splice in place so any component holding a reference to the
     // reactive array proxy continues to observe the replaced contents.
     this.state.spaces.splice(0, this.state.spaces.length, ...next.spaces);
     this.state.archivedTabs.splice(0, this.state.archivedTabs.length, ...next.archivedTabs);
     this.state.faviconRow.splice(0, this.state.faviconRow.length, ...next.faviconRow);
+  }
+
+  /**
+   * Set or clear the ephemeral "peek" lens overview for a window (lens-overview-peek).
+   * Broadcast so the sidebar renders the lens row active; never persisted. Passing
+   * `null` clears it.
+   */
+  setLensPeek(windowId: WindowId, peek: { folderId: FolderId; tabId: TabId } | null): void {
+    if (peek === null) {
+      delete this.state.lensPeekByWindow[windowId];
+    } else {
+      this.state.lensPeekByWindow[windowId] = peek;
+    }
+  }
+
+  /**
+   * Clear any peek whose tab is `tabId` (its peek tab was closed — manually or by
+   * the switch-away auto-close). Returns true if one was cleared. Used by `onRemoved`.
+   */
+  clearLensPeekForTab(tabId: TabId): boolean {
+    let cleared = false;
+    for (const key of Object.keys(this.state.lensPeekByWindow)) {
+      const windowId = Number(key);
+      if (this.state.lensPeekByWindow[windowId]?.tabId === tabId) {
+        delete this.state.lensPeekByWindow[windowId];
+        cleared = true;
+      }
+    }
+    return cleared;
   }
 
   // Ephemeral live-tab metadata (sidebar-temp-tabs). Maintained from Chrome
@@ -1560,10 +1661,15 @@ export class LunmaStore {
     return this.markConsumedFeedItems();
   }
 
-  /** Whether `folderId` has any `rss` source — the draining-queue read trigger
-   * checks if any section is a feed. */
+  /** Whether `folderId` references any `rss` account — the draining-queue read
+   * trigger checks if any section is a feed. Resolves each reference against the
+   * accounts map (connector-accounts); a dangling ref counts as no feed. */
   private isFeedFolder(folderId: FolderId): boolean {
-    return this.findLensAnySpace(folderId)?.sources.some((s) => s.source === 'rss') ?? false;
+    return (
+      this.findLensAnySpace(folderId)?.sources.some(
+        (ref) => this.state.sources[ref.sourceId]?.provider === 'rss',
+      ) ?? false
+    );
   }
 
   /**
