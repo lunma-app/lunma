@@ -1,11 +1,13 @@
 import type { BrowserContext, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 
-// lens-page (task 9.2): the real-browser smoke for the full-page folder
-// dashboard with the BUILT extension loaded — proves the page is registered as a
-// build entrypoint (vite rollupOptions.input, NOT a new-tab override / WAR) and
-// reachable at its chrome-extension:// URL, that it mirrors live SW state, and
-// that it renders the folder's section + its result card.
+// lens-page (task 9.2; sources-redesign): the real-browser smoke for the
+// full-page lens overview with the BUILT extension loaded — proves the page is
+// registered as a build entrypoint (vite rollupOptions.input, NOT a new-tab
+// override / WAR) and reachable at its chrome-extension:// URL, that it mirrors
+// live SW state, and that it renders the entity-merged overview. A gitlab lens
+// derives `lensKind: 'review'` SW-side, so its source buckets to the **Changes**
+// entity and renders as a Review-Queue change row (not a generic section card).
 //
 // Like lens-bindings.spec.ts, the runtime `lenses` slice is never
 // persisted, so the folder is created through the real `createLens` bus
@@ -81,9 +83,18 @@ test('the lens page loads at its URL and renders the folder section + card', asy
   const spaceId = (await ids(page)).spaceId;
   expect(spaceId, 'a Default Space is active at boot').toBeTruthy();
 
-  // Create a lens through the real bus command — its immediate fetch hits
-  // the mocked endpoint, so the runtime lands one real result item.
+  // Connect an account, then create a lens REFERENCING it through the real bus
+  // commands (connector-accounts) — its immediate fetch hits the mocked endpoint,
+  // so the runtime lands one real result item.
   await page.evaluate((sid: string) => {
+    chrome.runtime.sendMessage({
+      type: 'lunma/command',
+      id: 'e2e:create-account',
+      cmd: {
+        kind: 'createAccount',
+        payload: { id: 'e2e-acc', provider: 'gitlab', baseUrl: 'https://forge.e2e.test' },
+      },
+    });
     chrome.runtime.sendMessage({
       type: 'lunma/command',
       id: 'e2e:create-page',
@@ -91,7 +102,7 @@ test('the lens page loads at its URL and renders the folder section + card', asy
         kind: 'createLens',
         payload: {
           spaceId: sid,
-          sources: [{ source: 'gitlab', baseUrl: 'https://forge.e2e.test', queries: ['authored'] }],
+          sources: [{ sourceId: 'e2e-acc', queries: ['authored'] }],
           name: 'E2E page queue',
           maxItems: 20,
           refreshMinutes: 10,
@@ -108,10 +119,13 @@ test('the lens page loads at its URL and renders the folder section + card', asy
     `chrome-extension://${extensionId}/src/launcher/lenspage/index.html?folderId=${folderId}`,
   );
 
-  // The page mounts, mirrors SW state, and renders the folder + its one section.
+  // The page mounts, mirrors SW state, and renders the entity-merged overview.
   await expect(page.getByTestId('lenspage-root')).toBeVisible();
   await expect(page.getByTestId('lenspage-name')).toHaveText('E2E page queue');
-  await expect(page.getByTestId('lenspage-section')).toHaveCount(1);
-  // The mocked MR rendered as a result card — proof the live runtime reached the page.
-  await expect(page.getByTestId('lenspage-item')).toContainText('E2E page merge request');
+  // The gitlab source buckets to a single Changes entity section…
+  await expect(page.getByTestId('overview-entity')).toHaveCount(1);
+  await expect(page.getByTestId('overview-entity')).toHaveAttribute('data-entity', 'change');
+  // …and the mocked MR rendered as a Review-Queue change row — proof the live
+  // runtime reached the page.
+  await expect(page.getByTestId('change-row')).toContainText('E2E page merge request');
 });

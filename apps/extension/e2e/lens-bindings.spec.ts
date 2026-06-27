@@ -152,12 +152,20 @@ test('a lens row activates like a pinned tab: open bound, re-click focuses, dele
   await page.evaluate((sid: string) => {
     chrome.runtime.sendMessage({
       type: 'lunma/command',
+      id: 'e2e:create-account',
+      cmd: {
+        kind: 'createAccount',
+        payload: { id: 'e2e-acc', provider: 'gitlab', baseUrl: 'https://forge.e2e.test' },
+      },
+    });
+    chrome.runtime.sendMessage({
+      type: 'lunma/command',
       id: 'e2e:create',
       cmd: {
         kind: 'createLens',
         payload: {
           spaceId: sid,
-          sources: [{ source: 'gitlab', baseUrl: 'https://forge.e2e.test', queries: ['authored'] }],
+          sources: [{ sourceId: 'e2e-acc', queries: ['authored'] }],
           name: 'E2E review queue',
           maxItems: 20,
           refreshMinutes: 10,
