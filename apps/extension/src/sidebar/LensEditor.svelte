@@ -4,7 +4,7 @@ import { deriveAuthStatus } from '../shared/auth-method';
 import { dispatch } from '../shared/bus';
 import { requiredOriginsForConfig } from '../shared/connector-origins';
 import { readAccountTokens } from '../shared/connectors';
-import { entityForSource, type LensEntity } from '../shared/lens-entity';
+import { entitiesForSource, type LensEntity } from '../shared/lens-entity';
 import { requestHostPermissions } from '../shared/permissions';
 import type {
   LensProvider,
@@ -225,9 +225,11 @@ const previewEntities = $derived.by<LensEntity[]>(() => {
   const present = new Set<LensEntity>();
   for (const id of selectedOrder) {
     const provider = accountById(id)?.provider;
-    if (provider) present.add(entityForSource(provider));
+    // Every entity the source MAY emit — a github/gitlab source surfaces both
+    // Changes (PRs/MRs) AND Issues (tickets), so the preview must list both.
+    if (provider) for (const e of entitiesForSource(provider)) present.add(e);
   }
-  return (['change', 'article', 'generic'] as LensEntity[]).filter((e) => present.has(e));
+  return (['change', 'ticket', 'article', 'generic'] as LensEntity[]).filter((e) => present.has(e));
 });
 
 const resolvedSectionCount = $derived(
