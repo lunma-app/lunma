@@ -241,10 +241,10 @@ describe('parseFeed rich content', () => {
   });
 });
 
-// ── parseFeed: genre (Lens Overview, article category) ───────────────────────────
+// ── parseFeed: categories (Lens Overview, article categories) ────────────────────
 
-describe('parseFeed genre', () => {
-  test('RSS 2.0: <category> text body → genre (decoded)', () => {
+describe('parseFeed categories', () => {
+  test('RSS 2.0: <category> text body → categories (decoded)', () => {
     const xml = `<?xml version="1.0"?>
       <rss version="2.0"><channel><item>
         <title>Hello</title>
@@ -252,10 +252,10 @@ describe('parseFeed genre', () => {
         <category>Tech &amp; Science</category>
       </item></channel></rss>`;
     const { items } = parseFeed(xml);
-    expect(items[0]?.genre).toBe('Tech & Science');
+    expect(items[0]?.categories).toEqual(['Tech & Science']);
   });
 
-  test('Atom: <category term="..."/> → genre (decoded)', () => {
+  test('Atom: <category term="..."/> → categories (decoded)', () => {
     const xml = `<?xml version="1.0"?>
       <feed xmlns="http://www.w3.org/2005/Atom"><entry>
         <title>Atom post</title>
@@ -264,31 +264,31 @@ describe('parseFeed genre', () => {
         <category term="Sport &amp; Leisure" />
       </entry></feed>`;
     const { items } = parseFeed(xml);
-    expect(items[0]?.genre).toBe('Sport & Leisure');
+    expect(items[0]?.categories).toEqual(['Sport & Leisure']);
   });
 
-  test('no <category> → genre absent (never faked)', () => {
+  test('no <category> → categories absent (never faked)', () => {
     const { items } = parseFeed(
       `<rss><channel><item><title>x</title><link>https://news.example.com/f</link></item></channel></rss>`,
     );
-    expect(items[0]?.genre).toBeUndefined();
-    expect(items[0]).not.toHaveProperty('genre');
+    expect(items[0]?.categories).toBeUndefined();
+    expect(items[0]).not.toHaveProperty('categories');
   });
 
-  test('multiple categories → the first wins (RSS and Atom)', () => {
+  test('multiple categories → ALL kept, in document order (RSS and Atom)', () => {
     const rss = parseFeed(`<rss version="2.0"><channel><item>
       <link>https://news.example.com/g</link>
       <category>Primary</category>
       <category>Secondary</category>
     </item></channel></rss>`);
-    expect(rss.items[0]?.genre).toBe('Primary');
+    expect(rss.items[0]?.categories).toEqual(['Primary', 'Secondary']);
 
     const atom = parseFeed(`<feed xmlns="http://www.w3.org/2005/Atom"><entry>
       <link rel="alternate" href="https://news.example.com/h" />
       <category term="First" />
       <category term="Second" />
     </entry></feed>`);
-    expect(atom.items[0]?.genre).toBe('First');
+    expect(atom.items[0]?.categories).toEqual(['First', 'Second']);
   });
 });
 

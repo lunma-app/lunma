@@ -263,7 +263,7 @@ const empty = $derived(
                       <span class="art-foot">
                         <span class="art-src">{feedLabel(t)}</span>
                         {#if t.item.publishedAt}<span class="art-fdot" aria-hidden="true"></span><span class="art-age">{relTime(t.item.publishedAt)}</span>{/if}
-                        {#if t.item.genre}<span class="genre">{t.item.genre}</span>{/if}
+                        {#if t.item.categories?.length}<span class="categories">{#each t.item.categories as cat (cat)}<span class="category">{cat}</span>{/each}</span>{/if}
                       </span>
                     </span>
                   </button>
@@ -285,7 +285,7 @@ const empty = $derived(
                       <span class="art-foot">
                         <span class="art-src">{feedLabel(t)}</span>
                         {#if t.item.publishedAt}<span class="art-fdot" aria-hidden="true"></span><span class="art-age">{relTime(t.item.publishedAt)}</span>{/if}
-                        {#if t.item.genre}<span class="genre">{t.item.genre}</span>{/if}
+                        {#if t.item.categories?.length}<span class="categories">{#each t.item.categories as cat (cat)}<span class="category">{cat}</span>{/each}</span>{/if}
                       </span>
                     </span>
                   </button>
@@ -706,6 +706,10 @@ const empty = $derived(
   .art-row .art-open {
     flex-direction: row;
     align-items: stretch;
+    /* Min height of a 1-line-title + 2-line-description row, so single-line rows
+       match it — the full-height image gets room and the foot bottom-aligns
+       (see `.art-row .art-foot`). */
+    min-height: 96px;
   }
   .art-open:hover .art-title {
     color: var(--lens-text);
@@ -819,6 +823,12 @@ const empty = $derived(
     font-size: 10.5px;
     color: var(--text-muted);
   }
+  /* List rows: pin source · age · category to the bottom (title stays at the top),
+     so a single-line row aligns its foot with the 2-line rows beside it. */
+  .art-row .art-foot {
+    margin-top: auto;
+    padding-top: 10px;
+  }
   .art-fdot {
     width: 3px;
     height: 3px;
@@ -828,8 +838,13 @@ const empty = $derived(
   .art-age {
     color: var(--text-faint);
   }
-  .genre {
+  .categories {
     margin-left: auto;
+    display: flex;
+    flex-shrink: 0;
+    gap: 5px;
+  }
+  .category {
     padding: 1px 8px;
     border-radius: var(--r-pill);
     font-size: 10px;

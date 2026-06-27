@@ -394,10 +394,10 @@ export interface LensItem {
   imageUrl?: string | undefined;
   /** Publication time as epoch ms (RSS pubDate / Atom published|updated). */
   publishedAt?: number | undefined;
-  /** Article genre/category pill (lens-overview) — RSS `<category>` / Atom
-   * `<category term>`, first term, decoded. Ephemeral; only the magazine
-   * projection renders it. Absent when the feed declares none. */
-  genre?: string | undefined;
+  /** Article categories (lens-overview) — the RSS `<category>` / Atom
+   * `<category term>` values, decoded + de-duped (a feed item may carry several).
+   * Ephemeral; only the magazine projection renders them. Absent when none. */
+  categories?: string[] | undefined;
   /** The canonical Change entity (review-lens) — populated by the github/gitlab
    * connectors for `review`-kind lenses only; absent for `general` lenses. Rides
    * the ephemeral runtime slice (never persisted); the Review Queue page reads
