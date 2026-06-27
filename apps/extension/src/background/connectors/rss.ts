@@ -1,4 +1,5 @@
 import { SaxesParser } from 'saxes';
+import { PROVIDER_AUTH_METHODS } from '../../shared/auth-method';
 import { requiredOriginsForConfig } from '../../shared/connector-origins';
 import type { LensItem, LensSectionRuntime, ResolvedLensSource } from '../../shared/types';
 import { boundedFetch, type ConnectorCaches, type SourceConnector } from './connector';
@@ -74,6 +75,8 @@ interface DraftEntry {
   image?: string;
   /** Raw publication date text (RSS pubDate / Atom published|updated). */
   dateText?: string;
+  /** First `<category>` — RSS 2.0 text body or Atom `@term` — the article genre. */
+  category?: string;
 }
 
 /** Which leaf element's text we are currently accumulating, and into where. */
@@ -85,6 +88,7 @@ type Capture =
   | 'description'
   | 'content'
   | 'date'
+  | 'category'
   | null;
 
 /** Richer-content extraction (smart-folder-page). The SW has no DOMParser, so
@@ -260,6 +264,16 @@ export function parseFeed(xml: string): { items: LensItem[]; channelLink?: strin
         ) {
           entry.image = url;
         }
+      } else if (name === 'category') {
+        // Atom `<category term="Foo"/>` carries its value in the attribute (self-
+        // closing, no text body); RSS 2.0 `<category>Tech</category>` is a text
+        // body, collected like the other leaves. FIRST category wins (see closetag).
+        const term = attrs.term;
+        if (term !== undefined) entry.category ??= term;
+        else {
+          capture = 'category';
+          buf = '';
+        }
       } else if (
         name === 'pubdate' ||
         name === 'published' ||
@@ -310,6 +324,7 @@ export function parseFeed(xml: string): { items: LensItem[]; channelLink?: strin
           else if (capture === 'content') entry.contentRaw ??= value;
           else if (capture === 'date' && (dateStrong || entry.dateText === undefined))
             entry.dateText = value;
+          else if (capture === 'category') entry.category ??= value;
         }
       }
       capture = null;
@@ -336,6 +351,7 @@ export function parseFeed(xml: string): { items: LensItem[]; channelLink?: strin
           ...(excerpt !== undefined ? { excerpt } : {}),
           ...(imageUrl !== undefined ? { imageUrl } : {}),
           ...(publishedAt !== undefined ? { publishedAt } : {}),
+          ...(entry.category !== undefined ? { genre: decodeHtmlEntities(entry.category) } : {}),
         });
       }
       entry = null;
@@ -464,6 +480,9 @@ function requiredOrigins(cfg: ResolvedLensSource): string[] {
  * empty (a feed has no canonical host); the SW mints the `'rss'` icon. */
 export const rssConnector: SourceConnector = {
   source: 'rss',
+  // Public (connector-accounts): a feed URL needs no identity — `[]` derives to
+  // the `public` method, never requesting a token. Sourced from the shared map.
+  authMethods: PROVIDER_AUTH_METHODS.rss,
   defaultBaseUrl: '',
   mintedIcon: 'rss',
   requiredOrigins,

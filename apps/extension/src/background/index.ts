@@ -1,4 +1,5 @@
 import { persist } from '../shared/chrome/storage';
+import { reconcileAccountSecrets } from '../shared/connectors';
 import { log } from '../shared/logger';
 import {
   type BoundaryOpenElsewhereMessage,
@@ -88,6 +89,22 @@ const bootReady: Promise<void> = loadState()
     bootUnavailable = outcome === 'unavailable';
     freshInstall = store.state.spaces.length === 0 && !bootUnavailable;
     return runRestartRecovery();
+  })
+  .then(async () => {
+    // One-time secrets reconcile (connector-accounts, design D7): move legacy
+    // host-keyed connector tokens onto the minted accounts' ids. Idempotent; a
+    // no-op once every key is a sourceId. Skipped on an `unavailable` read (the
+    // accounts map may be incomplete). Off the persist path — it writes the
+    // separate `lunma.connectors` key directly.
+    if (!bootUnavailable) await reconcileAccountSecrets(store.state.sources);
+  })
+  .then(() => {
+    // One-time lensKind re-derivation (sources-redesign D9): re-derive every
+    // lens node's kind from its current sources so a pre-existing `'general'`
+    // lens holding a git source becomes `'review'` and renders enriched Changes
+    // without an edit. Off the persist path here — the change rides the boot
+    // persist below. Skipped on an `unavailable` read (state may be incomplete).
+    if (!bootUnavailable) store.reconcileLensKinds();
   })
   .then(() => {
     if (!bootUnavailable) ensureAtLeastOneSpace(store);

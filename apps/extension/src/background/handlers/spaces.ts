@@ -21,12 +21,12 @@ export function spaceHandlers(): Pick<
 > {
   return {
     createSpace: async (ctx, event) => {
-      const { name, color, icon, windowId } = event.payload;
+      const { name, color, icon, windowId, autoArchive } = event.payload;
       const before = new Set(ctx.store.state.spaces.map((s) => s.id));
       // The Space active in the window before this create — its home-only tab
       // (if any) is tidied when activation moves off it (see D4 close-on-leave).
       const outgoing = ctx.store.state.activeSpaceByWindow[windowId] ?? undefined;
-      ctx.store.createSpace({ name, color, icon });
+      ctx.store.createSpace({ name, color, icon, autoArchive });
       const newSpace = ctx.store.state.spaces.find((s) => !before.has(s.id));
       if (!newSpace) {
         throw new Error('createSpace: new Space not found after creation');

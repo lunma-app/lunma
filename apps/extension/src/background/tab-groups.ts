@@ -32,15 +32,18 @@ function isTabBusyError(err: unknown): boolean {
 }
 
 /**
- * Map a Lunma `SpaceColor` to a `chrome.tabGroups.Color`. The nine `SpaceColor`
- * values are exactly Chrome's nine group colours, so every colour maps 1:1 — the
- * only spelling difference is Lunma's `gray` vs Chrome's `grey`. Anything
- * unrecognised → `grey`.
+ * Map a Lunma `SpaceColor` to a `chrome.tabGroups.Color`. Nine of the ten
+ * `SpaceColor` values are exactly Chrome's group colours (the only spelling
+ * difference is Lunma's `gray` vs Chrome's `grey`); the tenth, `teal`, has no
+ * Chrome equivalent and folds onto the nearest one, `cyan` — so in the NATIVE tab
+ * strip a teal Space reads as cyan. Anything unrecognised → `grey`.
  */
 export function toGroupColor(color: string): `${chrome.tabGroups.Color}` {
   switch (color) {
     case 'gray':
       return 'grey';
+    case 'teal':
+      return 'cyan';
     case 'blue':
     case 'cyan':
     case 'green':

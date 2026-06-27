@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { ResolvedLensSource } from '../../shared/types';
-import { jiraConnector, statusForCategory } from './jira';
+import { jiraConnector, kanbanForCategory, priorityForName, statusForCategory } from './jira';
 
 // ── test plumbing ──────────────────────────────────────────────────────────────
 
@@ -57,6 +57,44 @@ function issue(
   };
 }
 
+/** A richer search-result row carrying the Ticket-entity fields. Every field is
+ * optional — omit any to model a provider that did not return it. */
+function richIssue(args: {
+  id: string;
+  key: string;
+  summary: string;
+  categoryKey?: string;
+  statusName?: string;
+  priorityName?: string;
+  assigneeName?: string;
+  projectName?: string;
+  updated?: string;
+  labels?: string[];
+}): Record<string, unknown> {
+  return {
+    id: args.id,
+    key: args.key,
+    fields: {
+      summary: args.summary,
+      ...(args.categoryKey === undefined && args.statusName === undefined
+        ? {}
+        : {
+            status: {
+              ...(args.statusName === undefined ? {} : { name: args.statusName }),
+              ...(args.categoryKey === undefined
+                ? {}
+                : { statusCategory: { key: args.categoryKey } }),
+            },
+          }),
+      ...(args.priorityName === undefined ? {} : { priority: { name: args.priorityName } }),
+      ...(args.assigneeName === undefined ? {} : { assignee: { displayName: args.assigneeName } }),
+      ...(args.projectName === undefined ? {} : { project: { name: args.projectName } }),
+      ...(args.updated === undefined ? {} : { updated: args.updated }),
+      ...(args.labels === undefined ? {} : { labels: args.labels }),
+    },
+  };
+}
+
 let fetchMock: ReturnType<typeof vi.fn>;
 
 function node(overrides: Partial<ResolvedLensSource> = {}): ResolvedLensSource {
@@ -65,6 +103,7 @@ function node(overrides: Partial<ResolvedLensSource> = {}): ResolvedLensSource {
     baseUrl: 'https://acme.atlassian.net',
     query: 'assigned',
     lensKind: 'general',
+    sourceId: 'acc-jira',
     ...overrides,
   };
 }
@@ -93,6 +132,37 @@ describe('statusForCategory', () => {
   });
 });
 
+// ── Ticket-entity mappers (Lens Overview, design §4) ────────────────────────────
+
+describe('kanbanForCategory', () => {
+  test('maps the three Jira categories to kanban columns; unmapped/absent → todo', () => {
+    expect(kanbanForCategory('new')).toBe('todo');
+    expect(kanbanForCategory('indeterminate')).toBe('in-progress');
+    expect(kanbanForCategory('done')).toBe('done');
+    // Defensive default — the Ticket entity always carries a column.
+    expect(kanbanForCategory('frozen')).toBe('todo');
+    expect(kanbanForCategory(undefined)).toBe('todo');
+  });
+});
+
+describe('priorityForName', () => {
+  test('maps each default-scheme priority to its bucket', () => {
+    expect(priorityForName('Highest')).toBe('urgent');
+    expect(priorityForName('Blocker')).toBe('urgent');
+    expect(priorityForName('Critical')).toBe('urgent');
+    expect(priorityForName('High')).toBe('high');
+    expect(priorityForName('Medium')).toBe('med');
+    expect(priorityForName('Low')).toBe('low');
+    expect(priorityForName('Lowest')).toBe('low');
+  });
+
+  test('an unmapped/custom or absent priority name is omitted (never faked)', () => {
+    expect(priorityForName('P0 — drop everything')).toBeUndefined();
+    expect(priorityForName('Trivial')).toBeUndefined();
+    expect(priorityForName(undefined)).toBeUndefined();
+  });
+});
+
 // ── canned queries (D2) ─────────────────────────────────────────────────────────
 
 describe('fetchRuntime — canned queries', () => {
@@ -101,7 +171,7 @@ describe('fetchRuntime — canned queries', () => {
     const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      'https://acme.atlassian.net/rest/api/3/search/jql?jql=assignee%20%3D%20currentUser()%20AND%20statusCategory%20!%3D%20Done%20ORDER%20BY%20updated%20DESC&fields=summary,status&maxResults=20',
+      'https://acme.atlassian.net/rest/api/3/search/jql?jql=assignee%20%3D%20currentUser()%20AND%20statusCategory%20!%3D%20Done%20ORDER%20BY%20updated%20DESC&fields=summary,status,priority,assignee,project,updated,labels&maxResults=20',
     );
     expect(runtime.state).toBe('ok');
   });
@@ -148,13 +218,17 @@ describe('fetchRuntime — normalization', () => {
     fetchMock.mockResolvedValueOnce(searchResponse([issue('10001', 'PROJ-123', 'Fix the export')]));
     const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
     expect(runtime.state).toBe('ok');
-    expect(runtime.items).toEqual([
-      {
-        id: '10001',
-        title: 'PROJ-123 Fix the export',
-        url: 'https://acme.atlassian.net/browse/PROJ-123',
-      },
-    ]);
+    const [item] = runtime.items;
+    expect(item).toMatchObject({
+      id: '10001',
+      // The key still prefixes the summary (sidebar parity) AND is carried on
+      // the Ticket entity for the board to read separately.
+      title: 'PROJ-123 Fix the export',
+      url: 'https://acme.atlassian.net/browse/PROJ-123',
+      ticket: { key: 'PROJ-123', statusCategory: 'todo', statusLabel: '' },
+    });
+    // No status category supplied → no glyph, but the ticket entity is present.
+    expect(item).not.toHaveProperty('status');
   });
 
   test('statusCategory maps to one tone inline, with no per-item follow-up request', async () => {
@@ -170,7 +244,7 @@ describe('fetchRuntime — normalization', () => {
     const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
     // Inline: one request only — Jira issues zero enrichment fan-out.
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(runtime.items).toEqual([
+    expect(runtime.items).toMatchObject([
       {
         id: '1',
         title: 'P-1 In progress one',
@@ -187,6 +261,18 @@ describe('fetchRuntime — normalization', () => {
       { id: '4', title: 'P-4 Frozen one', url: 'https://acme.atlassian.net/browse/P-4' },
       { id: '5', title: 'P-5 No category', url: 'https://acme.atlassian.net/browse/P-5' },
     ]);
+    // The glyph (`status`) is omitted for `new`/unmapped/absent, but the kanban
+    // column on the Ticket entity always resolves (defaulting to `todo`).
+    expect(runtime.items.map((i) => i.ticket?.statusCategory)).toEqual([
+      'in-progress',
+      'done',
+      'todo',
+      'todo',
+      'todo',
+    ]);
+    expect(runtime.items[2]).not.toHaveProperty('status');
+    expect(runtime.items[3]).not.toHaveProperty('status');
+    expect(runtime.items[4]).not.toHaveProperty('status');
   });
 
   test('a malformed issue is dropped, the rest survive (element-wise parse)', async () => {
@@ -203,6 +289,138 @@ describe('fetchRuntime — normalization', () => {
     fetchMock.mockResolvedValueOnce(searchResponse(overfull));
     const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
     expect(runtime.items).toHaveLength(20);
+  });
+});
+
+// ── Ticket entity (Lens Overview, design §4) ─────────────────────────────────────
+
+describe('fetchRuntime — Ticket entity', () => {
+  test('a fully-populated issue carries the complete ticket bag, with the key prefix kept', async () => {
+    fetchMock.mockResolvedValueOnce(
+      searchResponse([
+        richIssue({
+          id: '10001',
+          key: 'PAY-91',
+          summary: 'Wire the gateway',
+          categoryKey: 'indeterminate',
+          statusName: 'In Review',
+          priorityName: 'High',
+          assigneeName: 'Ada Lovelace',
+          projectName: 'Payments',
+          updated: '2026-06-20T12:00:00.000Z',
+          labels: ['backend', 'urgent-ish'],
+        }),
+      ]),
+    );
+    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
+    const [item] = runtime.items;
+    // The summary keeps its key prefix (sidebar parity); the board reads
+    // `ticket.key` separately.
+    expect(item?.title).toBe('PAY-91 Wire the gateway');
+    expect(item?.ticket).toEqual({
+      key: 'PAY-91',
+      statusCategory: 'in-progress',
+      statusLabel: 'In Review',
+      priority: 'high',
+      assignee: 'Ada Lovelace',
+      project: 'Payments',
+      labels: ['backend', 'urgent-ish'],
+      updatedAt: Date.parse('2026-06-20T12:00:00.000Z'),
+    });
+  });
+
+  test('absent assignee/project/labels/priority are OMITTED, not set to undefined', async () => {
+    fetchMock.mockResolvedValueOnce(
+      searchResponse([
+        richIssue({
+          id: '2',
+          key: 'PAY-92',
+          summary: 'Bare ticket',
+          categoryKey: 'new',
+          statusName: 'To Do',
+          updated: '2026-06-21T08:00:00.000Z',
+        }),
+      ]),
+    );
+    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
+    const ticket = runtime.items[0]?.ticket;
+    expect(ticket).toEqual({
+      key: 'PAY-92',
+      statusCategory: 'todo',
+      statusLabel: 'To Do',
+      updatedAt: Date.parse('2026-06-21T08:00:00.000Z'),
+    });
+    // Conditional-spread omission: the keys are absent (not present-as-undefined).
+    expect(ticket).not.toHaveProperty('priority');
+    expect(ticket).not.toHaveProperty('assignee');
+    expect(ticket).not.toHaveProperty('project');
+    expect(ticket).not.toHaveProperty('labels');
+  });
+
+  test('an empty labels array is omitted (treated as absent)', async () => {
+    fetchMock.mockResolvedValueOnce(
+      searchResponse([richIssue({ id: '3', key: 'PAY-93', summary: 'No labels', labels: [] })]),
+    );
+    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
+    expect(runtime.items[0]?.ticket).not.toHaveProperty('labels');
+  });
+
+  test('an unmapped/custom priority is omitted (never coerced to a bucket)', async () => {
+    fetchMock.mockResolvedValueOnce(
+      searchResponse([
+        richIssue({
+          id: '4',
+          key: 'PAY-94',
+          summary: 'Custom priority',
+          priorityName: 'P0 — drop everything',
+        }),
+      ]),
+    );
+    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
+    expect(runtime.items[0]?.ticket).not.toHaveProperty('priority');
+  });
+
+  test('an absent or unparseable `updated` falls back to the section fetch time', async () => {
+    const before = Date.now();
+    fetchMock.mockResolvedValueOnce(
+      searchResponse([
+        richIssue({ id: '5', key: 'PAY-95', summary: 'No updated stamp' }),
+        richIssue({ id: '6', key: 'PAY-96', summary: 'Garbage stamp', updated: 'not a date' }),
+      ]),
+    );
+    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
+    const after = Date.now();
+    for (const item of runtime.items) {
+      const at = item.ticket?.updatedAt ?? Number.NaN;
+      expect(at).toBeGreaterThanOrEqual(before);
+      expect(at).toBeLessThanOrEqual(after);
+    }
+  });
+
+  test('statusLabel is the raw provider status name; absent status → empty label, todo column', async () => {
+    fetchMock.mockResolvedValueOnce(
+      searchResponse([
+        richIssue({ id: '7', key: 'PAY-97', summary: 'Raw status', statusName: 'Awaiting QA' }),
+        richIssue({ id: '8', key: 'PAY-98', summary: 'No status object' }),
+      ]),
+    );
+    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
+    expect(runtime.items[0]?.ticket).toMatchObject({
+      statusLabel: 'Awaiting QA',
+      statusCategory: 'todo',
+    });
+    expect(runtime.items[1]?.ticket).toMatchObject({ statusLabel: '', statusCategory: 'todo' });
+  });
+
+  test('Jira emits no change bag and no refs (ticket entity only)', async () => {
+    fetchMock.mockResolvedValueOnce(
+      searchResponse([richIssue({ id: '9', key: 'PAY-99', summary: 'Just a ticket' })]),
+    );
+    const runtime = await jiraConnector.fetchRuntime(node({ query: 'assigned' }), 20);
+    const [item] = runtime.items;
+    expect(item).not.toHaveProperty('change');
+    expect(item).not.toHaveProperty('refs');
+    expect(item?.ticket).toBeDefined();
   });
 });
 
@@ -295,7 +513,12 @@ describe('maxItems + listingUrl', () => {
         source: 'jira',
         baseUrl: 'https://acme.atlassian.net',
         lensKind: 'general',
+        sourceId: 'acc-jira',
       }),
     ).toEqual(['https://acme.atlassian.net/*']);
+  });
+
+  test('declares session-only authMethods', () => {
+    expect(jiraConnector.authMethods).toEqual(['session']);
   });
 });

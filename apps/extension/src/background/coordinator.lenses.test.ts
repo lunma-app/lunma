@@ -47,7 +47,24 @@ function jsonResponse(body: unknown, status = 200): unknown {
   return { status, ok: status >= 200 && status < 300, json: async () => body };
 }
 
-/** Default gitlab node; overrides merge at the top level of LensNode. */
+/**
+ * The connected accounts these suites reference (connector-accounts). Seeded into
+ * `store.state.sources` by `makeWithSpace` so lens references resolve and the
+ * per-section keys derive from each account's `baseUrl`.
+ */
+const ACCOUNTS = {
+  'gl-ex': { id: 'gl-ex', provider: 'gitlab', baseUrl: 'https://gitlab.example.com' },
+  gh: { id: 'gh', provider: 'github', baseUrl: 'https://github.com' },
+  gl: { id: 'gl', provider: 'gitlab', baseUrl: 'https://gitlab.com' },
+  'rss-news': { id: 'rss-news', provider: 'rss', baseUrl: 'https://news.example.com/rss' },
+  // A github account on the gitlab.example.com host — the "source-only edit"
+  // repoints a lens from the gitlab account to this github account on the same
+  // host.
+  'gh-ghe': { id: 'gh-ghe', provider: 'github', baseUrl: 'https://gitlab.example.com' },
+} as const;
+
+/** Default gitlab node (references the seeded `gl-ex` account); overrides merge
+ * at the top level of LensNode. */
 function lensNode(overrides: Partial<LensNode> = {}): LensNode {
   return {
     kind: 'lens',
@@ -55,9 +72,7 @@ function lensNode(overrides: Partial<LensNode> = {}): LensNode {
     id: 'sf-1',
     name: 'Review requests',
     icon: 'folder-git-2',
-    sources: [
-      { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['review-requested'] },
-    ],
+    sources: [{ sourceId: 'gl-ex', queries: ['review-requested'] }],
     maxItems: 20,
     hideRead: false,
     refreshMinutes: 10,
@@ -99,6 +114,10 @@ afterEach(() => {
 function makeWithSpace() {
   const made = makeCoordinator();
   made.store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+  // Seed the connected accounts the suites reference (connector-accounts).
+  for (const account of Object.values(ACCOUNTS)) {
+    made.store.state.sources[account.id] = { ...account };
+  }
   return made;
 }
 
@@ -120,13 +139,7 @@ describe('createLens handler', () => {
           kind: 'createLens',
           payload: {
             spaceId: 'work',
-            sources: [
-              {
-                source: 'gitlab',
-                baseUrl: 'https://gitlab.example.com/',
-                queries: ['review-requested'],
-              },
-            ],
+            sources: [{ sourceId: 'gl-ex', queries: ['review-requested'] }],
             name: 'Review requests',
             maxItems: 20,
             refreshMinutes: 1,
@@ -141,10 +154,8 @@ describe('createLens handler', () => {
     expect(created).toMatchObject({
       kind: 'lens',
       name: 'Review requests',
-      icon: 'folder-git-2',
-      sources: [
-        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['review-requested'] },
-      ],
+      icon: 'folder-git-2', // minted from the referenced gitlab account's provider
+      sources: [{ sourceId: 'gl-ex', queries: ['review-requested'] }],
       refreshMinutes: 5, // clamped to the floor
     });
     expect(created.id).toBeTruthy(); // SW-minted (crypto.randomUUID)
@@ -158,7 +169,7 @@ describe('createLens handler', () => {
     expect(fetchMock).toHaveBeenCalled();
   });
 
-  test('create with source github mints the connector icon and the node carries the source', async () => {
+  test('create referencing a github account mints the connector icon', async () => {
     const { coordinator, store, emitAck } = makeWithSpace();
 
     coordinator.enqueue(
@@ -167,7 +178,7 @@ describe('createLens handler', () => {
           kind: 'createLens',
           payload: {
             spaceId: 'work',
-            sources: [{ source: 'github', baseUrl: 'https://github.com/', queries: ['authored'] }],
+            sources: [{ sourceId: 'gh', queries: ['authored'] }],
             name: 'My pull requests',
             maxItems: 20,
             refreshMinutes: 10,
@@ -181,7 +192,7 @@ describe('createLens handler', () => {
     const created = store.state.pinnedBySpace.work?.[0] as LensNode;
     expect(created).toMatchObject({
       kind: 'lens',
-      sources: [{ source: 'github', baseUrl: 'https://github.com', queries: ['authored'] }],
+      sources: [{ sourceId: 'gh', queries: ['authored'] }],
       icon: 'folder-git-2', // CONNECTORS.github.mintedIcon
     });
     expect(emitAck).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1', result: 'ok' }));
@@ -194,7 +205,7 @@ describe('createLens handler', () => {
     });
   });
 
-  test('review-lens: a createLens carrying lensKind: review persists a review node', async () => {
+  test('sources-redesign: createLens derives review from a github source (no kind on the wire)', async () => {
     const { coordinator, store } = makeWithSpace();
     coordinator.enqueue(
       sidebar(
@@ -202,13 +213,10 @@ describe('createLens handler', () => {
           kind: 'createLens',
           payload: {
             spaceId: 'work',
-            sources: [
-              { source: 'github', baseUrl: 'https://github.com', queries: ['review-requested'] },
-            ],
+            sources: [{ sourceId: 'gh', queries: ['review-requested'] }],
             name: 'Reviews',
             maxItems: 20,
             refreshMinutes: 10,
-            lensKind: 'review',
           },
         },
         'c1',
@@ -220,7 +228,7 @@ describe('createLens handler', () => {
     expect(created.lensKind).toBe('review');
   });
 
-  test('review-lens: a createLens omitting lensKind defaults to general (back-compat)', async () => {
+  test('sources-redesign: createLens derives general from a feed-only source set', async () => {
     const { coordinator, store } = makeWithSpace();
     coordinator.enqueue(
       sidebar(
@@ -228,10 +236,8 @@ describe('createLens handler', () => {
           kind: 'createLens',
           payload: {
             spaceId: 'work',
-            sources: [
-              { source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['review-requested'] },
-            ],
-            name: 'X',
+            sources: [{ sourceId: 'rss-news', queries: [] }],
+            name: 'News',
             maxItems: 20,
             refreshMinutes: 10,
           },
@@ -244,7 +250,34 @@ describe('createLens handler', () => {
     expect(created.lensKind).toBe('general');
   });
 
-  test('an invalid baseUrl rejects with an error ack and adds no node', async () => {
+  test('sources-redesign: createLens derives review from a mixed git+feed source set', async () => {
+    const { coordinator, store } = makeWithSpace();
+    coordinator.enqueue(
+      sidebar(
+        {
+          kind: 'createLens',
+          payload: {
+            spaceId: 'work',
+            sources: [
+              { sourceId: 'gh', queries: ['authored'] },
+              { sourceId: 'rss-news', queries: [] },
+            ],
+            name: 'Backend',
+            maxItems: 20,
+            refreshMinutes: 10,
+          },
+        },
+        'c1',
+      ),
+    );
+    await coordinator.idle();
+    const created = store.state.pinnedBySpace.work?.[0] as LensNode;
+    expect(created.lensKind).toBe('review');
+  });
+
+  test('an unresolved sourceId rejects with an error ack and adds no node', async () => {
+    // baseUrl validation moved to createAccount (connector-accounts); createLens
+    // now rejects a reference whose account does not exist.
     const { coordinator, store, emitAck } = makeWithSpace();
     coordinator.enqueue(
       sidebar(
@@ -252,7 +285,7 @@ describe('createLens handler', () => {
           kind: 'createLens',
           payload: {
             spaceId: 'work',
-            sources: [{ source: 'gitlab', baseUrl: 'not-a-url', queries: ['authored'] }],
+            sources: [{ sourceId: 'ghost', queries: ['authored'] }],
             name: 'X',
             maxItems: 20,
             refreshMinutes: 10,
@@ -265,7 +298,7 @@ describe('createLens handler', () => {
     expect(emitAck).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'c1',
-        result: { error: expect.stringContaining('invalid base URL') },
+        result: { error: expect.stringContaining('unknown sourceId') },
       }),
     );
     expect(store.state.pinnedBySpace.work ?? []).toHaveLength(0);
@@ -279,7 +312,7 @@ describe('createLens handler', () => {
           kind: 'createLens',
           payload: {
             spaceId: 'nope',
-            sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored'] }],
+            sources: [{ sourceId: 'gl', queries: ['authored'] }],
             name: 'X',
             maxItems: 20,
             refreshMinutes: 10,
@@ -298,15 +331,86 @@ describe('createLens handler', () => {
   });
 });
 
+describe('sources-redesign: mixed-lens Change enrichment gates per section (D8)', () => {
+  /** A minimal arrayBuffer-backed feed Response (the rss connector reads
+   * arrayBuffer + headers, not json). */
+  function feedResponse(xml: string): unknown {
+    const buf = new TextEncoder().encode(xml).buffer;
+    return { ok: true, status: 200, headers: { get: () => null }, arrayBuffer: async () => buf };
+  }
+
+  const FEED_XML = `<?xml version="1.0"?><rss version="2.0"><channel><title>News</title>
+    <item><title>A post</title><link>https://news.example.com/p/1</link><guid>p1</guid></item>
+    </channel></rss>`;
+
+  /** A review-shaped MR (author/reviewers/branch/diff/draft) so the git section
+   * has a `change` bag to populate when the lens derives 'review'. */
+  const reviewMr = {
+    id: 1,
+    iid: 1,
+    project_id: 1,
+    title: 'MR 1',
+    web_url: 'https://gitlab.example.com/g/p/-/merge_requests/1',
+    head_pipeline: { status: 'success' },
+    author: { username: 'octo' },
+    target_branch: 'main',
+    updated_at: '2026-06-24T10:00:00Z',
+    draft: false,
+    reviewers: [{ username: 'alice' }],
+    additions: 112,
+    deletions: 40,
+  };
+
+  test('a mixed git+feed lens derives review; only the git section carries a change bag', async () => {
+    const { coordinator, store } = makeWithSpace();
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes('/api/v4/merge_requests?')) return jsonResponse([reviewMr]);
+      if (url.includes('/approvals')) {
+        return jsonResponse({ approved_by: [{ user: { username: 'alice' } }] });
+      }
+      if (url.includes('news.example.com')) return feedResponse(FEED_XML);
+      throw new Error(`unrouted: ${url}`);
+    });
+
+    coordinator.enqueue(
+      sidebar(
+        {
+          kind: 'createLens',
+          payload: {
+            spaceId: 'work',
+            sources: [
+              { sourceId: 'gl-ex', queries: ['authored'] },
+              { sourceId: 'rss-news', queries: [] },
+            ],
+            name: 'Backend',
+            maxItems: 20,
+            refreshMinutes: 10,
+          },
+        },
+        'c1',
+      ),
+    );
+    await coordinator.idle();
+
+    const created = store.state.pinnedBySpace.work?.[0] as LensNode;
+    expect(created.lensKind).toBe('review'); // derived from the git source
+    const sections = store.state.lenses[created.id]?.sections ?? {};
+    const gitSection = sections['gitlab:gitlab.example.com:authored'];
+    const feedSection = sections[FEED_SK];
+    // The git section's item is enriched (enrichment gates on the derived 'review').
+    expect(gitSection?.state).toBe('ok');
+    expect(gitSection?.items[0]?.change).toMatchObject({ author: 'octo', repo: 'g/p' });
+    // The feed section's item carries no change bag — only git sections enrich.
+    expect(feedSection?.state).toBe('ok');
+    expect(feedSection?.items[0]?.change).toBeUndefined();
+  });
+});
+
 describe('updateLens handler', () => {
   test('edits in place; a query change triggers an immediate refetch', async () => {
     const { coordinator, store } = makeWithSpace();
     store.state.pinnedBySpace.work = [
-      lensNode({
-        sources: [
-          { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['assigned'] },
-        ],
-      }),
+      lensNode({ sources: [{ sourceId: 'gl-ex', queries: ['assigned'] }] }),
     ];
 
     coordinator.enqueue(
@@ -316,13 +420,7 @@ describe('updateLens handler', () => {
           payload: {
             spaceId: 'work',
             folderId: 'sf-1',
-            sources: [
-              {
-                source: 'gitlab',
-                baseUrl: 'https://gitlab.example.com',
-                queries: ['review-requested'],
-              },
-            ],
+            sources: [{ sourceId: 'gl-ex', queries: ['review-requested'] }],
             name: 'Review requests',
             maxItems: 20,
             refreshMinutes: 30,
@@ -340,14 +438,14 @@ describe('updateLens handler', () => {
     expect(fetchMock).toHaveBeenCalled(); // the immediate refetch
   });
 
-  test('review-lens: an updateLens omitting lensKind preserves the existing kind', async () => {
+  test('sources-redesign: updateLens re-derives review when a git source is added to a feed lens', async () => {
     const { coordinator, store } = makeWithSpace();
+    // Starts as a feed-only general lens.
     store.state.pinnedBySpace.work = [
       lensNode({
-        lensKind: 'review',
-        sources: [
-          { source: 'github', baseUrl: 'https://github.com', queries: ['review-requested'] },
-        ],
+        lensKind: 'general',
+        icon: 'rss',
+        sources: [{ sourceId: 'rss-news', queries: [] }],
       }),
     ];
 
@@ -358,13 +456,14 @@ describe('updateLens handler', () => {
           payload: {
             spaceId: 'work',
             folderId: 'sf-1',
+            // Add a github account → the kind must flip to 'review'.
             sources: [
-              { source: 'github', baseUrl: 'https://github.com', queries: ['review-requested'] },
+              { sourceId: 'rss-news', queries: [] },
+              { sourceId: 'gh', queries: ['authored'] },
             ],
-            name: 'Renamed',
+            name: 'Backend',
             maxItems: 20,
             refreshMinutes: 10,
-            // lensKind intentionally omitted — must preserve 'review'.
           },
         },
         'c1',
@@ -374,19 +473,42 @@ describe('updateLens handler', () => {
     expect((store.state.pinnedBySpace.work?.[0] as LensNode).lensKind).toBe('review');
   });
 
+  test('sources-redesign: updateLens re-derives general when the last git source is removed', async () => {
+    const { coordinator, store } = makeWithSpace();
+    store.state.pinnedBySpace.work = [
+      lensNode({ lensKind: 'review', sources: [{ sourceId: 'gh', queries: ['authored'] }] }),
+    ];
+
+    coordinator.enqueue(
+      sidebar(
+        {
+          kind: 'updateLens',
+          payload: {
+            spaceId: 'work',
+            folderId: 'sf-1',
+            sources: [{ sourceId: 'rss-news', queries: [] }],
+            name: 'News',
+            maxItems: 20,
+            refreshMinutes: 10,
+          },
+        },
+        'c1',
+      ),
+    );
+    await coordinator.idle();
+    expect((store.state.pinnedBySpace.work?.[0] as LensNode).lensKind).toBe('general');
+  });
+
   test('a source-only edit triggers the immediate refetch through the new connector', async () => {
     const { coordinator, store } = makeWithSpace();
     // A self-hosted URL (never the canonical default) so ONLY `source` changes;
     // a token for its host lets the github connector reach the network.
     store.state.pinnedBySpace.work = [
-      lensNode({
-        sources: [
-          { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['authored'] },
-        ],
-      }),
+      lensNode({ sources: [{ sourceId: 'gl-ex', queries: ['authored'] }] }),
     ];
+    // The token is keyed by the github account's sourceId now (connector-accounts).
     chromeStub.storage.local.get.mockResolvedValue({
-      'lunma.connectors': { 'gitlab.example.com': 'ghp-x' },
+      'lunma.connectors': { 'gh-ghe': 'ghp-x' },
     });
 
     coordinator.enqueue(
@@ -396,9 +518,8 @@ describe('updateLens handler', () => {
           payload: {
             spaceId: 'work',
             folderId: 'sf-1',
-            sources: [
-              { source: 'github', baseUrl: 'https://gitlab.example.com', queries: ['authored'] },
-            ],
+            // Repoint to a github account on the SAME host (gitlab.example.com).
+            sources: [{ sourceId: 'gh-ghe', queries: ['authored'] }],
             name: 'Review requests',
             maxItems: 20,
             refreshMinutes: 10,
@@ -409,7 +530,9 @@ describe('updateLens handler', () => {
     );
     await coordinator.idle();
 
-    expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({ sources: [{ source: 'github' }] });
+    expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({
+      sources: [{ sourceId: 'gh-ghe' }],
+    });
     // The refetch dispatched through the GitHub connector (the GHE API root).
     expect(fetchMock).toHaveBeenCalled();
     expect(fetchMock.mock.calls[0]?.[0]).toContain(
@@ -428,13 +551,7 @@ describe('updateLens handler', () => {
           payload: {
             spaceId: 'work',
             folderId: 'sf-1',
-            sources: [
-              {
-                source: 'gitlab',
-                baseUrl: 'https://gitlab.example.com',
-                queries: ['review-requested'],
-              },
-            ],
+            sources: [{ sourceId: 'gl-ex', queries: ['review-requested'] }],
             name: 'Renamed',
             maxItems: 20,
             refreshMinutes: 10,
@@ -458,7 +575,7 @@ describe('updateLens handler', () => {
           payload: {
             spaceId: 'work',
             folderId: 'nope',
-            sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored'] }],
+            sources: [{ sourceId: 'gl', queries: ['authored'] }],
             name: 'X',
             maxItems: 20,
             refreshMinutes: 10,
@@ -511,10 +628,7 @@ describe('refreshLens handler', () => {
   // The `authored` filter is a single list fetch (no me-resolution), so one
   // mocked fetch drives the section; its key carries the filter axis.
   const GL_AUTHORED = 'gitlab:gitlab.example.com:authored';
-  const authoredNode = () =>
-    lensNode({
-      sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['authored'] }],
-    });
+  const authoredNode = () => lensNode({ sources: [{ sourceId: 'gl-ex', queries: ['authored'] }] });
 
   test('acks ok BEFORE the fetch resolves; the outcome lands via the runtime slice', async () => {
     const { coordinator, store, emitAck } = makeWithSpace();
@@ -782,6 +896,49 @@ describe('openLensItem handler', () => {
     );
   });
 
+  test('a cold runtime (SW respawn) fetches the owning section on-demand, then opens', async () => {
+    const stub = installActivationChrome();
+    const { coordinator, store, emitAck } = makeWithSpace();
+    seedWindowInstance(store);
+    // An rss lens with a COLD runtime: `lenses` is ephemeral (stripped from
+    // persistence), so after the SW idles out + respawns the slice is empty.
+    store.state.pinnedBySpace.work = [
+      lensNode({ sources: [{ sourceId: 'rss-news', queries: [] }] }),
+    ];
+    // No `store.state.lenses['sf-1']` is seeded → the runtime is cold.
+    const xml = `<?xml version="1.0"?><rss version="2.0"><channel><title>News</title>
+      <item><title>A post</title><link>https://news.example.com/p/1</link><guid>p1</guid></item>
+      </channel></rss>`;
+    const buf = new TextEncoder().encode(xml).buffer;
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      arrayBuffer: async () => buf,
+    });
+
+    coordinator.enqueue(
+      sidebar(
+        {
+          kind: 'openLensItem',
+          payload: { spaceId: 'work', folderId: 'sf-1', itemId: `${FEED_SK}:p1`, windowId: 100 },
+        },
+        'c1',
+      ),
+    );
+    await coordinator.idle();
+
+    // The cold miss fetched the feed on-demand and opened the item (no reject).
+    expect(fetchMock).toHaveBeenCalled();
+    expect(stub.tabs.create).toHaveBeenCalledWith({
+      url: 'https://news.example.com/p/1',
+      windowId: 100,
+    });
+    expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'c1', result: 'ok' });
+    // The on-demand result is written back too, so the overview catches up.
+    expect(store.state.lenses['sf-1']?.sections[FEED_SK]?.state).toBe('ok');
+  });
+
   test('an unknown folderId rejects', async () => {
     installActivationChrome();
     const { coordinator, emitAck } = makeWithSpace();
@@ -942,7 +1099,7 @@ describe('feed read-state handlers', () => {
   function feedNode() {
     return lensNode({
       id: 'feed-1',
-      sources: [{ source: 'rss', baseUrl: 'https://news.example.com/rss', queries: [] }],
+      sources: [{ sourceId: 'rss-news', queries: [] }],
       icon: 'rss',
     });
   }
@@ -1212,7 +1369,8 @@ describe('openLensPage handler (smart-folder-page)', () => {
       windowId: 100,
     });
     expect(stub.tabs.group).toHaveBeenCalled(); // joined the Space's Chrome group
-    expect(stub.tabs.update).not.toHaveBeenCalled();
+    // Pinned non-discardable so Chrome's Memory Saver won't reload it on return.
+    expect(stub.tabs.update).toHaveBeenCalledWith(expect.any(Number), { autoDiscardable: false });
     expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'c1', result: 'ok' });
   });
 
@@ -1228,7 +1386,7 @@ describe('openLensPage handler (smart-folder-page)', () => {
     dispatchOpenPage(coordinator);
     await coordinator.idle();
 
-    expect(stub.tabs.update).toHaveBeenCalledWith(7, { active: true });
+    expect(stub.tabs.update).toHaveBeenCalledWith(7, { active: true, autoDiscardable: false });
     expect(stub.windows.update).toHaveBeenCalledWith(100, { focused: true });
     expect(stub.tabs.create).not.toHaveBeenCalled();
     expect(store.state.lensItemBindings).toEqual({}); // nothing persisted for the page tab
@@ -1249,7 +1407,7 @@ describe('openLensPage handler (smart-folder-page)', () => {
     dispatchOpenPage(coordinator);
     await coordinator.idle();
 
-    expect(stub.tabs.update).toHaveBeenCalledWith(8, { active: true });
+    expect(stub.tabs.update).toHaveBeenCalledWith(8, { active: true, autoDiscardable: false });
     expect(stub.tabs.create).not.toHaveBeenCalled();
   });
 
@@ -1271,7 +1429,8 @@ describe('openLensPage handler (smart-folder-page)', () => {
       url: `${PAGE_BASE}?folderId=sf-1`,
       windowId: 100,
     });
-    expect(stub.tabs.update).not.toHaveBeenCalled();
+    // Created fresh + pinned non-discardable; the other folder's page is not focused.
+    expect(stub.tabs.update).toHaveBeenCalledWith(expect.any(Number), { autoDiscardable: false });
   });
 
   test('a folder-page tab is NOT adopted into the Temporary list (managed view)', async () => {

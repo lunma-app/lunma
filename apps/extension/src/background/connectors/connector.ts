@@ -1,4 +1,9 @@
-import type { LensProvider, LensSectionRuntime, ResolvedLensSource } from '../../shared/types';
+import type {
+  AuthMethod,
+  LensProvider,
+  LensSectionRuntime,
+  ResolvedLensSource,
+} from '../../shared/types';
 
 /**
  * The connector contract (github-connector, design D1) — a fetch-contract, not
@@ -36,6 +41,15 @@ export type ConnectorCaches = Map<string, Promise<unknown>>;
 /** One smart-folder connector source. */
 export interface SourceConnector {
   readonly source: LensProvider;
+  /**
+   * The auth methods this provider supports (connector-accounts, design D3), in
+   * no particular order — the EFFECTIVE method for an account is derived by
+   * `deriveAuthMethod` (token wins over session). `github: ['pat']`,
+   * `gitlab: ['session', 'pat']`, `jira: ['session']`, `rss: []` (public). Drives
+   * the session-default-vs-token-required behaviour in the connectors and the
+   * surfaces (the inline connect affordance is method-aware).
+   */
+  readonly authMethods: AuthMethod[];
   /** The editor's per-source base-URL seed (empty for `rss` — a feed has no
    * canonical host; the user pastes the feed URL). */
   readonly defaultBaseUrl: string;

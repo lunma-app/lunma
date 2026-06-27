@@ -84,6 +84,9 @@ export type PendingEvent =
   | SidebarVariant<'createLens'>
   | SidebarVariant<'updateLens'>
   | SidebarVariant<'deleteLens'>
+  | SidebarVariant<'createAccount'>
+  | SidebarVariant<'renameAccount'>
+  | SidebarVariant<'deleteAccount'>
   | SidebarVariant<'refreshLens'>
   | SidebarVariant<'openLensItem'>
   | SidebarVariant<'markLensItemRead'>

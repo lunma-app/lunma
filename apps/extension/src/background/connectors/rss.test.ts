@@ -51,6 +51,7 @@ function node(overrides: Partial<ResolvedLensSource> = {}): ResolvedLensSource {
     source: 'rss',
     baseUrl: 'https://news.example.com/rss',
     lensKind: 'general',
+    sourceId: 'acc-rss',
     ...overrides,
   };
 }
@@ -240,6 +241,57 @@ describe('parseFeed rich content', () => {
   });
 });
 
+// ── parseFeed: genre (Lens Overview, article category) ───────────────────────────
+
+describe('parseFeed genre', () => {
+  test('RSS 2.0: <category> text body → genre (decoded)', () => {
+    const xml = `<?xml version="1.0"?>
+      <rss version="2.0"><channel><item>
+        <title>Hello</title>
+        <link>https://news.example.com/a</link>
+        <category>Tech &amp; Science</category>
+      </item></channel></rss>`;
+    const { items } = parseFeed(xml);
+    expect(items[0]?.genre).toBe('Tech & Science');
+  });
+
+  test('Atom: <category term="..."/> → genre (decoded)', () => {
+    const xml = `<?xml version="1.0"?>
+      <feed xmlns="http://www.w3.org/2005/Atom"><entry>
+        <title>Atom post</title>
+        <link rel="alternate" href="https://news.example.com/e" />
+        <id>urn:e</id>
+        <category term="Sport &amp; Leisure" />
+      </entry></feed>`;
+    const { items } = parseFeed(xml);
+    expect(items[0]?.genre).toBe('Sport & Leisure');
+  });
+
+  test('no <category> → genre absent (never faked)', () => {
+    const { items } = parseFeed(
+      `<rss><channel><item><title>x</title><link>https://news.example.com/f</link></item></channel></rss>`,
+    );
+    expect(items[0]?.genre).toBeUndefined();
+    expect(items[0]).not.toHaveProperty('genre');
+  });
+
+  test('multiple categories → the first wins (RSS and Atom)', () => {
+    const rss = parseFeed(`<rss version="2.0"><channel><item>
+      <link>https://news.example.com/g</link>
+      <category>Primary</category>
+      <category>Secondary</category>
+    </item></channel></rss>`);
+    expect(rss.items[0]?.genre).toBe('Primary');
+
+    const atom = parseFeed(`<feed xmlns="http://www.w3.org/2005/Atom"><entry>
+      <link rel="alternate" href="https://news.example.com/h" />
+      <category term="First" />
+      <category term="Second" />
+    </entry></feed>`);
+    expect(atom.items[0]?.genre).toBe('First');
+  });
+});
+
 // ── fetchRuntime ─────────────────────────────────────────────────────────────────
 
 describe('fetchRuntime', () => {
@@ -366,7 +418,12 @@ describe('requiredOrigins', () => {
         source: 'rss',
         baseUrl: 'https://blog.example.com/feed.xml',
         lensKind: 'general',
+        sourceId: 'acc-rss',
       }),
     ).toEqual(['https://blog.example.com/*']);
+  });
+
+  test('declares no authMethods (public)', () => {
+    expect(rssConnector.authMethods).toEqual([]);
   });
 });
