@@ -1,11 +1,15 @@
 <script lang="ts">
+import { hostLabel, tokenHelpUrl, tokenRequirement } from '../shared/account-ui';
+import { PROVIDER_AUTH_METHODS } from '../shared/auth-method';
 import { dispatch } from '../shared/bus';
 import { requiredOriginsForConfig } from '../shared/connector-origins';
+import { setAccountToken } from '../shared/connectors';
 import { requestHostPermissions } from '../shared/permissions';
 import type {
   AppState,
   LensItem,
   LensSectionRuntime,
+  LensSourceRef,
   PinNode,
   ResolvedLensSource,
   SidebarLocalState,
@@ -13,23 +17,23 @@ import type {
   TabId,
   WindowId,
 } from '../shared/types';
+import AccountConnectField from '../ui/AccountConnectField.svelte';
+import BitsContextMenu from '../ui/BitsContextMenu.svelte';
+import BottomSheet from '../ui/BottomSheet.svelte';
 import Button from '../ui/Button.svelte';
-import ContextMenu from '../ui/ContextMenu.svelte';
 import Favicon from '../ui/Favicon.svelte';
-import FolderRow from '../ui/FolderRow.svelte';
 import { faviconFor } from '../ui/favicon';
 import Icon from '../ui/Icon.svelte';
 import IconButton from '../ui/IconButton.svelte';
+import LensRow from '../ui/LensRow.svelte';
 import type { MenuItem } from '../ui/menu-types';
-import type { RowMenuItem } from '../ui/RowMenu.svelte';
 import Tooltip from '../ui/Tooltip.svelte';
 import LensEditor from './LensEditor.svelte';
 import LensSectionHeader from './LensSectionHeader.svelte';
-import { openOptionsAt } from './open-options';
 import { useStore } from './store-context.svelte';
 
 /**
- * A smart folder in the pinned tree: the same folder-row chrome (`ui/FolderRow`)
+ * A smart folder in the pinned tree: the lens-header row chrome (`ui/LensRow`)
  * with live connector results as children, rendered in per-RESOLVED-SECTION
  * blocks. Each `sources[]` instance expands over its `queries[]` into one
  * section per filter (one section for an rss feed); when the folder has ≥2
@@ -65,6 +69,10 @@ const {
 
 const store = useStore();
 
+// This lens's overview is the active "peek" tab in this window (lens-overview-peek)
+// → drives the lens row's active treatment. Delivered via the broadcast AppState.
+const isActivePeek = $derived(store.state.lensPeekByWindow[windowId]?.folderId === node.id);
+
 const spaceColor = $derived(store.state.spaces.find((s) => s.id === spaceId)?.color ?? 'gray');
 
 // Per-filter section identity key — same formula as background/smart-folders.ts
@@ -99,36 +107,44 @@ function sectionHidesRead(sk: string): boolean {
   return node.hideRead && !isSectionReadRevealed(node.id, sk);
 }
 
-// Expand the per-instance sources[] over each instance's queries[] into per-
-// filter resolved sections (one section, no query, for an rss feed). The single
-// derivation the render, badge, and identity all key on (sources × queries order).
+// Resolve each account REFERENCE (connector-accounts) against `AppState.sources`
+// and expand it over its `queries[]` into per-filter resolved sections (one
+// section, no query, for an rss feed). The account supplies `source`/`baseUrl`/
+// `name`/`sourceId`. A reference whose account was disconnected (dangling) is
+// dropped here and surfaced via `danglingRefs` as a calm "account removed" row.
+// The single derivation the render, badge, and identity all key on.
+const accounts = $derived(store.state.sources);
 const sections = $derived.by<ResolvedLensSource[]>(() => {
   const out: ResolvedLensSource[] = [];
-  for (const cfg of node.sources) {
-    if (cfg.queries.length === 0) {
-      out.push({
-        source: cfg.source,
-        baseUrl: cfg.baseUrl,
-        name: cfg.name,
-        lensKind: node.lensKind,
-      });
+  for (const ref of node.sources) {
+    const account = accounts[ref.sourceId];
+    if (!account) continue;
+    const base = {
+      source: account.provider,
+      baseUrl: account.baseUrl,
+      name: account.name,
+      sourceId: account.id,
+      lensKind: node.lensKind,
+    };
+    if (ref.queries.length === 0) {
+      out.push({ ...base });
     } else {
-      for (const query of cfg.queries) {
-        out.push({
-          source: cfg.source,
-          baseUrl: cfg.baseUrl,
-          query,
-          name: cfg.name,
-          lensKind: node.lensKind,
-        });
+      for (const query of ref.queries) {
+        out.push({ ...base, query });
       }
     }
   }
   return out;
 });
 
-// Whether any source is a feed — gates the feed-only menu items and controls.
-const hasFeedSections = $derived(node.sources.some((cfg) => cfg.source === 'rss'));
+// References whose account is gone (disconnected) — rendered as a calm removed
+// row (design D9), never a crash.
+const danglingRefs = $derived<LensSourceRef[]>(
+  node.sources.filter((ref) => accounts[ref.sourceId] === undefined),
+);
+
+// Whether any resolved section is a feed — gates the feed-only menu items.
+const hasFeedSections = $derived(sections.some((cfg) => cfg.source === 'rss'));
 
 /** Read items for the whole folder (feed sections only). */
 const readSet = $derived(new Set(store.state.lensReadState[node.id] ?? []));
@@ -198,6 +214,16 @@ function isActiveItem(cfg: ResolvedLensSource, item: LensItem): boolean {
 function closeBoundTab(cfg: ResolvedLensSource, item: LensItem): void {
   const tabId = boundTabIdFor(cfg, item);
   if (tabId !== undefined) dispatch({ kind: 'closeTab', payload: { tabId } });
+}
+
+// Dismiss an (unopened) feed item: mark it read so it drains out of the unread
+// list — the read-it-later gesture. `itemId` is the namespaced `sourceKey:nativeId`
+// the read-state slice keys on (same shape openLensItem marks read SW-side).
+function dismissFeedItem(cfg: ResolvedLensSource, item: LensItem): void {
+  dispatch({
+    kind: 'markLensItemRead',
+    payload: { folderId: node.id, itemId: `${sourceKey(cfg)}:${item.id}` },
+  });
 }
 
 /** Live items + held items during reloads + binding-held rows per section. */
@@ -334,8 +360,37 @@ function deleteFolder(): void {
   dispatch({ kind: 'deleteLens', payload: { spaceId, folderId: node.id } });
 }
 
-function openConnectorsSettings(): void {
-  void openOptionsAt('#connectors');
+// Whether a provider can ride the browser session (gitlab/jira) — drives the
+// method-aware signed-out lane (sign-in row vs inline token reconnect).
+function isSessionCapable(cfg: ResolvedLensSource): boolean {
+  return PROVIDER_AUTH_METHODS[cfg.source].includes('session');
+}
+
+// Sections where the user opened the optional "add a token" reveal on a
+// session-capable signed-out lane, keyed by sourceKey.
+let tokenRevealOpen = $state<Record<string, boolean>>({});
+// Sections where a reconnect was attempted but the next fetch still came back
+// signed-out (a bad token) — keyed by sourceKey; drives the bad-token error.
+let reconnectAttempted = $state<Record<string, boolean>>({});
+
+// Clear the bad-token flag for any section that has healed to `ok`.
+$effect(() => {
+  for (const [sk, sec] of Object.entries(folderRuntime?.sections ?? {})) {
+    if (sec.state === 'ok' && reconnectAttempted[sk]) {
+      const next = { ...reconnectAttempted };
+      delete next[sk];
+      reconnectAttempted = next;
+    }
+  }
+});
+
+/** Write a per-source token inline (connector-accounts) and refetch the section
+ * without navigating to Options. */
+function reconnect(cfg: ResolvedLensSource, token: string): void {
+  reconnectAttempted = { ...reconnectAttempted, [sourceKey(cfg)]: true };
+  void setAccountToken(cfg.sourceId, token).then(() =>
+    dispatch({ kind: 'refreshLens', payload: { spaceId, folderId: node.id } }),
+  );
 }
 
 function itemAria(cfg: ResolvedLensSource, item: LensItem, read: boolean): string {
@@ -343,28 +398,27 @@ function itemAria(cfg: ResolvedLensSource, item: LensItem, read: boolean): strin
   return item.status ? `${item.title} — ${item.status.label}` : item.title;
 }
 
-let editing = $state(false);
-let kebabMenuOpen = $state(false);
+// The "Edit lens" editor now lives in a `BottomSheet` (the per-consumer drill-in
+// boundary): the kebab/right-click "Edit…" item opens the sheet, which renders
+// the existing `LensEditor` unchanged. Sheet open/close is owned here; the
+// editor's `onDone` (Save/Create or Cancel) closes the sheet and the kebab.
+let sheetOpen = $state(false);
 
 function onEditorDone(): void {
-  editing = false;
-  kebabMenuOpen = false;
-  menuOpen = false;
+  sheetOpen = false;
 }
 
 let confirmingDelete = $state(false);
 
-const menuItems = $derived<RowMenuItem[] & MenuItem[]>([
+const menuItems = $derived<MenuItem[]>([
   { id: 'refresh', label: 'Refresh now', icon: 'rotate-cw', onSelect: refreshNow },
   {
     id: 'edit',
     label: 'Edit…',
     icon: 'pencil',
-    keepOpen: true,
-    submenu: true,
     onSelect: () => {
       confirmingDelete = false;
-      editing = true;
+      sheetOpen = true;
     },
   },
   { id: 'open-page', label: 'Open as page', icon: 'external-link', onSelect: openPage },
@@ -403,50 +457,57 @@ const menuItems = $derived<RowMenuItem[] & MenuItem[]>([
       },
 ]);
 
-let menuOpen = $state(false);
-let menuX = $state(0);
-let menuY = $state(0);
-let menuAnchorEl = $state<HTMLElement | undefined>(undefined);
+// A pending two-step Delete is disarmed when the right-click menu closes, via
+// `BitsContextMenu`'s `onOpenChange` below (the lens row carries no kebab).
 
-$effect(() => {
-  if (!kebabMenuOpen && !menuOpen) confirmingDelete = false;
-});
-
-export function onContextMenu(e: MouseEvent): void {
-  e.preventDefault();
-  menuX = e.clientX;
-  menuY = e.clientY;
-  menuAnchorEl = e.currentTarget as HTMLElement;
-  editing = false;
-  menuOpen = true;
+/**
+ * Retained for the host (PinnedTabs forwards the lens row's `contextmenu`, and the
+ * test harness binds it) so its forwarding wiring keeps type-checking. The
+ * right-click menu is now owned by `BitsContextMenu` wrapping the folder row
+ * below — bits-ui captures the `contextmenu` on the row itself, anchors at the
+ * cursor, and handles keyboard invocation (menu key / Shift+F10) + dismissal — so
+ * this no longer opens anything itself.
+ */
+export function onContextMenu(_e: MouseEvent): void {
+  // Intentionally empty: bits-ui's `ContextMenu.Trigger` (below) owns the
+  // right-click. This kept-for-compat export is a no-op.
 }
 </script>
 
-<FolderRow
-  name={node.name}
-  icon={node.icon}
-  color={spaceColor}
-  {expanded}
-  {onToggle}
-  onOpenPage={openPage}
-  openPageLabel={`Open ${node.name} as a page`}
-  label={badge === undefined
-    ? node.name
-    : `${node.name}, ${badge} ${hasFeedSections ? 'unread' : 'items'}`}
-  {badge}
-  {busy}
-  {menuItems}
-  panel={editing ? editorPanel : undefined}
-  panelTitle={editing ? 'Edit lens' : undefined}
-  onPanelBack={() => {
-    editing = false;
+<!-- Right-click is owned by bits-ui: the trigger props spread onto a wrapper that
+     contains the whole folder row. It sits INSIDE Lens, nested under the
+     `.row-wrap` PinnedTabs measures for the unit drag — so bits-ui adds only its
+     `contextmenu`/ARIA handlers and never disturbs that measured element's
+     identity. `onOpenChange` resets a pending Delete confirm when the menu closes
+     (the legacy `onclose` behaviour). -->
+<BitsContextMenu
+  items={menuItems}
+  label="Smart folder actions"
+  testid="smart-folder-menu"
+  onOpenChange={(open) => {
+    if (!open) confirmingDelete = false;
   }}
-  bind:menuOpen={kebabMenuOpen}
-/>
-
-{#snippet editorPanel()}
-  <LensEditor {spaceId} {node} onDone={onEditorDone} />
-{/snippet}
+>
+  {#snippet children(menuProps)}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div {...menuProps} class="lens-row-context">
+      <LensRow
+        name={node.name}
+        icon={node.icon}
+        color={spaceColor}
+        active={isActivePeek}
+        {expanded}
+        {onToggle}
+        onOpenPage={openPage}
+        openPageLabel={badge === undefined
+          ? `Open ${node.name}`
+          : `Open ${node.name}, ${badge} ${hasFeedSections ? 'unread' : 'items'}`}
+        {badge}
+        {busy}
+      />
+    </div>
+  {/snippet}
+</BitsContextMenu>
 
 {#if expanded}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -493,17 +554,10 @@ export function onContextMenu(e: MouseEvent): void {
         <div class="ghost" data-testid="smart-ghost-row" aria-hidden="true"></div>
         <div class="ghost" data-testid="smart-ghost-row" aria-hidden="true"></div>
       {:else if secState === 'signed-out'}
-        {#if cfg.source === 'github'}
-          <button
-            type="button"
-            class="signin-row"
-            data-testid="smart-signin-row"
-            onclick={openConnectorsSettings}
-          >
-            Add a token in Settings → Connectors
-          </button>
-        {:else}
-          {@const secHost = (() => { try { return new URL(cfg.baseUrl).host; } catch { return cfg.baseUrl; } })()}
+        {@const secHost = hostLabel(cfg.baseUrl)}
+        {#if isSessionCapable(cfg)}
+          <!-- Session-capable (gitlab/jira): the next poll heals after sign-in;
+               offer an optional inline "add a token" upgrade. -->
           <button
             type="button"
             class="signin-row"
@@ -512,6 +566,44 @@ export function onContextMenu(e: MouseEvent): void {
           >
             Sign in to {secHost}
           </button>
+          {#if tokenRevealOpen[sourceKey(cfg)]}
+            <div class="reconnect-field" data-testid="smart-reconnect-field">
+              <AccountConnectField
+                host={secHost}
+                requirement="optional"
+                hasToken={false}
+                helpUrl={tokenHelpUrl(cfg.source, cfg.baseUrl)}
+                onConnect={(t) => reconnect(cfg, t)}
+              />
+            </div>
+          {:else}
+            <Button
+              variant="ghost"
+              size="sm"
+              testid="smart-add-token-toggle"
+              onclick={() => {
+                tokenRevealOpen = { ...tokenRevealOpen, [sourceKey(cfg)]: true };
+              }}
+            >
+              Add a token
+            </Button>
+          {/if}
+        {:else}
+          <!-- pat-only (github) or a bad token: inline reconnect that writes the
+               per-source token and refetches — no navigation to Options. -->
+          <div class="reconnect-field" data-testid="smart-reconnect-field">
+            <p class="reconnect-copy">Reconnect {secHost}</p>
+            <AccountConnectField
+              host={secHost}
+              requirement={tokenRequirement(cfg.source) === 'optional' ? 'optional' : 'required'}
+              hasToken={false}
+              helpUrl={tokenHelpUrl(cfg.source, cfg.baseUrl)}
+              error={reconnectAttempted[sourceKey(cfg)]
+                ? "That token didn't work — check it can read pull requests."
+                : undefined}
+              onConnect={(t) => reconnect(cfg, t)}
+            />
+          </div>
         {/if}
       {:else if secState === 'needs-access'}
         {@const secHost = (() => { try { return new URL(cfg.baseUrl).host; } catch { return cfg.baseUrl; } })()}
@@ -531,16 +623,17 @@ export function onContextMenu(e: MouseEvent): void {
             : faviconFor(cfg.baseUrl)}
 
           {#snippet closeSlot()}
-            {#if bound}
+            {#if bound || isSectionFeed}
+              {@const dismiss = bound ? 'Close tab' : 'Mark read'}
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <span class="close-slot" onpointerdown={(e) => e.stopPropagation()}>
                 <IconButton
                   icon="x"
-                  ariaLabel="Close tab"
-                  title="Close tab"
+                  ariaLabel={dismiss}
+                  title={dismiss}
                   size={14}
                   testid="smart-close"
-                  onclick={() => closeBoundTab(cfg, item)}
+                  onclick={() => (bound ? closeBoundTab(cfg, item) : dismissFeedItem(cfg, item))}
                 />
               </span>
             {/if}
@@ -571,8 +664,8 @@ export function onContextMenu(e: MouseEvent): void {
                     aria-label={itemAria(cfg, item, false)}
                     onclick={() => openItem(cfg, item)}
                   >
-                    <span class="result-favicon" aria-hidden="true">
-                      <Favicon src={itemFavSrc} size={16} />
+                    <span class="result-favicon" data-tone={status.tone} aria-hidden="true">
+                      <Favicon src={itemFavSrc} size={14} />
                     </span>
                     <span class="result-title">{item.title}</span>
                     <span class="dot {status.tone}" data-testid="smart-status-dot"></span>
@@ -594,12 +687,9 @@ export function onContextMenu(e: MouseEvent): void {
                 onclick={() => openItem(cfg, item)}
               >
                 <span class="result-favicon" aria-hidden="true">
-                  <Favicon src={faviconFor(cfg.baseUrl)} size={16} />
+                  <Favicon src={itemFavSrc} size={14} />
                 </span>
                 <span class="result-title">{item.title}</span>
-                {#if isSectionFeed}
-                  <span class="dot unread" class:cleared={read} data-testid="smart-unread-dot"></span>
-                {/if}
               </button>
             {/if}
             {@render closeSlot()}
@@ -644,33 +734,51 @@ export function onContextMenu(e: MouseEvent): void {
       </div>
       {/if}
     {/each}
+
+    {#each danglingRefs as ref (ref.sourceId)}
+      <div class="removed-row" data-testid="smart-account-removed">
+        <Icon name="unplug" size={16} />
+        <span class="removed-copy">Account removed — reconnect or pick another</span>
+      </div>
+    {/each}
   </div>
 {/if}
 
-<ContextMenu
-  bind:open={menuOpen}
-  x={menuX}
-  y={menuY}
-  anchorEl={menuAnchorEl}
-  items={menuItems}
-  label="Smart folder actions"
-  testid="smart-folder-menu"
-  panel={editing ? editorPanel : undefined}
-  panelTitle={editing ? 'Edit lens' : undefined}
-  onPanelBack={() => {
-    editing = false;
+<!-- The "Edit sources…"/LensEditor drill-in is an EDITOR, not a menu: it opens in
+     a `BottomSheet` scoped to the sidebar panel. The existing `LensEditor` is
+     rendered unchanged inside; its `onDone` (Save/Create or Cancel) closes the
+     sheet (and the kebab). The sheet's own scrim/✕/Esc dismissal routes through
+     `onClose`. -->
+<BottomSheet
+  open={sheetOpen}
+  portalTo=".sidebar"
+  title="Edit lens"
+  onClose={() => {
+    sheetOpen = false;
   }}
-  onclose={() => {
-    editing = false;
-    confirmingDelete = false;
-  }}
-/>
+>
+  {#snippet children()}
+    <LensEditor {spaceId} {windowId} {node} onDone={onEditorDone} />
+  {/snippet}
+</BottomSheet>
 
 <style>
+  /* The bits-ui right-click trigger wrapper. `display: contents` makes it
+   * layout-transparent — it generates no box, so the folder row keeps its exact
+   * geometry and PinnedTabs' measured `.row-wrap` (the parent, used for the unit
+   * drag) is unaffected — while still carrying bits-ui's `contextmenu`/ARIA
+   * handlers, which fire for events bubbling up from the row inside it. */
+  .lens-row-context {
+    display: contents;
+  }
+
+  /* The expand body. The comp insets result rows with their own left padding
+   * (`padding-left: 20px`) rather than indenting the container, so the wrapper
+   * stays full-width and the drag geometry reads clean row rects. */
   .children {
-    padding-left: var(--space-3);
     display: flex;
     flex-direction: column;
+    padding: var(--space-1) 0 var(--space-2);
     animation: smart-open var(--motion-base) var(--ease-emphasised);
   }
 
@@ -690,29 +798,38 @@ export function onContextMenu(e: MouseEvent): void {
     margin: 0 0 var(--row-gap);
   }
 
+  /* Result row (comp §5b/5c result rows). The leading 24px state-coloured tile
+   * carries the source disc; the title leads; a hover-revealed dismiss + the
+   * status/unread dot sit in the trailing slot. The left inset (`--space-5`)
+   * lines the tiles up under the lens header's 26px icon tile. Height stays on
+   * `--row-h` so the drag controller reads consistent row rects. */
   .result-row {
     appearance: none;
     border: 0;
     margin: 0;
     width: 100%;
     box-sizing: border-box;
-    height: var(--row-h);
-    padding: 0 var(--space-2) 0 var(--space-3);
+    min-height: var(--row-h);
+    /* Right inset --space-3 (12px) so the trailing unread/status dot right-aligns
+       with the kebab GLYPHS on the headers above (kebab button at 8px row-pad,
+       icon inset ~4px → glyph at ~12px). Keeps the whole trailing column plumb. */
+    padding: var(--space-1) var(--space-3) var(--space-1) var(--space-5);
     display: flex;
     align-items: center;
     gap: var(--space-2);
     background: transparent;
-    color: var(--text-2);
-    border-radius: var(--r-md);
+    color: var(--text);
+    border-radius: var(--r-lg);
     cursor: pointer;
     text-align: left;
     animation: smart-item-in var(--motion-fast) var(--ease-standard);
     transition:
       background var(--motion-fast) var(--ease-standard),
+      box-shadow var(--motion-fast) var(--ease-standard),
       transform var(--motion-fast) var(--ease-standard);
   }
   .result-row:hover {
-    background: var(--surface-2);
+    background: var(--hover);
   }
   .result-row:active {
     transform: scale(var(--press-scale));
@@ -722,50 +839,82 @@ export function onContextMenu(e: MouseEvent): void {
     outline-offset: var(--focus-offset);
   }
 
+  /* Active = the Space-soft wash + a Space-line inset ring (comp ACTIVE_STYLE:
+   * `background:var(--space-soft);box-shadow:inset 0 0 0 1px var(--space-line)`). */
   .result-row.active {
     background: var(--space-c-soft);
+    box-shadow: inset 0 0 0 1px var(--space-c-dim);
     color: var(--text);
   }
   .result-row.active .result-title {
     font-weight: var(--weight-semibold);
   }
 
+  /* Hover-revealed dismiss in the trailing slot (comp `.sb-kebab`: invisible at
+   * rest, revealed on row hover / focus-within). Sits over the dot's slot. */
   .close-slot {
     position: absolute;
     top: 50%;
-    right: calc(var(--space-2) + 4px);
-    translate: 50% -50%;
+    /* Centre the (--icon-btn-wide) dismiss button's glyph on the status dot's
+       CENTRE — the dot sits at --space-3 + half-dot (4px) from the right; offsetting
+       by half the button width lands the X exactly over it, so hover swaps dot → X
+       in place. */
+    right: calc(var(--space-3) + 4px - var(--icon-btn) / 2);
+    translate: 0 -50%;
     display: inline-flex;
     opacity: 0;
     pointer-events: none;
     transition: opacity var(--motion-fast) var(--ease-standard);
   }
   .row-wrap:hover .close-slot,
-  .close-slot:focus-within {
+  .close-slot:focus-within,
+  /* A SELECTED (active) row keeps its close button persistently visible —
+     selecting a tab must never hide the close (otherwise it takes a hover to
+     dismiss the open item). */
+  .row-wrap:has(.result-row.active) .close-slot {
     opacity: 1;
     pointer-events: auto;
   }
   .row-wrap.bound:hover .dot,
-  .row-wrap.bound:has(.close-slot:focus-within) .dot {
+  .row-wrap.bound:has(.close-slot:focus-within) .dot,
+  /* Hide the status/unread dot under the persistently-shown close on an active row. */
+  .row-wrap:has(.result-row.active) .dot {
     opacity: 0;
   }
 
+  /* State-coloured leading tile (comp §5b: 24px rounded tile, `background:iconBg;
+   * color:iconColor` per STATE). The source disc sits inside; the tone of the
+   * tint comes from `data-tone` (status rows) and defaults to the neutral
+   * `--surface-2` wash (feed rows + the no-pipeline / draft case). */
   .result-favicon {
     flex-shrink: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: var(--favicon-size);
-    height: var(--favicon-size);
+    width: 24px;
+    height: 24px;
+    border-radius: var(--r-sm);
+    background: var(--surface-2);
     color: var(--text-muted);
-    /* Recessed at rest so the title leads, not the bright source disc; full
-     * strength on hover / when active. */
-    opacity: 0.8;
-    transition: opacity var(--motion-fast) var(--ease-standard);
+    transition:
+      background var(--motion-fast) var(--ease-standard),
+      opacity var(--motion-fast) var(--ease-standard);
   }
-  .row-wrap:hover .result-favicon,
-  .result-row.active .result-favicon {
-    opacity: 1;
+  .result-favicon[data-tone='ok'] {
+    background: color-mix(in oklch, var(--success) 16%, transparent);
+    color: var(--success);
+  }
+  .result-favicon[data-tone='fail'] {
+    background: color-mix(in oklch, var(--danger) 16%, transparent);
+    color: var(--danger);
+  }
+  .result-favicon[data-tone='warn'] {
+    background: color-mix(in oklch, var(--warning) 16%, transparent);
+    color: var(--warning);
+  }
+  .result-favicon[data-tone='pending'] {
+    background: color-mix(in oklch, var(--info) 16%, transparent);
+    color: var(--info);
   }
 
   .result-title {
@@ -774,7 +923,8 @@ export function onContextMenu(e: MouseEvent): void {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
-    font: var(--weight-regular) var(--text-sm) / 1 var(--font-sans);
+    font: var(--weight-regular) var(--text-sm) / 1.3 var(--font-sans);
+    color: var(--text);
   }
 
   .dot {
@@ -797,14 +947,13 @@ export function onContextMenu(e: MouseEvent): void {
     background: var(--info);
   }
 
-  .dot.unread {
-    background: var(--space-c);
-    transition: opacity var(--motion-base) var(--ease-standard);
+  /* Feed rows have no trailing dot (read/unread is carried by title weight + colour
+     + favicon dimming — a status dot would be redundant on a feed). Reserve the
+     trailing slot anyway so the hover-revealed dismiss never overlaps the title;
+     status rows reserve it via their in-flow dot. */
+  .result-row.feed {
+    padding-right: calc(var(--space-3) + 16px);
   }
-  .dot.unread.cleared {
-    opacity: 0;
-  }
-
   .result-row.feed .result-title {
     transition:
       color var(--motion-base) var(--ease-standard),
@@ -844,7 +993,7 @@ export function onContextMenu(e: MouseEvent): void {
     display: flex;
     align-items: center;
     gap: var(--space-1);
-    padding: var(--space-1) var(--space-1) 0;
+    padding: var(--space-1) var(--space-2) 0 var(--space-5);
     margin-top: var(--space-1);
   }
   .controls-spacer {
@@ -854,7 +1003,7 @@ export function onContextMenu(e: MouseEvent): void {
   .ghost {
     height: var(--row-h);
     margin-bottom: var(--row-gap);
-    border-radius: var(--r-md);
+    border-radius: var(--r-lg);
     background: color-mix(in oklch, var(--surface) 55%, transparent);
   }
 
@@ -864,22 +1013,22 @@ export function onContextMenu(e: MouseEvent): void {
     margin: 0 0 var(--row-gap);
     width: 100%;
     box-sizing: border-box;
-    height: var(--row-h);
-    padding: 0 var(--space-2) 0 var(--space-3);
+    min-height: var(--row-h);
+    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-5);
     display: flex;
     align-items: center;
     background: transparent;
     color: var(--text-muted);
-    border-radius: var(--r-md);
+    border-radius: var(--r-lg);
     cursor: pointer;
     text-align: left;
-    font: var(--weight-regular) var(--text-sm) / 1 var(--font-sans);
+    font: var(--weight-regular) var(--text-sm) / 1.3 var(--font-sans);
     transition:
       background var(--motion-fast) var(--ease-standard),
       color var(--motion-fast) var(--ease-standard);
   }
   .signin-row:hover {
-    background: var(--surface-2);
+    background: var(--hover);
     color: var(--text);
   }
   .signin-row:focus-visible {
@@ -892,7 +1041,7 @@ export function onContextMenu(e: MouseEvent): void {
     align-items: center;
     gap: var(--space-2);
     margin: 0 0 var(--row-gap);
-    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-5);
     color: var(--text-muted);
   }
   .needs-access-copy {
@@ -902,10 +1051,45 @@ export function onContextMenu(e: MouseEvent): void {
     font: var(--weight-regular) var(--text-sm) / 1.3 var(--font-sans);
   }
 
+  /* Inline reconnect (connector-accounts) — the per-section token field that
+   * heals a signed-out lane without leaving the sidebar. */
+  .reconnect-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: 0 0 var(--row-gap);
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-5);
+  }
+  .reconnect-copy {
+    margin: 0;
+    color: var(--text-muted);
+    font: var(--weight-medium) var(--text-sm) / 1.2 var(--font-sans);
+  }
+
+  /* Dangling reference (design D9) — a calm "account removed" row, never an error
+   * card. */
+  .removed-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0 0 var(--row-gap);
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-5);
+    color: var(--text-muted);
+  }
+  .removed-copy {
+    flex: 1;
+    min-width: 0;
+    color: var(--text-muted);
+    font: var(--weight-regular) var(--text-sm) / 1.3 var(--font-sans);
+  }
+
+  /* Empty/error note (comp §5b: `padding:2px 10px 6px 20px;font-size:12px;
+   * color:var(--text-faint);font-style:italic`). */
   .note-row {
-    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
+    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-5);
     color: var(--text-faint);
-    font: var(--weight-regular) var(--text-xs) / 1.2 var(--font-sans);
+    font: var(--weight-regular) var(--text-sm) / 1.3 var(--font-sans);
+    font-style: italic;
   }
 
   @keyframes smart-open {
@@ -934,7 +1118,6 @@ export function onContextMenu(e: MouseEvent): void {
     .result-row {
       animation: none;
     }
-    .dot.unread,
     .row-wrap.feed,
     .result-row.feed .result-title,
     .result-favicon {

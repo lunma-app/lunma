@@ -1,4 +1,4 @@
-import { fireEvent, render } from '@testing-library/svelte';
+import { fireEvent, render, waitFor } from '@testing-library/svelte';
 import { flushSync } from 'svelte';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { LunmaStore } from '../shared/store.svelte';
@@ -176,14 +176,21 @@ describe('TempTabs', () => {
     expect(sendMock).toHaveBeenCalledWith({ kind: 'focusTab', payload: { tabId: 17 } });
   });
 
-  /** Right-click a temp row's wrapper to open the action menu (suppressing the
-   * native menu); returns the menu's action items. */
+  /** Right-click a temp row's wrapper to open its bits-ui ContextMenu. The popover
+   * is portaled to <body> and opens ASYNC, so wait for the items to mount before
+   * returning them. */
   async function openRowMenu(container: HTMLElement, rowIndex = 0): Promise<HTMLButtonElement[]> {
-    const wrap = container.querySelectorAll('.row-wrap')[rowIndex] as HTMLElement;
-    wrap.dispatchEvent(
-      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 12, clientY: 18 }),
+    // The bits-ui trigger lives on the row's inner `.menu-trigger` (a
+    // `display:contents` wrapper); a real right-click originates on the row content
+    // and bubbles to it, so fire the contextmenu there.
+    const trigger = container.querySelectorAll('.menu-trigger')[rowIndex] as HTMLElement;
+    await fireEvent(
+      trigger,
+      new MouseEvent('contextmenu', { button: 2, clientX: 12, clientY: 18, bubbles: true }),
     );
-    await Promise.resolve();
+    await waitFor(() =>
+      expect(document.querySelectorAll('[data-testid="temp-menu-item"]').length).toBeGreaterThan(0),
+    );
     return Array.from(
       document.querySelectorAll('[data-testid="temp-menu-item"]'),
     ) as HTMLButtonElement[];
@@ -203,26 +210,34 @@ describe('TempTabs', () => {
     expect(sendMock).not.toHaveBeenCalledWith({ kind: 'focusTab', payload: { tabId: 17 } });
   });
 
-  test('right-click opens the menu at the cursor, suppresses the native menu, and does not focus', async () => {
+  test('right-click opens the (portaled) menu, suppresses the native menu, and does not focus', async () => {
+    // bits-ui's ContextMenu.Trigger owns the right-click: it preventDefaults the
+    // native menu, portals the popover to <body>, and clamps it into the viewport
+    // — positioning/outside-click/collision are bits-ui's, no longer asserted here.
     const { container } = render(TempTabsHarness, { props: { store: makeStore(), windowId: 100 } });
-    const wrap = container.querySelector('.row-wrap') as HTMLElement;
+    const trigger = container.querySelector('.menu-trigger') as HTMLElement;
     const ev = new MouseEvent('contextmenu', {
       bubbles: true,
       cancelable: true,
+      button: 2,
       clientX: 12,
       clientY: 18,
     });
-    wrap.dispatchEvent(ev);
-    await Promise.resolve();
-    // Native context menu suppressed.
+    await fireEvent(trigger, ev);
+    // Native context menu suppressed by bits-ui's trigger.
     expect(ev.defaultPrevented).toBe(true);
-    // Menu floats at the cursor (jsdom reports a zero rect, so it stays at anchor).
-    const menu = document.querySelector('[data-testid="temp-menu"]') as HTMLElement;
-    expect(menu).not.toBeNull();
-    expect(menu.style.left).toBe('12px');
-    expect(menu.style.top).toBe('18px');
+    // Menu mounts in the document body portal (async).
+    await waitFor(() => expect(document.querySelector('[data-testid="temp-menu"]')).not.toBeNull());
     // Right-click never focuses/switches the tab.
     expect(sendMock).not.toHaveBeenCalledWith({ kind: 'focusTab', payload: { tabId: 17 } });
+  });
+
+  test('Escape dismisses the right-click menu', async () => {
+    const { container } = render(TempTabsHarness, { props: { store: makeStore(), windowId: 100 } });
+    await openRowMenu(container);
+    const menu = document.querySelector('[data-testid="temp-menu"]') as HTMLElement;
+    await fireEvent.keyDown(menu, { key: 'Escape' });
+    await waitFor(() => expect(document.querySelector('[data-testid="temp-menu"]')).toBeNull());
   });
 
   test('the right-click menu Close tab dispatches closeTab and not focusTab', async () => {

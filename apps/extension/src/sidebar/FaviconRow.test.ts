@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/svelte';
 import { flushSync } from 'svelte';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { LunmaStore } from '../shared/store.svelte';
@@ -575,24 +575,30 @@ describe('FaviconRow couple / reorder drag', () => {
     expect(store.state.faviconRow).toEqual(['f1']); // no optimistic mutation
   });
 
+  // bits-ui PORTALS the menu to <body> and opens ASYNC: query `document` (not
+  // `container`) and `waitFor` the items after a right-click.
+  async function rightClickTile(container: HTMLElement): Promise<void> {
+    const tile = container.querySelector('[data-testid="favicon-tile"]') as HTMLElement;
+    await fireEvent(
+      tile,
+      new MouseEvent('contextmenu', { button: 2, clientX: 20, clientY: 20, bubbles: true }),
+    );
+    await waitFor(() =>
+      expect(document.querySelector('[data-testid="favicon-menu"]')).not.toBeNull(),
+    );
+  }
+  const menuItem = (id: string): HTMLButtonElement =>
+    [...document.querySelectorAll('[data-testid="favicon-menu-item"]')].find(
+      (e) => e.getAttribute('data-menu-id') === id,
+    ) as HTMLButtonElement;
+
   test('right-clicking a favorite opens a context menu; Remove dispatches unpinTab', async () => {
     const store = makeStore(['f1']);
     const { container } = render(FaviconRowHarness, { props: { store, windowId: 100 } });
     await Promise.resolve();
 
-    const tile = container.querySelector('[data-testid="favicon-tile"]') as HTMLElement;
-    // Right-click → custom menu opens (and the native menu is prevented).
-    await fireEvent(
-      tile,
-      new MouseEvent('contextmenu', { button: 2, clientX: 20, clientY: 20, bubbles: true }),
-    );
-    const menu = document.querySelector('[data-testid="favicon-menu"]');
-    expect(menu).not.toBeNull();
-
-    const remove = [...document.querySelectorAll('[data-testid="favicon-menu-item"]')].find(
-      (e) => e.getAttribute('data-menu-id') === 'remove',
-    ) as HTMLButtonElement;
-    await fireEvent.click(remove);
+    await rightClickTile(container);
+    await fireEvent.click(menuItem('remove'));
 
     expect(sendMock).toHaveBeenCalledWith({
       kind: 'unpinTab',
@@ -600,49 +606,25 @@ describe('FaviconRow couple / reorder drag', () => {
     });
   });
 
-  test('right-click → "Lock to its site…" opens the boundary editor (pinned-row parity)', async () => {
+  // "Lock to its site…" is no longer a menu drill-in (bits-ui menus are flat): the
+  // item opens the SAME `TabBoundaryEditor` inside a `BottomSheet`. The boundary
+  // assertions live on the sheet surface now (testid `favicon-boundary-sheet`), and
+  // there is no back-arrow — the sheet's own ✕ / scrim / Escape dismiss it (that
+  // dismissal path is BottomSheet's own test, not re-covered here).
+  test('right-click → "Lock to its site…" opens the boundary editor in a bottom sheet', async () => {
     const store = makeStore(['f1']);
     const { container } = render(FaviconRowHarness, { props: { store, windowId: 100 } });
     await Promise.resolve();
 
-    const tile = container.querySelector('[data-testid="favicon-tile"]') as HTMLElement;
-    await fireEvent(
-      tile,
-      new MouseEvent('contextmenu', { button: 2, clientX: 20, clientY: 20, bubbles: true }),
+    await rightClickTile(container);
+    expect(menuItem('lock')).not.toBeNull();
+
+    await fireEvent.click(menuItem('lock'));
+    // The menu closes and the editor rises in a sheet (rendered inline by BottomSheet).
+    await waitFor(() =>
+      expect(document.querySelector('[data-testid="favicon-boundary-editor"]')).not.toBeNull(),
     );
-    const lock = [...document.querySelectorAll('[data-testid="favicon-menu-item"]')].find(
-      (e) => e.getAttribute('data-menu-id') === 'lock',
-    ) as HTMLButtonElement;
-    expect(lock).not.toBeNull();
-
-    await fireEvent.click(lock);
-    expect(document.querySelector('[data-testid="favicon-boundary-editor"]')).not.toBeNull();
-  });
-
-  test('the boundary editor has a back arrow that returns to the menu actions', async () => {
-    const store = makeStore(['f1']);
-    const { container } = render(FaviconRowHarness, { props: { store, windowId: 100 } });
-    await Promise.resolve();
-
-    const tile = container.querySelector('[data-testid="favicon-tile"]') as HTMLElement;
-    await fireEvent(
-      tile,
-      new MouseEvent('contextmenu', { button: 2, clientX: 20, clientY: 20, bubbles: true }),
-    );
-    const lock = [...document.querySelectorAll('[data-testid="favicon-menu-item"]')].find(
-      (e) => e.getAttribute('data-menu-id') === 'lock',
-    ) as HTMLButtonElement;
-    await fireEvent.click(lock);
-    expect(document.querySelector('[data-testid="favicon-boundary-editor"]')).not.toBeNull();
-
-    // The drill-in back affordance returns to the action list (parity with pinned rows).
-    const back = document.querySelector('[data-testid="favicon-menu-back"]') as HTMLButtonElement;
-    expect(back).not.toBeNull();
-    await fireEvent.click(back);
-    expect(document.querySelector('[data-testid="favicon-boundary-editor"]')).toBeNull();
-    expect(document.querySelectorAll('[data-testid="favicon-menu-item"]').length).toBeGreaterThan(
-      0,
-    );
+    expect(document.querySelector('[data-testid="favicon-boundary-sheet"]')).not.toBeNull();
   });
 
   // --- two-step Delete confirm (compliance: deleting a bound favorite closes its tab) ---
@@ -662,11 +644,15 @@ describe('FaviconRow couple / reorder drag', () => {
     return store;
   }
 
+  // bits-ui portals the menu + opens async; wait for it after the right-click.
   async function openMenu(container: HTMLElement): Promise<void> {
     const tile = container.querySelector('[data-testid="favicon-tile"]') as HTMLElement;
     await fireEvent(
       tile,
       new MouseEvent('contextmenu', { button: 2, clientX: 20, clientY: 20, bubbles: true }),
+    );
+    await waitFor(() =>
+      expect(document.querySelector('[data-testid="favicon-menu"]')).not.toBeNull(),
     );
   }
   const deleteItem = (): HTMLButtonElement =>
@@ -680,7 +666,7 @@ describe('FaviconRow couple / reorder drag', () => {
     await Promise.resolve();
     await openMenu(container);
 
-    // First activation arms: danger-treated confirm, menu stays open, no dispatch.
+    // First activation arms: danger-treated confirm, menu stays open (keepOpen), no dispatch.
     await fireEvent.click(deleteItem());
     expect(sendMock).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'deleteSavedTab' }));
     expect(document.querySelector('[data-testid="favicon-menu"]')).not.toBeNull();
@@ -692,7 +678,7 @@ describe('FaviconRow couple / reorder drag', () => {
       kind: 'deleteSavedTab',
       payload: { savedTabId: 'f1' },
     });
-    expect(document.querySelector('[data-testid="favicon-menu"]')).toBeNull();
+    await waitFor(() => expect(document.querySelector('[data-testid="favicon-menu"]')).toBeNull());
   });
 
   test('Delete on a favorite dormant in all windows deletes without prompting', async () => {
@@ -715,10 +701,12 @@ describe('FaviconRow couple / reorder drag', () => {
     await Promise.resolve();
     await openMenu(container);
 
-    await fireEvent.click(deleteItem()); // arm
+    await fireEvent.click(deleteItem()); // arm (menu stays open)
     const panel = document.querySelector('[data-testid="favicon-menu"]') as HTMLElement;
-    await fireEvent.keyDown(panel, { key: 'Escape' }); // closes + disarms
+    // bits-ui owns Escape: it dismisses the menu, whose `onOpenChange(false)` disarms.
+    await fireEvent.keyDown(panel, { key: 'Escape' });
     expect(sendMock).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'deleteSavedTab' }));
+    await waitFor(() => expect(document.querySelector('[data-testid="favicon-menu"]')).toBeNull());
 
     // Re-open: Delete is unarmed again (back to its plain label).
     await openMenu(container);

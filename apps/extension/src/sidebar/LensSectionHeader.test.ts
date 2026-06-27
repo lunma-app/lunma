@@ -8,6 +8,7 @@ const gitlab: ResolvedLensSource = {
   baseUrl: 'https://gitlab.example.com',
   query: 'review-requested',
   lensKind: 'general',
+  sourceId: 'acc-gl',
 };
 
 const header = (c: HTMLElement) => c.querySelector('.section-header') as HTMLButtonElement;

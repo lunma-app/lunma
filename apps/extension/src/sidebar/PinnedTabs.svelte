@@ -17,7 +17,8 @@ import type {
   TabId,
   WindowId,
 } from '../shared/types';
-import ContextMenu from '../ui/ContextMenu.svelte';
+import BitsContextMenu from '../ui/BitsContextMenu.svelte';
+import BottomSheet from '../ui/BottomSheet.svelte';
 import FolderRow from '../ui/FolderRow.svelte';
 import { faviconCacheKey, faviconFor, faviconUrl } from '../ui/favicon';
 import IconButton from '../ui/IconButton.svelte';
@@ -629,23 +630,19 @@ function chooseIcon(folderId: FolderId, icon: IconName): void {
 
 // --- dispatch + tab interactions ---------------------------------------------
 let confirmingDeleteId = $state<SavedTabId | null>(null);
-// Which row's boundary editor is open as the menu's drill-in.
+// Which row's boundary editor is open — "Lock to its site…" opens it as a
+// BottomSheet (an EDITOR, not a flat menu entry), tracked by saved-tab id.
 let editingBoundaryId = $state<SavedTabId | null>(null);
 
-// --- right-click menu (one shared instance, opened at the cursor) -------------
-// Mirrors FaviconRow: a single ContextMenu floated at the pointer for whichever
-// row was right-clicked. The active row is re-derived by id across the live rows
-// (top-level + folder children) so the menu reflects state after each round-trip
-// and auto-closes when that row leaves the list (design D2).
-let menuOpen = $state(false);
-let menuX = $state(0);
-let menuY = $state(0);
-let menuRowId = $state<SavedTabId | null>(null);
-// The row element a keyboard-invoked menu anchors to (see onRowContextMenu / D6).
-let menuAnchorEl = $state<HTMLElement | undefined>(undefined);
+// --- right-click menu (bits-ui ContextMenu, per row) --------------------------
+// Each tab row wraps its content in `BitsContextMenu`, which OWNS the right-click,
+// cursor anchoring, keyboard invocation (menu key / Shift+F10), collision clamp,
+// and dismissal. The menu items still re-derive from the row's live view (drift,
+// renamed, delete-confirm) on every render, so they reflect state after each
+// round-trip; bits-ui auto-closes if the trigger leaves the DOM (design D2).
 
-/** Every tab view in the list, flattened across folders — the lookup the menu
- * re-derives its active row from. */
+/** Every tab view in the list, flattened across folders — the lookup the
+ * boundary sheet re-derives its row from. */
 const allTabViews = $derived.by<TabView[]>(() => {
   const out: TabView[] = [];
   for (const row of rows) {
@@ -655,24 +652,18 @@ const allTabViews = $derived.by<TabView[]>(() => {
   }
   return out;
 });
-const activeMenuRow = $derived(
-  menuRowId !== null ? (allTabViews.find((t) => t.id === menuRowId) ?? null) : null,
+/** The row whose boundary editor is open in the sheet — re-derived by id so it
+ * reflects state after each round-trip and the sheet auto-closes (boundaryRow
+ * goes null) if that row leaves the list. */
+const boundaryRow = $derived(
+  editingBoundaryId !== null ? (allTabViews.find((t) => t.id === editingBoundaryId) ?? null) : null,
 );
 
-function onRowContextMenu(e: MouseEvent, row: TabView): void {
-  // Open the action menu at the cursor and suppress Chrome's native menu. A
-  // right-click never focuses/switches the tab (design D4). Reset transient row
-  // state so the menu opens into the actions list, not a stale drill-in/confirm.
-  e.preventDefault();
-  menuX = e.clientX;
-  menuY = e.clientY;
-  // The invoking row element — ContextMenu anchors to it when the event carries no
-  // pointer position (keyboard menu key / Shift+F10 reports clientX/Y 0,0; D6).
-  menuAnchorEl = e.currentTarget as HTMLElement;
-  menuRowId = row.id;
-  editingBoundaryId = null;
-  confirmingDeleteId = null;
-  menuOpen = true;
+/** Reset transient menu state when a row's bits-ui menu closes (Escape, outside
+ * click, or a non-keepOpen select), so the next open lands on a fresh actions
+ * list, not a stale Delete-confirm. */
+function onMenuOpenChange(open: boolean): void {
+  if (!open) confirmingDeleteId = null;
 }
 
 function onTabClick(row: TabView): void {
@@ -726,11 +717,10 @@ function tabMenuItems(row: TabView): MenuItem[] {
     id: 'keep-on-site',
     label: 'Lock to its site…',
     icon: 'anchor',
-    keepOpen: true,
-    submenu: true,
     onSelect: () => {
-      // Drill the menu into the boundary editor (ContextMenu's panel view). The
-      // back affordance / Esc returns to the actions.
+      // The boundary editor is an EDITOR, not a menu entry — selecting this
+      // closes the bits-ui menu and opens the editor in a BottomSheet. The
+      // sheet's ✕ / scrim / Esc dismisses it back to the row.
       confirmingDeleteId = null; // selecting another entry disarms a pending Delete
       editingBoundaryId = row.id;
     },
@@ -821,7 +811,6 @@ function tabMenuItems(row: TabView): MenuItem[] {
       data-row-id={row.id}
       bind:this={rowEls[i]}
       onpointerdown={row.kind === 'tab' ? (e) => onRowPointerDown(e, row, ZONE) : undefined}
-      oncontextmenu={row.kind === 'tab' ? (e) => onRowContextMenu(e, row) : undefined}
       animate:flipMove
     >
       {#if row.kind === 'tab'}
@@ -841,24 +830,38 @@ function tabMenuItems(row: TabView): MenuItem[] {
             />
           </span>
         {/snippet}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="drag-handle" ondblclick={() => startTabRename(row.id)}>
-          <TabRow
-            title={row.title}
-            faviconSrc={row.faviconSrc}
-            faviconFallbackSrc={row.faviconFallbackSrc}
-            active={row.active}
-            loading={row.loading}
-            drifted={row.drifted}
-            homeHost={row.homeHost}
-            onGoHome={() => dispatch({ kind: 'goHome', payload: { savedTabId: row.id, windowId } })}
-            editing={renamingTabId === row.id}
-            oncommitName={(next) => commitTabRename(row.id, next)}
-            oncancelName={cancelTabRename}
-            onclick={() => onTabClick(row)}
-            trailing={row.dormant ? undefined : closeButton}
-          />
-        </div>
+        <!-- bits-ui owns the right-click on the row body: it spreads its trigger
+             props (the `contextmenu` handler + ARIA) onto `.drag-handle`, our
+             measured-row-internal hit target. The `.row-wrap` keeps the drag
+             pointerdown + measured identity (rowEls[i] / data-row-id); only the
+             menu's anchor moves down to this inner element. -->
+        <BitsContextMenu
+          items={tabMenuItems(row)}
+          label="Tab actions"
+          testid="pinned-menu"
+          onOpenChange={onMenuOpenChange}
+        >
+          {#snippet children(menuProps)}
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div {...menuProps} class="drag-handle" ondblclick={() => startTabRename(row.id)}>
+              <TabRow
+                title={row.title}
+                faviconSrc={row.faviconSrc}
+                faviconFallbackSrc={row.faviconFallbackSrc}
+                active={row.active}
+                loading={row.loading}
+                drifted={row.drifted}
+                homeHost={row.homeHost}
+                onGoHome={() => dispatch({ kind: 'goHome', payload: { savedTabId: row.id, windowId } })}
+                editing={renamingTabId === row.id}
+                oncommitName={(next) => commitTabRename(row.id, next)}
+                oncancelName={cancelTabRename}
+                onclick={() => onTabClick(row)}
+                trailing={row.dormant ? undefined : closeButton}
+              />
+            </div>
+          {/snippet}
+        </BitsContextMenu>
       {:else if row.kind === 'lens'}
         <!-- A smart folder: folder-row chrome + live connector results. The
              wrapper arms the smart node's unit drag; the result rows inside
@@ -920,8 +923,6 @@ function tabMenuItems(row: TabView): MenuItem[] {
                 class:dragging={isDragSource(child.id)}
                 bind:this={childRowElById[child.id]}
                 onpointerdown={(e) => onRowPointerDown(e, child, FOLDER_ZONE(row.id))}
-                oncontextmenu={(e) => onRowContextMenu(e, child)}
-                ondblclick={() => startTabRename(child.id)}
               >
                 {#snippet childCloseButton()}
                   <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -936,21 +937,36 @@ function tabMenuItems(row: TabView): MenuItem[] {
                     />
                   </span>
                 {/snippet}
-                <TabRow
-                  title={child.title}
-                  faviconSrc={child.faviconSrc}
-                  faviconFallbackSrc={child.faviconFallbackSrc}
-                  active={child.active}
-                  loading={child.loading}
-                  drifted={child.drifted}
-                  homeHost={child.homeHost}
-                  onGoHome={() => dispatch({ kind: 'goHome', payload: { savedTabId: child.id, windowId } })}
-                  editing={renamingTabId === child.id}
-                  oncommitName={(next) => commitTabRename(child.id, next)}
-                  oncancelName={cancelTabRename}
-                  onclick={() => onTabClick(child)}
-                  trailing={child.dormant ? undefined : childCloseButton}
-                />
+                <!-- Same wrap as the top-level tab rows: bits-ui owns the
+                     right-click on the child's body; the `.child-wrap` keeps the
+                     drag pointerdown + measured identity (childRowElById). -->
+                <BitsContextMenu
+                  items={tabMenuItems(child)}
+                  label="Tab actions"
+                  testid="pinned-menu"
+                  onOpenChange={onMenuOpenChange}
+                >
+                  {#snippet children(menuProps)}
+                    <!-- svelte-ignore a11y_no_static_element_interactions -->
+                    <div {...menuProps} ondblclick={() => startTabRename(child.id)}>
+                      <TabRow
+                        title={child.title}
+                        faviconSrc={child.faviconSrc}
+                        faviconFallbackSrc={child.faviconFallbackSrc}
+                        active={child.active}
+                        loading={child.loading}
+                        drifted={child.drifted}
+                        homeHost={child.homeHost}
+                        onGoHome={() => dispatch({ kind: 'goHome', payload: { savedTabId: child.id, windowId } })}
+                        editing={renamingTabId === child.id}
+                        oncommitName={(next) => commitTabRename(child.id, next)}
+                        oncancelName={cancelTabRename}
+                        onclick={() => onTabClick(child)}
+                        trailing={child.dormant ? undefined : childCloseButton}
+                      />
+                    </div>
+                  {/snippet}
+                </BitsContextMenu>
               </div>
             {/each}
             {#if row.children.length === 0}
@@ -963,44 +979,32 @@ function tabMenuItems(row: TabView): MenuItem[] {
   {/each}
 </div>
 
-{#snippet boundaryPanel()}
-  {#if activeMenuRow}
+<!-- "Lock to its site…" opens the per-tab boundary editor as a BottomSheet — an
+     EDITOR, scoped to the sidebar panel, not a flat bits-ui menu entry. The row
+     is re-derived by id (`boundaryRow`) so the editor reflects state after each
+     round-trip and the sheet auto-closes if the row leaves the list. The sheet's
+     ✕ / scrim / Escape dismiss it back to the actions (returning focus to the
+     trigger). -->
+<BottomSheet
+  open={boundaryRow !== null}
+  portalTo=".sidebar"
+  title="Lock to its site"
+  testid="pinned-boundary-sheet"
+  onClose={() => {
+    editingBoundaryId = null;
+  }}
+>
+  {#if boundaryRow}
     <div class="boundary-body">
       <TabBoundaryEditor
-        savedTabId={activeMenuRow.id}
-        boundary={activeMenuRow.boundary}
-        originalURL={activeMenuRow.originalURL}
+        savedTabId={boundaryRow.id}
+        boundary={boundaryRow.boundary}
+        originalURL={boundaryRow.originalURL}
         globalDefault={boundaryDefault.value}
       />
     </div>
   {/if}
-{/snippet}
-
-<!-- One shared right-click menu, opened at the cursor for whichever row was
-     right-clicked (mirrors FaviconRow). "Lock to its site…" drills it into the
-     boundary editor with a back-header; the active row is re-derived by id so the
-     panel reflects state after each round-trip and the menu closes if the row
-     leaves the list. -->
-{#if activeMenuRow}
-  <ContextMenu
-    bind:open={menuOpen}
-    x={menuX}
-    y={menuY}
-    anchorEl={menuAnchorEl}
-    items={tabMenuItems(activeMenuRow)}
-    label="Tab actions"
-    testid="pinned-menu"
-    panel={editingBoundaryId === activeMenuRow.id ? boundaryPanel : undefined}
-    panelTitle={editingBoundaryId === activeMenuRow.id ? 'Lock to its site' : undefined}
-    onPanelBack={() => {
-      editingBoundaryId = null;
-    }}
-    onclose={() => {
-      confirmingDeleteId = null;
-      editingBoundaryId = null;
-    }}
-  />
-{/if}
+</BottomSheet>
 
 <style>
   .pinned {
@@ -1027,18 +1031,21 @@ function tabMenuItems(row: TabView): MenuItem[] {
     display: inline-flex;
   }
 
-  /* "Lock to its site…" boundary editor — rendered as the menu's drill-in panel
-   * (ContextMenu owns the padding); a min-width so the allow-list editor has room. */
+  /* "Lock to its site…" boundary editor — rendered inside the BottomSheet (the
+   * sheet owns the outer padding); a min-width so the allow-list editor has room. */
   .boundary-body {
     min-width: 216px;
   }
-  /* Drop-onto a top-level TAB (create-folder-from-two): a colour-tinted ring,
-   * distinct from the between-row insertion line. Folder rows get their own
-   * highlight from FolderRow's `dropTarget` prop. */
+  /* Drop-onto a top-level TAB (create-folder-from-two): the comp's active-row
+   * treatment — a `--space-soft`-equivalent fill (`--space-c-soft`) plus a
+   * `--space-line`-equivalent inset ring (`--space-c-dim`, the ~0.5-alpha line
+   * weight) — distinct from the between-row insertion line. Folder rows get
+   * their own highlight from FolderRow's `dropTarget` prop. Radius matches the
+   * comp's rounder rows (`--r-lg`). */
   .row-wrap.onto-target :global(.tab-row) {
-    box-shadow: inset 0 0 0 1.5px var(--space-c);
+    box-shadow: inset 0 0 0 1px var(--space-c-dim);
     background: var(--space-c-soft);
-    border-radius: var(--r-md);
+    border-radius: var(--r-lg);
   }
 
   .child-wrap.dragging {
@@ -1060,10 +1067,13 @@ function tabMenuItems(row: TabView): MenuItem[] {
   .child-wrap {
     padding-bottom: var(--row-gap);
   }
+  /* Empty folder body — the comp's italic-faint placeholder (lens-body empty
+   * state: faint text, italic, slightly larger than the section labels). */
   .folder-empty {
     padding: var(--space-1) var(--space-2);
     color: var(--text-faint);
-    font: var(--weight-regular) var(--text-xs)/1.2 var(--font-sans);
+    font: var(--weight-regular) var(--text-xs)/1.3 var(--font-sans);
+    font-style: italic;
   }
 
   .drop-line {

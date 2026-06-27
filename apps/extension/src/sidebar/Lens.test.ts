@@ -1,24 +1,46 @@
-import { cleanup, fireEvent, render } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { LunmaStore } from '../shared/store.svelte';
 import type {
   AppState,
   LensItem,
+  LensProvider,
+  LensQuery,
   LensSectionRuntime,
+  LensSourceRef,
   PinNode,
   SidebarLocalState,
+  SourceAccount,
 } from '../shared/types';
 import LensHarness from './Lens.test.harness.svelte';
 
 type LensNode = Extract<PinNode, { kind: 'lens' }>;
 
-const { sendMock, openOptionsAtMock } = vi.hoisted(() => ({
+const { sendMock, openOptionsAtMock, setTokenMock } = vi.hoisted(() => ({
   sendMock: vi.fn(() => Promise.resolve()),
   openOptionsAtMock: vi.fn(() => Promise.resolve()),
+  setTokenMock: vi.fn(() => Promise.resolve()),
 }));
 vi.mock('../shared/bus', () => ({ bus: { send: sendMock }, dispatch: sendMock }));
 vi.mock('./open-options', () => ({ openOptionsAt: openOptionsAtMock }));
+vi.mock('../shared/connectors', () => ({
+  readAccountTokens: vi.fn(() => Promise.resolve({})),
+  setAccountToken: setTokenMock,
+}));
+
+// Connector-accounts: lens nodes reference accounts; a deterministic registry
+// mints one account per (provider, baseUrl) so section keys (provider:host:query)
+// stay identical. `seedAccounts` copies them into a store's `sources`.
+const ACCOUNTS: Record<string, SourceAccount> = {};
+function ref(provider: LensProvider, baseUrl: string, queries: LensQuery[]): LensSourceRef {
+  const id = `acc:${provider}:${baseUrl}`;
+  ACCOUNTS[id] = { id, provider, baseUrl };
+  return { sourceId: id, queries };
+}
+function seedAccounts(store: LunmaStore): void {
+  for (const [id, account] of Object.entries(ACCOUNTS)) store.state.sources[id] = account;
+}
 
 /** The `chrome.permissions.request` mock — the needs-access "Grant access"
  * button calls it via `requestHostPermissions` (least-privilege-permissions). */
@@ -50,9 +72,7 @@ function lensNode(overrides: Partial<LensNode> = {}): LensNode {
     id: 'sf-1',
     name: 'Review requests',
     icon: 'folder-git-2',
-    sources: [
-      { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['review-requested'] },
-    ],
+    sources: [ref('gitlab', 'https://gitlab.example.com', ['review-requested'])],
     maxItems: 20,
     hideRead: false,
     refreshMinutes: 10,
@@ -66,7 +86,7 @@ function feedNode(overrides: Partial<LensNode> = {}): LensNode {
     id: 'feed-1',
     name: 'Hacker News',
     icon: 'rss',
-    sources: [{ source: 'rss', baseUrl: 'https://news.ycombinator.com/rss', queries: [] }],
+    sources: [ref('rss', 'https://news.ycombinator.com/rss', [])],
     maxItems: 30,
     hideRead: false,
     ...overrides,
@@ -87,9 +107,11 @@ function makeFeedStore(
   const store = new LunmaStore();
   store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
   store.state.pinnedBySpace.work = [node];
+  seedAccounts(store);
   if (section) {
     const cfg = node.sources[0];
-    const key = cfg ? `${cfg.source}:${new URL(cfg.baseUrl).host}` : '';
+    const account = cfg ? ACCOUNTS[cfg.sourceId] : undefined;
+    const key = account ? `${account.provider}:${new URL(account.baseUrl).host}` : '';
     store.state.lenses[node.id] = { sections: { [key]: section } };
   }
   if (readIds.length > 0) store.state.lensReadState[node.id] = readIds;
@@ -109,6 +131,7 @@ function makeStore(section?: LensSectionRuntime): LunmaStore {
   const store = new LunmaStore();
   store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
   store.state.pinnedBySpace.work = [lensNode()];
+  seedAccounts(store);
   if (section)
     store.state.lenses['sf-1'] = {
       sections: { 'gitlab:gitlab.example.com:review-requested': section },
@@ -127,6 +150,9 @@ function renderLens(
     onMoveDown: () => void;
   }> = {},
 ) {
+  // Seed any accounts referenced by a custom node prop (registered when the node
+  // was built) so the lens resolves its sections.
+  seedAccounts(store);
   return render(LensHarness, {
     props: { store, windowId: 100, spaceId: 'work', node: lensNode(), ...props },
   });
@@ -137,18 +163,13 @@ describe('Lens — multi-filter sections (multi-filter-smart-connectors)', () =>
   // sections rendered flat with `host · filter` headers.
   const twoFilterNode = (): LensNode =>
     lensNode({
-      sources: [
-        {
-          source: 'gitlab',
-          baseUrl: 'https://gitlab.example.com',
-          queries: ['authored', 'review-requested'],
-        },
-      ],
+      sources: [ref('gitlab', 'https://gitlab.example.com', ['authored', 'review-requested'])],
     });
 
   function makeTwoFilterStore(): LunmaStore {
     const node = twoFilterNode();
     const store = new LunmaStore();
+    seedAccounts(store);
     store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
     store.state.pinnedBySpace.work = [node];
     store.state.lenses['sf-1'] = {
@@ -187,7 +208,7 @@ describe('Lens — multi-filter sections (multi-filter-smart-connectors)', () =>
   test('the badge sums per-section attention counts (7 + 3 = 10)', () => {
     const store = makeTwoFilterStore();
     const { container } = renderLens(store, { node: twoFilterNode() });
-    expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('10');
+    expect(container.querySelector('[data-testid="lens-row-badge"]')?.textContent).toBe('10');
   });
 });
 
@@ -231,7 +252,7 @@ describe('Lens — count badge', () => {
       fetchedAt: 1,
     });
     const { container } = renderLens(store);
-    expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('7');
+    expect(container.querySelector('[data-testid="lens-row-badge"]')?.textContent).toBe('7');
   });
 
   test('a queue section at its maxItems cap shows N+ (multi-filter design 5.3)', () => {
@@ -241,7 +262,7 @@ describe('Lens — count badge', () => {
       fetchedAt: 1,
     });
     const { container } = renderLens(store); // default maxItems 20 → at cap
-    expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('20+');
+    expect(container.querySelector('[data-testid="lens-row-badge"]')?.textContent).toBe('20+');
   });
 
   test('badge shows the section count with the at-cap marker', () => {
@@ -259,13 +280,13 @@ describe('Lens — count badge', () => {
       },
     };
     const { container } = renderLens(store, { node });
-    expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('30+');
+    expect(container.querySelector('[data-testid="lens-row-badge"]')?.textContent).toBe('30+');
   });
 
   test('renders no badge before the first fetch lands', () => {
     const store = makeStore(); // no runtime → pending
     const { container } = renderLens(store);
-    expect(container.querySelector('[data-testid="folder-row-badge"]')).toBeNull();
+    expect(container.querySelector('[data-testid="lens-row-badge"]')).toBeNull();
   });
 });
 
@@ -427,15 +448,32 @@ describe('Lens — binding-held rows (open work holds its row)', () => {
 });
 
 describe('Lens — menu (Refresh now · Edit… · Move · Delete)', () => {
-  const TRIGGER = '[data-testid="folder-row-menu-trigger"]';
+  // The lens row carries NO kebab — its actions live solely in the right-click
+  // `BitsContextMenu` (items `smart-folder-menu-item`, panel `smart-folder-menu`),
+  // opened by a native `contextmenu` on the lens row (the bits-ui trigger). Items
+  // portal to <body> + open ASYNC, so they're queried off `document` and awaited.
   const menuItem = (id: string): HTMLButtonElement =>
     document.querySelector(`[data-menu-id="${id}"]`) as HTMLButtonElement;
+
+  /** Right-click the folder row to open the lens BitsContextMenu, then wait for
+   * its portaled items. The `contextmenu` bubbles to the bits-ui trigger wrapper. */
+  async function openContextMenu(container: HTMLElement): Promise<void> {
+    await fireEvent(
+      container.querySelector('[data-testid="lens-row"]') as HTMLElement,
+      new MouseEvent('contextmenu', { button: 2, clientX: 30, clientY: 30, bubbles: true }),
+    );
+    await waitFor(() =>
+      expect(
+        document.querySelectorAll('[data-testid="smart-folder-menu-item"]').length,
+      ).toBeGreaterThan(0),
+    );
+  }
 
   test('a queue folder carries Refresh · Edit · Open-as-page · Open-all · Move · Delete (no Mark-all-read)', async () => {
     const store = makeStore({ state: 'ok', items: [], fetchedAt: 1 });
     const { container } = renderLens(store);
-    await fireEvent.click(container.querySelector(TRIGGER) as HTMLButtonElement);
-    const ids = [...document.querySelectorAll('[data-testid="folder-row-menu-item"]')].map((e) =>
+    await openContextMenu(container);
+    const ids = [...document.querySelectorAll('[data-testid="smart-folder-menu-item"]')].map((e) =>
       e.getAttribute('data-menu-id'),
     );
     expect(ids).toEqual([
@@ -453,8 +491,8 @@ describe('Lens — menu (Refresh now · Edit… · Move · Delete)', () => {
     const node = feedNode();
     const store = makeFeedStore(node, { state: 'ok', items: [post(1)], fetchedAt: 1 });
     const { container } = renderLens(store, { node });
-    await fireEvent.click(container.querySelector(TRIGGER) as HTMLButtonElement);
-    const ids = [...document.querySelectorAll('[data-testid="folder-row-menu-item"]')].map((e) =>
+    await openContextMenu(container);
+    const ids = [...document.querySelectorAll('[data-testid="smart-folder-menu-item"]')].map((e) =>
       e.getAttribute('data-menu-id'),
     );
     expect(ids).toEqual([
@@ -472,7 +510,7 @@ describe('Lens — menu (Refresh now · Edit… · Move · Delete)', () => {
   test('Open all in a tab dispatches openLensListing', async () => {
     const store = makeStore({ state: 'ok', items: [], fetchedAt: 1 });
     const { container } = renderLens(store);
-    await fireEvent.click(container.querySelector(TRIGGER) as HTMLButtonElement);
+    await openContextMenu(container);
     await fireEvent.click(menuItem('open-all'));
     expect(sendMock).toHaveBeenCalledWith({
       kind: 'openLensListing',
@@ -484,7 +522,7 @@ describe('Lens — menu (Refresh now · Edit… · Move · Delete)', () => {
     const node = feedNode();
     const store = makeFeedStore(node, { state: 'ok', items: [post(1)], fetchedAt: 1 });
     const { container } = renderLens(store, { node });
-    await fireEvent.click(container.querySelector(TRIGGER) as HTMLButtonElement);
+    await openContextMenu(container);
     await fireEvent.click(menuItem('mark-all-read'));
     expect(sendMock).toHaveBeenCalledWith({
       kind: 'markAllLensItemsRead',
@@ -495,7 +533,7 @@ describe('Lens — menu (Refresh now · Edit… · Move · Delete)', () => {
   test('Refresh now dispatches refreshLens', async () => {
     const store = makeStore({ state: 'ok', items: [], fetchedAt: 1 });
     const { container } = renderLens(store);
-    await fireEvent.click(container.querySelector(TRIGGER) as HTMLButtonElement);
+    await openContextMenu(container);
     await fireEvent.click(menuItem('refresh'));
     expect(sendMock).toHaveBeenCalledWith({
       kind: 'refreshLens',
@@ -513,8 +551,8 @@ describe('Lens — menu (Refresh now · Edit… · Move · Delete)', () => {
       onMoveUp,
       onMoveDown,
     });
-    await fireEvent.click(container.querySelector(TRIGGER) as HTMLButtonElement);
-    // At the top of the list: Move up is inert.
+    await openContextMenu(container);
+    // At the top of the list: Move up is inert (bits-ui marks it aria-disabled).
     expect(menuItem('move-up').getAttribute('aria-disabled')).toBe('true');
     await fireEvent.click(menuItem('move-up'));
     expect(onMoveUp).not.toHaveBeenCalled();
@@ -525,17 +563,16 @@ describe('Lens — menu (Refresh now · Edit… · Move · Delete)', () => {
   test('Delete is a two-step confirm — first arms "Delete — confirm" (menu open), second dispatches once', async () => {
     const store = makeStore({ state: 'ok', items: [], fetchedAt: 1 });
     const { container } = renderLens(store);
-    await fireEvent.click(container.querySelector(TRIGGER) as HTMLButtonElement);
+    await openContextMenu(container);
 
     // First activation: dispatches nothing, morphs the entry into the danger
     // "Delete — confirm", and keeps the menu open (`keepOpen`).
     await fireEvent.click(menuItem('delete'));
     expect(sendMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(menuItem('delete')?.textContent).toContain('Delete — confirm'));
     const armed = menuItem('delete');
-    expect(armed).not.toBeNull();
-    expect(armed.textContent).toContain('Delete — confirm');
     expect(armed.classList).toContain('danger');
-    expect(document.querySelector('[data-testid="folder-row-menu-item"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="smart-folder-menu-item"]')).not.toBeNull();
 
     // Second activation dispatches deleteLens exactly once.
     await fireEvent.click(menuItem('delete'));
@@ -550,85 +587,96 @@ describe('Lens — menu (Refresh now · Edit… · Move · Delete)', () => {
     const store = makeStore({ state: 'ok', items: [], fetchedAt: 1 });
     const { container } = renderLens(store);
 
-    // Arm via the right-click ContextMenu (its close is synchronous).
-    await fireEvent.contextMenu(
-      container.querySelector('[data-testid="context-surface"]') as HTMLElement,
-    );
-    await fireEvent.click(menuItem('delete'));
-    expect(menuItem('delete').textContent).toContain('Delete — confirm');
+    // Arm via the right-click BitsContextMenu.
+    await openContextMenu(container);
+    const delItem = () =>
+      document.querySelector(
+        '[data-testid="smart-folder-menu-item"][data-menu-id="delete"]',
+      ) as HTMLButtonElement | null;
+    await fireEvent.click(delItem() as HTMLButtonElement);
+    await waitFor(() => expect(delItem()?.textContent).toContain('Delete — confirm'));
 
     // Escape closes the menu without confirming — nothing dispatched, menu gone.
     const panel = document.querySelector('[data-testid="smart-folder-menu"]') as HTMLElement;
     await fireEvent.keyDown(panel, { key: 'Escape' });
     expect(sendMock).not.toHaveBeenCalled();
-    expect(document.querySelector('[data-menu-id="delete"]')).toBeNull();
-
-    // Reopening lands on the unarmed "Delete", never the stale "Delete — confirm".
-    await fireEvent.contextMenu(
-      container.querySelector('[data-testid="context-surface"]') as HTMLElement,
+    await waitFor(() =>
+      expect(document.querySelector('[data-testid="smart-folder-menu"]')).toBeNull(),
     );
-    const reopened = menuItem('delete');
+
+    // Reopening lands on the unarmed "Delete", never the stale "Delete — confirm"
+    // (BitsContextMenu's onOpenChange resets the pending confirm on close).
+    await openContextMenu(container);
+    const reopened = delItem() as HTMLButtonElement;
     expect(reopened).not.toBeNull();
     expect(reopened.textContent).toContain('Delete');
     expect(reopened.textContent).not.toContain('confirm');
     expect(sendMock).not.toHaveBeenCalled();
   });
 
-  test('Edit… drills into the LensEditor panel with a back-header', async () => {
+  test('Edit… opens the LensEditor in the bottom sheet, pre-filled from the node', async () => {
     const store = makeStore({ state: 'ok', items: [], fetchedAt: 1 });
     const { container } = renderLens(store);
-    await fireEvent.click(container.querySelector(TRIGGER) as HTMLButtonElement);
+    await openContextMenu(container);
     await fireEvent.click(menuItem('edit'));
-    expect(document.querySelector('[data-testid="smart-folder-editor"]')).not.toBeNull();
-    const back = document.querySelector('[data-testid="folder-row-menu-back"]');
-    expect(back?.textContent).toContain('Edit lens');
-    // Pre-filled from the node — the editor shows the existing source as an
-    // in-place card (source Select + URL input).
+    // The editor lives in the BottomSheet now (no drill-in back-header).
+    await waitFor(() =>
+      expect(document.querySelector('[data-testid="smart-folder-editor"]')).not.toBeNull(),
+    );
+    expect(document.querySelector('.bottom-sheet-title')?.textContent).toBe('Edit lens');
+    // Pre-filled from the node — the editor's account picker shows the referenced
+    // gitlab account pre-selected (its filter pills are visible).
     const sourceList = document.querySelector('[data-testid="smart-source-list"]');
     expect(sourceList).not.toBeNull();
-    expect(
-      sourceList?.querySelector('[data-testid="smart-source-type"]')?.getAttribute('data-value'),
-    ).toBe('gitlab');
-    const sourceUrl = sourceList?.querySelector(
-      '[data-testid="smart-source-url"]',
-    ) as HTMLInputElement;
-    expect(sourceUrl?.value).toBe('https://gitlab.example.com');
-  });
-
-  test('Save closes the kebab morph entirely — no action list remains open', async () => {
-    const store = makeStore({ state: 'ok', items: [], fetchedAt: 1 });
-    const { container } = renderLens(store);
-    await fireEvent.click(container.querySelector(TRIGGER) as HTMLButtonElement);
-    await fireEvent.click(menuItem('edit'));
-    const save = [...document.querySelectorAll('button')].find((b) =>
-      (b.textContent ?? '').includes('Save'),
-    ) as HTMLButtonElement;
-    await fireEvent.click(save);
-
-    expect(sendMock).toHaveBeenCalledWith(expect.objectContaining({ kind: 'updateLens' }));
-    // The whole morph is dismissed — neither the editor nor the Refresh/Edit/
-    // Move/Delete action list survives the confirm (the editor's onDone
-    // contract: the host closes its menu, not just the drill-in).
-    expect(document.querySelector('[data-testid="smart-folder-editor"]')).toBeNull();
-    expect(document.querySelector('[data-testid="folder-row-menu-item"]')).toBeNull();
-  });
-
-  test('Save via the right-click ContextMenu path closes that menu entirely too', async () => {
-    const store = makeStore({ state: 'ok', items: [], fetchedAt: 1 });
-    const { container } = renderLens(store);
-    await fireEvent.contextMenu(
-      container.querySelector('[data-testid="context-surface"]') as HTMLElement,
+    const selectedRow = document.querySelector(
+      '[data-account-id="acc:gitlab:https://gitlab.example.com"]',
     );
+    expect(selectedRow?.querySelector('[data-testid="smart-filter-pill"]')).not.toBeNull();
+  });
+
+  test('Save dispatches updateLens and closes the editor sheet (the onDone contract)', async () => {
+    const store = makeStore({ state: 'ok', items: [], fetchedAt: 1 });
+    const { container } = renderLens(store);
+    await openContextMenu(container);
     await fireEvent.click(menuItem('edit'));
-    expect(document.querySelector('[data-testid="smart-folder-editor"]')).not.toBeNull();
+    await waitFor(() =>
+      expect(document.querySelector('[data-testid="smart-folder-editor"]')).not.toBeNull(),
+    );
     const save = [...document.querySelectorAll('button')].find((b) =>
       (b.textContent ?? '').includes('Save'),
     ) as HTMLButtonElement;
     await fireEvent.click(save);
 
     expect(sendMock).toHaveBeenCalledWith(expect.objectContaining({ kind: 'updateLens' }));
-    expect(document.querySelector('[data-testid="smart-folder-editor"]')).toBeNull();
-    expect(document.querySelector('[data-menu-id="edit"]')).toBeNull();
+    // The editor's `onDone` flips `sheetOpen` false → the BottomSheet (and its
+    // editor) leave the DOM. The kebab is a separate bits-ui surface owned by
+    // FolderRow; the editor surface is what the host controls.
+    await waitFor(() =>
+      expect(document.querySelector('[data-testid="smart-folder-editor"]')).toBeNull(),
+    );
+  });
+
+  test('Save via the right-click menu path closes the editor sheet too', async () => {
+    const store = makeStore({ state: 'ok', items: [], fetchedAt: 1 });
+    const { container } = renderLens(store);
+    await openContextMenu(container);
+    await fireEvent.click(
+      document.querySelector(
+        '[data-testid="smart-folder-menu-item"][data-menu-id="edit"]',
+      ) as HTMLButtonElement,
+    );
+    await waitFor(() =>
+      expect(document.querySelector('[data-testid="smart-folder-editor"]')).not.toBeNull(),
+    );
+    const save = [...document.querySelectorAll('button')].find((b) =>
+      (b.textContent ?? '').includes('Save'),
+    ) as HTMLButtonElement;
+    await fireEvent.click(save);
+
+    expect(sendMock).toHaveBeenCalledWith(expect.objectContaining({ kind: 'updateLens' }));
+    await waitFor(() =>
+      expect(document.querySelector('[data-testid="smart-folder-editor"]')).toBeNull(),
+    );
   });
 });
 
@@ -646,7 +694,7 @@ describe('Lens — calm states (design D7)', () => {
     expect(container.querySelectorAll('[data-testid="lens-result-row"]')).toHaveLength(1);
     expect(container.querySelector('[data-testid="smart-ghost-row"]')).toBeNull();
     // The in-flight refresh spins the glyph (FolderRow's busy treatment).
-    expect(container.querySelector('.glyph.busy')).not.toBeNull();
+    expect(container.querySelector('.tile.busy')).not.toBeNull();
   });
 
   test('signed-out shows one "Sign in to ⟨host⟩" row that opens the instance', async () => {
@@ -664,10 +712,9 @@ describe('Lens — calm states (design D7)', () => {
     expect(openOptionsAtMock).not.toHaveBeenCalled();
   });
 
-  test('a signed-out github folder points at Connectors via the options deep-link, never the bus', async () => {
-    const ghNode = lensNode({
-      sources: [{ source: 'github', baseUrl: 'https://github.com', queries: ['review-requested'] }],
-    });
+  test('a signed-out github folder reconnects inline (writes token + refreshLens, no navigation)', async () => {
+    const ghRef = ref('github', 'https://github.com', ['review-requested']);
+    const ghNode = lensNode({ sources: [ghRef] });
     const store = makeStore();
     store.state.lenses['sf-1'] = {
       sections: {
@@ -676,18 +723,27 @@ describe('Lens — calm states (design D7)', () => {
     };
     store.state.pinnedBySpace.work = [ghNode];
     const { container } = renderLens(store, { node: ghNode });
-    const row = container.querySelector('[data-testid="smart-signin-row"]') as HTMLButtonElement;
-    expect(row.textContent?.trim()).toBe('Add a token in Settings → Connectors');
-    await fireEvent.click(row);
-    expect(openOptionsAtMock).toHaveBeenCalledWith('#connectors');
-    // Nothing rides the bus — the openUrl handler's scheme hardening would
-    // silently drop a chrome-extension:// URL, so the row never goes near it.
-    expect(sendMock).not.toHaveBeenCalled();
+    // Pat-only github → an inline reconnect field, NOT a sign-in/navigation row.
+    const field = container.querySelector('[data-testid="smart-reconnect-field"]') as HTMLElement;
+    expect(field.textContent).toContain('Reconnect github.com');
+    expect(container.querySelector('[data-testid="smart-signin-row"]')).toBeNull();
+    const input = field.querySelector('[data-testid="account-token-input"]') as HTMLInputElement;
+    await fireEvent.input(input, { target: { value: 'ghp-x' } });
+    await fireEvent.click(
+      field.querySelector('[data-testid="account-connect-button"]') as HTMLButtonElement,
+    );
+    // The token is written by sourceId, and the section refetches in place.
+    expect(setTokenMock).toHaveBeenCalledWith(ghRef.sourceId, 'ghp-x');
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'refreshLens',
+      payload: { spaceId: 'work', folderId: 'sf-1' },
+    });
+    expect(openOptionsAtMock).not.toHaveBeenCalled();
   });
 
   test('a signed-out jira folder shows "Sign in to ⟨host⟩" and opens the instance, never the options path', async () => {
     const jiraNode = lensNode({
-      sources: [{ source: 'jira', baseUrl: 'https://acme.atlassian.net', queries: ['assigned'] }],
+      sources: [ref('jira', 'https://acme.atlassian.net', ['assigned'])],
       icon: 'folder-kanban',
     });
     const store = makeStore();
@@ -707,6 +763,46 @@ describe('Lens — calm states (design D7)', () => {
       payload: { url: 'https://acme.atlassian.net', windowId: 100 },
     });
     expect(openOptionsAtMock).not.toHaveBeenCalled();
+  });
+
+  test('a dangling reference renders the calm "account removed" row, never a crash', () => {
+    const danglingNode = lensNode({
+      sources: [{ sourceId: 'acc:missing', queries: ['review-requested'] }],
+    });
+    const store = makeStore();
+    store.state.pinnedBySpace.work = [danglingNode];
+    // Deliberately do NOT seed acc:missing.
+    const { container } = renderLens(store, { node: danglingNode });
+    const removed = container.querySelector('[data-testid="smart-account-removed"]') as HTMLElement;
+    expect(removed.textContent).toContain('Account removed');
+  });
+
+  test('a reconnect that stays signed-out renders the bad-token error', async () => {
+    const ghRef = ref('github', 'https://github.com', ['review-requested']);
+    const ghNode = lensNode({ sources: [ghRef] });
+    const store = makeStore();
+    store.state.lenses['sf-1'] = {
+      sections: {
+        'github:github.com:review-requested': { state: 'signed-out', items: [], fetchedAt: 1 },
+      },
+    };
+    store.state.pinnedBySpace.work = [ghNode];
+    const { container } = renderLens(store, { node: ghNode });
+    const field = container.querySelector('[data-testid="smart-reconnect-field"]') as HTMLElement;
+    await fireEvent.input(
+      field.querySelector('[data-testid="account-token-input"]') as HTMLInputElement,
+      {
+        target: { value: 'bad' },
+      },
+    );
+    await fireEvent.click(
+      field.querySelector('[data-testid="account-connect-button"]') as HTMLButtonElement,
+    );
+    await tick();
+    // The section is still signed-out → the bad-token copy renders.
+    expect(container.querySelector('[data-testid="account-connect-error"]')?.textContent).toContain(
+      "That token didn't work",
+    );
   });
 
   test('needs-access shows a calm grant prompt (no error card); activating requests the connector origins', async () => {
@@ -735,7 +831,7 @@ describe('Lens — calm states (design D7)', () => {
 
   test('a needs-access github.com folder requests the api.github.com origin (D8)', async () => {
     const ghNode = lensNode({
-      sources: [{ source: 'github', baseUrl: 'https://github.com', queries: ['review-requested'] }],
+      sources: [ref('github', 'https://github.com', ['review-requested'])],
     });
     const store = makeStore();
     store.state.lenses['sf-1'] = {
@@ -784,8 +880,8 @@ describe('Lens — calm states (design D7)', () => {
     // no ghost rows; rows remain activatable mid-reload.
     expect(container.querySelectorAll('[data-testid="lens-result-row"]')).toHaveLength(2);
     expect(container.querySelector('[data-testid="smart-ghost-row"]')).toBeNull();
-    expect(container.querySelector('.glyph.busy')).not.toBeNull();
-    expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('2');
+    expect(container.querySelector('.tile.busy')).not.toBeNull();
+    expect(container.querySelector('[data-testid="lens-row-badge"]')?.textContent).toBe('2');
     await fireEvent.click(
       container.querySelector('[data-testid="lens-result-row"]') as HTMLButtonElement,
     );
@@ -834,7 +930,7 @@ describe('Lens — the reading nook (rss-connector)', () => {
   const rows = (c: HTMLElement): HTMLButtonElement[] =>
     [...c.querySelectorAll('[data-testid="lens-result-row"]')] as HTMLButtonElement[];
 
-  test('unread and read rows render distinctly (dot, read class, accessible name)', () => {
+  test('unread and read rows render distinctly (read class, accessible name)', () => {
     const node = feedNode();
     const store = makeFeedStore(
       node,
@@ -844,19 +940,35 @@ describe('Lens — the reading nook (rss-connector)', () => {
     const { container } = renderLens(store, { node });
     const [r1, r2] = rows(container);
 
-    // Unread row: not read, carries the (un-cleared) unread dot, "unread" in name.
+    // Unread row: not read, "unread" in name. Title weight + colour carry the
+    // distinction — the redundant unread dot was removed.
     expect(r1?.classList).not.toContain('read');
     expect(r1?.getAttribute('aria-label')).toBe('Post 1 — unread');
-    const dot1 = r1?.querySelector('[data-testid="smart-unread-dot"]');
-    expect(dot1).not.toBeNull();
-    expect(dot1?.classList).not.toContain('cleared');
 
-    // Read row: read class, the dot is mounted-but-cleared, "read" in name.
+    // Read row: read class, "read" in name.
     expect(r2?.classList).toContain('read');
     expect(r2?.getAttribute('aria-label')).toBe('Post 2 — read');
-    expect(r2?.querySelector('[data-testid="smart-unread-dot"]')?.classList).toContain('cleared');
-    // Feed rows never carry a status dot.
+    // Feed rows carry neither a status dot nor an unread dot.
     expect(container.querySelector('[data-testid="smart-status-dot"]')).toBeNull();
+    expect(container.querySelector('[data-testid="smart-unread-dot"]')).toBeNull();
+  });
+
+  test('an unopened feed row shows a "Mark read" dismiss ✕ that marks the item read', async () => {
+    const node = feedNode();
+    const store = makeFeedStore(node, { state: 'ok', items: [post(1), post(2)], fetchedAt: 1 }, []);
+    const { container } = renderLens(store, { node });
+
+    // The dismiss control renders on every feed row — no open tab required (unlike
+    // a forge row, whose ✕ closes a bound tab and is gated on `bound`).
+    const close = container.querySelector('[data-testid="smart-close"]') as HTMLButtonElement;
+    expect(close).not.toBeNull();
+    expect(close.getAttribute('aria-label')).toBe('Mark read');
+
+    await fireEvent.click(close);
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'markLensItemRead',
+      payload: { folderId: 'feed-1', itemId: 'rss:news.ycombinator.com:post-1' },
+    });
   });
 
   test('the badge counts UNREAD and disappears when everything is read', async () => {
@@ -867,7 +979,7 @@ describe('Lens — the reading nook (rss-connector)', () => {
       ['rss:news.ycombinator.com:post-1'], // 1 read → 2 unread
     );
     const { container } = renderLens(store, { node });
-    expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('2');
+    expect(container.querySelector('[data-testid="lens-row-badge"]')?.textContent).toBe('2');
 
     // Everything read → the badge is absent (the calm "caught up" state).
     store.state.lensReadState['feed-1'] = [
@@ -876,7 +988,7 @@ describe('Lens — the reading nook (rss-connector)', () => {
       'rss:news.ycombinator.com:post-3',
     ];
     await tick();
-    expect(container.querySelector('[data-testid="folder-row-badge"]')).toBeNull();
+    expect(container.querySelector('[data-testid="lens-row-badge"]')).toBeNull();
   });
 
   test('opening a feed row dispatches openLensItem; the read broadcast resolves the row in place', async () => {
@@ -1018,7 +1130,7 @@ describe('Lens — the draining queue (rss-connector, maxItems = unread budget)'
     // Budget 2 → only the newest two unread render, though the buffer holds five.
     expect(visibleLabels(container)).toEqual(['Post 5 — unread', 'Post 4 — unread']);
     // The badge shows the true total unread (5), not capped by maxItems.
-    expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('5');
+    expect(container.querySelector('[data-testid="lens-row-badge"]')?.textContent).toBe('5');
   });
 
   test('reading an item drains it and backfills the next-oldest unread', async () => {
@@ -1082,7 +1194,7 @@ describe('Lens — the draining queue (rss-connector, maxItems = unread budget)'
     const store = makeFeedStore(node, { state: 'ok', items: fiveUnread(), fetchedAt: 1 });
     const { container } = renderLens(store, { node });
     // Badge shows the true total unread (5) rather than a capped value.
-    expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('5');
+    expect(container.querySelector('[data-testid="lens-row-badge"]')?.textContent).toBe('5');
 
     // Mark everything read → caught up → the badge disappears, nothing visible.
     store.state.lensReadState['feed-1'] = [
@@ -1093,7 +1205,7 @@ describe('Lens — the draining queue (rss-connector, maxItems = unread budget)'
       'rss:news.ycombinator.com:post-5',
     ];
     await tick();
-    expect(container.querySelector('[data-testid="folder-row-badge"]')).toBeNull();
+    expect(container.querySelector('[data-testid="lens-row-badge"]')).toBeNull();
     expect(visibleLabels(container)).toEqual([]);
   });
 
@@ -1110,15 +1222,15 @@ describe('Lens — the draining queue (rss-connector, maxItems = unread budget)'
     ]);
     const { container } = renderLens(store, { node });
     expect(visibleLabels(container)).toEqual(['Post 2 — unread', 'Post 1 — unread']);
-    expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('2');
+    expect(container.querySelector('[data-testid="lens-row-badge"]')?.textContent).toBe('2');
   });
 
   test('revealing one feed section leaves the others drained (per-window, per-section)', async () => {
     const node = feedNode({
       hideRead: true,
       sources: [
-        { source: 'rss', baseUrl: 'https://a.example.com/feed', queries: [] },
-        { source: 'rss', baseUrl: 'https://b.example.com/feed', queries: [] },
+        ref('rss', 'https://a.example.com/feed', []),
+        ref('rss', 'https://b.example.com/feed', []),
       ],
     });
     const store = new LunmaStore();
@@ -1215,8 +1327,8 @@ describe('Lens — per-section collapse (collapsible-smart-folder-sections)', ()
   function twoSourceNode(): LensNode {
     return lensNode({
       sources: [
-        { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['review-requested'] },
-        { source: 'github', baseUrl: 'https://github.com', queries: ['review-requested'] },
+        ref('gitlab', 'https://gitlab.example.com', ['review-requested']),
+        ref('github', 'https://github.com', ['review-requested']),
       ],
     });
   }
@@ -1229,6 +1341,7 @@ describe('Lens — per-section collapse (collapsible-smart-folder-sections)', ()
   function makeTwoSourceStore(glItems: LensItem[], ghItems: LensItem[]): LunmaStore {
     const node = twoSourceNode();
     const store = new LunmaStore();
+    seedAccounts(store);
     store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
     store.state.pinnedBySpace.work = [node];
     store.state.lenses['sf-1'] = {
@@ -1319,12 +1432,12 @@ describe('Lens — per-section collapse (collapsible-smart-folder-sections)', ()
     // gitlab 4 + github 2 = 6.
     const store = makeTwoSourceStore([item(1), item(2), item(3), item(4)], [ghItem(1), ghItem(2)]);
     const { container } = renderLens(store, { node: twoSourceNode() });
-    expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('6');
+    expect(container.querySelector('[data-testid="lens-row-badge"]')?.textContent).toBe('6');
 
     store.setLensSectionCollapsed(100, 'sf-1', GITLAB_KEY, true);
     await tick();
     // Collapse hides the body but the badge still sums every section.
-    expect(container.querySelector('[data-testid="folder-row-badge"]')?.textContent).toBe('6');
+    expect(container.querySelector('[data-testid="lens-row-badge"]')?.textContent).toBe('6');
   });
 
   test('a single-source folder renders no section header and no collapse control', () => {

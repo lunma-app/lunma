@@ -95,9 +95,14 @@ const ariaLabel = $derived(
     align-items: center;
     gap: var(--space-2);
     min-height: 24px;
-    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
+    /* Right inset --space-3 (12px), not --space-2, so the count right-aligns with
+       the kebab GLYPHS above (a kebab button sits at 8px row-pad but its icon is
+       inset ~4px inside the 24px button → glyph at ~12px). Aligns the whole
+       trailing column. */
+    padding: var(--space-1) var(--space-3) var(--space-1) var(--space-3);
     margin-bottom: var(--row-gap);
-    border-radius: var(--r-md);
+    /* Match the lens row + result rows: --r-lg pill on the interactive --hover wash. */
+    border-radius: var(--r-lg);
     transition:
       background var(--motion-fast) var(--ease-standard),
       transform var(--motion-fast) var(--ease-standard);
@@ -110,7 +115,7 @@ const ariaLabel = $derived(
     padding-top: calc(var(--space-1) + 1px);
   }
   .section-header:hover {
-    background: var(--surface-2);
+    background: var(--hover);
   }
   .section-header:hover .section-host {
     color: var(--text-2);

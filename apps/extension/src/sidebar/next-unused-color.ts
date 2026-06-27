@@ -10,6 +10,7 @@ const PALETTE: readonly SpaceColor[] = [
   'orange',
   'yellow',
   'green',
+  'teal',
   'cyan',
   'blue',
   'purple',

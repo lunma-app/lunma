@@ -56,9 +56,23 @@ function openCreate(event: MouseEvent): void {
   editorOpen = true;
 }
 
-function openEditFor(space: Space, el: HTMLElement): void {
+function openEditFor(space: Space, el: HTMLElement | null): void {
   editorMode = { kind: 'edit', space };
   triggerEl = el;
+  editorOpen = true;
+}
+
+// Exposed to App.svelte (via `bind:this`) so the Space-header menu — which lives
+// in App but does NOT own the editor — can open it. No triggering element, so
+// focus simply isn't returned to a chip on close (the sheet manages its own).
+export function openEditForSpace(spaceId: string): void {
+  const space = store.state.spaces.find((s) => s.id === spaceId);
+  if (space) openEditFor(space, null);
+}
+
+export function openCreateSpace(): void {
+  editorMode = createMode();
+  triggerEl = null;
   editorOpen = true;
 }
 
@@ -200,7 +214,7 @@ function openOptions(): void {
           oncontextmenu={(event) => onChipContextMenu(event, space)}
         >
           {#snippet tile()}
-            <span class="tile"><Icon name={space.icon} size={12} /></span>
+            <span class="tile"><Icon name={space.icon} size={16} /></span>
           {/snippet}
           {#if isActive}
             <!-- The active chip reads as "lit from within": its Space-colour tile
@@ -230,7 +244,7 @@ function openOptions(): void {
         aria-label="New Space"
         onclick={openCreate}
       >
-        <Icon name="plus" size={12} />
+        <Icon name="plus" size={14} />
       </button>
     {/snippet}
   </Tooltip>
@@ -247,56 +261,62 @@ function openOptions(): void {
       onclick={openOptions}
     />
   </span>
-
-  <!-- The editor morph is absolutely positioned within the switcher (out of
-       flow), so it grows upward over the tab list without changing the
-       switcher's or sidebar's height. -->
-  <SpaceEditor open={editorOpen} mode={editorMode} onClose={closeEditor} />
 </div>
 
+<!-- The editor now lives in a BottomSheet (SpaceEditor wraps itself in one).
+     Rendered as a SIBLING of the `.switcher` bar so the sheet's
+     `position:absolute;inset:0` anchors to the full sidebar panel (the nearest
+     positioned ancestor), not the short switcher bar. The switcher opens it for
+     create (the `+`/add-chip) and edit (active-chip click / any-chip right-click);
+     `closeEditor` returns focus to the trigger chip. -->
+<SpaceEditor open={editorOpen} mode={editorMode} onClose={closeEditor} />
+
 <style>
+  /* Comp §6: a bordered-top bar over a faint dark wash, holding a row of rounded
+   * Space tiles, a dashed add-tile, and a trailing settings gear. */
   .switcher {
     position: relative;
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-    border-top: 1px solid var(--divider);
-    background: var(--bg-elev);
+    padding: 11px 14px;
+    border-top: 1px solid var(--border-soft);
+    background: oklch(0 0 0 / 0.14);
   }
 
-  /* Arc-style: no box around the active chip — just opacity. Active = 1,
-   * inactive = dimmed. Opacity transitions smoothly so when the active state
-   * migrates from one chip to another, you see one fade up while the other
-   * fades down. */
+  /* Each Space tile is a 34px rounded chip. Active = Space-hue ring (the
+   * `--space-line` equivalent, `--space-c`) over a soft Space-hue fill
+   * (`--space-soft` ≡ `--space-c-soft`); inactive = calm `--surface` chip.
+   * The active fill/ring crossfades so when the active state migrates between
+   * chips, one lights up while the other settles. */
   .chip {
     position: relative;
-    flex: 0 0 32px;
-    width: 32px;
-    height: 32px;
+    flex: 0 0 34px;
+    width: 34px;
+    height: 34px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     box-sizing: border-box;
     padding: 0;
-    background: transparent;
+    background: var(--surface);
     border: 1px solid transparent;
     border-radius: var(--r-md);
     color: var(--text);
     cursor: pointer;
-    opacity: 0.4;
     /* Chips are pointer-draggable to reorder; suppress touch scrolling on them. */
     touch-action: none;
     /* Durations read the motion tokens (no hard-coded ms literals) so they collapse
      * to the fast tick under prefers-reduced-motion via the token override block. */
     transition:
-      opacity var(--motion-slow) cubic-bezier(0.16, 1, 0.3, 1),
       background-color var(--motion-base) ease,
+      border-color var(--motion-base) ease,
       transform var(--motion-fast) var(--ease-standard);
   }
 
   .chip[data-active='true'] {
-    opacity: 1;
+    background: var(--space-c-soft);
+    border-color: var(--space-c);
     /* The active chip is clickable — clicking it opens its editor. */
     cursor: pointer;
   }
@@ -309,8 +329,7 @@ function openOptions(): void {
 
   /* Press + focus follow the one foundation convention for every chip (active,
    * inactive, and the `+` add-chip, which also carries `.chip`): the press scale
-   * and the single `--focus-*` ring (auto-hue inside `.sidebar`), replacing the
-   * former inline `scale(0.94)` and `outline: 2px solid var(--accent)`. */
+   * and the single `--focus-*` ring (auto-hue inside `.sidebar`). */
   .chip:active {
     transform: scale(var(--press-scale));
   }
@@ -319,15 +338,18 @@ function openOptions(): void {
     outline-offset: var(--focus-offset);
   }
 
-  /* The active chip's frosted-glass backing fills the 32px chip and centres the
-   * Space-colour tile on it. Only the active chip composes a `Surface`, so this
-   * sizing applies to it alone; it adjusts layout, not the primitive's chrome. */
+  /* The active chip's frosted-glass backing fills the tile and centres the
+   * Space-colour swatch on it. Only the active chip composes a `Surface`, so this
+   * sizing applies to it alone; it adjusts layout, not the primitive's chrome.
+   * Transparent so the chip's own `--space-soft` fill reads through. */
   .chip[data-active='true'] :global(.surface) {
     width: 100%;
     height: 100%;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    background: transparent;
+    border: 0;
   }
 
   /* "Click to edit" cue: a dim scrim + pencil that fades in over the active
@@ -351,24 +373,23 @@ function openOptions(): void {
   }
 
   .chip[data-active='false']:hover {
-    opacity: 0.85;
     background: var(--hover);
   }
 
+  /* Inactive icon swatch: a muted glyph on the calm chip (comp's
+   * `--text-muted` icon). The active chip recolours its swatch to the Space hue. */
   .tile {
-    width: 20px;
-    height: 20px;
-    border-radius: var(--r-sm);
-    background: oklch(var(--space-l, 0.62) var(--space-chroma, 0.15) var(--space-h));
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: var(--space-on);
-    flex: 0 0 20px;
+    color: var(--text-muted);
+  }
+  .chip[data-active='true'] .tile {
+    color: oklch(0.84 var(--space-chroma, 0.13) var(--space-h));
   }
 
-  /* Launcher + Settings cluster, pushed to the bar's trailing edge (chips + the
-   * add-chip sit on the leading side). */
+  /* Settings cluster, pushed to the bar's trailing edge (chips + the add-chip
+   * sit on the leading side). */
   .bar-actions {
     margin-left: auto;
     display: inline-flex;
@@ -376,16 +397,17 @@ function openOptions(): void {
     gap: var(--space-1);
   }
 
+  /* Dashed "add Space" tile (comp's `--text-faint` glyph on a dashed `--border`
+   * outline); hover lifts the glyph + border per the comp. */
   .chip-add {
     background: transparent;
-    color: var(--text-dim);
+    color: var(--text-faint);
     border: 1px dashed var(--border);
-    opacity: 0.45;
   }
   .chip-add:hover {
-    opacity: 0.8;
-    background: var(--hover);
-    color: var(--text);
+    background: transparent;
+    color: var(--text-2);
+    border-color: var(--text-faint);
   }
 
   /* Vertical insertion line — the X-axis sibling of the Pinned/Temp `.drop-line`:

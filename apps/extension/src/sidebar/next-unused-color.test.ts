@@ -23,12 +23,13 @@ describe('nextUnusedColor', () => {
     expect(nextUnusedColor([space('yellow'), space('red')])).toBe('orange');
   });
 
-  // The full 9-colour palette, in canonical order.
+  // The full 10-colour palette, in canonical order.
   const ALL_COLORS: SpaceColor[] = [
     'red',
     'orange',
     'yellow',
     'green',
+    'teal',
     'cyan',
     'blue',
     'purple',

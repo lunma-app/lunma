@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/svelte';
 import { flushSync } from 'svelte';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { LunmaStore } from '../shared/store.svelte';
@@ -55,6 +55,48 @@ function installLayout(map: Record<string, [number, number]>): () => void {
 function pointer(type: string, clientX: number, clientY: number): MouseEvent {
   return new MouseEvent(type, { clientX, clientY, button: 0, bubbles: true });
 }
+
+/**
+ * Open a tab row's right-click menu. Tab rows now wrap their body in
+ * `BitsContextMenu`, which OWNS the right-click: bits-ui attaches the
+ * `contextmenu` handler to the inner trigger region (the `.drag-handle` wrapper
+ * inside the measured `.row-wrap` / `.child-wrap`), portals the popover to
+ * `document.body`, and opens ASYNC. So we fire `contextmenu` on the trigger
+ * region and `waitFor` the portaled `pinned-menu-item`s. Pass either a
+ * top-level `.row-wrap[data-row-id]` or a `.child-wrap` — we descend to its
+ * trigger region (the element bits-ui spread its props onto).
+ */
+async function openRowContextMenu(rowOrChildWrap: Element): Promise<HTMLButtonElement[]> {
+  // The trigger region is the bits-ui ContextMenu.Trigger element — the inner
+  // wrapper that received `{...props}`. It is the first element child of the
+  // measured wrapper (the `.drag-handle` for top-level rows, the unclassed
+  // wrapper for folder children). Right-clicking it (or any descendant) opens.
+  const trigger = (rowOrChildWrap.querySelector('[aria-haspopup="menu"]') ??
+    rowOrChildWrap.firstElementChild ??
+    rowOrChildWrap) as Element;
+  await fireEvent(
+    trigger,
+    new MouseEvent('contextmenu', { button: 2, clientX: 12, clientY: 18, bubbles: true }),
+  );
+  await waitFor(() =>
+    expect(document.querySelector('[data-testid="pinned-menu-item"]')).not.toBeNull(),
+  );
+  return [...document.querySelectorAll('[data-testid="pinned-menu-item"]')] as HTMLButtonElement[];
+}
+
+/** Open a FolderRow's kebab (now a `BitsMenu`): trigger `menu-trigger`, items
+ * `menu-item` portaled to `document.body`, opened ASYNC. */
+async function openFolderMenu(folderRow: Element): Promise<HTMLButtonElement[]> {
+  const trigger = folderRow.querySelector('[data-testid="menu-trigger"]') as HTMLButtonElement;
+  await fireEvent.pointerDown(trigger);
+  await fireEvent.pointerUp(trigger);
+  await fireEvent.click(trigger);
+  await waitFor(() => expect(document.querySelector('[data-testid="menu-item"]')).not.toBeNull());
+  return [...document.querySelectorAll('[data-testid="menu-item"]')] as HTMLButtonElement[];
+}
+
+const byMenuId = (items: HTMLButtonElement[], id: string): HTMLButtonElement | undefined =>
+  items.find((el) => el.getAttribute('data-menu-id') === id);
 
 const { sendMock } = vi.hoisted(() => ({ sendMock: vi.fn(() => Promise.resolve()) }));
 // The surface dispatches fire-and-forget via `dispatch`; route it to the same
@@ -558,21 +600,16 @@ describe('PinnedTabs folders', () => {
     const { container } = render(PinnedTabsHarness, {
       props: { store, windowId: 100, spaceId: 'work' },
     });
-    // The folder's actions are a plain kebab `Menu` — NOT a row that composes a
-    // TabRow header (which would render a duplicate row: folder name + globe
-    // favicon floated right).
+    // The folder's actions are a bits-ui kebab `BitsMenu` — NOT a row that
+    // composes a TabRow header (which would render a duplicate row: folder name +
+    // globe favicon floated right).
     const folderRow = container.querySelector('[data-testid="folder-row"]') as HTMLElement;
     expect(folderRow.querySelector('[data-testid="tab-row"]')).toBeNull();
     expect(folderRow.querySelector('[data-testid="tab-row-menu-trigger"]')).toBeNull();
 
-    // Open the kebab and pick Rename.
-    await fireEvent.click(
-      folderRow.querySelector('[data-testid="folder-row-menu-trigger"]') as HTMLButtonElement,
-    );
-    const rename = [...container.querySelectorAll('[data-testid="folder-row-menu-item"]')].find(
-      (el) => el.getAttribute('data-menu-id') === 'rename',
-    ) as HTMLButtonElement;
-    await fireEvent.click(rename);
+    // Open the kebab (BitsMenu, portaled) and pick Rename.
+    const items = await openFolderMenu(folderRow);
+    await fireEvent.click(byMenuId(items, 'rename') as HTMLButtonElement);
 
     // The name becomes an inline field, in place, with the folder glyph still shown.
     const input = container.querySelector(
@@ -608,9 +645,10 @@ describe('PinnedTabs folders', () => {
       props: { store, windowId: 100, spaceId: 'work' },
     });
     const folderRow = container.querySelector('[data-testid="folder-row"]') as HTMLElement;
-    // The folder trailing is a plain Menu kebab — it must NOT compose a TabRow
-    // (which would paint a second name + globe favicon on the right).
-    expect(folderRow.querySelector('[data-testid="folder-row-menu-trigger"]')).not.toBeNull();
+    // The folder trailing is a bits-ui kebab (BitsMenu, testid `menu-trigger`) —
+    // it must NOT compose a TabRow (which would paint a second name + globe
+    // favicon on the right).
+    expect(folderRow.querySelector('[data-testid="menu-trigger"]')).not.toBeNull();
     expect(folderRow.querySelector('[data-testid="tab-row"]')).toBeNull();
     expect(folderRow.querySelector('[data-testid="tab-row-menu-trigger"]')).toBeNull();
   });
@@ -627,14 +665,9 @@ describe('PinnedTabs folders', () => {
     const childArea = container.querySelector('[data-testid="folder-children"]') as HTMLElement;
     expect(childArea).not.toBeNull();
 
-    // Right-click the child row to open the shared action menu, then pick Unpin.
-    (childArea.querySelector('.child-wrap') as HTMLElement).dispatchEvent(
-      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }),
-    );
-    await Promise.resolve();
-    const unpin = [...document.querySelectorAll('[data-testid="pinned-menu-item"]')].find(
-      (el) => el.getAttribute('data-menu-id') === 'unpin',
-    ) as HTMLButtonElement;
+    // Right-click the child row to open its bits-ui context menu, then pick Unpin.
+    const items = await openRowContextMenu(childArea.querySelector('.child-wrap') as HTMLElement);
+    const unpin = byMenuId(items, 'unpin') as HTMLButtonElement;
     expect(unpin).toBeTruthy();
     await fireEvent.click(unpin);
 
@@ -918,17 +951,10 @@ describe('PinnedTabs right-click menu + hover close', () => {
 
   async function openMenu(container: HTMLElement, rowId = 'st-1'): Promise<HTMLButtonElement[]> {
     const wrap = container.querySelector(`.row-wrap[data-row-id="${rowId}"]`) as HTMLElement;
-    wrap.dispatchEvent(
-      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 12, clientY: 18 }),
-    );
-    await Promise.resolve();
-    return [
-      ...document.querySelectorAll('[data-testid="pinned-menu-item"]'),
-    ] as HTMLButtonElement[];
+    return openRowContextMenu(wrap);
   }
 
-  const byId = (items: HTMLButtonElement[], id: string): HTMLButtonElement | undefined =>
-    items.find((el) => el.getAttribute('data-menu-id') === id);
+  const byId = byMenuId;
 
   test('a bound row shows the ✕ close; activating it closes the bound tab without focusing', async () => {
     const store = boundStore();
@@ -957,25 +983,31 @@ describe('PinnedTabs right-click menu + hover close', () => {
     expect(container.querySelector('[data-testid="pinned-close"]')).toBeNull();
   });
 
-  test('right-click opens the menu at the cursor, suppresses the native menu, and does not focus', async () => {
+  // Open/dismiss smoke. bits-ui OWNS cursor anchoring + collision clamp +
+  // keyboard invocation now (the obsolete x/y/anchorEl-positioning + outside-click
+  // tests the legacy ContextMenu carried are deleted — bits-ui covers them in its
+  // own suite). We keep: native-menu suppression, the menu portals open, and a
+  // right-click never focuses/switches the tab (design D4).
+  test('right-click opens the menu, suppresses the native menu, and does not focus', async () => {
     const store = boundStore();
     const { container } = render(PinnedTabsHarness, {
       props: { store, windowId: 100, spaceId: 'work' },
     });
     const wrap = container.querySelector('.row-wrap[data-row-id="st-1"]') as HTMLElement;
+    const trigger = wrap.querySelector('[aria-haspopup="menu"]') ?? wrap.firstElementChild;
     const ev = new MouseEvent('contextmenu', {
       bubbles: true,
       cancelable: true,
+      button: 2,
       clientX: 12,
       clientY: 18,
     });
-    wrap.dispatchEvent(ev);
-    await Promise.resolve();
+    (trigger as Element).dispatchEvent(ev);
+    // bits-ui's ContextMenu.Trigger calls preventDefault to suppress Chrome's menu.
     expect(ev.defaultPrevented).toBe(true);
-    const menu = document.querySelector('[data-testid="pinned-menu"]') as HTMLElement;
-    expect(menu).not.toBeNull();
-    expect(menu.style.left).toBe('12px');
-    expect(menu.style.top).toBe('18px');
+    await waitFor(() =>
+      expect(document.querySelector('[data-testid="pinned-menu"]')).not.toBeNull(),
+    );
     expect(sendMock).not.toHaveBeenCalledWith({
       kind: 'focusSavedTab',
       payload: { savedTabId: 'st-1', windowId: 100 },
@@ -1028,13 +1060,16 @@ describe('PinnedTabs right-click menu + hover close', () => {
     });
     const items = await openMenu(container);
     await fireEvent.click(byId(items, 'delete') as HTMLButtonElement);
-    // keepOpen — not dispatched yet; the entry becomes a confirm affordance.
+    // keepOpen — not dispatched yet; the entry becomes a confirm affordance, and
+    // the bits-ui menu stays open (closeOnSelect=false) and re-renders the item.
     expect(sendMock).not.toHaveBeenCalledWith({
       kind: 'deleteSavedTab',
       payload: { savedTabId: 'st-1' },
     });
-    expect(document.querySelector('[data-menu-id="delete"] .label')?.textContent).toBe(
-      'Delete — confirm',
+    await waitFor(() =>
+      expect(document.querySelector('[data-menu-id="delete"] .label')?.textContent).toBe(
+        'Delete — confirm',
+      ),
     );
     await fireEvent.click(document.querySelector('[data-menu-id="delete"]') as HTMLButtonElement);
     expect(sendMock).toHaveBeenCalledWith({
@@ -1063,18 +1098,21 @@ describe('PinnedTabs right-click menu + hover close', () => {
     expect(byId(items, 'reset-name')).toBeUndefined();
   });
 
-  test('"Lock to its site…" drills into the boundary editor and dispatches setTabBoundary', async () => {
+  test('"Lock to its site…" opens the boundary editor in a sheet and dispatches setTabBoundary', async () => {
     const store = boundStore();
     const { container } = render(PinnedTabsHarness, {
       props: { store, windowId: 100, spaceId: 'work' },
     });
     const items = await openMenu(container);
     const lock = byId(items, 'keep-on-site') as HTMLButtonElement;
-    // Advertises its drill-in via the submenu affordance.
-    expect(lock.getAttribute('aria-haspopup')).toBe('menu');
+    expect(lock).toBeTruthy();
+    // The boundary editor is an EDITOR, not a bits-ui submenu: selecting "Lock to
+    // its site…" closes the flat menu and opens TabBoundaryEditor inside a
+    // BottomSheet scoped to the sidebar panel.
     await fireEvent.click(lock);
-    // Drilled in: the back affordance + the boundary editor render.
-    expect(document.querySelector('[data-testid="pinned-menu-back"]')).not.toBeNull();
+    await waitFor(() =>
+      expect(document.querySelector('[data-testid="pinned-boundary-sheet"]')).not.toBeNull(),
+    );
     const editor = document.querySelector('[data-testid="tab-boundary-editor"]') as HTMLElement;
     expect(editor).not.toBeNull();
     // Selecting a mode (Off) dispatches setTabBoundary.
@@ -1110,10 +1148,7 @@ describe('PinnedTabs keyboard reorder (Move up/down)', () => {
 
   async function openRowMenu(container: HTMLElement, index: number): Promise<void> {
     const rows = container.querySelectorAll('.row-wrap');
-    (rows[index] as HTMLElement).dispatchEvent(
-      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }),
-    );
-    await Promise.resolve();
+    await openRowContextMenu(rows[index] as HTMLElement);
   }
 
   test('Move down on a top-level row dispatches reorderPinned with the swapped order', async () => {
@@ -1172,10 +1207,7 @@ describe('PinnedTabs keyboard reorder (Move up/down)', () => {
       container.querySelector('[data-testid="folder-row"] .hit') as HTMLElement,
     );
     const childArea = container.querySelector('[data-testid="folder-children"]') as HTMLElement;
-    (childArea.querySelector('.child-wrap') as HTMLElement).dispatchEvent(
-      new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }),
-    );
-    await Promise.resolve();
+    await openRowContextMenu(childArea.querySelector('.child-wrap') as HTMLElement);
     // Both Move up and Move down are disabled (st-2 is the only/edge child) and inert.
     expect(menuItem('move-up').getAttribute('aria-disabled')).toBe('true');
     expect(menuItem('move-down').getAttribute('aria-disabled')).toBe('true');
@@ -1195,13 +1227,9 @@ describe('PinnedTabs keyboard reorder (Move up/down)', () => {
     const { container } = render(PinnedTabsHarness, {
       props: { store, windowId: 100, spaceId: 'work' },
     });
-    await fireEvent.click(
-      container.querySelector('[data-testid="folder-row-menu-trigger"]') as HTMLButtonElement,
-    );
-    const down = [...container.querySelectorAll('[data-testid="folder-row-menu-item"]')].find(
-      (el) => el.getAttribute('data-menu-id') === 'move-down',
-    ) as HTMLButtonElement;
-    await fireEvent.click(down);
+    const folderRow = container.querySelector('[data-testid="folder-row"]') as HTMLElement;
+    const items = await openFolderMenu(folderRow);
+    await fireEvent.click(byMenuId(items, 'move-down') as HTMLButtonElement);
     expect(sendMock).toHaveBeenCalledWith({
       kind: 'reorderPinned',
       payload: {
@@ -1222,9 +1250,7 @@ describe('PinnedTabs smart-folder node (smart-folders, design D13)', () => {
     id: 'sf-1',
     name: 'Review requests',
     icon: 'folder-git-2',
-    sources: [
-      { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['review-requested'] },
-    ],
+    sources: [{ sourceId: 'acc-gl', queries: ['review-requested'] }],
     maxItems: 20,
     hideRead: false,
     refreshMinutes: 10,
@@ -1233,6 +1259,13 @@ describe('PinnedTabs smart-folder node (smart-folders, design D13)', () => {
   /** A top-level tab st-1 plus the smart node, in the given order. */
   function withSmart(order: 'tab-first' | 'smart-first' = 'tab-first'): LunmaStore {
     const store = makeStore();
+    // The lens references the gitlab account (connector-accounts) — seed it so the
+    // node resolves its section.
+    store.state.sources['acc-gl'] = {
+      id: 'acc-gl',
+      provider: 'gitlab',
+      baseUrl: 'https://gitlab.example.com',
+    };
     store.state.savedTabs['st-1'] = savedTab({ id: 'st-1', currentURL: null });
     store.state.tabBindings['st-1'] = {};
     store.state.pinnedBySpace.work =
@@ -1249,7 +1282,7 @@ describe('PinnedTabs smart-folder node (smart-folders, design D13)', () => {
     });
     const wrap = container.querySelector('[data-row-id="sf-1"]') as HTMLElement;
     expect(wrap.getAttribute('data-row-kind')).toBe('lens');
-    expect(wrap.querySelector('[data-testid="folder-row"]')).not.toBeNull();
+    expect(wrap.querySelector('[data-testid="lens-row"]')).not.toBeNull();
     expect(wrap.querySelector('[data-testid="tab-row"]')).toBeNull();
     expect(wrap.textContent).toContain('Review requests');
   });
@@ -1269,7 +1302,7 @@ describe('PinnedTabs smart-folder node (smart-folders, design D13)', () => {
 
     // Grab the smart row (via its folder-row chrome, where the press handler
     // lives) and drag it below the tab row.
-    const grabEl = (rows[0] as Element).querySelector('[data-testid="folder-row"]') as HTMLElement;
+    const grabEl = (rows[0] as Element).querySelector('[data-testid="lens-row"]') as HTMLElement;
     await fireEvent.pointerDown(grabEl, { clientX: 50, clientY: 10, button: 0 });
     window.dispatchEvent(pointer('pointermove', 50, 70));
     window.dispatchEvent(pointer('pointermove', 50, 75));
@@ -1338,7 +1371,7 @@ describe('PinnedTabs smart-folder node (smart-folders, design D13)', () => {
     });
     const unregister = drag.registerZone('temp:100', { el: tempEl, itemEls: () => [] });
 
-    const grabEl = (rows[1] as Element).querySelector('[data-testid="folder-row"]') as HTMLElement;
+    const grabEl = (rows[1] as Element).querySelector('[data-testid="lens-row"]') as HTMLElement;
     await fireEvent.pointerDown(grabEl, { clientX: 50, clientY: 50, button: 0 });
     window.dispatchEvent(pointer('pointermove', 50, 70));
     window.dispatchEvent(pointer('pointermove', 50, 150)); // into temp
@@ -1357,12 +1390,18 @@ describe('PinnedTabs smart-folder node (smart-folders, design D13)', () => {
       props: { store, windowId: 100, spaceId: 'work' },
     });
     const wrap = container.querySelector('[data-row-id="sf-1"]') as HTMLElement;
-    await fireEvent.click(
-      wrap.querySelector('[data-testid="folder-row-menu-trigger"]') as HTMLButtonElement,
+    // The lens's actions live in its right-click context menu (the lens row has no kebab).
+    const lensRow = wrap.querySelector('[data-testid="lens-row"]') as HTMLElement;
+    await fireEvent(
+      lensRow,
+      new MouseEvent('contextmenu', { button: 2, clientX: 30, clientY: 30, bubbles: true }),
+    );
+    await waitFor(() =>
+      expect(document.querySelector('[data-testid="smart-folder-menu-item"]')).not.toBeNull(),
     );
     const item = (id: string): HTMLButtonElement =>
-      [...wrap.querySelectorAll('[data-testid="folder-row-menu-item"]')].find(
-        (el) => el.getAttribute('data-menu-id') === id,
+      document.querySelector(
+        `[data-testid="smart-folder-menu-item"][data-menu-id="${id}"]`,
       ) as HTMLButtonElement;
 
     // At the bottom of the list: Move down is inert.
