@@ -26,11 +26,21 @@ function applyDensity(settings: Settings): void {
   applyDensityToDocument(settings.density);
 }
 
-/** Reflect the light/dark theme onto `<html>` (the redesigned lens page is flat +
- * fully token-driven, so theme is the only document-level presentation hook —
- * tint/aurora no longer apply here). */
+/** Reflect the light/dark theme onto `<html>`. */
 function applyTheme(settings: Settings): void {
   applyThemeToDocument(settings.theme);
+}
+
+/** Reflect the atmosphere-glow + tint settings onto the `.lenspage` root so its
+ * aurora backdrop shows/hides live. The aurora intensity is seeded from the `tint`
+ * prop at first paint (mount props are static); `showGlares` is the live toggle —
+ * `[data-show-glares='false']` hides the aurora in CSS, mirroring the new-tab home.
+ * Called right after mount (before paint, so no flash) and on every settings change. */
+function applyGlow(settings: Settings): void {
+  const root = target.querySelector<HTMLElement>('[data-testid="lenspage-root"]');
+  if (!root) return;
+  root.dataset.showGlares = String(settings.showGlares);
+  root.dataset.tint = settings.tint;
 }
 
 /** The folder this page renders, from `?folderId=…`. Null when the param is
@@ -58,11 +68,13 @@ async function boot(): Promise<void> {
     log.error('lenspage boot failed: getCurrentWindowId', { err });
     mount(LensPage, {
       target,
-      props: { windowId: -1, folderId, initialState: null },
+      props: { windowId: -1, folderId, initialState: null, tint: initialSettings.tint },
     });
+    applyGlow(initialSettings);
     watchSettings((settings) => {
       applyDensity(settings);
       applyTheme(settings);
+      applyGlow(settings);
     });
     return;
   }
@@ -92,14 +104,16 @@ async function boot(): Promise<void> {
   const initialState = pendingBroadcast ?? snapshot;
   mount(LensPage, {
     target,
-    props: { windowId, folderId, initialState },
+    props: { windowId, folderId, initialState, tint: initialSettings.tint },
   });
+  applyGlow(initialSettings);
 
-  // Re-apply on change (e.g. the user switches density or theme in the options
-  // page). Registered once per boot, after mount.
+  // Re-apply on change (e.g. the user switches density, theme, or the atmosphere
+  // glow in the options page). Registered once per boot, after mount.
   watchSettings((settings) => {
     applyDensity(settings);
     applyTheme(settings);
+    applyGlow(settings);
   });
 }
 

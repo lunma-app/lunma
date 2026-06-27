@@ -176,6 +176,16 @@ describe('LensPage — single-lens shell + per-item bucketing', () => {
     });
   });
 
+  test('renders the ambient aurora backdrop, intensity tracking the tint prop', () => {
+    const initialState = stateWith(ghNode(), {
+      [GH_SK]: { state: 'ok', items: [PR], fetchedAt: 1 },
+    });
+    const { getByTestId } = render(LensPage, {
+      props: { windowId: 100, folderId: 'sf-1', initialState, tint: 'subtle' },
+    });
+    expect(getByTestId('aurora').getAttribute('data-intensity')).toBe('subtle');
+  });
+
   test('no folderId renders the calm missing state', () => {
     const initialState = stateWith(ghNode(), {});
     const { getByTestId } = render(LensPage, {
