@@ -46,25 +46,60 @@ first sketch). Rejected — it adds a slice that must be pruned when lenses are
 deleted and migrated independently, with no benefit over a node field for a
 global-per-lens setting.
 
-### D2 — Pure filter logic in `shared/lens-filter.ts`
-Both surfaces import `applyLensFilter(items, filter)` and
-`deriveLensFacets(items)` from `shared/`. `overview-vm.ts` keeps its launcher-only
-display helpers (`reposOf`, `feedsOf`, new `projectsOf`) but delegates the actual
-predicate to the shared module so the sidebar can use the identical logic.
+### D2 — Pure filter logic in `shared/lens-filter.ts`, and `LensEntity` moves to `types.ts`
+Both surfaces import `applyLensFilter(...)` and `deriveLensFacets(...)` from
+`shared/`. `overview-vm.ts` keeps its launcher-only display helpers (`reposOf`,
+`feedsOf`, new `projectsOf`) but delegates the actual predicate to the shared module
+so the sidebar can use identical logic.
 *Alternative:* duplicate the predicate in `Lens.svelte`. Rejected — guaranteed drift
 between two surfaces that must agree by definition.
 
+**Intra-`shared/` cycle (must fix before apply).** `LensFilter` references
+`LensEntity`, and the lens `PinNode` (which gains `filter?: LensFilter`) lives in
+`shared/types.ts`. But `LensEntity` currently lives in `shared/lens-entity.ts`, which
+imports `LensItem`/`LensKind` *from* `types.ts`. Putting `LensFilter` in `types.ts`
+while it imports `LensEntity` from `lens-entity.ts` would form
+`types.ts → lens-entity.ts → types.ts` — a cycle Biome's `noImportCycles` rejects
+(a binding gate). **Resolution:** move the `LensEntity` *type definition* into
+`types.ts` and re-export it from `lens-entity.ts` (`export type { LensEntity } from
+'./types'`) so existing `import … from '../shared/lens-entity'` sites are unchanged.
+`lens-entity.ts` keeps the mapping *functions* (`entityForItem`, …) and imports
+`LensEntity` from `types.ts`. Then `LensFilter`/`PinNode.filter` reference
+`LensEntity` locally in `types.ts` (no import), and `lens-filter.ts → lens-entity.ts
+→ types.ts` is a clean one-way chain.
+
 ### D3 — Filter semantics: AND across axes, OR within, scope is per-entity
-An item passes iff **both**:
+The predicate operates on `{ item: LensItem; host: string }` pairs (both surfaces
+have the host in scope — the overview from each `Tagged.cfg`, the sidebar from the
+section `cfg`/`sk`), so repo facets can stay **host-scoped** (see D10). An item
+passes iff **both**:
 - **type:** `entities` is empty **or** `entityForItem(item) ∈ entities`; and
-- **scope:** a Change passes iff `repos` is empty **or** `change.repo ∈ repos`; a
-  Ticket passes iff `projects` is empty **or** `ticket.project ∈ projects`; Articles
-  and Other carry no repo/project and **always** pass the scope test (they are
-  governed only by the type axis).
+- **scope:** a Change passes iff `repos` is empty **or** its host-qualified repo key
+  `\`${host}/${change.repo}\`` ∈ `repos`; a Ticket passes iff `projects` is empty
+  **or** `ticket.project ∈ projects`; Article and Other items carry no repo/project
+  and **always** pass the scope axis (governed only by the type axis).
 
 So selecting a repo narrows Changes without hiding Issues/Articles, matching the
 mental model "repo for changes, project for issues". Within an axis, multiple
 selected values are OR'd.
+
+**Project-less tickets.** `ticket.project` is optional. A project-less ticket passes
+scope only when `projects` is empty; under a non-empty `projects` filter it is
+excluded (it matches no selected project — the same rule, applied honestly).
+`deriveLensFacets` SHALL drop `undefined` so `projects: string[]` never contains a
+hole.
+
+### D10 — Repo facets are host-scoped (preserve the prior guarantee)
+`change.repo` is a bare `owner/repo` slug (`types.ts`), so the same slug on two hosts
+would merge into one facet and one selection would filter both — a guarantee the
+superseded review-page requirement explicitly held ("the same `owner/repo` on two
+hosts never merges"). `LensFilter.repos` therefore stores **host-qualified keys**
+(`\`${host}/${owner}/${repo}\``); `deriveLensFacets` emits host-qualified repo
+values and the bar may group them by host. Projects are left as bare names (Jira
+project keys are account-scoped; cross-host collision is negligible) — host-qualify
+later only if a real collision appears (flag as a deviation if added).
+*Alternative:* bare slugs + accept the cross-host merge. Rejected — it silently drops
+a documented correctness guarantee.
 
 ### D4 — Persistence: additive field, schema 13 → 14, pass-through migration
 `LensFilterSchema` is `{ entities?, repos?, projects? }` (all optional arrays);
@@ -93,14 +128,18 @@ as deselectable chips.
 handler locates the node, sets/clears `filter`, persists, and broadcasts. No new
 mutation pattern — it follows the established per-lens-preference command.
 
-### D8 — Chip gains a `pressed` variant if it lacks one
-The filter facets are multi-select toggles, so they need a `Chip` with a
-selected/pressed state and `aria-pressed`. If `ui/Chip.svelte` already exposes that
-(the existing repo chip row suggests a toggle role), `LensFilterBar` composes it as
-is; if not, this change adds a `pressed` boolean to the `Chip` primitive (additive,
-token-driven, proven by use here) rather than re-rolling a toggle chip inline. The
-primitive audit + final decision is recorded at implementation; either way no inline
-re-roll is permitted.
+### D8 — `Chip` already toggles; the real question is the selected hue
+`ui/Chip.svelte` already exposes `selected` + `onToggle` + `aria-pressed`, so the
+multi-select facets compose it directly — **no pressed-variant work is needed** (the
+original draft mis-framed this). The actual nuance: Chip's selected fill is wired to
+the scope accent `--space-c-soft`, **not** to `--lens-fill`/`--lens-ring` (which are
+per-row locals set on `LensRow`, not ambient tokens). So `LensFilterBar` SHALL use
+Chip's native selected affordance — which on the lens page already resolves to the
+lens's owning-Space hue because `LensPage` scopes the Space colour there — rather
+than mandating `--lens-fill` (that would force either a re-roll or a feature-level
+override of `--space-c-soft`, both forbidden by the component-library policy). If a
+distinct lens-tinted selected state is later wanted, it is an additive change to the
+`Chip` primitive (a hue/intent prop), not an inline override — out of scope here.
 
 ### D9 — Sidebar application point
 `displayItemsForSection(cfg)` (`Lens.svelte` ~L252–277) applies `applyLensFilter`
@@ -112,11 +151,13 @@ windowing/`maxItems`, so the cap counts only items that survive the filter.
 The filter bar sits between the lens identity row and the first section on the
 overview — a single calm row, not a panel. Type facets render first as a `Chip`
 group; a `Divider` then the scope facets (repo/project `Chip`s, or a `Select` past
-the threshold). Selected chips use the lens-hue fill/ring (`--lens-fill` /
-`--lens-ring`) so "selected" reads identically to the rest of the overview; toggles
-animate at 150–250ms and hold flat under reduced-motion. Chip labels clear WCAG-AA
-against both the rest and selected fills at every Colour-intensity level. A "Clear"
-`IconButton` appears only when a filter is active.
+five). Selected chips use `Chip`'s shipped selected affordance (the scope accent
+`--space-c-soft`, which on the lens page resolves to the lens's owning-Space hue via
+the page token scope) — so "selected" reads consistently with the rest of the
+overview without any inline override. Toggles animate at 150–250ms and hold flat
+under reduced-motion. Chip labels clear WCAG-AA against both rest and selected fills
+at every Colour-intensity level. A "Clear" `IconButton` appears only when a filter is
+active.
 
 On the **sidebar**, there is no filter bar (the filter is authored from the
 overview), but a narrowed lens must not look like missing data: the lens section
@@ -158,8 +199,14 @@ filters inert (ignored by older readers). No destructive migration to undo.
 
 ## Open Questions
 
-- Does `ui/Chip.svelte` already expose a pressed/selected variant, or must D8 add it?
-  (Resolved by a quick primitive audit at apply time; recorded in tasks.)
+- **Spec reconciliation — RESOLVED (folded in).** The living `lenses` spec described
+  the pre-redesign Review-Queue-lanes / generic-grid page while this change describes
+  the shipped unified entity-sectioned overview. Per the user's decision this change
+  reconciles that in-place: it REMOVES "The review lens renders a Review Queue page"
+  and MODIFIES "The page renders all resolved sections" + "The page item is a card
+  with optional content slots" to match the shipped overview (doc-only deltas). The
+  change-entity normalisation + adapter requirements are unchanged. *(Chip's
+  selected/pressed affordance is also no longer an open question — see D8.)*
 - Should source facets (multi-source lenses) be folded into `LensFilter.sources` now,
   or left as the retained behaviour from the superseded requirement? (Default: retain
   as-is; add `sources` only if it falls out naturally — flag as a deviation if added.)

@@ -1,26 +1,28 @@
 ## 1. Shared model + persistence (backward-compatible, no UI)
 
-- [ ] 1.1 Add `LensFilter` type (`{ entities?: LensEntity[]; repos?: string[]; projects?: string[] }`) and `filter?: LensFilter` on the lens `PinNode` variant in `shared/types.ts`
-- [ ] 1.2 Add `LensFilterSchema` and the optional `filter` on the lens `PinNodeSchema` in `shared/schemas.ts`; bump `CURRENT_SCHEMA_VERSION` 13 → 14
-- [ ] 1.3 Append the pass-through migration `{ toVersion: 14, migrate: (raw) => raw }` in `shared/migrations.ts`
-- [ ] 1.4 Tests: schema round-trip for a lens with a `filter`; pre-14 → 14 pass-through load with no `filter`; empty-filter canonicalisation; schema-to-type coherence
+- [ ] 1.1 Move the `LensEntity` type into `shared/types.ts` and re-export it from `shared/lens-entity.ts` (`export type { LensEntity } from './types'`); keep the mapping functions in `lens-entity.ts` importing `LensEntity` from `types.ts` (avoids the `types.ts ↔ lens-entity.ts` cycle — blocker #1). Confirm `biome check` (`noImportCycles`) passes.
+- [ ] 1.2 Add `LensFilter` type (`{ entities?: LensEntity[]; repos?: string[]; projects?: string[] }`) and `filter?: LensFilter` on the lens `PinNode` variant in `shared/types.ts`
+- [ ] 1.3 Add `LensFilterSchema` and the optional `filter` on the lens `PinNodeSchema` in `shared/schemas.ts`; bump `CURRENT_SCHEMA_VERSION` 13 → 14
+- [ ] 1.4 Append the pass-through migration `{ toVersion: 14, migrate: (raw) => raw }` in `shared/migrations.ts`
+- [ ] 1.5 Tests: schema round-trip for a lens with a `filter` (host-qualified repo key); pre-14 → 14 pass-through load with no `filter`; empty-filter canonicalisation; schema-to-type coherence
 
 ## 2. Shared filter logic
 
-- [ ] 2.1 Create `shared/lens-filter.ts` with pure `applyLensFilter(items, filter)` implementing the D3 semantics (type AND scope; scope per-entity; articles/other pass scope; empty ⇒ identity)
-- [ ] 2.2 Add `deriveLensFacets(items)` returning `{ entities, repos, projects }` from the held items (depends only on `entityForItem` + `LensItem`)
+- [ ] 2.1 Create `shared/lens-filter.ts` with pure `applyLensFilter(rows: { item; host }[], filter)` implementing the D3 semantics (type AND scope; host-qualified repo keys; per-entity scope; articles/other always pass scope; empty ⇒ identity)
+- [ ] 2.2 Add `deriveLensFacets(rows)` returning `{ entities, repos, projects }` (host-qualified repos; drop `undefined` projects); depends only on `entityForItem` + `LensItem`
 - [ ] 2.3 Add `projectsOf(tickets)` to `launcher/lenspage/overview-vm.ts` (peer of `reposOf`/`feedsOf`); delegate the predicate to `shared/lens-filter.ts`
-- [ ] 2.4 Unit tests for `applyLensFilter` (each axis, AND/OR, per-entity scope, empty short-circuit) and `deriveLensFacets`
+- [ ] 2.4 Unit tests for `applyLensFilter` (each axis, AND/OR, per-entity scope, host-scoped repos, project-less ticket, empty short-circuit) and `deriveLensFacets`
 
 ## 3. Bus command + SW handler
 
 - [ ] 3.1 Add the `setLensFilter` command `{ spaceId, folderId, filter }` to `shared/bus.ts`
-- [ ] 3.2 Implement the SW handler in `background/` (set/clear `filter`, persist, broadcast) mirroring `setLensHideRead`; no-op/calm error for an unresolved `folderId`
-- [ ] 3.3 Tests: dispatch sets + broadcasts; empty filter clears; unresolved folderId is a no-op
+- [ ] 3.2 Add `store.setLensFilter(folderId, filter)` to `shared/store.svelte.ts` (set/clear the node `filter`), mirroring `store.setLensHideRead`
+- [ ] 3.3 Implement the SW handler in `background/handlers/lenses.ts` delegating to `store.setLensFilter`, persist + broadcast; no-op/calm error for an unresolved `folderId`
+- [ ] 3.4 Tests: dispatch sets + broadcasts; empty filter clears; unresolved folderId is a no-op
 
-## 4. Chip primitive audit
+## 4. Chip primitive
 
-- [ ] 4.1 Audit `ui/Chip.svelte` for a selected/pressed variant (with `aria-pressed`); if absent, add a token-driven `pressed` boolean (additive) + harness/test. Record the finding in the change (deviation note if the contract changes)
+- [ ] 4.1 Confirm `ui/Chip.svelte` exposes `selected` + `onToggle` + `aria-pressed` (it does) — no pressed-variant work. Verify its selected fill (`--space-c-soft`) reads correctly within the lens-page token scope; if a distinct lens-tinted selected state is wanted, that is a separate additive `Chip` change, NOT an inline override (flag as a deviation before doing it)
 
 ## 5. Overview filter bar
 
@@ -38,5 +40,6 @@
 ## 7. Docs + verification
 
 - [ ] 7.1 Update `docs/architecture.md`: the persisted `LensFilter` node field, `shared/lens-filter.ts` placement (and the DAG reason it lives in `shared/`), and the `setLensFilter` command
-- [ ] 7.2 `pnpm verify` green (tsc, biome incl. layer DAG, svelte-check, stylelint, vitest); confirm no new primitive re-roll and no cross-layer import
-- [ ] 7.3 Manual QA via dev-load: filter on the overview, confirm the sidebar narrows in another window and the filter survives a reload
+- [ ] 7.2 Confirm the folded reconciliation deltas (REMOVED "Review Queue page"; MODIFIED "page renders all resolved sections" + "page item is a card") accurately describe the SHIPPED `LensPage`/`OverviewPage` — these are doc-only, no code change beyond the filter feature; cross-check against `OverviewPage.test.ts`
+- [ ] 7.3 `pnpm verify` green (tsc, biome incl. layer DAG + `noImportCycles`, svelte-check, stylelint, vitest); confirm no new primitive re-roll and no cross-layer import
+- [ ] 7.4 Manual QA via dev-load: filter on the overview, confirm the sidebar narrows in another window and the filter survives a reload
