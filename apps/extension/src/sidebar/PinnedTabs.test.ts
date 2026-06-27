@@ -595,7 +595,7 @@ describe('PinnedTabs folders', () => {
     expect(container.querySelector('[data-testid="folder-children"]')).toBeNull();
   });
 
-  test('the folder Rename action opens an inline field on the row; Enter dispatches renameFolder', async () => {
+  test('the folder Edit action opens the Edit sheet; Enter in the name field dispatches renameFolder', async () => {
     const store = withFolder(); // folder f1
     const { container } = render(PinnedTabsHarness, {
       props: { store, windowId: 100, spaceId: 'work' },
@@ -607,16 +607,16 @@ describe('PinnedTabs folders', () => {
     expect(folderRow.querySelector('[data-testid="tab-row"]')).toBeNull();
     expect(folderRow.querySelector('[data-testid="tab-row-menu-trigger"]')).toBeNull();
 
-    // Open the kebab (BitsMenu, portaled) and pick Rename.
+    // Open the kebab (BitsMenu, portaled) and pick Edit.
     const items = await openFolderMenu(folderRow);
-    await fireEvent.click(byMenuId(items, 'rename') as HTMLButtonElement);
+    await fireEvent.click(byMenuId(items, 'edit') as HTMLButtonElement);
 
-    // The name becomes an inline field, in place, with the folder glyph still shown.
-    const input = container.querySelector(
-      '[data-testid="folder-rename-input"]',
-    ) as HTMLInputElement;
+    // The Edit sheet opens with a name field pre-filled with the folder name.
+    await waitFor(() =>
+      expect(document.querySelector('[data-testid="folder-appearance"]')).not.toBeNull(),
+    );
+    const input = document.querySelector('[data-testid="folder-edit-name"]') as HTMLInputElement;
     expect(input).not.toBeNull();
-    expect(container.querySelector('[data-testid="folder-row"] .glyph')).not.toBeNull();
     expect(input.value).toBe('Reading');
 
     // `bind:value` only updates on an input event, so set the value that way.

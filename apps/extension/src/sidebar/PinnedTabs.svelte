@@ -908,6 +908,7 @@ function tabMenuItems(row: TabView): MenuItem[] {
             onSetColor={(c) => chooseColor(row.id, c)}
             onSetIcon={(ic) => chooseIcon(row.id, ic)}
             onDelete={() => dispatch({ kind: 'deleteFolder', payload: { spaceId, folderId: row.id } })}
+            portalTo=".sidebar"
           />
         </div>
 
