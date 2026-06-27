@@ -17,11 +17,17 @@ persisted one that both the overview and the sidebar respect.
 ## What Changes
 
 - **A filter bar on the unified lens overview** (`OverviewPage.svelte`): toggleable
-  **type facets** (Changes / Issues / Articles / Other — only those present render)
+  **type facets** (Changes / Issues / Articles / Other, mapping to the `LensEntity`
+  values `change` / `ticket` / `article` / `generic` — only those present render)
   and **scope facets** (the distinct `change.repo` values for Changes, the distinct
-  `ticket.project` values for Issues). Scope facets render as toggle `Chip`s at or
-  below a small threshold, otherwise a `Select` (preserving the existing repo-facet
-  fallback). A clear affordance resets the lens to "show everything".
+  `ticket.project` values for Issues). Repo facets are **scoped per source host** so
+  the same `owner/repo` on two hosts never merges into one facet (preserved from the
+  prior review-page behaviour, which `change.repo` alone would lose). Scope facets
+  render as toggle `Chip`s when there are **five or fewer** of a kind, otherwise a
+  `Select`. This replaces the current inline `chip-btn` repo buttons in
+  `OverviewPage` with the `Chip` primitive (removing a re-roll); the Chip↔Select
+  threshold is new to this surface. A clear affordance resets the lens to "show
+  everything".
 - **The filter is persisted per-lens and global across windows.** A new optional
   `filter: LensFilter` field on the lens `PinNode` holds the selected facets; an
   absent/empty filter means "no narrowing" (identical to today's behaviour).
@@ -42,14 +48,16 @@ persisted one that both the overview and the sidebar respect.
   is **persisted** and **shared with the sidebar**. Source facets are retained for
   multi-source lenses.
 
-Out of scope (named, not silently absorbed): the `lenses` spec still describes the
-pre-redesign **Review Queue lanes / generic grid** page archetypes (requirements
-"The review lens renders a Review Queue page", "The page renders all resolved
-sections"). The shipped code already replaced those with the single
-entity-sectioned overview. This change writes its filter deltas against that
-current unified overview and does **not** reconcile the stale lane/grid
-requirements — that belongs to a separate `lens-overview-redesign-reconcile`
-change. The reviewer should confirm this scoping.
+- **Spec reconciliation (folded in).** The `lenses` spec still described the
+  pre-redesign **Review Queue lanes / generic grid** page; the shipped code already
+  replaced those with the single entity-sectioned overview. This change reconciles
+  that lag **in the same change** (so the filter deltas don't archive into a
+  self-contradictory spec): it REMOVES "The review lens renders a Review Queue page"
+  (the separate archetype no longer exists — only `LensPage` + `OverviewPage`) and
+  MODIFIES "The page renders all resolved sections" and "The page item is a card with
+  optional content slots" to describe the unified overview. These are
+  **documentation-only** deltas describing already-shipped behaviour — no code change
+  beyond the filter feature itself.
 
 ### Docs
 
@@ -60,23 +68,28 @@ change. The reviewer should confirm this scoping.
 
 ### New public types / files / fields
 
+- **`LensEntity` relocates** from `shared/lens-entity.ts` to `shared/types.ts`, re-exported from `lens-entity.ts` so existing import sites are unchanged. Required to avoid a `types.ts → lens-entity.ts → types.ts` import cycle (Biome `noImportCycles`) once `LensFilter` — which references `LensEntity` — lives next to the lens `PinNode`. `lens-entity.ts` keeps the mapping functions and imports `LensEntity` from `types.ts`.
 - `LensFilter` (type, `shared/types.ts`): `{ entities?: LensEntity[]; repos?: string[]; projects?: string[] }` — every axis optional; absent/empty ⇒ no narrowing on that axis.
 - `PinNode` lens variant gains `filter?: LensFilter` (`shared/types.ts`).
 - `LensFilterSchema` + `filter` on the lens `PinNodeSchema` (`shared/schemas.ts`); `CURRENT_SCHEMA_VERSION` 13 → 14; pass-through migration `{ toVersion: 14 }` (`shared/migrations.ts`).
-- `shared/lens-filter.ts`: `applyLensFilter(items: LensItem[], filter: LensFilter): LensItem[]` and `deriveLensFacets(items: LensItem[]): { entities: LensEntity[]; repos: string[]; projects: string[] }` (pure, depend only on `entityForItem` + `LensItem`).
+- `shared/lens-filter.ts`: `applyLensFilter(rows: { item: LensItem; host: string }[], filter: LensFilter)` and `deriveLensFacets(rows: { item: LensItem; host: string }[]): { entities: LensEntity[]; repos: string[]; projects: string[] }` (pure; depend only on `entityForItem` + `LensItem`). The `{ item, host }` pair lets repo facets stay host-scoped (host-qualified repo keys); `deriveLensFacets` drops project-less tickets from `projects`. Clean DAG: `lens-filter.ts → lens-entity.ts → types.ts`.
 - `overview-vm.ts` gains `projectsOf(tickets): string[]` (peer of the existing `reposOf`/`feedsOf`).
-- Bus command `setLensFilter` `{ spaceId: SpaceId; folderId: FolderId; filter: LensFilter }` (`shared/bus.ts`) + SW handler (`background/`).
+- Bus command `setLensFilter` `{ spaceId: SpaceId; folderId: FolderId; filter: LensFilter }` (`shared/bus.ts`) + SW handler (`background/handlers/lenses.ts`) delegating to a new `store.setLensFilter(folderId, filter)` method (`shared/store.svelte.ts`), mirroring `store.setLensHideRead`.
 - `launcher/lenspage/LensFilterBar.svelte` — the overview filter-bar feature component.
 
 ### Component library
 
 - **Composes existing `ui/` primitives:** `Chip` (toggle facets for types + repos +
-  projects), `Select` (scope-facet overflow past the threshold), `IconButton`
-  (clear), `Divider` (facet-group separation).
-- **New primitives:** none expected. The one risk: if `Chip` has no
-  selected/pressed variant, this change adds that variant to the `Chip` primitive
-  (a small additive enhancement, proven by use in `LensFilterBar`) rather than
-  re-rolling a toggle chip inline. Confirmed/decided in `design.md`.
+  projects — it already exposes `selected` + `onToggle` + `aria-pressed`, so no
+  pressed-variant work is needed), `Select` (scope-facet overflow past five),
+  `IconButton` (clear), `Divider` (facet-group separation).
+- **New primitives:** none. The only nuance is the *selected-chip hue*: the shipped
+  `Chip` paints its selected state from the scope accent (`--space-c-soft`), not from
+  the per-row `--lens-fill`/`--lens-ring` locals. `LensFilterBar` therefore uses the
+  `Chip`'s native selected affordance (which on the lens page already resolves to the
+  lens's owning-Space hue via the page token scope) — it does NOT override
+  `--space-c-soft` from the feature, and does NOT re-roll a toggle chip. See
+  `design.md` D8 / Visual language.
 
 ## Capabilities
 
@@ -87,7 +100,10 @@ change. The reviewer should confirm this scoping.
 - `lenses`: replace the Review-only, page-local repo filter requirement with a
   general, persisted overview filter (type + scope facets); add a requirement that
   the sidebar lens listing honours the active filter; extend the lens-node
-  persistence requirement to carry the optional `filter` field.
+  persistence requirement to carry the optional `filter` field. Also reconcile the
+  shipped unified overview: REMOVE the separate "Review Queue page" archetype and
+  MODIFY the page-structure + result-unit requirements to match (doc-only deltas for
+  already-shipped behaviour).
 - `storage-and-migrations`: the schema version advances to 14 with an append-only
   migration; the new persisted `filter` field validates under the current-version
   schema and round-trips.
