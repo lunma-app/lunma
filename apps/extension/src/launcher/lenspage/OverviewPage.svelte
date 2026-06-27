@@ -721,7 +721,11 @@ const empty = $derived(
     background: repeating-linear-gradient(135deg, var(--surface-3) 0 8px, var(--surface-2) 8px 16px);
   }
   .art-thumb.sm {
-    width: 110px;
+    /* List view: a left strip that runs the FULL row height. `height: auto` drops
+       the grid card's fixed 84px so `align-self: stretch` actually governs (an
+       explicit height would win over stretch and stop the image short of the row). */
+    width: 128px;
+    height: auto;
     align-self: stretch;
   }
   .art-thumb.img {
