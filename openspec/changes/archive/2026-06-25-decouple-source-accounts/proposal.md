@@ -29,7 +29,13 @@ inline via the shared helper, not only Options). **Left untouched:**
 - **`Account` (the `SourceAccount` entity).** A new persisted, broadcast-safe
   record `{ id, provider, baseUrl, name? }` in `AppState.sources`. It carries **no
   secret** (tokens never enter `AppState`/broadcast) and **no stored auth method** —
-  the method is derived (see next bullet).
+  the method is derived (see next bullet). Because it is portable user
+  configuration (not a secret, not machine-bound), the **data-backup** portable
+  subset (`PortableAppState`/`buildBackup`) carries `AppState.sources` so a restored
+  backup's lens references resolve (tokens are still excluded — they stay in the
+  machine-bound `lunma.connectors` store). *(Agreed during apply: the backup path is
+  not in the original task list but otherwise a restore would dangle every lens; see
+  `design.md` "Backup portability".)*
 - **Each provider declares its auth methods; piggy-back is the zero-config
   default.** The `SourceConnector` contract gains a declared `authMethods` list —
   GitHub `['pat']`, GitLab `['session', 'pat']`, Jira `['session']`, RSS `[]`
@@ -66,9 +72,19 @@ inline via the shared helper, not only Options). **Left untouched:**
   token is required in the same beat. A token is only ever *requested* when the
   derived status is `needs-token` or a session-capable account has gone
   `signed-out`.
+- **A Source is an Account or a Feed (presentation split).** The uniform
+  `SourceAccount` model is kept internally, but the two kinds are surfaced
+  distinctly so a public RSS feed never reads as a "connected account": **Accounts**
+  (github/gitlab/jira, auth) live in the Options **Accounts** manager and the
+  editor's "+ Connect an account"; **Feeds** (rss, a public URL) live in the Options
+  **Feed subscriptions** card (OPML import/export) and the editor's "+ Add a feed".
+  See `design.md` D12. *(Agreed during apply — the original framing surfaced rss as
+  an account, which read wrong, and the editor rework had dropped OPML import; this
+  restores it.)*
 - **Editor becomes assembly, not a URL form.** The lens editor picks from
-  connected accounts and sets per-account filters, with inline connect for a new
-  account. Creating a lens no longer types hosts.
+  connected accounts and feeds, sets per-account filters, with inline connect for a
+  new account and inline "add a feed" for a new RSS subscription. Creating a lens no
+  longer types hosts.
 - **Options ConnectorsCard → Accounts manager.** The existing card evolves into
   the management home: list accounts with their reach, connect / rename /
   disconnect, replace a token. Disconnecting an account warns when it still feeds

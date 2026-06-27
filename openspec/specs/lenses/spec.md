@@ -5,79 +5,51 @@ TBD - created by archiving change establish-lens-model. Update Purpose after arc
 ## Requirements
 ### Requirement: Lens configuration persists as a pinned-tree node
 
-A lens SHALL persist as a third `PinNode` kind in `pinnedBySpace`:
-`{ kind: 'lens'; id: FolderId; name: string; icon: string; sources: LensSource[]; maxItems: number; hideRead: boolean; refreshMinutes: number }`,
-where `LensSource` is `{ source: LensProvider; baseUrl: string; queries: LensQuery[] }`.
-Each `LensSource` entry is one connector **instance** (source + host); its `queries`
-array is the set of canned filters that instance contributes. The `sources` array SHALL contain
-at least one entry; the editor SHALL prevent confirming with an empty list. The flat `source`,
-`baseUrl`, and `query?` fields on the lens node remain **removed** (they were removed in the
-multi-source change); the per-entry `query?` field is replaced by `queries`.
+A lens SHALL persist as a `PinNode` kind in `pinnedBySpace`:
+`{ kind: 'lens'; id: FolderId; name: string; icon: string; lensKind: LensKind; sources: LensSourceRef[]; maxItems: number; hideRead: boolean; refreshMinutes: number }`,
+where `LensSourceRef` is `{ sourceId: SourceId; queries: LensQuery[] }`. Each
+`LensSourceRef` **references a connected Account** (`AppState.sources[sourceId]` —
+see the `connector-accounts` capability) rather than embedding the provider/host;
+its `queries` array is the set of canned filters that reference contributes. The
+`sources` array SHALL contain at least one entry; the editor SHALL prevent confirming
+with an empty list. The provider and `baseUrl` are read from the referenced account at
+resolve time; the lens node SHALL NOT carry `provider`/`baseUrl`/`name` on its source
+entries (those live on the account).
 
 `LensProvider` (`'gitlab' | 'github' | 'jira' | 'rss'`) and `LensQuery`
-(`'authored' | 'assigned' | 'review-requested'`) are unchanged. A **queue** source
-(gitlab/github/jira) entry SHALL carry a **non-empty** `queries` array (at least one filter);
-a **feed** source (rss) entry SHALL carry `queries: []` (rss has no filter axis). The same
-per-source rules for `baseUrl` (normalized, trailing slash stripped, absolute http(s) only) and
-defaults per source apply to each entry, enforced by the SW's create/update handlers. The SW
-SHALL throw when any entry's `baseUrl` does not parse as an absolute http(s) URL, or when a queue
-source entry's `queries` is empty, or when an rss entry's `queries` is non-empty.
+(`'authored' | 'assigned' | 'review-requested'`) are unchanged. A **queue** account
+(gitlab/github/jira) reference SHALL carry a **non-empty** `queries` array; a **feed**
+account (rss) reference SHALL carry `queries: []`. The SW SHALL throw on create/update
+when any `sourceId` does not resolve to an existing account, when a queue reference's
+`queries` is empty, or when an rss reference's `queries` is non-empty.
 
-The node persists **configuration only** — it SHALL NOT carry a `children` field; results are
-ephemeral runtime state (see Requirement: Lens results are ephemeral sectioned runtime
-state). The node orders among pins exactly like a `folder` node and round-trips `reorderPinned`
-losslessly; drag/drop and expand/collapse semantics are unchanged.
+The node persists **configuration only** — it SHALL NOT carry a `children` field;
+results are ephemeral runtime state. The node orders among pins exactly like a
+`folder` node and round-trips `reorderPinned` losslessly.
 
-`icon` is minted by the SW on create from the **first** source entry's connector `mintedIcon`
-when all sources share the same connector kind, otherwise from the compound icon `'layers'` (a
-lucide glyph in the curated `ICON_NAMES` list). The number of filters does not affect icon
-minting — icon keys on connector kinds only. `refreshMinutes` and `hideRead` are unchanged
-lens-level fields. `maxItems` applies per section (see Requirement: Lenses honour a
-per-lens maximum item count).
+`icon` is minted by the SW on create from the **first** referenced account's provider
+`mintedIcon` when all referenced accounts share the same provider, otherwise the
+compound `'layers'`. `refreshMinutes`, `hideRead`, and `maxItems` are unchanged.
 
 #### Scenario: A lens survives restart as config only
 
-- **WHEN** the SW boots with a persisted lens node in `pinnedBySpace`
-- **THEN** the node is restored with its `sources` (each carrying `queries`), `maxItems`, `hideRead`, and `refreshMinutes` intact
-- **AND** no result items are read from storage
+- **WHEN** the SW boots with a persisted lens node
+- **THEN** the node is restored with its `sources` (each a `{ sourceId, queries }` reference), `lensKind`, `maxItems`, `hideRead`, and `refreshMinutes` intact, and no result items are read from storage
 
-#### Scenario: A multi-filter instance persists with two queries
+#### Scenario: A lens references one account with two filters
 
-- **WHEN** `createLens` is dispatched with `sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored', 'review-requested'] }]` and the SW restarts
-- **THEN** the node is restored with the single instance carrying both filters intact and validates under the current-version schema
+- **WHEN** `createLens` is dispatched with `sources: [{ sourceId: 'acc-1', queries: ['authored', 'review-requested'] }]` and the SW restarts
+- **THEN** the node is restored referencing `acc-1` with both filters and validates under the current-version schema
 
-#### Scenario: A multi-instance lens persists with two connectors
+#### Scenario: A reference to a missing account is rejected on create
 
-- **WHEN** `createLens` is dispatched with `sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored'] }, { source: 'github', baseUrl: 'https://github.com', queries: ['authored'] }]` and the SW restarts
-- **THEN** the node is restored with both instances intact and validates under the current-version schema
-
-#### Scenario: baseUrl is normalized and validated per entry
-
-- **WHEN** `createLens` is dispatched with a sources entry whose `baseUrl` is `'https://gitlab.example.com/'`
-- **THEN** the stored entry's `baseUrl` SHALL be `https://gitlab.example.com` (trailing slash stripped)
-- **AND** a dispatch with any entry's `baseUrl` not parsing as an absolute http(s) URL SHALL throw, with the ack carrying the error
-
-#### Scenario: A queue instance with an empty queries array is rejected
-
-- **WHEN** `createLens` is dispatched with a `gitlab` sources entry whose `queries` is `[]`
-- **THEN** the SW SHALL throw and the ack SHALL carry the error
-- **AND** no node SHALL be persisted
-
-#### Scenario: A feed entry carries an empty queries array
-
-- **WHEN** `createLens` is dispatched with an `rss` sources entry with `queries: []`
-- **THEN** the stored entry SHALL have `queries: []`
-- **AND** the node is restored with `source: 'rss'` intact after a SW restart
+- **WHEN** `createLens` is dispatched with a `sourceId` absent from `AppState.sources`
+- **THEN** the SW SHALL throw and no node SHALL be persisted
 
 #### Scenario: An empty sources array is rejected
 
 - **WHEN** `createLens` is dispatched with `sources: []`
 - **THEN** the SW SHALL throw and the ack SHALL carry the error
-
-#### Scenario: A lens reorders among pins like a lens
-
-- **WHEN** the user drags a lens above a pinned tab and the sidebar dispatches `reorderPinned` with the full post-drop tree
-- **THEN** the lens node persists at its new position with all config fields unchanged
 
 ### Requirement: A lens carries a kind
 
@@ -282,82 +254,80 @@ with identical output.
 
 ### Requirement: Connector auth follows the PAT-then-cookies ladder
 
-For a **GitLab** lens's instance host, the connector SHALL authenticate per
-request: (1)
-when a token for that host exists in the `lunma.connectors` record, send
-`Authorization: Bearer <token>` with `credentials: 'omit'`; (2) otherwise fetch
-with `credentials: 'include'` so the browser's existing session cookies ride
-along (the manifest's `host_permissions: <all_urls>` already exempts these
-requests from CORS and SameSite — no manifest change, no `cookies` permission).
-The ladder is GitLab-specific: auth is a per-connector strategy on the
-`SourceConnector` contract, and the GitHub source is token-only (see
-Requirement: GitHub connector auth is token-only).
-Tokens SHALL be stored only in `chrome.storage.local` (NEVER `storage.sync`),
-SHALL never appear in logs, and SHALL never be included in any state broadcast.
-Signed-out detection SHALL be response-shape-based and non-throwing: a `401`, a
-redirect landing on a non-JSON document, or any non-JSON body SHALL resolve the
-runtime to `state: 'signed-out'`; network errors, timeouts, and 5xx/429 resolve
-to `state: 'error'`. Every connector request — any source — SHALL carry a
-bounded timeout
-(`AbortSignal.timeout`, 20 s) so a hung connection RESOLVES to `error` rather
-than wedging the lens in `pending` — an unbounded hang would otherwise block
-every later poll behind the in-flight guard. The connector SHALL NOT prompt,
+For a **GitLab** account, the connector SHALL authenticate per request: (1) when a
+per-source token exists for the resolved config's `sourceId` in the `lunma.connectors`
+record, send `Authorization: Bearer <token>` with `credentials: 'omit'`; (2) otherwise
+fetch with `credentials: 'include'` so the browser's existing session cookies ride
+along. This ladder is the declared `gitlab.authMethods = ['session', 'pat']` in
+precedence order (a token always wins); the GitHub source is token-only (see
+Requirement: GitHub connector auth is token-only). Tokens SHALL be stored only in
+`chrome.storage.local`, keyed by `sourceId`, SHALL never appear in logs, and SHALL
+never be included in any state broadcast. Signed-out detection SHALL be
+response-shape-based and non-throwing: a `401`, a redirect landing on a non-JSON
+document, or any non-JSON body SHALL resolve `state: 'signed-out'`; network errors,
+timeouts, and 5xx/429 resolve `state: 'error'`. Every connector request SHALL carry a
+bounded timeout (`AbortSignal.timeout`, 20 s). The connector SHALL NOT prompt,
 retry-loop, or surface an exception for auth failures.
 
 #### Scenario: A configured PAT wins over cookies
 
-- **GIVEN** a token is stored for host `gitlab.example.com`
-- **WHEN** the connector polls a lens on that host
-- **THEN** the request carries `Authorization: Bearer <token>` and omits credentials
+- **GIVEN** a token is stored for the account `acc-1` on `gitlab.example.com`
+- **WHEN** the connector polls a lens referencing `acc-1`
+- **THEN** the request carries `Authorization: Bearer <token>` (looked up by `sourceId`) and omits credentials
 
 #### Scenario: No PAT rides the browser session
 
-- **GIVEN** no token is stored for the lens's host
+- **GIVEN** no token is stored for the resolved `sourceId`
 - **WHEN** the GitLab connector polls
 - **THEN** the request is sent with `credentials: 'include'` and no Authorization header
 
-#### Scenario: A login redirect resolves to signed-out, calmly
+#### Scenario: Two accounts on one host hold distinct tokens
 
-- **WHEN** a cookie-authenticated poll receives a redirect to an HTML sign-in page
-- **THEN** the runtime becomes `state: 'signed-out'` with no exception thrown and no error ack anywhere
-
-#### Scenario: A hung connection resolves bounded, never an eternal pending
-
-- **WHEN** a poll's request hangs (e.g. a dropped VPN to a self-hosted instance)
-- **THEN** the bounded timeout aborts it and the runtime resolves to `state: 'error'`
-- **AND** the lens's in-flight guard clears, so the next due poll retries
+- **GIVEN** two `gitlab.com` accounts where only one has a token
+- **WHEN** each is polled
+- **THEN** the tokened account authenticates by Bearer and the other rides the session — they do not share a token
 
 ### Requirement: Connector implementations conform to the SourceConnector contract
 
 The `SourceConnector` interface in `background/connectors/connector.ts` SHALL remain
-**shape-stable**: `fetchRuntime` accepts a **resolved single-query** config (the engine expands `queries[]` before
-dispatch; a connector never sees a `queries[]` array) plus `ConnectorCaches?`:
+**shape-stable** in `fetchRuntime`'s arity:
 `fetchRuntime(cfg: ResolvedLensSource, maxItems: number, caches?: ConnectorCaches): Promise<LensSectionRuntime>`,
-where `ResolvedLensSource` is `{ source: LensProvider; baseUrl: string; query?: LensQuery; lensKind: LensKind }`
-(a single optional query, present for queue sources, absent for rss; plus the owning lens's `lensKind`, stamped by `resolvedConfigs` so a connector can gate kind-specific enrichment such as the review-lens `change` bag). `maxItems` is passed
-separately. `listingUrl`, `requiredOrigins`, `defaultBaseUrl`, and `mintedIcon` accept the same
-resolved config (origins and listing URLs are query-independent for the queue sources).
+where `ResolvedLensSource` is
+`{ source: LensProvider; baseUrl: string; query?: LensQuery; name?: string; lensKind: LensKind; sourceId: SourceId }`
+(the engine expands `queries[]` before dispatch; `lensKind` from the owning lens;
+`sourceId` from the referenced account, used for the per-source token lookup).
+`listingUrl`, `requiredOrigins`, `defaultBaseUrl`, and `mintedIcon` accept the same
+resolved config. The contract SHALL additionally declare
+`readonly authMethods: AuthMethod[]` (`AuthMethod = 'session' | 'pat'`) — see the
+`connector-accounts` capability — so the engine and surfaces can derive an account's
+effective method.
 
-The engine's `fetchLensSectionRuntime(cfg: ResolvedLensSource, maxItems, caches?)` entry point
-dispatches to `CONNECTORS[cfg.source].fetchRuntime(cfg, maxItems, caches)`. The
-`resolvedConfigs(node): ResolvedLensSource[]` helper performs the `sources[] × queries[]`
-expansion, stamps each resolved config with `node.lensKind`, and is the single derivation used by the engine fan-out, the origin union, and the
-editor's section preview.
+The engine's `fetchLensSectionRuntime(cfg, maxItems, caches?)` dispatches to
+`CONNECTORS[cfg.source].fetchRuntime(cfg, maxItems, caches)`. The
+`resolvedConfigs(node): ResolvedLensSource[]` helper resolves each `LensSourceRef`
+against `AppState.sources` and performs the `× queries[]` expansion, stamping
+`sourceId`, `lensKind`, and the account's `source`/`baseUrl`/`name?`; it is the single
+derivation used by the engine fan-out, the origin union, and the editor preview.
 
 #### Scenario: A fetch dispatches through the registry by resolved config
 
-- **WHEN** the engine refreshes a section whose resolved config carries `source: 'gitlab', query: 'authored'`
-- **THEN** `CONNECTORS.gitlab.fetchRuntime(cfg, maxItems, caches)` performs the fetch with that single query and the result event reaches the drain
+- **WHEN** the engine refreshes a section whose resolved config carries `source: 'gitlab', query: 'authored', sourceId: 'acc-1'`
+- **THEN** `CONNECTORS.gitlab.fetchRuntime(cfg, maxItems, caches)` performs the fetch and looks the token up by `cfg.sourceId`
+
+#### Scenario: Each connector declares its auth methods
+
+- **WHEN** the `CONNECTORS` registry is inspected
+- **THEN** `github.authMethods` is `['pat']`, `gitlab.authMethods` is `['session', 'pat']`, `jira.authMethods` is `['session']`, and `rss.authMethods` is `[]`
 
 #### Scenario: The registry holds exactly the four shipped sources
 
 - **WHEN** the `CONNECTORS` registry is inspected
 - **THEN** its keys are exactly `gitlab`, `github`, `jira`, and `rss`
 
-#### Scenario: The resolved config carries the lens kind
+#### Scenario: The resolved config carries the lens kind and source id
 
-- **WHEN** `resolvedConfigs(node)` expands a lens whose `lensKind` is `'review'`
-- **THEN** every resolved config it produces carries `lensKind: 'review'`, so the connector can gate `change` enrichment on it
+- **WHEN** `resolvedConfigs(node)` expands a lens whose `lensKind` is `'review'` referencing account `acc-1`
+- **THEN** every resolved config it produces carries `lensKind: 'review'` and `sourceId: 'acc-1'`, so the connector can gate `change` enrichment and look up the per-source token
 
 ### Requirement: The GitHub connector fetches canned queries over the search API
 
@@ -414,23 +384,19 @@ runs, the item carries no `status` (no glyph — absence over guessing).
 
 ### Requirement: GitHub connector auth is token-only
 
-The GitHub connector SHALL authenticate exclusively via a per-host token from
-the `lunma.connectors` record (`Authorization: Bearer <token>`,
-`credentials: 'omit'`) — there is no cookie rung: api.github.com and GHE API
-roots ignore browser sessions, and the `@me` search qualifiers require
-authentication. When NO token is stored for the lens's host the connector
-SHALL resolve `{ state: 'signed-out' }` WITHOUT issuing a request (the request
-could only fail; not sending it is rate-limit kind). A `401` (revoked or
-malformed token) SHALL also resolve `signed-out`; ANY other non-2xx response —
-403 in all its shapes (rate limit, SAML-unauthorized organization,
-fine-grained-PAT scope gaps), 5xx — plus
-network failures and timeouts resolve `error`. Token hygiene is unchanged:
-stored only in `chrome.storage.local`, never logged, never broadcast, never
-echoed.
+The GitHub connector SHALL authenticate exclusively via the **per-source** token for
+the resolved config's `sourceId` in the `lunma.connectors` record
+(`Authorization: Bearer <token>`, `credentials: 'omit'`) — there is no cookie rung
+(`github.authMethods = ['pat']`). When NO token is stored for the resolved `sourceId`
+the connector SHALL resolve `{ state: 'signed-out' }` WITHOUT issuing a request. A
+`401` (revoked or malformed token) SHALL also resolve `signed-out`; any other non-2xx —
+403 in all its shapes, 5xx — plus network failures and timeouts resolve `error`. Token
+hygiene is unchanged: stored only in `chrome.storage.local` (keyed by `sourceId`),
+never logged, never broadcast, never echoed.
 
 #### Scenario: No token short-circuits to signed-out
 
-- **GIVEN** a `github` lens whose host has no stored token
+- **GIVEN** a `github` account with no stored token for its `sourceId`
 - **WHEN** the connector polls
 - **THEN** the runtime becomes `signed-out` and no network request is made
 
@@ -720,221 +686,103 @@ renders three static ghost rows.
 
 ### Requirement: Calm failure and pending states
 
-A lens's non-`ok` runtime states SHALL render quietly, never as a red
-error card: `signed-out` → a single muted row whose copy and activation are
-**per source** — a GitLab **or Jira** lens renders "Sign in to ⟨host⟩"
-dispatching `openUrl` with the lens's `baseUrl` (both ride a browser session,
-so the next due poll heals after sign-in); a GitHub lens renders "Add a token
-in Settings → Connectors" opening the options page at its Connectors anchor via
-the sidebar's established options deep-link (`openOptionsAt('#connectors')` from
-`sidebar/open-options.ts` — App.svelte's helper; NOT `openUrl`, whose handler's
-scheme hardening deliberately drops non-http(s) URLs and stays untouched — there
-is no session to sign in to, the fix is the token);
-`error` → the last-known items remain rendered with one
-dim note row ("Couldn't reach ⟨host⟩") at the list end; first-fetch `pending`
-(no items yet) → three static low-alpha ghost rows (no shimmer, no strobe).
-During a reload — including the post-SW-restart refetch, whose boot broadcast
-carries an empty runtime slice — the sidebar SHALL keep rendering the lens's
-last-shown items from component memory (held in the sidebar only, never
-persisted), activatable throughout, with only the refresh indicator marking the
-reload; ghost rows render only when nothing has ever been shown, and an honest
-`ok`-empty result clears the hold (stale items are never resurrected) —
-**except items whose lens item binding is live**: open work holds its row.
-An item that drops out of the latest results while its bound tab is open
-SHALL keep rendering from component memory (same anatomy, same dot rules)
-until its binding drops, at which point the row evaporates on the next
-render. No failure state SHALL produce a rejected command ack, a toast, or a
-notification.
+A lens's non-`ok` runtime states SHALL render quietly, never as a red error card.
+For `signed-out` the row is **per source and method-aware**: a **session**-capable
+account (GitLab or Jira) renders "Sign in to ⟨host⟩" dispatching `openUrl` with the
+account's `baseUrl` (the next due poll heals after sign-in), with an optional inline
+"add a token" upgrade; a **`pat`-only** account (GitHub) — or any account whose token
+has gone bad — renders an **inline "Reconnect ⟨host⟩"** affordance that expands in
+place into a password field (the reusable connect affordance — see the
+`connector-accounts` capability), writes the token via `setAccountToken(sourceId, …)`,
+and dispatches `refreshLens` so the section re-fetches **without navigating to the
+options page**. A bad token after refresh SHALL show "That token didn't work — check
+it can read pull requests." A `dangling` reference (its account was disconnected)
+renders a calm "Account removed — reconnect or pick another" row. `error` → the
+last-known items remain with one dim "Couldn't reach ⟨host⟩" note row; first-fetch
+`pending` (no items) → three static low-alpha ghost rows. The reload-hold behaviour
+(keep last-shown items from sidebar component memory across an SW restart, hold open
+work's row) is unchanged. No failure state SHALL produce a rejected command ack, a
+toast, or a notification.
 
-#### Scenario: Signed-out shows the sign-in row
+#### Scenario: A session-capable signed-out lens shows the sign-in row
 
-- **GIVEN** a GitLab lens on `gitlab.example.com` whose runtime is `signed-out`
+- **GIVEN** a GitLab lens whose runtime is `signed-out`
 - **WHEN** the lens is expanded
-- **THEN** it renders one "Sign in to gitlab.example.com" row and no ghost/error rows
-- **AND** activating it opens the instance via `openUrl`
+- **THEN** it renders one "Sign in to ⟨host⟩" row (activating it opens the instance via `openUrl`), with an optional inline "add a token"
 
-#### Scenario: A signed-out Jira lens shows the sign-in row
-
-- **GIVEN** a `jira` lens on `acme.atlassian.net` whose runtime is `signed-out`
-- **WHEN** the lens is expanded
-- **THEN** it renders one "Sign in to acme.atlassian.net" row and activating it opens the instance via `openUrl` (never the token/options path — Jira has no token)
-
-#### Scenario: A token-less GitHub lens points at Connectors
+#### Scenario: A signed-out GitHub lens reconnects inline
 
 - **GIVEN** a `github` lens whose runtime is `signed-out`
-- **WHEN** the lens is expanded
-- **THEN** it renders one "Add a token in Settings → Connectors" row
-- **AND** activating it opens (or reuses) an options tab at the Connectors section via the sidebar's options deep-link, never via `openUrl`
+- **WHEN** the user opens the inline "Reconnect ⟨host⟩" affordance, enters a token, and confirms
+- **THEN** `setAccountToken(sourceId, …)` writes the token AND `refreshLens` is dispatched, and the section re-fetches without opening the options page
 
-#### Scenario: Errors keep last-known items
+#### Scenario: A disconnected account's section is calm
 
-- **GIVEN** a lens whose last poll succeeded with 5 items and whose latest poll failed with a network error
+- **GIVEN** a lens section whose referenced account was disconnected
 - **WHEN** the lens renders
-- **THEN** the 5 items remain with a dim "Couldn't reach ⟨host⟩" note row beneath them
-
-#### Scenario: First fetch shows ghost rows
-
-- **WHEN** a freshly created lens renders before its first fetch resolves
-- **THEN** it shows three static ghost rows
-
-#### Scenario: A reload never blanks an open sidebar
-
-- **GIVEN** a lens rendering 5 items in an open sidebar
-- **WHEN** the SW restarts (the boot broadcast carries an empty `lenses` slice) and the post-boot refetch begins
-- **THEN** the 5 last-shown items remain rendered and activatable, with the refresh indicator spinning
-- **AND** no ghost rows appear until/unless the lens has never shown items
-
-#### Scenario: Open work holds its row
-
-- **GIVEN** an item bound to an open tab
-- **WHEN** the next `ok` poll no longer lists that item (the PR merged, or the lens's query changed)
-- **THEN** the row keeps rendering with its bound treatment
-- **AND** when the bound tab closes, the row evaporates on the next render
+- **THEN** it shows a calm "Account removed — reconnect or pick another" row, never an error card
 
 ### Requirement: Creation and configuration via the pinned-header menu
 
-The `LensEditor.svelte` SHALL render, top to bottom: a **Name** field; a
-**Sources** list of in-place editable **source cards**; the lens settings
-(**Show** maximum-items and **Refresh** cadence `Select`s); and a single primary
-action — **Create** (new) or **Save** (edit) — with a **Cancel** ghost beside it
-and the validation hint read alongside them. There is no separate inline
-"add-source" sub-form and no second confirm button.
+The `LensEditor.svelte` SHALL render, top to bottom: a **Name** field; a **Kind**
+picker (per the `A lens carries a kind` requirement); a **Sources** list that is
+**account assembly** (not a URL form); the lens settings (**Show** max-items and
+**Refresh** cadence); and a single primary action — **Create** / **Save** — with
+**Cancel** and the validation hint. The Sources list SHALL be height-bounded and
+scroll independently while Name/Kind stay pinned above and the settings + action stay
+pinned below.
 
-The **Sources list SHALL be height-bounded and scroll independently**
-(`overflow-y: auto`) while **Name** stays pinned above it and the lens settings
-+ primary action stay pinned below — so the primary **Create / Save** action is
-reachable regardless of how many sources the list holds (e.g. after an OPML
-import of many feeds). The list SHALL never push the action out of the panel.
+The Sources list SHALL present the user's **connected accounts** (filtered to the
+kind's allowed providers — e.g. a `review` lens shows only github/gitlab accounts) as
+**pickable rows**: each row shows the account identity (provider glyph + name/host) and
+its derived status, a checkbox to include it, and — once included — the per-reference
+**filter multi-select** (authored / assigned / review-requested; hidden for an rss
+account). A **"+ Connect an account"** action SHALL append a connect flow that captures an
+**Account** provider (auth providers only — github/gitlab/jira) + `baseUrl` and the
+inline connect affordance (method-aware: required token for a `pat`-only provider,
+optional for a session-capable one), mints the account (client-minted id via
+`createAccount` + optional `setAccountToken`), and returns it to the picker
+pre-selected. A `general` lens SHALL also offer **"+ Add a feed"** — a URL-only flow
+(no provider, no token) that mints an rss **Feed** (`createAccount` with `provider:
+'rss'`) and returns it pre-selected (`queries: []`); a `review` lens SHALL NOT offer
+it (auth accounts only). RSS is added as a Feed, never via "Connect an account". Confirming SHALL be blocked when no account is
+selected, when a selected queue account has zero filters, or when a connect flow is
+incomplete. `createLens`/`updateLens` SHALL carry `sources: LensSourceRef[]`
+(references, not embedded configs). A reference or filter change on an existing lens
+SHALL trigger an immediate refetch of the affected sections only.
 
-Each **source card** SHALL present a **persistent header row** that is identical
-whether the card is collapsed or expanded: a disclosure chevron (rotated when
-expanded), the source glyph, the host identity (and, when collapsed, a queue
-filter summary), then the card's reorder + remove controls. When **expanded**, a
-**body** SHALL appear **beneath** that header carrying the source `Select` (which
-changes the card's type), the per-source URL field (labelled "Feed URL" for rss,
-"Instance URL" for a queue source), and — for a queue source — the **filter
-multi-select** (selectable chips for authored / assigned / review-requested,
-hidden for rss). The header never swaps shape between states; expanding reveals
-the body in place. Editing a card SHALL mutate the lens's `sources` directly
-(no intermediate Add step); the existing source-adaptive behaviour (URL label,
-filters hidden for rss, hint line, refresh default, name auto-suggest) applies
-per card. On create, the list SHALL seed one default card so a single-source
-lens is fill-and-create. An `+ Add source` ghost `Button` below the list SHALL
-append another card.
+#### Scenario: A lens is assembled from a connected account
 
-Cards SHALL be **reorderable**: each card carries a **grip handle** supporting
-pointer **drag-and-drop** (with a drop indicator) AND keyboard reorder (focus the
-handle, **Arrow Up / Arrow Down** move the card) — there are no separate move
-up/down buttons. A card SHALL carry a remove `×` control hidden when only one
-card remains.
+- **GIVEN** a connected `gitlab.com` account
+- **WHEN** the user opens "New lens…", ticks that account, selects "Authored" and "Reviewing", and presses Create
+- **THEN** `createLens` is dispatched with `sources: [{ sourceId: <that account>, queries: ['authored', 'review-requested'] }]` and the lens appears with two sections
 
-A card SHALL be **collapsible to its header row alone** via the disclosure
-chevron; an **incomplete** card (invalid URL, queue with no filters, or an
-unresolved OPML card) SHALL NOT be collapsible (it stays expanded so it can be
-fixed); a **newly added** card SHALL open expanded; **OPML-imported** feed cards
-SHALL land **collapsed**.
+#### Scenario: Connecting a new account inline during lens creation
 
-**OPML** SHALL be a selectable source type on a card: choosing it shows a file
-picker (no URL/filter fields); selecting a file SHALL parse the OPML and
-**expand** that card into one `rss` card per discovered feed (deduplicated by
-`source:host`), reporting how many were imported.
+- **WHEN** the user picks "+ Connect an account", enters a GitHub host + token, and confirms
+- **THEN** the account is minted (`createAccount` with a client-minted id, then `setAccountToken`) and returned to the picker pre-selected, with no navigation to the options page
 
-Editing a card so its `source:host` matches another card SHALL **merge** the
-filter selections into the existing instance rather than creating a duplicate
-(queue filters union in `QUERY_ORDER`; rss has no filter axis). Confirming SHALL
-be blocked when the source list is empty, when any queue card has zero filters
-selected, or when any card is otherwise incomplete (invalid URL, or an OPML card
-with no file chosen). A `baseUrl`, `source`, or `queries` change on an existing
-lens's card triggers an immediate refetch of the affected sections only
-(`updateLens` carries the full new `sources[]`; the engine diffs resolved
-sections to find added/removed/changed ones).
+#### Scenario: Confirming with no account selected is blocked
 
-#### Scenario: The card header is identical collapsed and expanded
-
-- **GIVEN** a source card
-- **THEN** its header row (disclosure chevron + source glyph + host identity + controls) is present whether collapsed or expanded
-- **AND** expanding reveals the body (Source select + URL + filters) beneath that same header — the header is not replaced by the Source select
-
-#### Scenario: Reordering by grip — drag or arrow keys
-
-- **GIVEN** a lens with two or more source cards
-- **WHEN** the user drags a card's grip handle onto another position (or focuses the grip and presses Arrow Up / Arrow Down)
-- **THEN** the card moves to the new position in `sources` and keyboard focus stays on the moved card's grip
-
-#### Scenario: Creating a multi-filter lens from the header menu
-
-- **WHEN** the user opens "New lens…", the seeded GitLab card is shown, the user ticks "Authored" and "Reviewing", and presses Create
-- **THEN** `createLens` is dispatched with `sources: [{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored', 'review-requested'] }]`
-- **AND** the lens appears with two sections, each pending its first fetch
-
-#### Scenario: A single-source lens needs no separate Add step
-
-- **WHEN** the user opens "New lens…" and the seeded card is valid (default GitLab + a filter)
-- **THEN** the primary action is enabled immediately — there is no inner "Add source" button to press first
-
-#### Scenario: The action stays reachable with many sources
-
-- **GIVEN** an OPML import has produced many feed cards
-- **THEN** the Sources list scrolls within a bounded height and the Create / Save action remains visible and reachable (it is never pushed out of the panel)
-
-#### Scenario: Imported feed cards land collapsed; a card expands on demand
-
-- **WHEN** an OPML import expands into several feed cards
-- **THEN** those cards render collapsed (header row only)
-- **AND WHEN** the user activates one card's disclosure chevron
-- **THEN** its body expands beneath the header
-
-#### Scenario: An incomplete card cannot be collapsed
-
-- **GIVEN** a card that is incomplete (e.g. a queue card with no filters, or an invalid URL)
-- **THEN** it stays expanded (its disclosure chevron is disabled) so it can be fixed, and the primary action is disabled
-
-#### Scenario: Confirming a queue card with no filters is blocked
-
-- **GIVEN** a card for a gitlab instance with no filters ticked
+- **WHEN** the editor has no account selected
 - **THEN** the primary Create/Save action SHALL be disabled
-
-#### Scenario: Editing a card to an existing instance merges filters
-
-- **GIVEN** a lens already holding `{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored'] }`
-- **WHEN** the user adds a GitLab card on the same host with "Reviewing" ticked
-- **THEN** the instances merge to a single `{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored', 'review-requested'] }` (not a second entry)
-
-#### Scenario: An OPML card imports and expands into feed cards
-
-- **WHEN** the user sets a card's source to "OPML file" and chooses a file with three valid feeds
-- **THEN** that card is replaced by three `rss` cards (deduplicated by `source:host`) and the import count is reported
-
-#### Scenario: Removing a filter from an existing lens updates it immediately
-
-- **GIVEN** a lens with a gitlab card carrying `['authored', 'review-requested']`; the user unticks "Reviewing" and presses Save
-- **THEN** `updateLens` carries the instance with `queries: ['authored']` and the lens's runtime drops the `gitlab:gitlab.com:review-requested` section
 
 ### Requirement: Connectors section in the options page
 
-The options page SHALL render a **Connectors** section managing per-host access
-tokens in a dedicated `lunma.connectors` record in `chrome.storage.local`,
-accessed only through `apps/extension/src/shared/connectors.ts`
-(`readConnectors()` / `setConnectorToken(host, token | null)`). The section is
-independent of the sync-backed settings registry and of lens configs
-(the options page reads neither `AppState` nor `pinnedBySpace`). It SHALL list
-each stored host with a token-set indicator and allow adding a host + token,
-replacing, and clearing. The token input SHALL be a password-type field, and a
-stored token SHALL never be echoed back into the field (a "Token set — replace?"
-affordance renders instead). Setting or clearing a token SHALL take effect on
-the next poll without a reload.
+The options page's prior per-host **Connectors** section (anchor `#connectors`) SHALL be
+replaced by the **Accounts** manager, whose full contract — listing accounts with their
+reach, connecting / renaming / disconnecting, and the per-source token write keyed by
+`sourceId` — is owned by the `connector-accounts` capability (see Requirement: The
+options page manages accounts and shows their reach). This requirement retains only the
+lens-side guarantee: a token set or cleared for an account in that manager SHALL take
+effect on the next poll of any lens referencing that account, without a reload, and the
+token value SHALL never be echoed back into the field.
 
-#### Scenario: Adding a token for a self-hosted instance
+#### Scenario: A token set in the manager applies on the next poll
 
-- **WHEN** the user adds host `gitlab.example.com` with a token in the Connectors section
-- **THEN** `lunma.connectors` in `chrome.storage.local` holds the token for that host
-- **AND** the next poll of any lens on that host authenticates via Bearer header
-
-#### Scenario: A stored token is never echoed
-
-- **GIVEN** a token is stored for a host
-- **WHEN** the Connectors section renders
-- **THEN** the token value does not appear in the DOM (the row shows a token-set indicator with a replace affordance)
+- **WHEN** the user sets a token for an account in the Accounts manager
+- **THEN** the next poll of any lens referencing that account authenticates via the Bearer header (the token resolved by `sourceId`), with no reload
+- **AND** the token value never appears in the DOM (a "Token set — replace" affordance renders instead)
 
 ### Requirement: The RSS connector fetches and parses public feeds
 
@@ -1224,68 +1072,28 @@ section-body entrance animation SHALL be disabled under reduced motion.
 
 ### Requirement: `LensSource` is the per-instance connector unit
 
-`LensSource` (`{ source: LensProvider; baseUrl: string; queries: LensQuery[] }`) SHALL be
-exported from `apps/extension/src/shared/types.ts` as the per-**instance** entry type for
-`sources[]` on a lens `PinNode`. The per-**section** unit SHALL be `ResolvedLensSource`
-(`{ source: LensProvider; baseUrl: string; query?: LensQuery }`), produced by expanding a
-`LensSource` over its `queries[]`. `ResolvedLensSource` is the parameter type for
-`SourceConnector.fetchRuntime`, `SourceConnector.requiredOrigins`, `SourceConnector.listingUrl`,
-and `requiredOriginsForConfig` in `shared/connector-origins.ts`.
+The per-**instance** entry on a lens node SHALL be `LensSourceRef`
+(`{ sourceId: SourceId; queries: LensQuery[] }`), exported from
+`apps/extension/src/shared/types.ts`, referencing a `SourceAccount` rather than
+embedding `{ source, baseUrl }`. The per-**section** unit SHALL remain
+`ResolvedLensSource`, produced by `resolvedConfigs(node)` which resolves each
+reference against `AppState.sources` and expands it over its `queries[]`. A
+`ResolvedLensSource` SHALL carry the resolved `source`/`baseUrl`/`name?` (read from the
+account), the section's `query?`, the lens's `lensKind`, and the account's `sourceId`
+(so the connector can look up the per-source token). `ResolvedLensSource` is the
+parameter type for `SourceConnector.fetchRuntime`/`requiredOrigins`/`listingUrl` and
+`requiredOriginsForConfig`.
 
-#### Scenario: LensSource round-trips through the schema
+#### Scenario: A reference resolves against its account and expands per filter
 
-- **WHEN** a `LensSource` `{ source: 'rss', baseUrl: 'https://feeds.example.com/rss', queries: [] }` is persisted and loaded
-- **THEN** it SHALL parse cleanly under `LensSourceSchema` with an empty `queries`
+- **GIVEN** `AppState.sources['acc-1'] = { id: 'acc-1', provider: 'gitlab', baseUrl: 'https://gitlab.com' }`
+- **WHEN** `resolvedConfigs` expands a lens referencing `{ sourceId: 'acc-1', queries: ['authored', 'assigned'] }`
+- **THEN** it yields two `ResolvedLensSource`s carrying `source: 'gitlab'`, `baseUrl: 'https://gitlab.com'`, `sourceId: 'acc-1'`, and `query: 'authored'` / `'assigned'` respectively
 
-#### Scenario: A queue LensSource expands to one ResolvedLensSource per filter
+#### Scenario: A dangling reference yields no section
 
-- **WHEN** `resolvedConfigs` expands `{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored', 'assigned'] }`
-- **THEN** it yields two `ResolvedLensSource`s `{ source: 'gitlab', baseUrl: 'https://gitlab.com', query: 'authored' }` and `{ …, query: 'assigned' }`
-
-### Requirement: A lens source may carry a display name
-
-A `LensSource` MAY carry an OPTIONAL `name: string`, which SHALL be
-**display-only**: it SHALL NOT participate in the section identity key
-(`sourceKey` stays `source:host[:query]`), the duplicate-`source:host` merge, the
-connector fetch, or `lensItemBindings`. It is persisted as part of the source config (see the
-`storage-and-migrations` capability — `LensSource` schema + the v10
-additive migration).
-
-When a source carries a non-empty `name`, that name SHALL **label its resolved
-section(s)** in the sidebar in place of the host: a feed (`rss`) section reads
-`name`, and a queue section reads `name · filter` (the filter axis is preserved).
-When `name` is absent or blank, the section label is unchanged (`host`, or
-`host · filter`) — overriding the default host label specified in "Requirement:
-Lens rendering and the one-glyph restraint".
-
-The `LensEditor` SHALL expose a per-source **Name** field (optional;
-placeholder shows the host) in each source card's body, and the card's header
-identity SHALL prefer the `name` when set. Confirming SHALL carry the trimmed
-`name`, omitting it entirely when blank (an unnamed source persists as
-`{ source, baseUrl, queries }` with no `name` key). The `createLens` /
-`updateLens` command source schema SHALL accept the optional `name`.
-
-#### Scenario: A named source labels its section
-
-- **GIVEN** a feed source `{ source: 'rss', baseUrl: 'https://www.theguardian.com/world/rss', name: 'World news' }`
-- **WHEN** the lens renders its section header
-- **THEN** the header reads `World news` (not `www.theguardian.com`)
-
-#### Scenario: A named queue source keeps the filter axis
-
-- **GIVEN** a queue source `{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored', 'review-requested'], name: 'Work' }`
-- **WHEN** the lens renders
-- **THEN** its two section headers read `Work · authored` and `Work · reviewing`
-
-#### Scenario: An unnamed source is unchanged
-
-- **GIVEN** a source with no `name` (or a blank one)
-- **THEN** its section label is the host (`host`, or `host · filter`) exactly as before, and confirming the editor persists no `name` key
-
-#### Scenario: The editor exposes a per-source Name field
-
-- **WHEN** a source card is expanded in the editor
-- **THEN** it shows an optional Name field (placeholder = the host) whose value persists as the source's `name` on Create/Save
+- **WHEN** `resolvedConfigs` expands a reference whose `sourceId` is absent from `AppState.sources`
+- **THEN** it yields no `ResolvedLensSource` for that reference, and the page/sidebar renders a calm "account removed" state for it (never a crash)
 
 ### Requirement: A lens has a full-page view
 

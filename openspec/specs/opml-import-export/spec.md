@@ -44,40 +44,41 @@ An input with no qualifying outlines SHALL return an empty array.
 
 ### Requirement: OPML build utility serialises RSS feed folders to OPML 1.0
 
-`buildOpml(nodes: LensNode[])` in `shared/opml.ts` SHALL accept the updated
-node shape (with `sources: LensSource[]`) and for each node produce one `<outline>`
-element per `LensSource` entry whose `source === 'rss'`. The folder's `name` is
-used as the `text` attribute for each outline when the folder is single-source; for
-multi-source folders each outline's `text` is derived as
-`${node.name} — ${new URL(cfg.baseUrl).host}` to distinguish entries from the same folder.
-The `xmlUrl` and `htmlUrl` attributes continue to be set to `cfg.baseUrl` (unchanged).
-Nodes where no `sources` entry has `source === 'rss'` produce no `<outline>`.
+The `buildOpml` utility in `shared/opml.ts` SHALL accept the lens nodes plus the
+`AppState.sources` account map (its signature widens to `buildOpml(nodes, sources)`) and,
+for each node, produce one `<outline>` element per `LensSourceRef` whose **resolved
+account** has `provider === 'rss'`. A reference whose `sourceId` is absent from `sources`
+SHALL be skipped. The folder's `name` SHALL be the `text` attribute for each outline when
+the folder resolves to a single rss source; for folders resolving to multiple rss sources
+each outline's `text` SHALL be the folder name and the account host. The `xmlUrl` and
+`htmlUrl` attributes SHALL be the resolved account's `baseUrl`. Nodes with no
+rss-resolving reference SHALL produce no `<outline>`.
 
 #### Scenario: A single-source RSS folder serialises one outline
 
-- **WHEN** `buildOpml` is called with one RSS node (`name: "HN"`, single source `baseUrl: "https://hn.rss"`)
+- **WHEN** `buildOpml` is called with one node referencing one rss account (`name: "HN"`, account `baseUrl: "https://hn.rss"`) and that account in `sources`
 - **THEN** the output contains exactly one `<outline>` with `type="rss"`, `text="HN"`, `xmlUrl="https://hn.rss"`, and `htmlUrl="https://hn.rss"`
 
-#### Scenario: A multi-source RSS folder serialises one outline per RSS source
+#### Scenario: A multi-source RSS folder serialises one outline per resolved RSS source
 
-- **WHEN** `buildOpml` is called with a folder named `"Feeds"` with two rss sources (`https://a.com/rss` and `https://b.com/rss`)
-- **THEN** the output contains two `<outline>` elements: one for each source, with `text` `"Feeds — a.com"` and `"Feeds — b.com"` respectively
+- **WHEN** `buildOpml` is called with a node named `"Feeds"` referencing two rss accounts (`https://a.com/rss` and `https://b.com/rss`)
+- **THEN** the output contains two `<outline>` elements with `text` `"Feeds — a.com"` and `"Feeds — b.com"`
 
-#### Scenario: Non-RSS sources in a mixed folder are excluded per-entry
+#### Scenario: Non-RSS references are excluded; a dangling ref is skipped
 
-- **WHEN** `buildOpml` is called with a folder containing sources `[{ source: 'gitlab', ... }, { source: 'rss', baseUrl: 'https://feed.example.com/rss' }]`
-- **THEN** only the rss source appears as an `<outline>` in the output
+- **WHEN** `buildOpml` is called with a node referencing a `gitlab` account and an `rss` account, plus a ref whose `sourceId` is absent from `sources`
+- **THEN** only the resolved rss account appears as an `<outline>`; the gitlab and dangling refs produce none
 
 ### Requirement: Options-page Feed subscriptions card
 
-The import flow in `FeedSubscriptions.svelte` SHALL be updated to reflect the new
-one-folder-per-import behaviour. The confirm step SHALL read:
-"Found N feeds — import as one folder into:" (previously "Found N feeds — add to:").
-The Space `Select` picker and Cancel / Import buttons are unchanged. On successful import,
-the `Toast` SHALL show `"Folder imported with N feeds"` when `imported > 0` and
-`skipped === 0`, or `"Folder imported with N feeds (M skipped)"` when `skipped > 0`.
-When `imported === 0` (all entries invalid) the Toast SHALL show an error message
-"No valid feed URLs found" instead of a success toast.
+The import flow in `FeedSubscriptions.svelte` SHALL read "Found N feeds — import as one
+folder into:" at the confirm step, with the Space `Select` and Cancel / Import buttons
+unchanged. On successful import the `Toast` SHALL show `"Folder imported with N feeds"`
+(`imported > 0, skipped === 0`) or `"Folder imported with N feeds (M skipped)"`
+(`skipped > 0`); when `imported === 0` it SHALL show "No valid feed URLs found" instead.
+The Export button's presence SHALL key on whether any lens references an **rss account**
+(a `LensSourceRef` whose resolved account has `provider === 'rss'`), since the lens node
+no longer carries `source` on its entries.
 
 #### Scenario: Import confirm step shows updated copy
 
@@ -89,76 +90,53 @@ When `imported === 0` (all entries invalid) the Toast SHALL show an error messag
 - **WHEN** `importOpml` acks with `{ imported: 5, skipped: 0 }`
 - **THEN** a Toast shows `"Folder imported with 5 feeds"`
 
-#### Scenario: Toast with skip count
-
-- **WHEN** `importOpml` acks with `{ imported: 3, skipped: 2 }`
-- **THEN** a Toast shows `"Folder imported with 3 feeds (2 skipped)"`
-
 #### Scenario: Toast on all-invalid import shows error
 
 - **WHEN** `importOpml` acks with `{ imported: 0, skipped: 3 }`
 - **THEN** a Toast or inline error message shows `"No valid feed URLs found"` and no success toast is shown
 
-#### Scenario: Export button absent when no RSS sources exist
+#### Scenario: Export button absent when no RSS account is referenced
 
-- **WHEN** the state has no lens node with any `source: 'rss'` entry in its `sources`
+- **WHEN** no lens references an account with `provider === 'rss'`
 - **THEN** the Export button is not rendered
 
-#### Scenario: Export button present when any RSS source exists
+#### Scenario: Export button present when an RSS account is referenced
 
-- **WHEN** the state has at least one lens node with a `source: 'rss'` entry
+- **WHEN** at least one lens references an account with `provider === 'rss'`
 - **THEN** the Export button is rendered and clicking it triggers a file download
 
 ### Requirement: importOpml bus command bulk-creates RSS lenses
 
-The `importOpml` `SidebarCommand` SHALL be accepted by the background coordinator with
-the same payload shape: `{ spaceId: string; feeds: { name: string; feedUrl: string }[] }`.
-The handler SHALL now create **one** RSS lens per import operation (not one lens
-per feed entry). The single lens SHALL carry `sources: LensSource[]` with one
-entry per valid feed: `{ source: 'rss', baseUrl: feedUrl }` (no `query`, as RSS sources
-are feed-kind). Invalid entries (unparseable or non-http(s) `feedUrl`) are silently
-skipped and counted. The lens's name SHALL be the single feed's `name` when
-`feeds.length === 1`; otherwise `"Feeds"`. Default `maxItems: 10`, `refreshMinutes: 30`,
-`hideRead: true` (unchanged per-feed defaults, now applied folder-level). The command
-SHALL complete with a summary `{ imported: number; skipped: number }` as the ack payload,
-where `imported` is the count of valid sources added to the lens and `skipped` is the
-count of invalid entries. When `imported === 0` (all entries invalid or `feeds` is empty)
-no lens is created and the ack carries `{ imported: 0, skipped: N }`.
+The `importOpml` `SidebarCommand` SHALL keep the payload shape
+`{ spaceId: string; feeds: { name: string; feedUrl: string }[] }`. The handler SHALL
+create **one** RSS lens per import. For each valid feed (`feedUrl` parses as absolute
+http(s)) the handler SHALL **find-or-mint an rss `SourceAccount`** for that feed URL
+(de-duplicated by normalized `baseUrl`; reusing an existing rss account on the same URL,
+else minting a new SW-generated-id account into `AppState.sources`), and the lens SHALL
+carry `sources: LensSourceRef[]` with one `{ sourceId, queries: [] }` entry per valid feed.
+Invalid entries are silently skipped and counted. The lens name SHALL be the single feed's
+`name` when `feeds.length === 1`, else `"Feeds"`; defaults `maxItems: 10`,
+`refreshMinutes: 30`, `hideRead: true`. The ack payload SHALL be
+`{ imported: number; skipped: number }` (`imported` = valid feeds referenced). When
+`imported === 0` no lens (and no account) SHALL be created.
 
-#### Scenario: All valid feeds create one multi-source folder
+#### Scenario: All valid feeds create one folder referencing minted rss accounts
 
 - **WHEN** `importOpml` is dispatched with three valid feed entries
-- **THEN** exactly one RSS lens is created in the target space with `sources` containing three entries
-- **AND** the ack carries `{ imported: 3, skipped: 0 }`
+- **THEN** one RSS lens is created whose `sources` holds three `LensSourceRef`s, each referencing an rss account in `AppState.sources`, and the ack carries `{ imported: 3, skipped: 0 }`
 
-#### Scenario: Invalid feed URLs are skipped and counted; valid ones still create one folder
+#### Scenario: A feed URL already backed by an account reuses it
 
-- **WHEN** `importOpml` is dispatched with two valid entries and one entry with a relative `feedUrl`
-- **THEN** one lens is created with `sources` containing two entries
-- **AND** the ack carries `{ imported: 2, skipped: 1 }`
+- **WHEN** `importOpml` imports a `feedUrl` for which an rss account already exists
+- **THEN** the lens reference SHALL point at the existing account's id (no duplicate account is minted)
 
-#### Scenario: A single-feed import names the folder after the feed
+#### Scenario: Invalid feed URLs are skipped and counted
 
-- **WHEN** `importOpml` is dispatched with `feeds: [{ name: 'Hacker News', feedUrl: 'https://news.ycombinator.com/rss' }]`
-- **THEN** the created lens's name SHALL be `'Hacker News'`
+- **WHEN** `importOpml` is dispatched with two valid entries and one relative `feedUrl`
+- **THEN** one lens is created with two references and the ack carries `{ imported: 2, skipped: 1 }`
 
-#### Scenario: A multi-feed import names the folder "Feeds"
+#### Scenario: Empty or all-invalid import creates nothing
 
-- **WHEN** `importOpml` is dispatched with three feed entries
-- **THEN** the created lens's name SHALL be `'Feeds'`
-
-#### Scenario: Unknown spaceId throws
-
-- **WHEN** `importOpml` is dispatched with a `spaceId` that does not exist in the store
-- **THEN** the command acks with an error and no lens is created
-
-#### Scenario: Empty feeds array is a no-op
-
-- **WHEN** `importOpml` is dispatched with `feeds: []`
-- **THEN** no lens is created and the ack carries `{ imported: 0, skipped: 0 }`
-
-#### Scenario: All invalid entries is a no-op
-
-- **WHEN** `importOpml` is dispatched with feeds all having invalid (relative) `feedUrl` values
-- **THEN** no lens is created and the ack carries `{ imported: 0, skipped: N }`
+- **WHEN** `importOpml` is dispatched with `feeds: []` or only invalid entries
+- **THEN** no lens and no account are created and the ack carries `{ imported: 0, skipped: N }`
 
