@@ -140,16 +140,10 @@ describe('FolderRow', () => {
       return openMenu(container);
     }
 
-    test('menu offers Rename, Appearance, Move up, Move down, Delete folder', async () => {
+    test('menu offers Edit, Move up, Move down, Delete folder', async () => {
       await openWith({ canMoveUp: true, canMoveDown: true });
-      await waitFor(() => expect(menuItemIds().length).toBe(5));
-      expect(menuItemIds()).toEqual([
-        'rename',
-        'appearance',
-        'move-up',
-        'move-down',
-        'delete-folder',
-      ]);
+      await waitFor(() => expect(menuItemIds().length).toBe(4));
+      expect(menuItemIds()).toEqual(['edit', 'move-up', 'move-down', 'delete-folder']);
     });
 
     test('Move down dispatches onMoveDown; disabled at the list end dispatches nothing', async () => {
@@ -200,8 +194,8 @@ describe('FolderRow', () => {
     });
   });
 
-  describe('Appearance editor (icon + colour) opens in a BottomSheet', () => {
-    test('selecting Appearance opens the sheet with the swatch row + icon picker', async () => {
+  describe('Edit sheet (name + icon + colour) opens in a BottomSheet', () => {
+    test('selecting Edit opens the sheet with a name field, swatch row, and icon picker', async () => {
       const onSetColor = vi.fn();
       const { container } = render(FolderRowHarness, {
         props: { ...base, onSetColor },
@@ -209,21 +203,22 @@ describe('FolderRow', () => {
       // The sheet is absent until the action opens it.
       expect(document.querySelector('[data-testid="folder-appearance"]')).toBeNull();
       await openMenu(container);
-      await waitFor(() => expect(item('appearance')).not.toBeNull());
-      await fireEvent.click(item('appearance'));
-      // The Appearance sheet (not a menu drawer) now carries the editor.
+      await waitFor(() => expect(item('edit')).not.toBeNull());
+      await fireEvent.click(item('edit'));
+      // The Edit sheet now carries the editor.
       await waitFor(() =>
         expect(document.querySelector('[data-testid="folder-appearance"]')).not.toBeNull(),
       );
       const sheet = document.querySelector('[data-testid="folder-appearance"]') as HTMLElement;
+      expect(sheet.querySelector('[data-testid="folder-edit-name"]')).not.toBeNull();
       expect(sheet.querySelector('[role="radiogroup"]')).not.toBeNull();
     });
 
-    test('the Appearance sheet dismisses via Escape', async () => {
+    test('the Edit sheet dismisses via Escape', async () => {
       const { container } = render(FolderRowHarness, { props: base });
       await openMenu(container);
-      await waitFor(() => expect(item('appearance')).not.toBeNull());
-      await fireEvent.click(item('appearance'));
+      await waitFor(() => expect(item('edit')).not.toBeNull());
+      await fireEvent.click(item('edit'));
       await waitFor(() =>
         expect(document.querySelector('[data-testid="folder-appearance"]')).not.toBeNull(),
       );
@@ -298,20 +293,15 @@ describe('FolderRow', () => {
       await waitFor(() => expect(onPanelBack).toHaveBeenCalledTimes(1));
     });
 
-    test('default behavior unchanged: built-in actions still open, Rename dispatches', async () => {
-      const onStartRename = vi.fn();
-      const { container } = render(FolderRowHarness, { props: { ...base, onStartRename } });
+    test('default behavior unchanged: built-in Edit action opens the sheet', async () => {
+      const { container } = render(FolderRowHarness, { props: base });
       await openMenu(container);
-      await waitFor(() => expect(menuItemIds().length).toBe(5));
-      expect(menuItemIds()).toEqual([
-        'rename',
-        'appearance',
-        'move-up',
-        'move-down',
-        'delete-folder',
-      ]);
-      await fireEvent.click(item('rename'));
-      expect(onStartRename).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(menuItemIds().length).toBe(4));
+      expect(menuItemIds()).toEqual(['edit', 'move-up', 'move-down', 'delete-folder']);
+      await fireEvent.click(item('edit'));
+      await waitFor(() =>
+        expect(document.querySelector('[data-testid="folder-appearance"]')).not.toBeNull(),
+      );
     });
   });
 

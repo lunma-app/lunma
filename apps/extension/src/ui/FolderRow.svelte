@@ -5,11 +5,13 @@ import { colourToHue } from '../shared/space-hue';
 import type { SpaceColor } from '../shared/types';
 import BitsMenu from './BitsMenu.svelte';
 import BottomSheet from './BottomSheet.svelte';
+import Button from './Button.svelte';
 import ColorSwatch from './ColorSwatch.svelte';
 import EditableLabel from './EditableLabel.svelte';
 import Icon from './Icon.svelte';
 import IconPicker from './IconPicker.svelte';
 import type { MenuItem } from './menu-types';
+import TextInput from './TextInput.svelte';
 
 interface Props {
   /** Folder name (the row label). */
@@ -67,7 +69,7 @@ interface Props {
    * a {@link BottomSheet} titled `panelTitle`. The sheet is open exactly while
    * `panel` is set — the host owns that (it toggles the snippet on/off) — and any
    * dismissal (scrim / ✕ / Escape) calls `onPanelBack`. Absent → the built-in
-   * Appearance sheet (icon + colour), opened by the kebab's "Appearance" item. */
+   * Edit sheet (name + icon + colour), opened by the kebab's "Edit" item. */
   panel?: Snippet | undefined;
   panelTitle?: string | undefined;
   onPanelBack?: (() => void) | undefined;
@@ -77,6 +79,10 @@ interface Props {
    * writing it back does NOT drive bits-ui (a forwarded editor dismisses by
    * toggling `panel`, not by closing the menu). Kept for API stability. */
   menuOpen?: boolean;
+  /** Portal target for the built-in Edit sheet — forwarded to BottomSheet's
+   * `portalTo`. In the sidebar, pass `".sidebar"` so the sheet anchors to the
+   * full panel and slides from the very bottom regardless of trigger depth. */
+  portalTo?: string | undefined;
 }
 
 let {
@@ -108,12 +114,22 @@ let {
   // Read-only mirror of the kebab open state — bindable so existing hosts keep
   // their binding; driven by BitsMenu's `onOpenChange`.
   menuOpen = $bindable(false),
+  portalTo,
 }: Props = $props();
 
 const hue = $derived(colourToHue(color));
 
-// The built-in Appearance editor (icon + colour) now opens in a BottomSheet.
+// The built-in Edit sheet (name + icon + colour) opens in a BottomSheet.
 let showAppearance = $state(false);
+// Draft name while the Edit sheet is open — re-seeded each time it opens.
+let editName = $state('');
+$effect(() => {
+  if (showAppearance) editName = name;
+});
+function commitEdit(): void {
+  if (editName.trim()) onRename?.(editName.trim());
+  showAppearance = false;
+}
 // Two-step Delete arm — Delete folder arms into a danger confirm before dispatching.
 let confirmingDelete = $state(false);
 
@@ -121,29 +137,28 @@ let confirmingDelete = $state(false);
 // while the host passes the snippet. The built-in Appearance sheet is internal.
 const forwardedOpen = $derived(panel !== undefined && panelTitle !== undefined);
 
-// Move entries are plain text (no icon) per the change's visual language; the
-// destructive Delete stays last and arms before firing. A caller-provided
-// `menuItems` override replaces this list wholesale.
+// A caller-provided `menuItems` override replaces this list wholesale.
 const builtinMenuItems = $derived<MenuItem[]>([
-  { id: 'rename', label: 'Rename', icon: 'pencil', onSelect: () => onStartRename?.() },
   {
-    id: 'appearance',
-    label: 'Appearance',
-    icon: 'palette',
+    id: 'edit',
+    label: 'Edit',
+    icon: 'pencil',
     onSelect: () => {
-      confirmingDelete = false; // selecting another entry disarms a pending Delete
+      confirmingDelete = false;
       showAppearance = true;
     },
   },
   {
     id: 'move-up',
     label: 'Move up',
+    icon: 'arrow-up',
     disabled: !canMoveUp,
     onSelect: () => onMoveUp?.(),
   },
   {
     id: 'move-down',
     label: 'Move down',
+    icon: 'arrow-down',
     disabled: !canMoveDown,
     onSelect: () => onMoveDown?.(),
   },
@@ -232,23 +247,36 @@ function onMenuOpenChange(open: boolean): void {
   </span>
 </div>
 
-<!-- Built-in Appearance editor — icon + colour, in a sheet (no forwarded panel). -->
+<!-- Built-in Edit sheet — name + icon + colour (no forwarded panel). -->
 {#if !forwardedOpen}
   <BottomSheet
     open={showAppearance}
-    title="Appearance"
+    title="Edit folder"
+    {portalTo}
     onClose={() => {
       showAppearance = false;
     }}
     testid="folder-appearance"
   >
     <div class="appearance">
+      <TextInput
+        label="Name"
+        value={editName}
+        autofocus
+        testid="folder-edit-name"
+        oninput={(v) => { editName = v; }}
+        onenter={commitEdit}
+      />
       <div class="swatch-row" role="radiogroup" aria-label="Folder colour">
         {#each colors as c (c)}
           <ColorSwatch color={c} selected={c === color} onclick={() => onSetColor?.(c)} />
         {/each}
       </div>
       <IconPicker value={icon} onselect={(i) => onSetIcon?.(i)} />
+      <div class="actions">
+        <Button variant="secondary" onclick={() => { showAppearance = false; }}>Cancel</Button>
+        <Button variant="primary" disabled={!editName.trim()} onclick={commitEdit}>Save</Button>
+      </div>
     </div>
   </BottomSheet>
 {/if}
@@ -258,6 +286,7 @@ function onMenuOpenChange(open: boolean): void {
   <BottomSheet
     open={forwardedOpen}
     title={panelTitle}
+    {portalTo}
     onClose={() => onPanelBack?.()}
     testid="folder-forwarded-panel"
   >
@@ -463,15 +492,21 @@ function onMenuOpenChange(open: boolean): void {
     opacity: 0;
   }
 
-  /* Appearance editor body (icon + colour), rendered inside the BottomSheet. */
+  /* Edit sheet body (name + icon + colour), rendered inside the BottomSheet. */
   .appearance {
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
+    gap: var(--space-3);
   }
   .swatch-row {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-1);
+  }
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    margin-top: var(--space-1);
   }
 </style>
