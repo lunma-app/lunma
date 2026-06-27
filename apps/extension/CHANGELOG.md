@@ -1,5 +1,68 @@
 # Changelog
 
+## [0.4.0](https://github.com/lunma-app/lunma/compare/v0.3.1...v0.4.0) (2026-06-27)
+
+
+### Features
+
+* **background:** account lifecycle + lens engine on sources ([b20960a](https://github.com/lunma-app/lunma/commit/b20960ae3b57bad9db685e6f046515375cbde508))
+* **background:** scope Space management to normal windows ([ebca537](https://github.com/lunma-app/lunma/commit/ebca537dc298c06f661f9a4b0d8341e3551794ad))
+* **icons:** fill the toolbar mark, drop the tile ([3f14494](https://github.com/lunma-app/lunma/commit/3f14494f653417f6c959ef6678032b781f540e67))
+* **launcher:** add the smart folder page surface ([6334794](https://github.com/lunma-app/lunma/commit/6334794ebfcd3b7f91bcf8c31f404f0f995d1bc4))
+* **launcher:** envelope icon for the read/unread toggle ([db4f64d](https://github.com/lunma-app/lunma/commit/db4f64d2e5d60485af605f2519db7274e6d82953))
+* **launcher:** generated cover for image-less feed cards ([dd09c9b](https://github.com/lunma-app/lunma/commit/dd09c9bf1eee537f193949923b56c0dcd328e3c3))
+* **launcher:** linger read items + animate the folder-page grid ([d13a3f4](https://github.com/lunma-app/lunma/commit/d13a3f4345c0c4238fdbbb273a5f97139be1aa82))
+* **launcher:** single-page lens overview ([fccf88f](https://github.com/lunma-app/lunma/commit/fccf88faac52563998946f5e43a02ea5acfd06d6))
+* **launcher:** smart folder page reading controls ([a0d8ae9](https://github.com/lunma-app/lunma/commit/a0d8ae9f72338685e2407bb6f897b88be2960306))
+* **lens-model:** establish-lens-model rename (smart folders → lenses) ([938093b](https://github.com/lunma-app/lunma/commit/938093bedf560fc639436feb79a42ba1b3117a8e))
+* **lenses:** add the review lens end-to-end ([125883f](https://github.com/lunma-app/lunma/commit/125883fd1cad5208947ee4127b65a443c28d01a5))
+* **options:** unified Connections manager ([4cfa93e](https://github.com/lunma-app/lunma/commit/4cfa93e828aaf6a64f922873637edba895a1fb86))
+* **overview:** add the atmosphere-glow aurora to the lens page ([f9b06ed](https://github.com/lunma-app/lunma/commit/f9b06ed5065109b8087da72c087e7e344ea04d9a))
+* **overview:** compose ReviewerRail + Diffstat in the Changes row ([416333e](https://github.com/lunma-app/lunma/commit/416333e902fe830b6be63c2e2262959b30613f40))
+* **overview:** show all article categories + size list rows to two lines ([2ab8be2](https://github.com/lunma-app/lunma/commit/2ab8be27edc0d585fb53d3931dd3afd8241ad242))
+* **shared:** per-account sources + lens entities over the bus ([80fb135](https://github.com/lunma-app/lunma/commit/80fb135ae83662875fed39ece1f12315c9a99799))
+* **sidebar:** collapse smart-folder sections individually ([#11](https://github.com/lunma-app/lunma/issues/11)) ([64df91f](https://github.com/lunma-app/lunma/commit/64df91f55d2329a0b78a381cd33b65cc0c01c0bf))
+* **sidebar:** connection-first lens editor + Space menus ([ef5e8aa](https://github.com/lunma-app/lunma/commit/ef5e8aa57a412cb42994d4b7d40adcf9f768aaf2))
+* **sidebar:** merge smart-section header into one disclosure slot ([98f9195](https://github.com/lunma-app/lunma/commit/98f9195323b1bc3bcba372408007bb86d0a26c27))
+* **sidebar:** open a smart folder as a page ([0276108](https://github.com/lunma-app/lunma/commit/027610835946b6fd787cece10522ca4a7d326b6b))
+* **sidebar:** open smart folder page via icon, not a body-click split ([1acf1f3](https://github.com/lunma-app/lunma/commit/1acf1f37c9d3f71e89292847290756d04fce8511))
+* **sidebar:** persistent card header + drag-handle reorder in the editor ([a0931dc](https://github.com/lunma-app/lunma/commit/a0931dc94574fb5cff7478fe570f658d9e54faba))
+* **sidebar:** redesign smart-folder editor to Name-first source cards ([a0ccfb8](https://github.com/lunma-app/lunma/commit/a0ccfb838ffdaae95c67ad5a6059a791b792c617))
+* **sidebar:** unify row hover/active, PR/issue glyphs, trailing alignment ([4c6debd](https://github.com/lunma-app/lunma/commit/4c6debd27244abb576941ff4a3f50c033fdb8822))
+* **smart-folders:** add markSmartItemUnread command ([3413806](https://github.com/lunma-app/lunma/commit/3413806cfa4d11fe5966cd2ec5d4eaed43e3c92f))
+* **smart-folders:** add openSmartFolderPage open-or-focus command ([f6b2b09](https://github.com/lunma-app/lunma/commit/f6b2b094bf670dee34d94247144c61145d0301dd))
+* **smart-folders:** folder page is a managed view with a real title ([ae1decf](https://github.com/lunma-app/lunma/commit/ae1decfe0d3e0d7f81d272e683d36b265f50c0cb))
+* **smart-folders:** multiple filters per connector instance (schema v9) ([525044e](https://github.com/lunma-app/lunma/commit/525044e3bd992903255d4ebc5731ef76cbfefc17))
+* **smart-folders:** optional per-source name (schema v10) ([c7121bd](https://github.com/lunma-app/lunma/commit/c7121bd5f0c5e41d6252e0c197cce37dcd2c9205))
+* **smart-folders:** parse RSS excerpt, image, and date ([fc52fe7](https://github.com/lunma-app/lunma/commit/fc52fe71000a0e0c916aee2c997372fedd599e8a))
+* **ui:** add Button size="sm"; quiet smart-folder footer + tighten indent ([75fae02](https://github.com/lunma-app/lunma/commit/75fae0214ffe7a0f7275319f58c479f0b14ba068))
+* **ui:** connection-first primitives ([f78321b](https://github.com/lunma-app/lunma/commit/f78321ba7e321e1bbf91cafa9a3ba054e296014c))
+
+
+### Bug Fixes
+
+* **bus:** use Web Crypto for session id ([0ff9237](https://github.com/lunma-app/lunma/commit/0ff923763b959c9e74c2fcf7a1313ca254206da8))
+* **e2e:** add visibility wait before chip text assert; widen dormant-switch timeout ([60638ec](https://github.com/lunma-app/lunma/commit/60638ec50fce749725a4cef5d7e575355ceab4c3))
+* **lens-editor:** preview lists Issues for git sources, not just Changes ([d29ff82](https://github.com/lunma-app/lunma/commit/d29ff8225abafee881b36d2d5240bf93a63fa533))
+* **lens-model:** rename remaining old testids in components and tests ([b734daa](https://github.com/lunma-app/lunma/commit/b734daa3fe4ee0f6562db731090ebea8d87490ba))
+* **overview:** use a 16:9 article grid hero ([5b46c32](https://github.com/lunma-app/lunma/commit/5b46c3268789a6c7d0281bcc38958263c4079e05))
+* **sidebar:** give expanded source cards real containment ("glue") ([819ad9f](https://github.com/lunma-app/lunma/commit/819ad9fbe23006d5a177e9b13eb91bdbaa32a4ba))
+* **sidebar:** give Move up/down menu items arrow icons ([606b57b](https://github.com/lunma-app/lunma/commit/606b57b09ec9456ad8b861ad0afa2817ff47158f))
+* **sidebar:** give the editor filter pills a "Filters" field label ([d6dcf4a](https://github.com/lunma-app/lunma/commit/d6dcf4a525c388efe539cbddec942b415a02a6c6))
+* **sidebar:** improve folder context menu UX ([16d8cba](https://github.com/lunma-app/lunma/commit/16d8cba634bce9aac9a1c77d8d4bb865c304229c))
+* **sidebar:** scrollable, collapsible smart-folder source list ([32598ac](https://github.com/lunma-app/lunma/commit/32598acd19ef6aae1e5e3c051ac5d5333e5b120e))
+* **smart-folders:** don't auto-advance a feed close when the page is open ([057d173](https://github.com/lunma-app/lunma/commit/057d173a489338b8c7aa63e3e94a117bb645ec14))
+* **smart-folders:** make "Show recently read" per feed section ([252f180](https://github.com/lunma-app/lunma/commit/252f18091b80678e16202a4b6ed865842e720b3b))
+* **smart-folders:** prune feed read-state per section ([02d5456](https://github.com/lunma-app/lunma/commit/02d5456dd5cd387f7e4c4421237b6a11640da9ad))
+* **smart-folders:** render unread feed items hidden behind read rows ([3c68a7e](https://github.com/lunma-app/lunma/commit/3c68a7e10493750da41fc1890d6dc7098e0c2a85))
+* **smart-folders:** stop derived_inert + guard the page open race ([462705c](https://github.com/lunma-app/lunma/commit/462705c006b12bbaa26f24015d837ff736b25228))
+* **smart-folders:** stop feed auto-advance from draining the section ([1a25128](https://github.com/lunma-app/lunma/commit/1a25128ab4933a0664d65b773b00c0cbd65cc976))
+* **smart-folders:** suppress feed auto-advance by open-origin, not page-open ([6ef5324](https://github.com/lunma-app/lunma/commit/6ef5324d2e945f22239295c59c95aca4dbf034b4))
+* **tab-groups:** downgrade mid-drag tab-edit transient to debug ([3a32ad3](https://github.com/lunma-app/lunma/commit/3a32ad3c3ddc1f0085a6355618eed304ae70c70c))
+* **ui:** restyle filter toggle chips — outline vs filled ([0538970](https://github.com/lunma-app/lunma/commit/05389705e1abcef215d700009ae3d8f98abf181c))
+* **ui:** silence derived_inert warning in Favicon ([ced3cc9](https://github.com/lunma-app/lunma/commit/ced3cc9b5f81d529b9671993ae9e0dda442974a3))
+* **ui:** skip _favicon request for an empty pageUrl ([7ea6a31](https://github.com/lunma-app/lunma/commit/7ea6a31953f28f70146ffb65723bf346462486f7))
+
 ## [0.3.1](https://github.com/lunma-app/lunma/compare/v0.3.0...v0.3.1) (2026-06-21)
 
 
