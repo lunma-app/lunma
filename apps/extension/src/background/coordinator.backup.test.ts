@@ -11,6 +11,7 @@ function makeValidEnvelope(): BackupEnvelope {
     state: {
       schemaVersion: 5,
       spaces: [{ id: 'sp-restore', name: 'Restored', color: 'blue', icon: 'star' }],
+      sources: {},
       savedTabs: {},
       pinnedBySpace: {},
       faviconRow: ['sp-restore'],

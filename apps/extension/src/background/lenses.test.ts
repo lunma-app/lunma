@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { deriveAuthStatus } from '../shared/auth-method';
 import { LunmaStore } from '../shared/store.svelte';
+import type { LensProvider, LensQuery, LensSourceRef, SourceAccount } from '../shared/types';
 import {
   CONNECTORS,
   collectLenses,
@@ -14,10 +16,45 @@ import {
   registerLensesPermissionSync,
   registerLensesRefreshKick,
   resetLensesInflight,
+  resolvedConfigs,
   sourceKey,
   startLensRefresh,
   syncLensesAlarm,
 } from './lenses';
+
+// ── connector-accounts test plumbing ────────────────────────────────────────────
+// The engine now resolves lens `sources` (LensSourceRef[]) against AppState.sources.
+// To keep the engine fixtures readable, `node()` still accepts the EMBEDDED source
+// shape `{ source, baseUrl, queries }` and converts each to a `LensSourceRef`,
+// minting (and registering) a deterministic account per `(provider, baseUrl)` so
+// two lenses on the same host share ONE account. `makeStoreWithLenses` seeds the
+// registered accounts into `store.state.sources`.
+
+type EmbeddedSource = {
+  source: LensProvider;
+  baseUrl: string;
+  queries: LensQuery[];
+  name?: string;
+};
+
+const accountRegistry = new Map<string, SourceAccount>();
+
+function ref(e: EmbeddedSource): LensSourceRef {
+  const id = `acc:${e.source}:${e.baseUrl}`;
+  if (!accountRegistry.has(id)) {
+    accountRegistry.set(id, {
+      id,
+      provider: e.source,
+      baseUrl: e.baseUrl,
+      ...(e.name !== undefined ? { name: e.name } : {}),
+    });
+  }
+  return { sourceId: id, queries: e.queries };
+}
+
+function registeredAccounts(): Record<string, SourceAccount> {
+  return Object.fromEntries(accountRegistry);
+}
 
 // The source-agnostic ENGINE suites: scheduling, the in-flight guard, the
 // state-request kick, registry dispatch. The per-connector fetch/normalize/
@@ -85,20 +122,24 @@ function jsonResponse(body: unknown, status = 200): unknown {
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
-function node(overrides: Partial<LensNode> = {}): LensNode {
+function node(
+  overrides: Partial<Omit<LensNode, 'sources'>> & { sources?: EmbeddedSource[] } = {},
+): LensNode {
+  const { sources: embedded, ...rest } = overrides;
+  const sourceList: EmbeddedSource[] = embedded ?? [
+    { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['review-requested'] },
+  ];
   return {
     kind: 'lens',
     id: 'sf-1',
     name: 'Review requests',
     icon: 'folder-git-2',
     lensKind: 'general',
-    sources: [
-      { source: 'gitlab', baseUrl: 'https://gitlab.example.com', queries: ['review-requested'] },
-    ],
+    sources: sourceList.map(ref),
     maxItems: 20,
     hideRead: false,
     refreshMinutes: 10,
-    ...overrides,
+    ...rest,
   };
 }
 
@@ -148,24 +189,116 @@ describe('normalizeBaseUrl', () => {
   });
 });
 
+// ── resolvedConfigs + account resolution (connector-accounts) ───────────────────
+
+describe('resolvedConfigs resolves references against AppState.sources', () => {
+  test('a reference resolves against its account and expands per filter', () => {
+    const sources: Record<string, SourceAccount> = {
+      'acc-1': { id: 'acc-1', provider: 'gitlab', baseUrl: 'https://gitlab.com', name: 'Work' },
+    };
+    const lensNode: LensNode = {
+      kind: 'lens',
+      id: 'sf-1',
+      name: 'L',
+      icon: 'folder-git-2',
+      lensKind: 'general',
+      sources: [{ sourceId: 'acc-1', queries: ['authored', 'assigned'] }],
+      maxItems: 20,
+      hideRead: false,
+      refreshMinutes: 10,
+    };
+    const out = resolvedConfigs(lensNode, sources);
+    expect(out).toEqual([
+      {
+        source: 'gitlab',
+        baseUrl: 'https://gitlab.com',
+        lensKind: 'general',
+        sourceId: 'acc-1',
+        name: 'Work',
+        query: 'authored',
+      },
+      {
+        source: 'gitlab',
+        baseUrl: 'https://gitlab.com',
+        lensKind: 'general',
+        sourceId: 'acc-1',
+        name: 'Work',
+        query: 'assigned',
+      },
+    ]);
+  });
+
+  test('a dangling reference (account absent from sources) yields no section', () => {
+    const lensNode: LensNode = {
+      kind: 'lens',
+      id: 'sf-1',
+      name: 'L',
+      icon: 'folder-git-2',
+      lensKind: 'general',
+      sources: [{ sourceId: 'gone', queries: ['authored'] }],
+      maxItems: 20,
+      hideRead: false,
+      refreshMinutes: 10,
+    };
+    expect(resolvedConfigs(lensNode, {})).toEqual([]);
+  });
+});
+
+// ── deriveAuthStatus precedence (connector-accounts, design D3) ──────────────────
+
+describe('deriveAuthStatus', () => {
+  test('rss is public regardless of token', () => {
+    expect(deriveAuthStatus('rss', false)).toBe('public');
+  });
+  test('a pat-only provider with no token needs a token', () => {
+    expect(deriveAuthStatus('github', false)).toBe('needs-token');
+  });
+  test('a token always wins → connected', () => {
+    expect(deriveAuthStatus('github', true)).toBe('connected');
+    expect(deriveAuthStatus('gitlab', true)).toBe('connected');
+  });
+  test('a session-capable provider with no token rides the browser session', () => {
+    expect(deriveAuthStatus('gitlab', false)).toBe('browser-session');
+    expect(deriveAuthStatus('jira', false)).toBe('browser-session');
+  });
+  test('a runtime signed-out overrides the config-time status', () => {
+    expect(deriveAuthStatus('gitlab', true, true)).toBe('signed-out');
+  });
+});
+
 // ── sourceKey (task 8.1) ───────────────────────────────────────────────────────
 
 describe('sourceKey', () => {
   test('gitlab.com', () => {
     expect(
-      sourceKey({ source: 'gitlab', baseUrl: 'https://gitlab.com', lensKind: 'general' }),
+      sourceKey({
+        source: 'gitlab',
+        baseUrl: 'https://gitlab.com',
+        lensKind: 'general',
+        sourceId: 'acc-test',
+      }),
     ).toBe('gitlab:gitlab.com');
   });
 
   test('github.com uses the baseUrl host (not the fetch api origin)', () => {
     expect(
-      sourceKey({ source: 'github', baseUrl: 'https://github.com', lensKind: 'general' }),
+      sourceKey({
+        source: 'github',
+        baseUrl: 'https://github.com',
+        lensKind: 'general',
+        sourceId: 'acc-test',
+      }),
     ).toBe('github:github.com');
   });
 
   test('GitHub Enterprise uses the custom host', () => {
     expect(
-      sourceKey({ source: 'github', baseUrl: 'https://ghe.corp.example.com', lensKind: 'general' }),
+      sourceKey({
+        source: 'github',
+        baseUrl: 'https://ghe.corp.example.com',
+        lensKind: 'general',
+        sourceId: 'acc-test',
+      }),
     ).toBe('github:ghe.corp.example.com');
   });
 
@@ -175,6 +308,7 @@ describe('sourceKey', () => {
         source: 'rss',
         baseUrl: 'https://feeds.example.com/blog.xml',
         lensKind: 'general',
+        sourceId: 'acc-test',
       }),
     ).toBe('rss:feeds.example.com');
   });
@@ -186,6 +320,7 @@ describe('sourceKey', () => {
         baseUrl: 'https://gitlab.example.com',
         query: 'authored',
         lensKind: 'general',
+        sourceId: 'acc-test',
       }),
     ).toBe('gitlab:gitlab.example.com:authored');
     expect(
@@ -194,6 +329,7 @@ describe('sourceKey', () => {
         baseUrl: 'https://gitlab.example.com',
         query: 'review-requested',
         lensKind: 'general',
+        sourceId: 'acc-test',
       }),
     ).toBe('gitlab:gitlab.example.com:review-requested');
   });
@@ -227,6 +363,7 @@ describe('the CONNECTORS registry', () => {
         source: 'github',
         baseUrl: 'https://github.com',
         lensKind: 'general',
+        sourceId: 'acc-test',
       }),
     ).toEqual(['https://api.github.com/*']);
     expect(
@@ -234,6 +371,7 @@ describe('the CONNECTORS registry', () => {
         source: 'github',
         baseUrl: 'https://ghe.acme.com',
         lensKind: 'general',
+        sourceId: 'acc-test',
       }),
     ).toEqual(['https://ghe.acme.com/*']);
     // GitLab, Jira, and RSS each fetch their own baseUrl origin (port preserved).
@@ -242,6 +380,7 @@ describe('the CONNECTORS registry', () => {
         source: 'gitlab',
         baseUrl: 'https://gitlab.example.com:8443/g',
         lensKind: 'general',
+        sourceId: 'acc-test',
       }),
     ).toEqual(['https://gitlab.example.com:8443/*']);
     expect(
@@ -249,6 +388,7 @@ describe('the CONNECTORS registry', () => {
         source: 'jira',
         baseUrl: 'https://acme.atlassian.net',
         lensKind: 'general',
+        sourceId: 'acc-test',
       }),
     ).toEqual(['https://acme.atlassian.net/*']);
     expect(
@@ -256,6 +396,7 @@ describe('the CONNECTORS registry', () => {
         source: 'rss',
         baseUrl: 'https://blog.example.com/feed.xml',
         lensKind: 'general',
+        sourceId: 'acc-test',
       }),
     ).toEqual(['https://blog.example.com/*']);
   });
@@ -263,17 +404,19 @@ describe('the CONNECTORS registry', () => {
   test('a github folder dispatches through CONNECTORS.github and its result reaches the drain', async () => {
     const runtime = { state: 'ok' as const, items: [], fetchedAt: 123 };
     const githubFetch = vi.spyOn(CONNECTORS.github, 'fetchRuntime').mockResolvedValue(runtime);
-    const store = makeStoreWithLenses([]);
     const events: LensesResultEvent[] = [];
+    // Build the node BEFORE seeding the store so its account registers first.
     const ghNode = node({
       id: 'sf-gh',
       sources: [{ source: 'github', baseUrl: 'https://github.com', queries: ['authored'] }],
     });
+    const store = makeStoreWithLenses([]);
     const ghResolved = {
       source: 'github' as const,
       baseUrl: 'https://github.com',
       query: 'authored' as const,
       lensKind: 'general' as const,
+      sourceId: 'acc:github:https://github.com',
     };
 
     const { completion } = startLensRefresh({ store, enqueue: (e) => events.push(e) }, ghNode);
@@ -293,17 +436,19 @@ describe('the CONNECTORS registry', () => {
   test('a jira folder dispatches through CONNECTORS.jira and its result reaches the drain', async () => {
     const runtime = { state: 'ok' as const, items: [], fetchedAt: 123 };
     const jiraFetch = vi.spyOn(CONNECTORS.jira, 'fetchRuntime').mockResolvedValue(runtime);
-    const store = makeStoreWithLenses([]);
     const events: LensesResultEvent[] = [];
+    // Build the node BEFORE seeding the store so its account registers first.
     const jiraNode = node({
       id: 'sf-jira',
       sources: [{ source: 'jira', baseUrl: 'https://acme.atlassian.net', queries: ['assigned'] }],
     });
+    const store = makeStoreWithLenses([]);
     const jiraResolved = {
       source: 'jira' as const,
       baseUrl: 'https://acme.atlassian.net',
       query: 'assigned' as const,
       lensKind: 'general' as const,
+      sourceId: 'acc:jira:https://acme.atlassian.net',
     };
 
     const { completion } = startLensRefresh({ store, enqueue: (e) => events.push(e) }, jiraNode);
@@ -327,6 +472,8 @@ function makeStoreWithLenses(nodes: LensNode[]): LunmaStore {
   const store = new LunmaStore({ idFactory: () => 'id' });
   store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
   store.state.pinnedBySpace.work = nodes;
+  // Seed the accounts the lens references resolve against (connector-accounts).
+  store.state.sources = registeredAccounts();
   return store;
 }
 
@@ -338,7 +485,12 @@ describe('the host-permission gate', () => {
     chromeStub.permissions.contains.mockResolvedValue(false);
 
     const runtime = await fetchLensSectionRuntime(
-      { source: 'gitlab', baseUrl: 'https://gitlab.example.com', lensKind: 'general' },
+      {
+        source: 'gitlab',
+        baseUrl: 'https://gitlab.example.com',
+        lensKind: 'general',
+        sourceId: 'acc-test',
+      },
       20,
     );
 
@@ -352,7 +504,12 @@ describe('the host-permission gate', () => {
     chromeStub.permissions.contains.mockResolvedValue(false);
 
     const runtime = await fetchLensSectionRuntime(
-      { source: 'github', baseUrl: 'https://github.com', lensKind: 'general' },
+      {
+        source: 'github',
+        baseUrl: 'https://github.com',
+        lensKind: 'general',
+        sourceId: 'acc-test',
+      },
       20,
     );
 
@@ -369,7 +526,12 @@ describe('the host-permission gate', () => {
     chromeStub.permissions.contains.mockResolvedValue(false);
 
     const runtime = await fetchLensSectionRuntime(
-      { source: 'rss', baseUrl: 'https://blog.example.com/feed.xml', lensKind: 'general' },
+      {
+        source: 'rss',
+        baseUrl: 'https://blog.example.com/feed.xml',
+        lensKind: 'general',
+        sourceId: 'acc-test',
+      },
       20,
     );
 
@@ -385,7 +547,12 @@ describe('the host-permission gate', () => {
     chromeStub.permissions.contains.mockResolvedValue(false);
 
     const runtime = await fetchLensSectionRuntime(
-      { source: 'github', baseUrl: 'https://github.com', lensKind: 'general' },
+      {
+        source: 'github',
+        baseUrl: 'https://github.com',
+        lensKind: 'general',
+        sourceId: 'acc-test',
+      },
       20,
     );
 
@@ -401,6 +568,7 @@ describe('the host-permission gate', () => {
       source: 'gitlab' as const,
       baseUrl: 'https://gitlab.example.com',
       lensKind: 'general' as const,
+      sourceId: 'acc-test' as const,
     };
 
     const runtime = await fetchLensSectionRuntime(glCfg, 20);

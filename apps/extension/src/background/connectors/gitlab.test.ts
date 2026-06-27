@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { ResolvedLensSource } from '../../shared/types';
 import type { ConnectorCaches } from './connector';
-import { gitlabConnector, pipelineStatus } from './gitlab';
+import { gitlabConnector, kanbanForIssueState, pipelineStatus, priorityFromLabels } from './gitlab';
 
 // The GitLab connector's fetch/normalize/auth suites, relocated from
 // `../lenses.test.ts` by the github-connector change (design D2) with
@@ -59,6 +59,9 @@ function node(overrides: Partial<ResolvedLensSource> = {}): ResolvedLensSource {
     baseUrl: 'https://gitlab.example.com',
     query: 'review-requested',
     lensKind: 'general',
+    // Per-source token key (connector-accounts) — the PAT is looked up by this
+    // `sourceId`, not by host.
+    sourceId: 'acc-gl',
     ...overrides,
   };
 }
@@ -111,13 +114,19 @@ describe('pipelineStatus', () => {
 
 describe('fetchRuntime — canned queries', () => {
   test('authored requests scope=created_by_me with the per_page cap', async () => {
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse([mr(1, { head_pipeline: { status: 'success' } })]),
-    );
+    // The MR pass + the lens-overview issue pass both fire for authored; route
+    // by endpoint so the issue pass returns an empty list (asserted separately).
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes('/api/v4/merge_requests?')) {
+        return jsonResponse([mr(1, { head_pipeline: { status: 'success' } })]);
+      }
+      return jsonResponse([]); // /api/v4/issues
+    });
     const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const url = fetchMock.mock.calls[0]?.[0] as string;
-    expect(url).toBe(
+    const mrUrl = fetchMock.mock.calls.find((c) =>
+      (c[0] as string).includes('/api/v4/merge_requests?'),
+    )?.[0] as string;
+    expect(mrUrl).toBe(
       'https://gitlab.example.com/api/v4/merge_requests?state=opened&per_page=20&scope=created_by_me',
     );
     expect(runtime.state).toBe('ok');
@@ -132,10 +141,12 @@ describe('fetchRuntime — canned queries', () => {
   });
 
   test('assigned requests scope=assigned_to_me', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+    fetchMock.mockImplementation(async () => jsonResponse([]));
     await gitlabConnector.fetchRuntime(node({ query: 'assigned' }), 20);
-    const url = fetchMock.mock.calls[0]?.[0] as string;
-    expect(url).toContain('scope=assigned_to_me');
+    const mrUrl = fetchMock.mock.calls.find((c) =>
+      (c[0] as string).includes('/api/v4/merge_requests?'),
+    )?.[0] as string;
+    expect(mrUrl).toContain('scope=assigned_to_me');
   });
 
   test('review-requested resolves me, then requests scope=all&reviewer_id=<me>', async () => {
@@ -168,14 +179,18 @@ describe('fetchRuntime — canned queries', () => {
     const overfull = Array.from({ length: 25 }, (_, i) =>
       mr(i + 1, { head_pipeline: { status: 'success' } }),
     );
-    fetchMock.mockResolvedValueOnce(jsonResponse(overfull));
+    fetchMock.mockImplementation(async (url: string) =>
+      url.includes('/api/v4/merge_requests?') ? jsonResponse(overfull) : jsonResponse([]),
+    );
     const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime.items).toHaveLength(20);
   });
 
   test('a malformed list element is dropped, the rest survive', async () => {
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse([mr(1, { head_pipeline: { status: 'success' } }), { junk: true }]),
+    fetchMock.mockImplementation(async (url: string) =>
+      url.includes('/api/v4/merge_requests?')
+        ? jsonResponse([mr(1, { head_pipeline: { status: 'success' } }), { junk: true }])
+        : jsonResponse([]),
     );
     const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
     expect(runtime.state).toBe('ok');
@@ -199,14 +214,19 @@ describe('fetchRuntime — canned queries', () => {
 
 describe('fetchRuntime — pipeline enrichment', () => {
   test('enrichment is skipped when the list already carries a usable pipeline', async () => {
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse([
-        mr(1, { head_pipeline: { status: 'failed' } }),
-        mr(2, { pipeline: { status: 'running' } }),
-      ]),
+    fetchMock.mockImplementation(async (url: string) =>
+      url.includes('/api/v4/merge_requests?')
+        ? jsonResponse([
+            mr(1, { head_pipeline: { status: 'failed' } }),
+            mr(2, { pipeline: { status: 'running' } }),
+          ])
+        : jsonResponse([]),
     );
     const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
-    expect(fetchMock).toHaveBeenCalledTimes(1); // list only — no detail fetches
+    // No per-MR detail fetch (every row carries a pipeline) — only the MR list
+    // and the lens-overview issue pass fire.
+    const detailCalls = fetchMock.mock.calls.filter((c) => (c[0] as string).includes('/projects/'));
+    expect(detailCalls).toHaveLength(0);
     expect(runtime.items[0]?.status?.tone).toBe('fail');
     expect(runtime.items[1]?.status?.tone).toBe('pending');
   });
@@ -259,17 +279,17 @@ describe('fetchRuntime — pipeline enrichment', () => {
 
 describe('fetchRuntime — auth ladder', () => {
   test('a configured PAT wins: Bearer header + credentials omit', async () => {
-    storageData['lunma.connectors'] = { 'gitlab.example.com': 'glpat-abc' };
-    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+    storageData['lunma.connectors'] = { 'acc-gl': 'glpat-abc' };
+    fetchMock.mockResolvedValue(jsonResponse([]));
     await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(init.headers).toEqual({ Authorization: 'Bearer glpat-abc' });
     expect(init.credentials).toBe('omit');
   });
 
-  test('the PAT host key includes an explicit port', async () => {
-    storageData['lunma.connectors'] = { 'gitlab.example.com:8443': 'glpat-port' };
-    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+  test('the PAT is keyed by sourceId, not host (a ported host still resolves by id)', async () => {
+    storageData['lunma.connectors'] = { 'acc-gl': 'glpat-port' };
+    fetchMock.mockResolvedValue(jsonResponse([]));
     await gitlabConnector.fetchRuntime(
       node({ baseUrl: 'https://gitlab.example.com:8443', query: 'authored' }),
       20,
@@ -278,8 +298,32 @@ describe('fetchRuntime — auth ladder', () => {
     expect(init.headers).toEqual({ Authorization: 'Bearer glpat-port' });
   });
 
+  test('two accounts on the SAME gitlab host hold distinct tokens (keyed by sourceId)', async () => {
+    storageData['lunma.connectors'] = { 'acc-a': 'glpat-a', 'acc-b': 'glpat-b' };
+    fetchMock.mockResolvedValue(jsonResponse([]));
+    // Select the MR call per invocation — the issue pass adds a second request
+    // per fetch, so positional `calls[0]`/`calls[1]` no longer map to the two MR
+    // lists. Both calls of one invocation carry the same per-source token.
+    const mrCall = (token: string) =>
+      fetchMock.mock.calls.find(
+        (c) =>
+          (c[0] as string).includes('/api/v4/merge_requests?') &&
+          (c[1] as RequestInit).headers !== undefined &&
+          ((c[1] as RequestInit).headers as Record<string, string>).Authorization ===
+            `Bearer ${token}`,
+      );
+    await gitlabConnector.fetchRuntime(node({ query: 'authored', sourceId: 'acc-a' }), 20);
+    expect(mrCall('glpat-a')).toBeDefined();
+    await gitlabConnector.fetchRuntime(node({ query: 'authored', sourceId: 'acc-b' }), 20);
+    expect(mrCall('glpat-b')).toBeDefined();
+  });
+
+  test('declares session-then-pat authMethods', () => {
+    expect(gitlabConnector.authMethods).toEqual(['session', 'pat']);
+  });
+
   test('no PAT rides the browser session: credentials include, no Authorization', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+    fetchMock.mockResolvedValue(jsonResponse([]));
     await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(init.headers).toEqual({});
@@ -317,7 +361,7 @@ describe('fetchRuntime — auth ladder', () => {
   });
 
   test('every request carries a bounded timeout signal (a hang resolves, never wedges)', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+    fetchMock.mockResolvedValue(jsonResponse([]));
     await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(init.signal).toBeInstanceOf(AbortSignal);
@@ -341,9 +385,12 @@ describe('fetchRuntime — auth ladder', () => {
 
 describe('maxItems + listingUrl', () => {
   test('the node maxItems drives the per_page cap', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+    fetchMock.mockImplementation(async () => jsonResponse([]));
     await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 50);
-    expect(fetchMock.mock.calls[0]?.[0]).toContain('per_page=50');
+    const mrUrl = fetchMock.mock.calls.find((c) =>
+      (c[0] as string).includes('/api/v4/merge_requests?'),
+    )?.[0] as string;
+    expect(mrUrl).toContain('per_page=50');
   });
 
   test('listingUrl is the dashboard merge-requests page', () => {
@@ -358,6 +405,7 @@ describe('maxItems + listingUrl', () => {
         source: 'gitlab',
         baseUrl: 'https://gitlab.example.com',
         lensKind: 'general',
+        sourceId: 'acc-gl',
       }),
     ).toEqual(['https://gitlab.example.com/*']);
     expect(
@@ -365,6 +413,7 @@ describe('maxItems + listingUrl', () => {
         source: 'gitlab',
         baseUrl: 'https://gitlab.example.com:8443/g',
         lensKind: 'general',
+        sourceId: 'acc-gl',
       }),
     ).toEqual(['https://gitlab.example.com:8443/*']);
   });
@@ -469,5 +518,248 @@ describe('fetchRuntime — review-lens change enrichment', () => {
     );
     expect(approvalsCalled).toBe(false);
     expect(runtime.items[0]?.change).toBeUndefined();
+  });
+});
+
+// ── linked-ticket refs on MRs (lens-overview, L0) ──────────────────────────────
+
+describe('fetchRuntime — MR linked-ticket refs', () => {
+  /** Route the MR list to one MR (overrides), no issues. */
+  function withMr(overrides: Record<string, unknown>): void {
+    fetchMock.mockImplementation(async (url: string) =>
+      url.includes('/api/v4/merge_requests?')
+        ? jsonResponse([mr(1, { head_pipeline: { status: 'success' }, ...overrides })])
+        : jsonResponse([]),
+    );
+  }
+
+  test('a Jira key in the MR title yields one ticket ref (bare chip, url empty)', async () => {
+    withMr({ title: 'PAY-91 fix the checkout flow' });
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
+    expect(runtime.items[0]?.refs).toEqual([
+      { kind: 'ticket', key: 'PAY-91', url: '', label: 'PAY-91' },
+    ]);
+  });
+
+  test('a Jira key only in the target branch is extracted (title-first, branch fallback)', async () => {
+    withMr({ title: 'Fix the thing', target_branch: 'feature/AB12-3-rework' });
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
+    expect(runtime.items[0]?.refs).toEqual([
+      { kind: 'ticket', key: 'AB12-3', url: '', label: 'AB12-3' },
+    ]);
+  });
+
+  test('the title wins over the branch when both name a key (first wins)', async () => {
+    withMr({ title: 'PAY-91 fix it', target_branch: 'feature/OPS-7-thing' });
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
+    expect(runtime.items[0]?.refs?.[0]?.key).toBe('PAY-91');
+  });
+
+  test('no Jira key anywhere omits refs entirely (no empty array)', async () => {
+    withMr({ title: 'MR 1', target_branch: 'main' });
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
+    expect(runtime.items[0]).not.toHaveProperty('refs');
+  });
+
+  test('refs ride alongside change on a review lens (both bags coexist)', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes('/api/v4/merge_requests?')) {
+        return jsonResponse([
+          mr(1, {
+            head_pipeline: { status: 'success' },
+            title: 'PAY-91 ship it',
+            author: { username: 'octo' },
+            target_branch: 'main',
+            updated_at: '2026-06-24T10:00:00Z',
+            reviewers: [],
+          }),
+        ]);
+      }
+      if (url.includes('/approvals')) {
+        return jsonResponse({ approved_by: [] });
+      }
+      return jsonResponse([]); // /api/v4/issues
+    });
+    const runtime = await gitlabConnector.fetchRuntime(
+      node({ lensKind: 'review', query: 'authored' }),
+      20,
+    );
+    const item = runtime.items[0];
+    expect(item?.refs?.[0]?.key).toBe('PAY-91');
+    expect(item?.change?.author).toBe('octo');
+  });
+});
+
+// ── issue pass → Ticket entity (lens-overview, design §4) ──────────────────────
+
+describe('kanbanForIssueState', () => {
+  test('opened → todo, closed → done; in-progress is unreachable (deferred)', () => {
+    expect(kanbanForIssueState('opened')).toBe('todo');
+    expect(kanbanForIssueState('closed')).toBe('done');
+    expect(kanbanForIssueState('anything-else')).toBe('todo');
+  });
+});
+
+describe('priorityFromLabels', () => {
+  test('maps a priority:: scoped label onto a bucket (case-insensitive)', () => {
+    expect(priorityFromLabels(['priority::urgent'])).toBe('urgent');
+    expect(priorityFromLabels(['Priority::High'])).toBe('high');
+    expect(priorityFromLabels(['priority::medium'])).toBe('med');
+    expect(priorityFromLabels(['priority::low'])).toBe('low');
+    expect(priorityFromLabels(['priority::critical'])).toBe('urgent');
+  });
+
+  test('a non-priority label or an unmapped level yields undefined (never faked)', () => {
+    expect(priorityFromLabels(['bug', 'frontend'])).toBeUndefined();
+    expect(priorityFromLabels(['priority::someday'])).toBeUndefined();
+    expect(priorityFromLabels(undefined)).toBeUndefined();
+    expect(priorityFromLabels([])).toBeUndefined();
+  });
+});
+
+describe('fetchRuntime — issue pass', () => {
+  /** A GitLab issue list row. */
+  function issue(iid: number, overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      id: iid + 1000,
+      iid,
+      title: `Issue ${iid}`,
+      web_url: `https://gitlab.example.com/g/p/-/issues/${iid}`,
+      state: 'opened',
+      updated_at: '2026-06-24T10:00:00Z',
+      ...overrides,
+    };
+  }
+
+  /** Route MRs to empty and issues to the given list. */
+  function withIssues(list: Record<string, unknown>[]): void {
+    fetchMock.mockImplementation(async (url: string) =>
+      url.includes('/api/v4/issues') ? jsonResponse(list) : jsonResponse([]),
+    );
+  }
+
+  test('the assigned slot fetches issues with scope=assigned_to_me & state=opened', async () => {
+    withIssues([]);
+    await gitlabConnector.fetchRuntime(node({ query: 'assigned' }), 20);
+    const issuesUrl = fetchMock.mock.calls.find((c) =>
+      (c[0] as string).includes('/api/v4/issues'),
+    )?.[0] as string;
+    expect(issuesUrl).toBe(
+      'https://gitlab.example.com/api/v4/issues?state=opened&per_page=20&scope=assigned_to_me',
+    );
+  });
+
+  test('the authored slot maps to scope=created_by_me', async () => {
+    withIssues([]);
+    await gitlabConnector.fetchRuntime(node({ query: 'authored' }), 20);
+    const issuesUrl = fetchMock.mock.calls.find((c) =>
+      (c[0] as string).includes('/api/v4/issues'),
+    )?.[0] as string;
+    expect(issuesUrl).toContain('scope=created_by_me');
+  });
+
+  test('review-requested runs NO issue pass (no issue analogue)', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.endsWith('/api/v4/user')) return jsonResponse({ id: 7 });
+      return jsonResponse([]);
+    });
+    await gitlabConnector.fetchRuntime(node({ query: 'review-requested' }), 20);
+    const issuesCalls = fetchMock.mock.calls.filter((c) =>
+      (c[0] as string).includes('/api/v4/issues'),
+    );
+    expect(issuesCalls).toHaveLength(0);
+  });
+
+  test('an opened issue maps to a todo ticket; assignee/project/labels mapped', async () => {
+    withIssues([
+      issue(212, {
+        state: 'opened',
+        assignees: [{ username: 'alice' }, { username: 'bob' }],
+        labels: ['bug', 'frontend'],
+      }),
+    ]);
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'assigned' }), 20);
+    const item = runtime.items.find((i) => i.ticket !== undefined);
+    expect(item).toMatchObject({
+      id: '1212',
+      title: 'Issue 212',
+      url: 'https://gitlab.example.com/g/p/-/issues/212',
+    });
+    expect(item?.ticket).toEqual({
+      key: '#212',
+      statusCategory: 'todo',
+      statusLabel: 'opened',
+      project: 'g/p',
+      assignee: 'alice',
+      labels: ['bug', 'frontend'],
+      updatedAt: Date.parse('2026-06-24T10:00:00Z'),
+    });
+    expect(item?.change).toBeUndefined();
+  });
+
+  test('a closed issue maps to a done ticket', async () => {
+    withIssues([issue(9, { state: 'closed' })]);
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'assigned' }), 20);
+    const ticket = runtime.items.find((i) => i.ticket !== undefined)?.ticket;
+    expect(ticket?.statusCategory).toBe('done');
+    expect(ticket?.statusLabel).toBe('closed');
+  });
+
+  test('a priority:: scoped label populates priority; its absence omits it', async () => {
+    withIssues([issue(1, { labels: ['priority::high', 'bug'] }), issue(2, { labels: ['bug'] })]);
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'assigned' }), 20);
+    const tickets = runtime.items.flatMap((i) => (i.ticket ? [i.ticket] : []));
+    expect(tickets.find((t) => t.key === '#1')?.priority).toBe('high');
+    expect(tickets.find((t) => t.key === '#2')).not.toHaveProperty('priority');
+  });
+
+  test('an unassigned issue with no labels omits assignee and labels', async () => {
+    withIssues([issue(5, { assignees: [], labels: [] })]);
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'assigned' }), 20);
+    const ticket = runtime.items.find((i) => i.ticket !== undefined)?.ticket;
+    expect(ticket).not.toHaveProperty('assignee');
+    expect(ticket).not.toHaveProperty('labels');
+  });
+
+  test('issue items append to the MR items in one section (Change + Ticket coexist)', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes('/api/v4/merge_requests?')) {
+        return jsonResponse([mr(1, { head_pipeline: { status: 'success' } })]);
+      }
+      return jsonResponse([issue(212)]);
+    });
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'assigned' }), 20);
+    const mrItem = runtime.items.find((i) => i.id === '1');
+    const issueItem = runtime.items.find((i) => i.ticket !== undefined);
+    expect(mrItem?.ticket).toBeUndefined();
+    expect(mrItem?.status?.tone).toBe('ok');
+    expect(issueItem?.ticket?.key).toBe('#212');
+    expect(issueItem?.change).toBeUndefined();
+  });
+
+  test('a malformed issue row is dropped, the rest survive', async () => {
+    withIssues([issue(1), { junk: true }, issue(2)]);
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'assigned' }), 20);
+    const keys = runtime.items.flatMap((i) => (i.ticket ? [i.ticket.key] : []));
+    expect(keys).toEqual(['#1', '#2']);
+  });
+
+  test('an issue-pass fetch error never costs the section its ok state', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes('/api/v4/merge_requests?')) {
+        return jsonResponse([mr(1, { head_pipeline: { status: 'success' } })]);
+      }
+      throw new Error('issues endpoint down');
+    });
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'assigned' }), 20);
+    expect(runtime.state).toBe('ok');
+    expect(runtime.items.some((i) => i.ticket !== undefined)).toBe(false);
+    expect(runtime.items.find((i) => i.id === '1')?.status?.tone).toBe('ok');
+  });
+
+  test('issues cap at maxItems even if the server over-returns', async () => {
+    withIssues(Array.from({ length: 25 }, (_, i) => issue(i + 1)));
+    const runtime = await gitlabConnector.fetchRuntime(node({ query: 'assigned' }), 20);
+    expect(runtime.items.filter((i) => i.ticket !== undefined)).toHaveLength(20);
   });
 });

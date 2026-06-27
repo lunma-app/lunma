@@ -72,8 +72,51 @@ describe('importOpml handler', () => {
     if (folder?.kind !== 'lens') throw new Error('not smart');
     expect(folder.name).toBe('Feeds');
     expect(folder.sources).toHaveLength(3);
-    expect(folder.sources.map((s) => s.source)).toEqual(['rss', 'rss', 'rss']);
+    // Each reference resolves to a minted rss account (connector-accounts).
+    expect(folder.sources.map((ref) => store.state.sources[ref.sourceId]?.provider)).toEqual([
+      'rss',
+      'rss',
+      'rss',
+    ]);
+    // The accounts carry the feed URLs as their baseUrl.
+    expect(folder.sources.map((ref) => store.state.sources[ref.sourceId]?.baseUrl)).toEqual([
+      'https://hnrss.org/frontpage',
+      'https://lobste.rs/rss',
+      'https://jvns.ca/atom.xml',
+    ]);
     expect(emitAck).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1', result: 'ok' }));
+  });
+
+  test('a repeated feed URL reuses one minted account', async () => {
+    const { coordinator, store, emitAck } = makeWithSpace();
+
+    coordinator.enqueue(
+      sidebar(
+        {
+          kind: 'importOpml',
+          payload: {
+            spaceId: 's1',
+            feeds: [
+              { name: 'HN', feedUrl: 'https://hnrss.org/frontpage' },
+              { name: 'HN again', feedUrl: 'https://hnrss.org/frontpage' },
+            ],
+          },
+        },
+        'c-dupe',
+      ),
+    );
+    await coordinator.idle();
+
+    const lensNodes = (store.state.pinnedBySpace.s1 ?? []).filter((n) => n.kind === 'lens');
+    const folder = lensNodes[0];
+    if (folder?.kind !== 'lens') throw new Error('not a lens');
+    // Two references, both pointing at the SAME minted account (dedupe by URL).
+    expect(folder.sources).toHaveLength(2);
+    expect(folder.sources[0]?.sourceId).toBe(folder.sources[1]?.sourceId);
+    // Exactly one rss account was minted for the repeated URL.
+    const rssAccounts = Object.values(store.state.sources).filter((a) => a.provider === 'rss');
+    expect(rssAccounts).toHaveLength(1);
+    expect(emitAck).toHaveBeenCalledWith(expect.objectContaining({ id: 'c-dupe', result: 'ok' }));
   });
 
   test('1 valid feed → 1 folder named after the feed', async () => {

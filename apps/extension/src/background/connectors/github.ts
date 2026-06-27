@@ -1,12 +1,15 @@
 import { z } from 'zod';
+import { PROVIDER_AUTH_METHODS } from '../../shared/auth-method';
 import { requiredOriginsForConfig } from '../../shared/connector-origins';
-import { readConnectors } from '../../shared/connectors';
+import { readAccountTokens } from '../../shared/connectors';
 import type {
   ChangeData,
+  EntityRef,
   LensItem,
   LensQuery,
   LensSectionRuntime,
   ResolvedLensSource,
+  TicketData,
 } from '../../shared/types';
 import { boundedFetch, type ConnectorCaches, type SourceConnector } from './connector';
 
@@ -27,11 +30,6 @@ import { boundedFetch, type ConnectorCaches, type SourceConnector } from './conn
 /** Per-PR enrichment fan-out bound (≤2 extra requests per listed PR for a
  * general lens — detail + check-runs; ≤3 for a review lens — plus reviews). */
 const ENRICH_CONCURRENCY = 5;
-
-/** The per-host token lookup key: hostname plus any explicit port. */
-function hostOf(baseUrl: string): string {
-  return new URL(baseUrl).host;
-}
 
 /**
  * The folder's REST root: `https://api.github.com` for github.com itself,
@@ -99,6 +97,15 @@ const SearchItemSchema = z.object({
   title: z.string(),
   html_url: z.string(),
   pull_request: z.object({ url: z.string() }).optional(),
+  // Issue-pass fields (lens-overview): the search item itself carries everything
+  // a `ticket` bag needs, so the issue pass never enriches per-row. All optional
+  // so a partial item never fails the section (the PR pass ignores these).
+  number: z.number().optional(),
+  state: z.string().optional(),
+  updated_at: z.string().optional(),
+  repository_url: z.string().optional(),
+  assignees: z.array(z.object({ login: z.string() })).optional(),
+  labels: z.array(z.object({ name: z.string() })).optional(),
 });
 
 const SearchResponseSchema = z.object({ items: z.array(z.unknown()) });
@@ -116,6 +123,9 @@ const PrDetailSchema = z.object({
   deletions: z.number().optional(),
   updated_at: z.string().optional(),
   requested_reviewers: z.array(z.object({ login: z.string() })).optional(),
+  // Linked-ticket extraction source (lens-overview, L0) — the PR description.
+  // ALREADY fetched in the enrich step, so reading it costs no extra request.
+  body: z.string().nullable().optional(),
 });
 
 // The PR reviews list (review-lens, D4): one entry per submitted review. `state`
@@ -189,12 +199,55 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
+// ── linked-ticket extraction (lens-overview, L0) ────────────────────────────────
+
+/** A bare Jira issue key anywhere in the PR title/body (`PAY-91`). */
+const JIRA_KEY_RE = /\b[A-Z][A-Z0-9]+-\d+\b/;
+/** A verb-gated GitHub issue closer (`Closes #88`, `Fixes #12`, `Resolves #3`). */
+const CLOSES_ISSUE_RE = /(?:Closes|Fixes|Resolves)\s+#(\d+)/i;
+
+/**
+ * Extract the PR's linked-ticket refs (lens-overview, L0 — URL-only, no
+ * cross-lens resolution) from its `title` + `body`. At most one ref per kind,
+ * first match wins:
+ *
+ *   - a bare Jira key → a chip with an EMPTY url (L0-honest: github has no link
+ *     to a foreign Jira instance — never fabricate one);
+ *   - a verb-gated `Closes/Fixes/Resolves #N` → a `#N` chip linking to that
+ *     repo's issue (`{baseUrl}/{owner/repo}/issues/N`).
+ *
+ * Returns `undefined` when neither matches — the caller OMITS `refs` entirely.
+ */
+function extractRefs(
+  title: string,
+  body: string | null | undefined,
+  baseUrl: string,
+  repo: string | undefined,
+): EntityRef[] | undefined {
+  const text = `${title}\n${body ?? ''}`;
+  const refs: EntityRef[] = [];
+
+  const jira = JIRA_KEY_RE.exec(text);
+  if (jira) refs.push({ kind: 'ticket', key: jira[0], url: '', label: jira[0] });
+
+  const closes = CLOSES_ISSUE_RE.exec(text);
+  if (closes && repo !== undefined) {
+    const key = `#${closes[1]}`;
+    refs.push({ kind: 'ticket', key, url: `${baseUrl}/${repo}/issues/${closes[1]}`, label: key });
+  }
+
+  return refs.length > 0 ? refs : undefined;
+}
+
 interface Enrichment {
   draft: boolean;
   status: LensItem['status'];
   /** The canonical Change bag (review-lens) — present only for review-kind
    * lenses, omitted when the PR detail lacks the required identity fields. */
   change?: ChangeData;
+  /** Linked-ticket refs (lens-overview, L0) extracted from the PR title/body —
+   * present for every PR-pass row that names a ticket, omitted otherwise. */
+  refs?: EntityRef[];
 }
 
 type ReviewVerdict = NonNullable<ChangeData['reviewers'][number]['state']>;
@@ -240,11 +293,21 @@ function reduceReviewers(
  */
 async function enrich(
   prUrl: string | undefined,
+  title: string,
+  baseUrl: string,
   apiRoot: string,
   token: string,
   buildChange: boolean,
 ): Promise<Enrichment> {
-  const none: Enrichment = { draft: false, status: undefined };
+  // Refs from the title alone always survive — even the failure paths below
+  // (a bare Jira key needs no repo/body; the `Closes #N` form needs `repo`,
+  // unavailable until the detail parses, so it only emits on the happy path).
+  const titleRefs = extractRefs(title, undefined, baseUrl, undefined);
+  const none: Enrichment = {
+    draft: false,
+    status: undefined,
+    ...(titleRefs !== undefined ? { refs: titleRefs } : {}),
+  };
   if (prUrl === undefined) return none;
   const detailOutcome = await githubGet(prUrl, token);
   if (detailOutcome.kind !== 'ok') return none;
@@ -254,6 +317,7 @@ async function enrich(
   const draft = d.draft === true;
   const sha = d.head?.sha;
   const repo = d.base?.repo.full_name;
+  const refs = extractRefs(title, d.body, baseUrl, repo);
 
   let status: LensItem['status'];
   if (sha !== undefined && repo !== undefined) {
@@ -267,7 +331,8 @@ async function enrich(
     }
   }
 
-  if (!buildChange) return { draft, status };
+  const refsBag = refs !== undefined ? { refs } : {};
+  if (!buildChange) return { draft, status, ...refsBag };
 
   // review-kind only: the `change` bag + one reviews fetch (D4). The required
   // identity fields (author/repo/updatedAt) must be present, else we omit
@@ -275,7 +340,7 @@ async function enrich(
   const author = d.user?.login;
   const updatedAt = d.updated_at !== undefined ? Date.parse(d.updated_at) : Number.NaN;
   if (author === undefined || repo === undefined || Number.isNaN(updatedAt)) {
-    return { draft, status };
+    return { draft, status, ...refsBag };
   }
   const reviewsOutcome = await githubGet(`${prUrl}/reviews?per_page=100`, token);
   const reviews =
@@ -291,7 +356,7 @@ async function enrich(
     ...(d.deletions !== undefined ? { deletions: d.deletions } : {}),
     ...(d.base?.ref !== undefined ? { targetBranch: d.base.ref } : {}),
   };
-  return { draft, status, change };
+  return { draft, status, change, ...refsBag };
 }
 
 /**
@@ -313,18 +378,18 @@ async function fetchRuntime(
     fetchedAt,
   });
 
-  let host: string;
   let apiRoot: string;
   try {
-    host = hostOf(cfg.baseUrl);
     apiRoot = apiRootOf(cfg.baseUrl);
   } catch {
     // A malformed persisted baseUrl (defensive — the SW validates on
     // create/update) degrades to the quiet error state, never a throw.
     return fail('error');
   }
-  const connectors = await readConnectors();
-  const token = connectors[host];
+  // Per-source token (connector-accounts): looked up by the resolved account's
+  // `sourceId`, NOT by host — two accounts on one host hold distinct tokens.
+  const tokens = await readAccountTokens();
+  const token = tokens[cfg.sourceId];
   if (token === undefined) return fail('signed-out');
 
   // A queue node always carries a query (source-optional only for feeds);
@@ -355,7 +420,7 @@ async function fetchRuntime(
   // the `change` bag; a `general` github lens stays unenriched (no `change`).
   const buildChange = cfg.lensKind === 'review';
   const enrichments = await mapWithConcurrency(prs, ENRICH_CONCURRENCY, (pr) =>
-    enrich(pr.pull_request?.url, apiRoot, token, buildChange),
+    enrich(pr.pull_request?.url, pr.title, cfg.baseUrl, apiRoot, token, buildChange),
   );
 
   const items: LensItem[] = prs.map((pr, index) => {
@@ -368,10 +433,96 @@ async function fetchRuntime(
       url: pr.html_url,
       ...(enrichment.status !== undefined ? { status: enrichment.status } : {}),
       ...(enrichment.change !== undefined ? { change: enrichment.change } : {}),
+      ...(enrichment.refs !== undefined ? { refs: enrichment.refs } : {}),
     };
   });
 
-  return { state: 'ok', items, fetchedAt };
+  // Issue pass (lens-overview): a SECOND search for open issues, for the
+  // `assigned`/`authored` queries only (issues are never review-requested).
+  // Each result becomes a `ticket`-bag row — no per-issue enrichment (issues
+  // carry no reviews/checks). A failed/unparsed issue search is silent: the PR
+  // rows above still ship.
+  const issueItems =
+    query === 'review-requested' ? [] : await fetchIssues(maxItems, apiRoot, query, token);
+
+  return { state: 'ok', items: [...items, ...issueItems], fetchedAt };
+}
+
+/**
+ * The issue pass (lens-overview): one Search-API call mirroring the PR pass's
+ * qualifier builder but with `is:issue is:open`, mapping each result to a
+ * `ticket` bag straight from the search item (number/state/assignees/labels/
+ * repository_url/updated_at) — NO per-issue enrichment. Returns `[]` on any
+ * failure so the PR rows always survive.
+ */
+async function fetchIssues(
+  maxItems: number,
+  apiRoot: string,
+  query: LensQuery,
+  token: string,
+): Promise<LensItem[]> {
+  // The issue pass must NEVER throw — any failure resolves to an empty list so
+  // the PR section keeps its state (the enrichment-failure precedent).
+  try {
+    const url =
+      `${apiRoot}/search/issues?q=is:issue+is:open+${qualifierFor(query)}` +
+      `&per_page=${maxItems}&sort=updated&order=desc&advanced_search=true`;
+    const outcome = await githubGet(url, token);
+    if (outcome.kind !== 'ok') return [];
+    const parsed = SearchResponseSchema.safeParse(outcome.json);
+    if (!parsed.success) return [];
+
+    return parsed.data.items
+      .flatMap((element) => {
+        const item = SearchItemSchema.safeParse(element);
+        return item.success ? [item.data] : [];
+      })
+      .slice(0, maxItems)
+      .map((issue) => ({
+        id: String(issue.id),
+        title: issue.title,
+        url: issue.html_url,
+        ticket: buildTicket(issue),
+      }));
+  } catch {
+    return [];
+  }
+}
+
+/** Owner/repo from the search item's `repository_url`
+ * (`{apiRoot}/repos/{owner}/{repo}`) — its last two path segments. Absent when
+ * the field is missing or malformed (omitted rather than guessed). */
+function repoFromUrl(repositoryUrl: string | undefined): string | undefined {
+  if (repositoryUrl === undefined) return undefined;
+  const parts = repositoryUrl.split('/');
+  const repo = parts.at(-1);
+  const owner = parts.at(-2);
+  return owner !== undefined && owner !== '' && repo !== undefined && repo !== ''
+    ? `${owner}/${repo}`
+    : undefined;
+}
+
+/**
+ * Build a {@link TicketData} bag from a GitHub issue search item (lens-overview).
+ * GitHub classic issues are open/closed only, so `statusCategory` is todo/done —
+ * `in-progress` is UNREACHABLE and the middle kanban lane stays empty (never
+ * faked). Issues have no native priority, so `priority` is always OMITTED (the
+ * pill won't render). `project`/`assignee`/`labels` are omitted when absent.
+ */
+function buildTicket(issue: z.infer<typeof SearchItemSchema>): TicketData {
+  const closed = issue.state === 'closed';
+  const project = repoFromUrl(issue.repository_url);
+  const assignee = issue.assignees?.[0]?.login;
+  const labels = issue.labels?.map((l) => l.name) ?? [];
+  return {
+    key: `#${issue.number ?? ''}`,
+    statusCategory: closed ? 'done' : 'todo',
+    statusLabel: closed ? 'Closed' : 'Open',
+    updatedAt: issue.updated_at !== undefined ? Date.parse(issue.updated_at) : Number.NaN,
+    ...(project !== undefined ? { project } : {}),
+    ...(assignee !== undefined ? { assignee } : {}),
+    ...(labels.length > 0 ? { labels } : {}),
+  };
 }
 
 /** The full listing on the forge (rss-connector design D6, "open all in a
@@ -395,6 +546,10 @@ function requiredOrigins(cfg: ResolvedLensSource): string[] {
 /** The GitHub `SourceConnector` — the registry's `github` entry. */
 export const githubConnector: SourceConnector = {
   source: 'github',
+  // api.github.com ignores browser sessions, so a PAT is the only auth rung
+  // (connector-accounts) — there is no `session` fallback. Sourced from the
+  // shared declared-methods map so the surfaces and the connector never drift.
+  authMethods: PROVIDER_AUTH_METHODS.github,
   defaultBaseUrl: 'https://github.com',
   mintedIcon: 'folder-git-2',
   requiredOrigins,

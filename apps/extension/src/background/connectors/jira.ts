@@ -1,10 +1,12 @@
 import { z } from 'zod';
+import { PROVIDER_AUTH_METHODS } from '../../shared/auth-method';
 import { requiredOriginsForConfig } from '../../shared/connector-origins';
 import type {
   LensItem,
   LensQuery,
   LensSectionRuntime,
   ResolvedLensSource,
+  TicketData,
 } from '../../shared/types';
 import { boundedFetch, type ConnectorCaches, type SourceConnector } from './connector';
 
@@ -69,6 +71,49 @@ export function statusForCategory(categoryKey: string | undefined): LensItem['st
   }
 }
 
+// ── Ticket-entity mappers (Lens Overview, design §4) ────────────────────────────
+
+/**
+ * Map a Jira `statusCategory.key` onto the kanban column of the Ticket entity:
+ * `new` → `todo`, `indeterminate` → `in-progress`, `done` → `done`. Any
+ * unmapped/absent key defaults defensively to `todo` (the backlog column) — the
+ * Ticket entity always carries a column, unlike the optional status glyph.
+ */
+export function kanbanForCategory(categoryKey: string | undefined): TicketData['statusCategory'] {
+  switch (categoryKey) {
+    case 'indeterminate':
+      return 'in-progress';
+    case 'done':
+      return 'done';
+    default:
+      return 'todo';
+  }
+}
+
+/**
+ * Map a raw Jira priority name onto the Ticket entity's priority bucket. Jira's
+ * default scheme (Highest/High/Medium/Low/Lowest) plus the common Blocker/Critical
+ * aliases map; any unmapped or custom scheme name resolves `undefined` so the
+ * field is omitted — a custom priority is never coerced into a fabricated bucket.
+ */
+export function priorityForName(name: string | undefined): TicketData['priority'] {
+  switch (name) {
+    case 'Highest':
+    case 'Blocker':
+    case 'Critical':
+      return 'urgent';
+    case 'High':
+      return 'high';
+    case 'Medium':
+      return 'med';
+    case 'Low':
+    case 'Lowest':
+      return 'low';
+    default:
+      return undefined;
+  }
+}
+
 // ── fetch + signed-out detection (D7, D8; ported from GitLab, kept here) ─────────
 
 type GetOutcome = { kind: 'ok'; json: unknown } | { kind: 'signed-out' } | { kind: 'error' };
@@ -114,7 +159,19 @@ const IssueSchema = z.object({
   key: z.string(),
   fields: z.object({
     summary: z.string(),
-    status: z.object({ statusCategory: z.object({ key: z.string() }).nullish() }).nullish(),
+    status: z
+      .object({
+        name: z.string().nullish(),
+        statusCategory: z.object({ key: z.string() }).nullish(),
+      })
+      .nullish(),
+    // Every Ticket-entity field below is lenient/optional: a missing or
+    // malformed provider field is dropped, never failing the whole issue parse.
+    priority: z.object({ name: z.string() }).nullish(),
+    assignee: z.object({ displayName: z.string() }).nullish(),
+    project: z.object({ name: z.string() }).nullish(),
+    updated: z.string().nullish(),
+    labels: z.array(z.string()).nullish(),
   }),
 });
 
@@ -157,7 +214,7 @@ async function fetchRuntime(
   // the cap is never silent (the forge precedent).
   const url =
     `${cfg.baseUrl}/rest/api/3/search/jql?jql=${encodeURIComponent(jqlFor(query))}` +
-    `&fields=summary,status&maxResults=${maxItems}`;
+    `&fields=summary,status,priority,assignee,project,updated,labels&maxResults=${maxItems}`;
   const outcome = await jiraGet(url);
   if (outcome.kind !== 'ok') return fail(outcome.kind);
   const parsed = SearchResponseSchema.safeParse(outcome.json);
@@ -172,13 +229,37 @@ async function fetchRuntime(
     .slice(0, maxItems)
     .map((issue) => {
       const status = statusForCategory(issue.fields.status?.statusCategory?.key ?? undefined);
+
+      // The Ticket entity (Lens Overview, design §4): read inline from the same
+      // search row — Jira fans out to nothing. Optional fields use conditional
+      // spreads so an absent provider field is OMITTED (never set to undefined)
+      // under exactConditionalPropertyTypes — a missing field is never faked.
+      const priority = priorityForName(issue.fields.priority?.name ?? undefined);
+      const assignee = issue.fields.assignee?.displayName ?? undefined;
+      const project = issue.fields.project?.name ?? undefined;
+      const labels = issue.fields.labels ?? undefined;
+      const updated = issue.fields.updated ?? undefined;
+      const updatedAt = updated !== undefined ? Date.parse(updated) : Number.NaN;
+      const ticket: TicketData = {
+        key: issue.key,
+        statusCategory: kanbanForCategory(issue.fields.status?.statusCategory?.key ?? undefined),
+        statusLabel: issue.fields.status?.name ?? '',
+        // Absent (or unparseable) `updated` falls back to the section fetch time.
+        updatedAt: Number.isNaN(updatedAt) ? fetchedAt : updatedAt,
+        ...(priority !== undefined ? { priority } : {}),
+        ...(assignee !== undefined ? { assignee } : {}),
+        ...(project !== undefined ? { project } : {}),
+        ...(labels !== undefined && labels.length > 0 ? { labels } : {}),
+      };
+
       return {
         id: String(issue.id),
         // Jira issues are identified by their key (`PROJ-123`) — the key
         // prefixes the summary, restoring the scan anchor (GitHub's `Draft: `
-        // normalization precedent).
+        // normalization precedent). The board reads `ticket.key` separately.
         title: `${issue.key} ${issue.fields.summary}`,
         url: `${cfg.baseUrl}/browse/${issue.key}`,
+        ticket,
         ...(status !== undefined ? { status } : {}),
       };
     });
@@ -205,6 +286,9 @@ function requiredOrigins(cfg: ResolvedLensSource): string[] {
 /** The Jira `SourceConnector` — the registry's `jira` entry. */
 export const jiraConnector: SourceConnector = {
   source: 'jira',
+  // Session-only (connector-accounts): rides the Atlassian browser sign-in; no
+  // PAT rung in v1. Sourced from the shared declared-methods map.
+  authMethods: PROVIDER_AUTH_METHODS.jira,
   defaultBaseUrl: 'https://your-site.atlassian.net',
   mintedIcon: 'folder-kanban',
   requiredOrigins,

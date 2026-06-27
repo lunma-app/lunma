@@ -77,6 +77,9 @@ export function chromeTabHandlers(): Pick<
         isWindowClosing: info.isWindowClosing,
       });
       ctx.store.removeLiveTab(tabId);
+      // When the overview tab is closed, drop its tracking so the lens row stops
+      // showing active (lens-overview-peek).
+      ctx.store.clearLensPeekForTab(tabId);
       forgetPageOpenedTab(tabId);
       ctx.markDirty();
       // Auto-advance: open the next unread feed item in the same section — but

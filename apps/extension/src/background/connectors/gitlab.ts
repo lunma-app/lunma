@@ -1,12 +1,15 @@
 import { z } from 'zod';
+import { PROVIDER_AUTH_METHODS } from '../../shared/auth-method';
 import { requiredOriginsForConfig } from '../../shared/connector-origins';
-import { readConnectors } from '../../shared/connectors';
+import { readAccountTokens } from '../../shared/connectors';
 import type {
   ChangeData,
+  EntityRef,
   LensItem,
   LensQuery,
   LensSectionRuntime,
   ResolvedLensSource,
+  TicketData,
 } from '../../shared/types';
 import { boundedFetch, type ConnectorCaches, type SourceConnector } from './connector';
 
@@ -27,11 +30,6 @@ import { boundedFetch, type ConnectorCaches, type SourceConnector } from './conn
 
 /** Pipeline-enrichment fan-out bound (≤21 requests/folder/poll worst case). */
 const ENRICH_CONCURRENCY = 5;
-
-/** The per-host PAT lookup key: hostname plus any explicit port. */
-function hostOf(baseUrl: string): string {
-  return new URL(baseUrl).host;
-}
 
 // ── pipeline → tone mapping ────────────────────────────────────────────────────
 
@@ -64,12 +62,14 @@ interface AuthMode {
   credentials: RequestCredentials;
 }
 
-/** Resolve the auth rung for a host: a stored PAT wins (`Bearer` +
- * `credentials: 'omit'`); otherwise the browser session rides along
- * (`credentials: 'include'`). The token value never leaves the request. */
-async function authFor(host: string): Promise<AuthMode> {
-  const connectors = await readConnectors();
-  const token = connectors[host];
+/** Resolve the auth rung for an account (connector-accounts): a stored
+ * per-source PAT (keyed by `sourceId`) wins (`Bearer` + `credentials: 'omit'`);
+ * otherwise the browser session rides along (`credentials: 'include'`). This is
+ * the declared `gitlab.authMethods = ['session', 'pat']` ladder in precedence
+ * order — a token always wins. The token value never leaves the request. */
+async function authFor(sourceId: string): Promise<AuthMode> {
+  const tokens = await readAccountTokens();
+  const token = tokens[sourceId];
   if (token !== undefined) {
     return { headers: { Authorization: `Bearer ${token}` }, credentials: 'omit' };
   }
@@ -153,6 +153,26 @@ const MeSchema = z.object({ id: z.number() });
 
 type Mr = z.infer<typeof MrSchema>;
 
+/**
+ * A GitLab issue list row (lens-overview, design §4). Lenient — unknown keys
+ * stripped, a partial payload never fails the section; every Ticket-entity field
+ * is optional so a missing provider field is dropped, not faked. `assignees` is
+ * the array form (the single `assignee` is deprecated); `labels` is GitLab's
+ * plain-string array (scoped labels like `priority::high` are members of it).
+ */
+const IssueSchema = z.object({
+  id: z.union([z.number(), z.string()]),
+  iid: z.number(),
+  title: z.string(),
+  web_url: z.string(),
+  state: z.string(),
+  updated_at: z.string().optional(),
+  assignees: z.array(z.object({ username: z.string() })).optional(),
+  labels: z.array(z.string()).optional(),
+});
+
+type Issue = z.infer<typeof IssueSchema>;
+
 type MeResolution = { kind: 'ok'; id: number } | { kind: 'signed-out' | 'error' };
 
 /** Resolve `/api/v4/user` once per poll cycle: the `ConnectorCaches` map
@@ -188,6 +208,53 @@ function queryParams(query: LensQuery, meId: number | null): string {
     case 'review-requested':
       return `scope=all&reviewer_id=${meId ?? ''}`;
   }
+}
+
+// ── Ticket-entity mappers (lens-overview, design §4) ────────────────────────────
+
+/** The `/api/v4/issues` scope per canned slot — the SAME vocabulary the MR pass
+ * uses (`authored` → created-by-me, `assigned` → assigned-to-me). Only these two
+ * slots run the issue pass; `review-requested` has no issue analogue. */
+function issueScope(query: 'assigned' | 'authored'): string {
+  return query === 'authored' ? 'created_by_me' : 'assigned_to_me';
+}
+
+/**
+ * Map a GitLab issue `state` onto the Ticket entity's kanban column. GitLab
+ * issues are `opened`/`closed` only → `todo`/`done`. The `in-progress` column is
+ * UNREACHABLE without per-board list configuration the issue list does not
+ * expose (DEFERRED — never faked); any unexpected state defaults to `todo`.
+ */
+export function kanbanForIssueState(state: string): TicketData['statusCategory'] {
+  return state === 'closed' ? 'done' : 'todo';
+}
+
+/**
+ * Derive the Ticket priority bucket from a GitLab scoped label of the form
+ * `priority::<level>` (the common convention — GitLab issues have no native
+ * priority field). Best-effort and label-convention-dependent: only these exact
+ * scoped values map; any other label, or no `priority::` label at all, yields
+ * `undefined` so the field is OMITTED (never coerced into a fabricated bucket).
+ */
+export function priorityFromLabels(labels: string[] | undefined): TicketData['priority'] {
+  for (const label of labels ?? []) {
+    const lower = label.toLowerCase();
+    if (!lower.startsWith('priority::')) continue;
+    switch (lower.slice('priority::'.length)) {
+      case 'urgent':
+      case 'critical':
+      case 'blocker':
+        return 'urgent';
+      case 'high':
+        return 'high';
+      case 'medium':
+      case 'med':
+        return 'med';
+      case 'low':
+        return 'low';
+    }
+  }
+  return undefined;
 }
 
 /** Map items through `fn` with at most `limit` in flight at once. */
@@ -230,6 +297,30 @@ function repoFromWebUrl(webUrl: string): string | undefined {
   const sep = pathname.indexOf('/-/');
   const slug = (sep >= 0 ? pathname.slice(0, sep) : pathname).replace(/^\/+|\/+$/g, '');
   return slug || undefined;
+}
+
+/**
+ * A Jira issue key (lens-overview, L0) — one-or-more uppercase letters/digits
+ * starting with a letter, a hyphen, then the number (`PAY-91`, `AB12-3`). Word
+ * boundaries keep it from matching a substring of a longer token.
+ */
+const JIRA_KEY_RE = /\b[A-Z][A-Z0-9]+-\d+\b/;
+
+/**
+ * Extract the linked-ticket references for one MR (lens-overview, L0). The MR
+ * list already carries `title` and `target_branch`, so this is a ZERO-request
+ * derivation: scan the title first, then the branch name, for a Jira key; the
+ * FIRST match wins and yields a single bare chip (`url: ''` — L0 is URL-only with
+ * no cross-lens resolution, and GitLab does not expose the Jira base URL). No
+ * key in either field → no refs (the field is OMITTED, never an empty array).
+ */
+function linkedTicketRefs(mr: Mr): EntityRef[] {
+  const match =
+    JIRA_KEY_RE.exec(mr.title) ??
+    (mr.target_branch !== undefined ? JIRA_KEY_RE.exec(mr.target_branch) : null);
+  if (match === null) return [];
+  const key = match[0];
+  return [{ kind: 'ticket', key, url: '', label: key }];
 }
 
 /**
@@ -293,6 +384,69 @@ async function buildMrChange(
 }
 
 /**
+ * Normalise one GitLab issue into the Ticket entity (lens-overview, design §4) —
+ * a zero-request derivation from the issue list row. Optional fields use
+ * conditional spreads so an absent provider value is OMITTED (never set to
+ * `undefined`) under `exactConditionalPropertyTypes`, mirroring `buildMrChange`.
+ */
+function buildTicket(issue: Issue, fetchedAt: number): TicketData {
+  const assignee = issue.assignees?.[0]?.username;
+  const priority = priorityFromLabels(issue.labels);
+  const labels = issue.labels;
+  const updatedAt = issue.updated_at !== undefined ? Date.parse(issue.updated_at) : Number.NaN;
+  const project = repoFromWebUrl(issue.web_url);
+  return {
+    key: `#${issue.iid}`,
+    statusCategory: kanbanForIssueState(issue.state),
+    statusLabel: issue.state,
+    // Absent (or unparseable) `updated_at` falls back to the section fetch time.
+    updatedAt: Number.isNaN(updatedAt) ? fetchedAt : updatedAt,
+    ...(project !== undefined ? { project } : {}),
+    ...(assignee !== undefined ? { assignee } : {}),
+    ...(priority !== undefined ? { priority } : {}),
+    ...(labels !== undefined && labels.length > 0 ? { labels } : {}),
+  };
+}
+
+/**
+ * The issue pass (lens-overview, design §4): one `GET /api/v4/issues` with the
+ * slot's scope + `state=opened`, normalised into Ticket-carrying `LensItem`s.
+ * Issue items carry `ticket` and NO `change` (they are not Changes). Any failure
+ * resolves to an empty list — the issue pass never costs the MR section its
+ * state (the enrichment-failure precedent). One malformed row is dropped, the
+ * rest survive (element-wise parse).
+ */
+async function fetchIssues(
+  cfg: ResolvedLensSource,
+  query: 'assigned' | 'authored',
+  maxItems: number,
+  auth: AuthMode,
+  fetchedAt: number,
+): Promise<LensItem[]> {
+  // The issue pass must NEVER throw — any failure (network, unparsable, or a
+  // missing response) resolves to an empty list so the MR section keeps its state.
+  try {
+    const path = `/api/v4/issues?state=opened&per_page=${maxItems}&scope=${issueScope(query)}`;
+    const outcome = await gitlabGet(cfg.baseUrl, path, auth);
+    if (outcome.kind !== 'ok' || !Array.isArray(outcome.json)) return [];
+    return outcome.json
+      .flatMap((element) => {
+        const parsed = IssueSchema.safeParse(element);
+        return parsed.success ? [parsed.data] : [];
+      })
+      .slice(0, maxItems)
+      .map((issue) => ({
+        id: String(issue.id),
+        title: issue.title,
+        url: issue.web_url,
+        ticket: buildTicket(issue, fetchedAt),
+      }));
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Fetch one smart folder section's results and normalize them into a
  * `LensSectionRuntime`. Never throws — every failure shape resolves to a
  * runtime state. The engine reaches this via `CONNECTORS.gitlab.fetchRuntime`.
@@ -309,15 +463,14 @@ async function fetchRuntime(
     fetchedAt,
   });
 
-  let host: string;
+  // A malformed persisted baseUrl (defensive — the SW validates on
+  // create/update) degrades to the quiet error state, never a throw.
   try {
-    host = hostOf(cfg.baseUrl);
+    new URL(cfg.baseUrl);
   } catch {
-    // A malformed persisted baseUrl (defensive — the SW validates on
-    // create/update) degrades to the quiet error state, never a throw.
     return fail('error');
   }
-  const auth = await authFor(host);
+  const auth = await authFor(cfg.sourceId);
 
   // A queue node always carries a query (it's source-optional only for feeds);
   // default defensively so the now-optional field stays a total switch.
@@ -372,16 +525,28 @@ async function fetchRuntime(
   const items: LensItem[] = mrs.map((mr, index) => {
     const status = pipelineStatus(enriched[index]?.statusRaw);
     const change = enriched[index]?.change;
+    // Linked-ticket chip (lens-overview, L0) — derived from the list row, no
+    // extra request; omitted when neither title nor branch names a Jira key.
+    const refs = linkedTicketRefs(mr);
     return {
       id: String(mr.id),
       title: mr.title,
       url: mr.web_url,
       ...(status !== undefined ? { status } : {}),
       ...(change !== undefined ? { change } : {}),
+      ...(refs.length > 0 ? { refs } : {}),
     };
   });
 
-  return { state: 'ok', items, fetchedAt };
+  // Issue pass (lens-overview, design §4): for the `assigned`/`authored` slots,
+  // GitLab issues normalise into the Ticket entity alongside the MR Changes.
+  // `review-requested` has no issue analogue, so it stays MR-only.
+  const issueItems =
+    query === 'assigned' || query === 'authored'
+      ? await fetchIssues(cfg, query, maxItems, auth, fetchedAt)
+      : [];
+
+  return { state: 'ok', items: [...items, ...issueItems], fetchedAt };
 }
 
 /** The full listing on the instance (rss-connector design D6, "open all in a
@@ -402,6 +567,10 @@ function requiredOrigins(cfg: ResolvedLensSource): string[] {
 /** The GitLab `SourceConnector` — the registry's `gitlab` entry. */
 export const gitlabConnector: SourceConnector = {
   source: 'gitlab',
+  // The PAT-then-cookies ladder (connector-accounts): rides the browser session
+  // by default, a per-source token is the optional upgrade (token wins). Sourced
+  // from the shared declared-methods map so the surfaces never drift.
+  authMethods: PROVIDER_AUTH_METHODS.gitlab,
   defaultBaseUrl: 'https://gitlab.com',
   mintedIcon: 'folder-git-2',
   requiredOrigins,

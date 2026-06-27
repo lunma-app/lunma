@@ -5,6 +5,7 @@ import type { LunmaStore } from '../shared/store.svelte';
 import type { AppState } from '../shared/types';
 import { BoundaryController } from './boundary-controller';
 import { GroupOrchestrator } from './group-orchestrator';
+import { accountHandlers } from './handlers/accounts';
 import { autoArchiveHandlers } from './handlers/auto-archive';
 import { backupHandlers } from './handlers/backup';
 import { boundaryHandlers } from './handlers/boundary';
@@ -133,6 +134,10 @@ export const EventPolicy: Record<PendingEventKind, EventPolicyEntry> = {
   createLens: {},
   updateLens: {},
   deleteLens: {},
+  // Account lifecycle (connector-accounts): infrequent, per-entity — no coalescing.
+  createAccount: {},
+  renameAccount: {},
+  deleteAccount: {},
   refreshLens: {},
   // Per-click distinct (smart-folder-item-bindings): a re-click of an
   // already-bound row is the cheap focus path, so coalescing buys nothing.
@@ -307,6 +312,7 @@ export class Coordinator {
       // Smart-folders: the lifecycle handlers start refreshes whose result
       // events re-enter this coordinator's queue — hence the enqueue closure.
       ...lensHandlers({ enqueue: (ev) => this.enqueue(ev) }),
+      ...accountHandlers(),
       ...tempTabHandlers(),
       ...autoArchiveHandlers(),
       ...boundaryHandlers(),

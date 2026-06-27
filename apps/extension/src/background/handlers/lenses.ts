@@ -4,11 +4,20 @@
 // single writer of the ephemeral `smartFolders` runtime. The network engine
 // itself lives in `../smart-folders.ts` — fetches always run OFF the drain.
 
+import { deriveLensKind } from '../../shared/lens-entity';
 import { log } from '../../shared/logger';
-import type { FolderId, LensItem, LensSource, SpaceId } from '../../shared/types';
+import type {
+  AppState,
+  FolderId,
+  LensItem,
+  LensSourceRef,
+  SourceAccount,
+  SpaceId,
+} from '../../shared/types';
 import { pageGlob } from '../../shared/url-boundary';
 import {
   CONNECTORS,
+  fetchLensSectionRuntime,
   type LensDeps,
   type LensNode,
   normalizeBaseUrl,
@@ -29,24 +38,54 @@ function clampRefreshMinutes(minutes: number): number {
 }
 
 /**
- * Normalize + validate each entry's `baseUrl` (throws on a non-http(s) URL) and
- * enforce the per-source `queries` rule (multi-filter-smart-connectors): a queue
- * source (gitlab/github/jira) entry SHALL carry a NON-EMPTY `queries`; a feed
- * source (rss) entry SHALL carry `queries: []`. Throws on a violation so the ack
- * carries the error and no node is persisted/updated.
+ * Validate each lens reference (connector-accounts): every `sourceId` SHALL
+ * resolve to an existing `AppState.sources` account, and the per-source `queries`
+ * rule SHALL hold against the RESOLVED provider — a queue account
+ * (gitlab/github/jira) reference carries a NON-EMPTY `queries`; a feed account
+ * (rss) reference carries `queries: []`. Throws on a violation so the ack carries
+ * the error and no node is persisted/updated. Returns the (validated) refs.
  */
-function normalizeAndValidateSources(sources: LensSource[], command: string): LensSource[] {
-  return sources.map((cfg) => {
-    const baseUrl = normalizeBaseUrl(cfg.baseUrl);
-    if (cfg.source === 'rss') {
-      if (cfg.queries.length > 0) {
-        throw new Error(`${command}: rss source '${baseUrl}' must carry an empty queries array`);
-      }
-    } else if (cfg.queries.length === 0) {
-      throw new Error(`${command}: queue source '${cfg.source}' requires at least one query`);
+function validateSourceRefs(
+  sources: AppState['sources'],
+  refs: LensSourceRef[],
+  command: string,
+): LensSourceRef[] {
+  return refs.map((ref) => {
+    const account = sources[ref.sourceId];
+    if (!account) {
+      throw new Error(`${command}: unknown sourceId '${ref.sourceId}'`);
     }
-    return { ...cfg, baseUrl };
+    if (account.provider === 'rss') {
+      if (ref.queries.length > 0) {
+        throw new Error(
+          `${command}: rss account '${ref.sourceId}' must carry an empty queries array`,
+        );
+      }
+    } else if (ref.queries.length === 0) {
+      throw new Error(
+        `${command}: queue account '${account.provider}' requires at least one query`,
+      );
+    }
+    return { sourceId: ref.sourceId, queries: ref.queries };
   });
+}
+
+/**
+ * The icon for a lens (connector-accounts): the FIRST referenced account's
+ * provider `mintedIcon` when every referenced account shares that provider, else
+ * the compound `'layers'`. A dangling reference (no account) is ignored for the
+ * single-provider check. Falls back to `'layers'` when nothing resolves.
+ */
+function iconForRefs(sources: AppState['sources'], refs: LensSourceRef[]): string {
+  const providers = refs.flatMap((ref) => {
+    const account = sources[ref.sourceId];
+    return account ? [account.provider] : [];
+  });
+  const first = providers[0];
+  if (first !== undefined && providers.every((p) => p === first)) {
+    return CONNECTORS[first].mintedIcon;
+  }
+  return 'layers';
 }
 
 /** The smart node addressed by `{ spaceId, folderId }`, with the same error
@@ -90,30 +129,29 @@ export function lensHandlers(
 > {
   return {
     createLens: (ctx, event) => {
-      const { spaceId, sources, name, maxItems, refreshMinutes, lensKind } = event.payload;
+      const { spaceId, id, sources, name, maxItems, refreshMinutes } = event.payload;
       if (!spaceExists(ctx.store.state, spaceId)) {
         throw new Error(`createLens: unknown spaceId '${spaceId}'`);
       }
-      // SW-minted identity (D12): handler mints the node. Validate + normalize
-      // each source's baseUrl + per-source queries rule (throws on invalid →
-      // error ack, no node). Icon comes from the first-source connector when all
-      // sources share a kind; 'layers' for a mixed multi-source folder. hideRead
-      // starts TRUE — a feed's resting state is the drained unread queue.
-      const normalizedSources = normalizeAndValidateSources(sources, 'createLens');
-      const firstSource = normalizedSources[0]?.source;
-      const icon =
-        firstSource && normalizedSources.every((s) => s.source === firstSource)
-          ? CONNECTORS[firstSource].mintedIcon
-          : 'layers';
+      // SW-minted identity (D12): handler mints the node. Validate each
+      // reference (every `sourceId` resolves + the per-source queries rule;
+      // throws on invalid → error ack, no node). Icon comes from the first
+      // referenced account's provider when all references share a provider;
+      // 'layers' for a mixed multi-account lens. hideRead starts TRUE — a feed's
+      // resting state is the drained unread queue.
+      const refs = validateSourceRefs(ctx.store.state.sources, sources, 'createLens');
+      const icon = iconForRefs(ctx.store.state.sources, refs);
       const node: LensNode = {
         kind: 'lens',
-        id: crypto.randomUUID(),
+        // sources-redesign: honor a client-minted id (mirrors createAccount) so
+        // the editor can open the new lens's page without awaiting; else mint.
+        id: id ?? crypto.randomUUID(),
         name,
         icon,
-        // review-lens (D9): stamp the chosen kind; absent defaults to 'general'
-        // so existing callers (and back-compat clients) keep their behaviour.
-        lensKind: lensKind ?? 'general',
-        sources: normalizedSources,
+        // sources-redesign (D4): the kind is DERIVED from the source set, never
+        // sent by the editor — any github/gitlab source ⇒ 'review', else 'general'.
+        lensKind: deriveLensKind(refs, (id) => ctx.store.state.sources[id]),
+        sources: refs,
         maxItems,
         hideRead: true,
         refreshMinutes: clampRefreshMinutes(refreshMinutes),
@@ -127,29 +165,25 @@ export function lensHandlers(
       ctx.runSideEffect(() => completion);
     },
     updateLens: (ctx, event) => {
-      const { spaceId, folderId, sources, name, maxItems, refreshMinutes, lensKind } =
-        event.payload;
+      const { spaceId, folderId, sources, name, maxItems, refreshMinutes } = event.payload;
       const node = requireLensNode(ctx, 'updateLens', spaceId, folderId);
-      const normalizedSources = normalizeAndValidateSources(sources, 'updateLens');
+      const refs = validateSourceRefs(ctx.store.state.sources, sources, 'updateLens');
       // Capture the resolved-section keys BEFORE the store mutates `node.sources`,
       // so the diff finds added/removed sections (multi-filter-smart-connectors
       // design D2/D6). A maxItems change invalidates EVERY section's cap → refetch
       // all; a sources-only change refetches only the ADDED resolved sections and
       // the store prunes the REMOVED ones.
-      const oldKeys = new Set(resolvedConfigs(node).map(sourceKey));
+      const oldKeys = new Set(resolvedConfigs(node, ctx.store.state.sources).map(sourceKey));
       const maxItemsChanged = node.maxItems !== maxItems;
-      const sourcesChanged = JSON.stringify(node.sources) !== JSON.stringify(normalizedSources);
-      const firstSource = normalizedSources[0]?.source;
-      const newIcon =
-        firstSource && normalizedSources.every((s) => s.source === firstSource)
-          ? CONNECTORS[firstSource].mintedIcon
-          : 'layers';
+      const sourcesChanged = JSON.stringify(node.sources) !== JSON.stringify(refs);
+      const newIcon = iconForRefs(ctx.store.state.sources, refs);
       ctx.store.updateLens(spaceId, folderId, {
-        sources: normalizedSources,
+        sources: refs,
         name,
         icon: newIcon,
-        // review-lens (D9): an absent `lensKind` preserves the existing kind.
-        lensKind: lensKind ?? node.lensKind,
+        // sources-redesign (D4): re-derive the kind from the (possibly edited)
+        // sources — the editor never sends a kind.
+        lensKind: deriveLensKind(refs, (id) => ctx.store.state.sources[id]),
         maxItems,
         refreshMinutes: clampRefreshMinutes(refreshMinutes),
       });
@@ -165,7 +199,9 @@ export function lensHandlers(
       } else if (sourcesChanged) {
         // Refetch only the newly-added resolved sections (the store has already
         // dropped the removed ones; unchanged sections keep their results).
-        const added = resolvedConfigs(updated).filter((cfg) => !oldKeys.has(sourceKey(cfg)));
+        const added = resolvedConfigs(updated, ctx.store.state.sources).filter(
+          (cfg) => !oldKeys.has(sourceKey(cfg)),
+        );
         if (added.length > 0) {
           const { completion } = startLensRefresh(refreshDeps, { ...updated }, undefined, added);
           ctx.runSideEffect(() => completion);
@@ -196,7 +232,7 @@ export function lensHandlers(
     openLensItem: async (ctx, event) => {
       const { spaceId, folderId, itemId, windowId, fromPage } = event.payload;
       // Unknown spaceId/folderId throws (error ack) — the unknown-id convention.
-      requireLensNode(ctx, 'openLensItem', spaceId, folderId);
+      const node = requireLensNode(ctx, 'openLensItem', spaceId, folderId);
       // NOTE (rss-connector, the draining queue): opening a FEED item does NOT
       // mark it read — that would drain it from the list the instant you open
       // it. An item is "consumed" (marked read) only when you MOVE ON: its bound
@@ -224,15 +260,37 @@ export function lensHandlers(
       // section whose key prefixes itemId and holds the trailing native id.
       // (Valid section keys never prefix each other, so the match is unambiguous;
       // item.url is RSS-feed-controlled and scheme-validated below before create.)
-      const folderSections = ctx.store.state.lenses[folderId]?.sections ?? {};
-      let item: LensItem | undefined;
-      for (const sk of Object.keys(folderSections)) {
-        if (!itemId.startsWith(`${sk}:`)) continue;
-        const nativeId = itemId.slice(sk.length + 1);
-        const candidate = folderSections[sk]?.items.find((i) => i.id === nativeId);
-        if (candidate) {
-          item = candidate;
-          break;
+      const findItem = (): LensItem | undefined => {
+        const sections = ctx.store.state.lenses[folderId]?.sections ?? {};
+        for (const sk of Object.keys(sections)) {
+          if (!itemId.startsWith(`${sk}:`)) continue;
+          const candidate = sections[sk]?.items.find((i) => i.id === itemId.slice(sk.length + 1));
+          if (candidate) return candidate;
+        }
+        return undefined;
+      };
+      let item = findItem();
+      // The runtime is EPHEMERAL (stripped from persistence): after the SW idles
+      // out and respawns it is empty until the boot refresh lands, so a click
+      // through the overview would throw here. On a miss, resolve the item's
+      // owning section from the (persisted) node config and — unless it's already
+      // settled `ok` (then the item is genuinely gone) — fetch THAT section
+      // on-demand and read the item straight off the result. We can't read it
+      // back from the store: the `lenses.result` we enqueue (so the UI catches
+      // up) is applied by a LATER drain iteration, after this handler returns.
+      if (!item) {
+        const cfg = resolvedConfigs(node, ctx.store.state.sources).find((c) =>
+          itemId.startsWith(`${sourceKey(c)}:`),
+        );
+        const ownerSk = cfg && sourceKey(cfg);
+        if (cfg && ownerSk && ctx.store.state.lenses[folderId]?.sections[ownerSk]?.state !== 'ok') {
+          const runtime = await fetchLensSectionRuntime(cfg, node.maxItems);
+          deps.enqueue({
+            source: 'connector',
+            kind: 'lenses.result',
+            payload: { folderId, sourceKey: ownerSk, runtime },
+          });
+          item = runtime.items.find((i) => i.id === itemId.slice(ownerSk.length + 1));
         }
       }
       if (!item) {
@@ -331,15 +389,18 @@ export function lensHandlers(
       // mark-all-read applies to feed sources exclusively).
       const sections = ctx.store.state.lenses[folderId]?.sections ?? {};
       const namespacedIds: string[] = [];
-      for (const cfg of node.sources) {
-        if (cfg.source !== 'rss') continue;
+      for (const ref of node.sources) {
+        // Resolve the reference against the accounts map (connector-accounts);
+        // only rss accounts have read-state. A dangling ref is skipped.
+        const account = ctx.store.state.sources[ref.sourceId];
+        if (account?.provider !== 'rss') continue;
         let host: string;
         try {
-          host = new URL(cfg.baseUrl).host;
+          host = new URL(account.baseUrl).host;
         } catch {
           continue;
         }
-        const sk = `${cfg.source}:${host}`;
+        const sk = `${account.provider}:${host}`;
         for (const item of sections[sk]?.items ?? []) {
           namespacedIds.push(`${sk}:${item.id}`);
         }
@@ -364,7 +425,7 @@ export function lensHandlers(
       // single-query config carrying the lens kind (review-lens, D4a) — listing
       // URLs are query-independent for the queue sources, so the first source's
       // resolved config suffices.
-      const firstCfg = resolvedConfigs(node)[0];
+      const firstCfg = resolvedConfigs(node, ctx.store.state.sources)[0];
       if (!firstCfg) return;
       const url = CONNECTORS[firstCfg.source].listingUrl(firstCfg);
       let scheme: string;
@@ -388,6 +449,17 @@ export function lensHandlers(
     openLensPage: async (ctx, event) => {
       const { spaceId, folderId, windowId } = event.payload;
       requireLensNode(ctx, 'openLensPage', spaceId, folderId);
+      // Track this overview as the window's open lens overview (lens-overview-peek):
+      // the sidebar renders the lens row active while it is open. Opening a different
+      // lens's overview replaces (closes) the previous one (one overview per window).
+      const prevPeek = ctx.store.state.lensPeekByWindow[windowId] ?? null;
+      const trackPeek = (peekTabId: number): void => {
+        ctx.store.setLensPeek(windowId, { folderId, tabId: peekTabId });
+        if (prevPeek !== null && prevPeek.tabId !== peekTabId) {
+          ctx.runSideEffect(() => closeTab(prevPeek.tabId));
+        }
+        ctx.markDirty();
+      };
       const pageBase = chrome.runtime.getURL('src/launcher/lenspage/index.html');
       const url = `${pageBase}?folderId=${encodeURIComponent(folderId)}`;
       // Dedupe: a tab in THIS window already showing this folder's page (match on
@@ -414,10 +486,14 @@ export function lensHandlers(
         // throw the handler (which would log HANDLER_THREW + a rejected ack). On
         // failure fall through to opening a fresh page tab.
         try {
-          const tab = await chrome.tabs.update(existing.id, { active: true });
+          const tab = await chrome.tabs.update(existing.id, {
+            active: true,
+            autoDiscardable: false,
+          });
           if (tab?.windowId !== undefined) {
             await chrome.windows.update(tab.windowId, { focused: true });
           }
+          trackPeek(existing.id);
           return;
         } catch (err) {
           log.debug('openLensPage: existing tab gone, reopening', { folderId, err });
@@ -427,34 +503,63 @@ export function lensHandlers(
       if (tab.id === undefined) {
         throw new Error('openLensPage: opened tab has no id');
       }
+      // Keep Chrome's Memory Saver from auto-discarding the overview tab: discarding
+      // reloads it on return (flicker, and the first click only wakes the tab instead
+      // of opening an item). It's a managed view, not a browsing tab, so pin it loaded
+      // for the tab's lifetime. (`autoDiscardable` is a persistent tab property.)
+      await chrome.tabs.update(tab.id, { autoDiscardable: false });
       // The page tab belongs to its Space's Chrome group, like an opened pinned
       // tab (floated off the critical path — a forbidden/odd page is benign).
       await ctx.groups.addTabToSpaceGroup(windowId, spaceId, tab.id);
+      trackPeek(tab.id);
     },
-    // OPML bulk-import (multi-source-smart-folders): collect all valid feed
-    // entries as LensSource[], then create ONE smart folder with N sources.
-    // Invalid URLs (normalizeBaseUrl throws) are skipped and counted.
+    // OPML bulk-import (opml-import-export under connector-accounts):
+    // find-or-mint an rss `SourceAccount` per valid feed (dedupe by normalized
+    // baseUrl — reuse an existing rss account on the same URL, else mint a new
+    // SW-generated-id account into `AppState.sources`), then create ONE lens with
+    // N `LensSourceRef[]`. Invalid URLs (normalizeBaseUrl throws) are skipped and
+    // counted. When `imported === 0` no account and no lens are created.
     importOpml: (ctx, event) => {
       const { spaceId, feeds } = event.payload;
       if (!spaceExists(ctx.store.state, spaceId)) {
         throw new Error(`importOpml: unknown spaceId '${spaceId}'`);
       }
-      const validEntries: { name: string; cfg: LensSource }[] = [];
+      // Existing rss accounts indexed by normalized baseUrl (find-or-mint reuse).
+      const rssByBaseUrl = new Map<string, string>();
+      for (const account of Object.values(ctx.store.state.sources)) {
+        if (account.provider === 'rss') rssByBaseUrl.set(account.baseUrl, account.id);
+      }
+      // Accounts minted by THIS import, so a repeated feed URL within the same
+      // file references the one minted account rather than minting twice.
+      const mintedThisImport: SourceAccount[] = [];
+      const validEntries: { name: string; ref: LensSourceRef }[] = [];
       let skipped = 0;
       for (const { name, feedUrl } of feeds) {
+        let baseUrl: string;
         try {
-          const baseUrl = normalizeBaseUrl(feedUrl);
-          validEntries.push({ name, cfg: { source: 'rss', baseUrl, queries: [] } });
+          baseUrl = normalizeBaseUrl(feedUrl);
         } catch (err) {
           log.warn('importOpml: skipping invalid feed entry', { name, feedUrl, err });
           skipped++;
+          continue;
         }
+        let sourceId = rssByBaseUrl.get(baseUrl);
+        if (sourceId === undefined) {
+          sourceId = crypto.randomUUID();
+          rssByBaseUrl.set(baseUrl, sourceId);
+          // Name the account from the feed's OPML title (the per-source name
+          // moved onto the account); display-only.
+          mintedThisImport.push({ id: sourceId, provider: 'rss', baseUrl, name });
+        }
+        validEntries.push({ name, ref: { sourceId, queries: [] } });
       }
       const imported = validEntries.length;
       if (imported === 0) {
-        log.debug('importOpml: no valid sources', { skipped });
+        log.debug('importOpml: no valid feeds', { skipped });
         return;
       }
+      // Mint the new accounts before the lens references them.
+      for (const account of mintedThisImport) ctx.store.addSource(account);
       const folderName = imported === 1 ? (validEntries[0]?.name ?? 'Feeds') : 'Feeds';
       const node: LensNode = {
         kind: 'lens',
@@ -462,7 +567,7 @@ export function lensHandlers(
         name: folderName,
         icon: CONNECTORS.rss.mintedIcon,
         lensKind: 'general',
-        sources: validEntries.map((e) => e.cfg),
+        sources: validEntries.map((e) => e.ref),
         maxItems: 10,
         hideRead: true,
         refreshMinutes: 30,

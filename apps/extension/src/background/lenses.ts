@@ -56,25 +56,42 @@ export function sourceKey(cfg: ResolvedLensSource): string {
 }
 
 /**
- * Expand a smart node's per-instance `sources[]` over each instance's
- * `queries[]` into per-section {@link ResolvedLensSource}s (one per filter; a
- * single resolved config — with no `query` — for a feed entry). The single
- * derivation used by the engine fan-out, the origin union, and the editor's
- * section preview. Order is `sources` order, then `queries` order within each
- * instance.
+ * Resolve a lens node's `sources[]` account REFERENCES against
+ * `AppState.sources` (connector-accounts) and expand each over its `queries[]`
+ * into per-section {@link ResolvedLensSource}s (one per filter; a single resolved
+ * config — with no `query` — for a feed entry). Each resolved config carries the
+ * account's `source`/`baseUrl`/`name?` plus the owning lens's `lensKind` and the
+ * account's `sourceId` (for the per-source token lookup). A reference whose
+ * `sourceId` is absent from `sources` (DANGLING — its account was disconnected)
+ * yields nothing: it is dropped here, and the page/sidebar renders a calm
+ * "account removed" state. The single derivation used by the engine fan-out, the
+ * origin union, and the editor's section preview. Order is `sources` order, then
+ * `queries` order within each reference.
  */
-export function resolvedConfigs(node: LensNode): ResolvedLensSource[] {
+export function resolvedConfigs(
+  node: LensNode,
+  sources: AppState['sources'],
+): ResolvedLensSource[] {
   const out: ResolvedLensSource[] = [];
   // Stamp the owning lens's kind on every resolved config (review-lens, D4a) so
   // a connector can gate kind-specific enrichment (the `change` bag + verdict
   // fetch) without a `fetchRuntime` signature change.
   const { lensKind } = node;
-  for (const cfg of node.sources) {
-    if (cfg.queries.length === 0) {
-      out.push({ source: cfg.source, baseUrl: cfg.baseUrl, lensKind });
+  for (const ref of node.sources) {
+    const account = sources[ref.sourceId];
+    if (!account) continue; // dangling reference — drop (no section)
+    const base = {
+      source: account.provider,
+      baseUrl: account.baseUrl,
+      lensKind,
+      sourceId: account.id,
+      ...(account.name !== undefined ? { name: account.name } : {}),
+    };
+    if (ref.queries.length === 0) {
+      out.push({ ...base });
     } else {
-      for (const query of cfg.queries) {
-        out.push({ source: cfg.source, baseUrl: cfg.baseUrl, query, lensKind });
+      for (const query of ref.queries) {
+        out.push({ ...base, query });
       }
     }
   }
@@ -120,18 +137,10 @@ export interface LensDeps {
  * string-append (subpath instances work unchanged). Throws on anything else —
  * the create/update handlers let the throw reach the error ack.
  */
-export function normalizeBaseUrl(raw: string): string {
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    throw new Error(`invalid base URL '${raw}': not an absolute URL`);
-  }
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-    throw new Error(`invalid base URL '${raw}': must be http(s)`);
-  }
-  return raw.endsWith('/') ? raw.slice(0, -1) : raw;
-}
+// `normalizeBaseUrl` moved to `shared/account-ui` so surfaces (the editor's
+// OPML "add to this lens" find-or-mint) and the SW handlers normalize feed URLs
+// identically. Re-exported here for the existing `from '../lenses'` importers.
+export { normalizeBaseUrl } from '../shared/account-ui';
 
 // ── registry dispatch ──────────────────────────────────────────────────────────
 
@@ -221,7 +230,7 @@ export function startLensRefresh(
   // One `ConnectorCaches` is shared across ALL this refresh's sections, so
   // per-instance me-resolution (keyed by baseUrl) happens once per instance per
   // cycle even when several filters of one instance refetch (D5).
-  const sections = only ?? resolvedConfigs(node);
+  const sections = only ?? resolvedConfigs(node, deps.store.state.sources);
   const cycleCaches = caches ?? new Map();
 
   // Emit pending per section so the UI can transition immediately.
@@ -381,7 +390,7 @@ export async function reconcileLensGrants(deps: LensDeps): Promise<void> {
       // are query-independent, so the filters of one instance share a grant —
       // but each has its own section key, so a revoke must drop them all.
       const grantResults = await Promise.all(
-        resolvedConfigs(node).map(async (cfg) => {
+        resolvedConfigs(node, deps.store.state.sources).map(async (cfg) => {
           const sk = sourceKey(cfg);
           const granted = await hasHostPermissions(CONNECTORS[cfg.source].requiredOrigins(cfg));
           return { cfg, sk, granted, sectionState: sections[sk]?.state };
