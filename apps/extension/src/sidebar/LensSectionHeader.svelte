@@ -1,5 +1,6 @@
 <script lang="ts">
-import type { LensQuery, ResolvedLensSource } from '../shared/types';
+import { filterLabel, sourceIcon } from '../shared/lens-labels';
+import type { ResolvedLensSource } from '../shared/types';
 import Icon from '../ui/Icon.svelte';
 
 interface Props {
@@ -18,22 +19,7 @@ interface Props {
 
 const { cfg, count, collapsed, onToggle, controlsId, first = false }: Props = $props();
 
-const ICON_BY_SOURCE: Record<string, string> = {
-  gitlab: 'folder-git-2',
-  github: 'folder-git-2',
-  jira: 'folder-kanban',
-  rss: 'rss',
-};
-
-// Per-source filter label for the `host · filter` header (multi-filter-smart-
-// connectors design D8). Jira re-skins review-requested to "Watching".
-function filterLabel(source: string, query: LensQuery): string {
-  if (query === 'authored') return 'authored';
-  if (query === 'assigned') return 'assigned';
-  return source === 'jira' ? 'Watching' : 'reviewing';
-}
-
-const icon = $derived(ICON_BY_SOURCE[cfg.source] ?? 'folder');
+const icon = $derived(sourceIcon(cfg.source));
 const host = $derived.by(() => {
   try {
     return new URL(cfg.baseUrl).host;

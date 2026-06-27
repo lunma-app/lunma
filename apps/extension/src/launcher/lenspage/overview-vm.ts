@@ -10,6 +10,7 @@
  * Svelte components stay declarative and these stay unit-testable.
  */
 import { entityForItem, type LensEntity } from '../../shared/lens-entity';
+import { hostOf, sourceKey } from '../../shared/lens-labels';
 import type {
   AppState,
   ChangeData,
@@ -33,19 +34,7 @@ export interface Tagged {
   sk: string;
 }
 
-export function hostOf(url: string): string {
-  try {
-    return new URL(url).host;
-  } catch {
-    return url;
-  }
-}
-
-/** Per-section identity — `${source}:${host}:${query}` (queue) / `${source}:${host}` (rss). */
-export function sourceKey(cfg: ResolvedLensSource): string {
-  const base = `${cfg.source}:${hostOf(cfg.baseUrl)}`;
-  return cfg.query !== undefined ? `${base}:${cfg.query}` : base;
-}
+export { hostOf, sourceKey };
 
 /** Expand a lens node's account refs into per-section configs (over each ref's
  * `queries`), skipping dangling refs (their account was disconnected). */
