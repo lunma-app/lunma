@@ -76,7 +76,7 @@ export function entitiesForSource(provider: LensProvider): LensEntity[] {
 export function entityForItem(item: LensItem): LensEntity {
   if (item.change) return 'change';
   if (item.ticket) return 'ticket';
-  if (item.publishedAt !== undefined || item.excerpt !== undefined || item.genre !== undefined)
+  if (item.publishedAt !== undefined || item.excerpt !== undefined || item.categories !== undefined)
     return 'article';
   return 'generic';
 }

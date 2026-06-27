@@ -381,8 +381,8 @@ const LensItemSchema = z.strictObject({
   excerpt: z.string().optional(),
   imageUrl: z.string().optional(),
   publishedAt: z.number().optional(),
-  // Article genre/category (lens-overview) — RSS `<category>`; ephemeral.
-  genre: z.string().optional(),
+  // Article categories (lens-overview) — RSS `<category>` values; ephemeral.
+  categories: z.array(z.string()).optional(),
   // The canonical Change entity (review-lens) — populated by the github/gitlab
   // connectors for review-kind lenses only; ephemeral (never persisted).
   change: ChangeDataSchema.optional(),

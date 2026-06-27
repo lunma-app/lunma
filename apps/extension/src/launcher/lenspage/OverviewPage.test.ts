@@ -82,7 +82,7 @@ const ARTICLE = tagged(
     url: 'u',
     excerpt: 'x',
     publishedAt: 1,
-    genre: 'Engineering',
+    categories: ['Engineering'],
   },
   'rss',
 );

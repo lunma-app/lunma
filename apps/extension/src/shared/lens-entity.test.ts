@@ -63,10 +63,10 @@ describe('entityForItem (the overview router — by populated bag)', () => {
   test('a ticket bag → ticket (jira issue or git issue)', () => {
     expect(entityForItem({ ...base, ticket })).toBe('ticket');
   });
-  test('an rss field cluster (publishedAt / excerpt / genre) → article', () => {
+  test('an rss field cluster (publishedAt / excerpt / categories) → article', () => {
     expect(entityForItem({ ...base, publishedAt: 1 })).toBe('article');
     expect(entityForItem({ ...base, excerpt: 'x' })).toBe('article');
-    expect(entityForItem({ ...base, genre: 'CSS' })).toBe('article');
+    expect(entityForItem({ ...base, categories: ['CSS'] })).toBe('article');
   });
   test('no typed bag → generic', () => {
     expect(entityForItem(base)).toBe('generic');

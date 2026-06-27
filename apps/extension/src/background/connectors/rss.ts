@@ -75,8 +75,8 @@ interface DraftEntry {
   image?: string;
   /** Raw publication date text (RSS pubDate / Atom published|updated). */
   dateText?: string;
-  /** First `<category>` — RSS 2.0 text body or Atom `@term` — the article genre. */
-  category?: string;
+  /** All `<category>` values — RSS 2.0 text bodies / Atom `@term`s — the article categories. */
+  categories?: string[];
 }
 
 /** Which leaf element's text we are currently accumulating, and into where. */
@@ -267,10 +267,13 @@ export function parseFeed(xml: string): { items: LensItem[]; channelLink?: strin
       } else if (name === 'category') {
         // Atom `<category term="Foo"/>` carries its value in the attribute (self-
         // closing, no text body); RSS 2.0 `<category>Tech</category>` is a text
-        // body, collected like the other leaves. FIRST category wins (see closetag).
+        // body, collected like the other leaves. ALL categories are kept (a feed
+        // item commonly carries several); de-duped + capped at item construction.
         const term = attrs.term;
-        if (term !== undefined) entry.category ??= term;
-        else {
+        if (term !== undefined) {
+          entry.categories ??= [];
+          entry.categories.push(term);
+        } else {
           capture = 'category';
           buf = '';
         }
@@ -324,7 +327,10 @@ export function parseFeed(xml: string): { items: LensItem[]; channelLink?: strin
           else if (capture === 'content') entry.contentRaw ??= value;
           else if (capture === 'date' && (dateStrong || entry.dateText === undefined))
             entry.dateText = value;
-          else if (capture === 'category') entry.category ??= value;
+          else if (capture === 'category') {
+            entry.categories ??= [];
+            entry.categories.push(value);
+          }
         }
       }
       capture = null;
@@ -344,6 +350,11 @@ export function parseFeed(xml: string): { items: LensItem[]; channelLink?: strin
         // Decode entities in the title too — feeds often CDATA-wrap or double-encode
         // it (e.g. `&#8217;`), which saxes leaves literal.
         const title = entry.title !== undefined ? decodeHtmlEntities(entry.title) : entry.url;
+        // Decode + de-dupe the categories, capped at 4 (display-oriented; a feed
+        // item can list many).
+        const categories = entry.categories
+          ? [...new Set(entry.categories.map(decodeHtmlEntities))].slice(0, 4)
+          : [];
         items.push({
           id: entry.id ?? entry.url,
           title,
@@ -351,7 +362,7 @@ export function parseFeed(xml: string): { items: LensItem[]; channelLink?: strin
           ...(excerpt !== undefined ? { excerpt } : {}),
           ...(imageUrl !== undefined ? { imageUrl } : {}),
           ...(publishedAt !== undefined ? { publishedAt } : {}),
-          ...(entry.category !== undefined ? { genre: decodeHtmlEntities(entry.category) } : {}),
+          ...(categories.length > 0 ? { categories } : {}),
         });
       }
       entry = null;
