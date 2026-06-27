@@ -181,10 +181,13 @@ function openOptions(): void {
     color: var(--text-muted);
   }
 
+  /* Comp §8 eyebrow — uppercase, 11px, letter-spaced, --text-dim (matches the
+     SpaceEditor/LensEditor sheet labels). */
   .list-label {
     font: var(--weight-semibold) var(--text-xs) / 1.2 var(--font-sans);
-    letter-spacing: 0.01em;
-    color: var(--text-muted);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-dim);
   }
 
   /* Quiet link to the Options page (where the global default lives), tinted in

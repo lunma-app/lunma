@@ -5,7 +5,8 @@ import { dispatch } from '../shared/bus';
 import { hostOf, labelFor } from '../shared/label-for';
 import { log } from '../shared/logger';
 import type { SavedTabId, TabBoundary, WindowId } from '../shared/types';
-import ContextMenu from '../ui/ContextMenu.svelte';
+import BitsContextMenu from '../ui/BitsContextMenu.svelte';
+import BottomSheet from '../ui/BottomSheet.svelte';
 import FaviconTile from '../ui/FaviconTile.svelte';
 import { faviconCacheKey, faviconFor, faviconUrl } from '../ui/favicon';
 import type { MenuItem } from '../ui/menu-types';
@@ -232,17 +233,17 @@ function contextItemsFor(fav: FavView): MenuItem[] {
       onSelect: () => copyLink(fav.url),
     },
     {
-      // Drills the menu into the same boundary editor pinned tabs use (a back-arrow
-      // header + the allow-list editor) — set the site(s) the locked favorite stays
-      // within. `keepOpen` so the menu morphs in place rather than closing.
+      // Opens the same boundary editor pinned tabs use — the allow-list editor that
+      // sets the site(s) the locked favorite stays within — inside a BottomSheet
+      // (bits-ui menus are flat, so an editor is a sheet, not a menu drill-in). The
+      // menu closes (no `keepOpen`) and the sheet rises in its place.
       id: 'lock',
       label: 'Lock to its site…',
       icon: 'anchor',
-      submenu: true,
-      keepOpen: true,
       onSelect: () => {
         confirmingDeleteId = null; // selecting another entry disarms a pending Delete
-        panelOpen = true;
+        boundaryFavId = fav.id;
+        boundaryOpen = true;
       },
     },
   );
@@ -475,36 +476,30 @@ function onStripFocusIn(e: FocusEvent): void {
   if (Number.isFinite(idx)) rovingIndex = idx;
 }
 
-// --- favorite right-click menu (with the "Lock to its site…" drill-in) ---------
-// The menu lives HERE (not in the FaviconTile primitive) because its actions + the
-// drill-in boundary panel are feature concerns. ONE `ContextMenu` is opened at the
-// cursor for whichever tile was right-clicked; `panelOpen` drills it into the SAME
-// `TabBoundaryEditor` the pinned rows use, with a back-arrow header. The active
-// favorite is re-derived by id so the panel reflects state after each round-trip.
-let menuOpen = $state(false);
-let menuX = $state(0);
-let menuY = $state(0);
-let menuFavId = $state<SavedTabId | null>(null);
-// The tile element a keyboard-invoked menu anchors to (see onTileContextMenu / D6).
-let menuAnchorEl = $state<HTMLElement | undefined>(undefined);
-let panelOpen = $state(false);
+// --- favorite right-click menu + the "Lock to its site…" boundary editor -------
+// Each tile IS its own bits-ui ContextMenu trigger (see the template): bits-ui owns
+// the right-click capture, cursor anchor, keyboard invocation (menu key / Shift+F10),
+// dismissal, and keyboard nav. The menu is FLAT (bits-ui has no drill-in editor), so
+// "Lock to its site…" opens the SAME `TabBoundaryEditor` the pinned rows use inside a
+// `BottomSheet` instead of morphing the menu — the editor component is unchanged.
+//
 // Two-step Delete arm: holds the favorite whose Delete is armed into its
-// "Delete — confirm" affordance. Reset on menu close, Escape, opening another
-// tile's menu, or selecting any other entry (see contextItemsFor / onclose).
+// "Delete — confirm" affordance. Reset when the menu closes (the bits-ui
+// `onOpenChange(false)` covers click-away / Escape / select), or on selecting any
+// other entry (see contextItemsFor).
 let confirmingDeleteId = $state<SavedTabId | null>(null);
-const activeMenuFav = $derived(
-  menuFavId !== null ? (favorites.find((f) => f.id === menuFavId) ?? null) : null,
+// The boundary editor sheet — opened from a tile's menu, keyed to that favorite so
+// the editor re-derives by id and reflects state after each dispatch round-trip.
+let boundaryOpen = $state(false);
+let boundaryFavId = $state<SavedTabId | null>(null);
+const boundaryFav = $derived(
+  boundaryFavId !== null ? (favorites.find((f) => f.id === boundaryFavId) ?? null) : null,
 );
 
-function onTileContextMenu(e: MouseEvent, fav: FavView): void {
-  menuX = e.clientX;
-  menuY = e.clientY;
-  // The invoking tile — ContextMenu anchors to it for a keyboard-invoked menu (D6).
-  menuAnchorEl = e.currentTarget as HTMLElement;
-  menuFavId = fav.id;
-  panelOpen = false;
-  confirmingDeleteId = null; // a fresh open starts unarmed
-  menuOpen = true;
+// Reset the two-step Delete arm whenever a tile's menu closes (click-away, Escape,
+// or selecting an item that closes the menu) — a fresh open always starts unarmed.
+function onMenuOpenChange(open: boolean): void {
+  if (!open) confirmingDeleteId = null;
 }
 </script>
 
@@ -539,30 +534,45 @@ function onTileContextMenu(e: MouseEvent, fav: FavView): void {
         ></div>
       {/if}
       {#each favorites as fav, i (fav.id)}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div
-          class="tile-wrap"
-          class:dragging={isDragSource(fav)}
-          data-favicon-index={i}
-          bind:this={tileWrapEls[i]}
-          onpointerdown={(e) => onTilePointerDown(e, fav)}
+        <!-- Each tile is its own bits-ui ContextMenu trigger: the trigger props are
+             spread onto the SAME `.tile-wrap` the drag controller measures
+             (`bind:this={tileWrapEls[i]}` + `data-favicon-index` + `onpointerdown`
+             preserved), so bits-ui captures right-click without changing the row's
+             element identity. The `favicon-tile` testid stays inside the wrap. -->
+        <BitsContextMenu
+          items={contextItemsFor(fav)}
+          label="Favorite actions"
+          testid="favicon-menu"
+          onOpenChange={onMenuOpenChange}
         >
-          <FaviconTile
-            title={fav.title}
-            faviconSrc={fav.faviconSrc}
-            faviconFallbackSrc={fav.faviconFallbackSrc}
-            active={fav.active}
-            loading={fav.loading}
-            drifted={fav.drifted}
-            homeHost={fav.homeHost}
-            onGoHome={() => dispatch({ kind: 'goHome', payload: { savedTabId: fav.id, windowId } })}
-            unbound={fav.unbound}
-            favoriting={pulsing.has(fav.id)}
-            tabindex={i === rovingTile ? 0 : -1}
-            onclick={() => onTileClick(fav)}
-            oncontextmenu={(e) => onTileContextMenu(e, fav)}
-          />
-        </div>
+          {#snippet children(menuProps)}
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div
+              {...menuProps}
+              class="tile-wrap"
+              class:dragging={isDragSource(fav)}
+              data-favicon-index={i}
+              bind:this={tileWrapEls[i]}
+              onpointerdown={(e) => onTilePointerDown(e, fav)}
+            >
+              <FaviconTile
+                title={fav.title}
+                faviconSrc={fav.faviconSrc}
+                faviconFallbackSrc={fav.faviconFallbackSrc}
+                active={fav.active}
+                loading={fav.loading}
+                drifted={fav.drifted}
+                homeHost={fav.homeHost}
+                onGoHome={() =>
+                  dispatch({ kind: 'goHome', payload: { savedTabId: fav.id, windowId } })}
+                unbound={fav.unbound}
+                favoriting={pulsing.has(fav.id)}
+                tabindex={i === rovingTile ? 0 : -1}
+                onclick={() => onTileClick(fav)}
+              />
+            </div>
+          {/snippet}
+        </BitsContextMenu>
       {/each}
     </div>
   {:else}
@@ -581,74 +591,69 @@ function onTileContextMenu(e: MouseEvent, fav: FavView): void {
   {/if}
 </div>
 
-{#snippet boundaryPanel()}
-  {#if activeMenuFav}
+<!-- "Lock to its site…" opens the SAME boundary editor pinned tabs use, inside a
+     BottomSheet (bits-ui menus are flat, so an editor is a sheet, not a drill-in).
+     The sheet is scoped to the sidebar panel; its own ✕ / scrim / Escape dismiss to
+     `onClose`. The editor is re-derived by id so it reflects state after each
+     dispatch round-trip. -->
+<BottomSheet
+  open={boundaryOpen && boundaryFav !== null}
+  portalTo=".sidebar"
+  title="Lock to its site"
+  testid="favicon-boundary-sheet"
+  onClose={() => {
+    boundaryOpen = false;
+  }}
+>
+  {#if boundaryFav}
     <div class="boundary-body" data-testid="favicon-boundary-editor">
       <TabBoundaryEditor
-        savedTabId={activeMenuFav.id}
-        boundary={activeMenuFav.boundary}
-        originalURL={activeMenuFav.originalURL}
+        savedTabId={boundaryFav.id}
+        boundary={boundaryFav.boundary}
+        originalURL={boundaryFav.originalURL}
         globalDefault="domain"
       />
     </div>
   {/if}
-{/snippet}
-
-<!-- The favorite right-click menu (one instance, opened at the cursor for the tile
-     that was right-clicked). "Lock to its site…" drills it into the boundary editor
-     with a back-arrow header — parity with the pinned-row menu. -->
-{#if activeMenuFav}
-  <ContextMenu
-    bind:open={menuOpen}
-    x={menuX}
-    y={menuY}
-    anchorEl={menuAnchorEl}
-    items={contextItemsFor(activeMenuFav)}
-    label="Favorite actions"
-    testid="favicon-menu"
-    panel={panelOpen ? boundaryPanel : undefined}
-    panelTitle={panelOpen ? 'Lock to its site' : undefined}
-    onPanelBack={() => {
-      panelOpen = false;
-    }}
-    onclose={() => {
-      panelOpen = false;
-      confirmingDeleteId = null; // closing / Escape disarms a pending Delete
-    }}
-  />
-{/if}
+</BottomSheet>
 
 <style>
   /* Fully bare: no glass card, no shadow, no divider line. The favicons read
    * directly on the sidebar's Space-tinted top wash. Positioned (not transformed)
    * so it paints above the aurora by DOM order; plumb-aligned via `--list-pad`.
    *
-   * Sits just under the top search bar: a `--space-3` (12px) gap above the grid and a
-   * `--space-3` bottom inset that sets a defined rhythm down to the Space section
-   * header — the grid reads as a deliberate top band, not a stray row. */
+   * The redesign comp's favourites band (§3) sits just under the search field as a
+   * single tight row: a small top gap, the sidebar plumb inset on the sides, and a
+   * defined bottom rhythm down to the Space header. The band padding lives HERE (one
+   * inset box, no nested padding) so the tiles sit directly on the wash — the comp's
+   * `padding:6px 16px 12px` mapped onto the codebase rhythm tokens. */
   .favicon-row {
     position: relative;
-    padding: var(--space-3) var(--list-pad);
+    padding: var(--space-2) var(--list-pad) var(--space-3);
   }
 
   /* A responsive auto-fill GRID of plated tiles: as many fixed-`--favicon-tile`-wide
    * columns as the sidebar width allows, wrapping to new rows. It grows vertically
-   * (the `flex: 1` carousel below shrinks) — no horizontal scroll. `--space-3` padding
-   * gives the band breathing room; `--r-lg` lets the whole-grid drop wash read as a
-   * soft region. */
+   * (the `flex: 1` carousel below shrinks) — no horizontal scroll. A small `--space-1`
+   * inset lets the whole-grid drop wash read as a soft region that hugs the tiles (the
+   * band rhythm is owned by `.favicon-row` above, so the strip stays compact like the
+   * comp's single row). `gap: var(--space-2)` keeps `lineRect`'s GAP_HALF correct. */
   .strip {
     display: grid;
     grid-template-columns: repeat(auto-fill, var(--favicon-tile));
     justify-content: start;
     gap: var(--space-2);
-    padding: var(--space-3);
+    padding: var(--space-1);
     border-radius: var(--r-lg);
     transition: background var(--motion-base) var(--ease-standard);
   }
   /* Whole-grid drop target — while a pinned/temp tab is dragged toward the grid the
-   * ENTIRE row washes in the Space colour, so dropping anywhere on it favorites. */
+   * ENTIRE row washes in the Space colour with a soft Space-hue inset ring (the comp's
+   * active-tile `--space-soft` fill + `--space-line` ring, applied here to the whole
+   * drop region), so dropping anywhere on it reads unmistakably as "drop to favorite". */
   .strip.drop-target {
     background: var(--space-c-soft);
+    box-shadow: inset 0 0 0 1px var(--space-c-dim);
   }
 
   .tile-wrap {
@@ -701,8 +706,8 @@ function onTileContextMenu(e: MouseEvent, fav: FavView): void {
   /* (The empty-state placeholder is the shared `EmptyState` plated drop-zone card —
    * same component the pinned list uses — so no bespoke empty styling lives here.) */
 
-  /* "Lock to its site…" boundary editor — rendered as the favorite menu's drill-in
-   * panel (ContextMenu owns the padding); a min-width so the allow-list editor has room. */
+  /* "Lock to its site…" boundary editor — rendered inside the BottomSheet (the
+   * sheet owns the padding); a min-width so the allow-list editor has room. */
   .boundary-body {
     min-width: 216px;
   }

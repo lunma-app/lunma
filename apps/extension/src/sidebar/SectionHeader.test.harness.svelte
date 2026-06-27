@@ -1,25 +1,28 @@
 <script lang="ts">
 import type { IconName } from '../shared/icon-names';
-import type { RowMenuItem } from '../ui/RowMenu.svelte';
+import type { MenuItem } from '../ui/menu-types';
 import SectionHeader from './SectionHeader.svelte';
 
 interface Props {
   icon?: IconName;
   label?: string;
-  menu?: RowMenuItem[];
-  /** When set, the harness forwards a drill-in panel rendering this text. */
+  menu?: MenuItem[];
+  /** When set, the harness forwards a drill-in editor panel rendering this text —
+   * SectionHeader now hosts it inside a BottomSheet. */
   panelContent?: string;
   panelTitle?: string;
   onPanelBack?: () => void;
+  open?: boolean;
 }
 
-const {
+let {
   icon = 'pin',
   label = 'Pinned',
   menu,
   panelContent,
   panelTitle,
   onPanelBack,
+  open = $bindable(false),
 }: Props = $props();
 </script>
 
@@ -34,4 +37,5 @@ const {
   panel={panelContent !== undefined ? forwardedPanel : undefined}
   {panelTitle}
   {onPanelBack}
+  bind:open
 />

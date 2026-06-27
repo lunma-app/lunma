@@ -12,9 +12,13 @@ body,
 #app {
   margin: 0;
   height: 100%;
-  background: var(--bg);
+  /* The warm atmosphere substrate fills the whole document so the side panel
+   * reads as one continuous warm panel edge-to-edge (the redesign comp's
+   * `--atm-bg`). `color-scheme` is set inline per-theme by main.ts
+   * (`applyThemeToDocument`), so it is NOT hard-coded here — that would fight the
+   * light theme. */
+  background: var(--atm-bg);
   color: var(--text);
-  color-scheme: dark;
   font-family: var(--font-sans);
 }
 
@@ -26,8 +30,14 @@ body,
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: var(--bg);
+  /* Warm atmosphere panel substrate (redesign comp): the theme-aware `--atm-bg`
+   * fill + a soft ambient ring (`--atm-ambient`). Both flip in the light theme
+   * (tokens.css `[data-theme='light']`). The comp's 388px/920px/20px-radius were
+   * MOCKUP floating-card chrome — the real Chrome side panel fills its viewport,
+   * so the root stays full-size with no border-radius. */
+  background: var(--atm-bg);
   color: var(--text);
+  box-shadow: var(--atm-ambient);
   /* Surfaces, borders, and text smoothly cross-fade as the active Space (and
    * therefore the hue) changes. Children inherit transitions because they
    * read from the same custom properties whose computed colours are changing. */
@@ -109,34 +119,50 @@ body,
  * glass loses its cast, and the aurora is reduced or nearly absent. Changing the
  * level changes colour intensity ONLY — never layout. */
 .sidebar[data-tint='vivid'] {
+  /* The aurora is kept QUIET on this dense working surface — below the
+   * @lunma/tokens vivid default (`--aurora-opacity: 0.5`) — because it is masked
+   * to the upper region (see `.sidebar-aurora`) and sits behind content; it's a
+   * soft top glow, not a landing-page field. The `<Aurora>` is composed WITHOUT
+   * an `intensity` prop, so it inherits this scoped value; `standard`/`subtle`
+   * drop it further, satisfying "aurora reduced or absent" at the calm levels. */
+  --aurora-opacity: 0.35;
+}
+
+/* The `vivid` substrate lifts a low-chroma cast of the active Space hue onto the
+ * neutral surfaces. These re-derivations are DARK-THEME ONLY: scoping them under
+ * `:root:not([data-theme='light'])` keeps them from hard-fighting the light
+ * theme (where the warm-paper `--atm-bg` panel + the light base tokens already
+ * carry the surface lightness). On light, `vivid` layers identity through the
+ * top-down wash + aurora + chip tiles + section-label tint, not a forced-dark
+ * surface set. */
+:root:not([data-theme='light']) .sidebar[data-tint='vivid'] {
   --bg: oklch(0.155 0.045 var(--base-hue));
   --bg-elev: oklch(0.180 0.045 var(--base-hue));
   --surface: oklch(0.200 0.045 var(--base-hue));
   --surface-2: oklch(0.230 0.045 var(--base-hue));
   --hover: oklch(0.255 0.050 var(--base-hue));
   --press: oklch(0.295 0.054 var(--base-hue));
-  /* Glass keeps its :root (hue-tinted) value. The aurora is kept QUIET on this
-   * dense working surface — below the @lunma/tokens vivid default
-   * (`--aurora-opacity: 0.5`) — because it is masked to the upper region (see
-   * `.sidebar-aurora`) and sits behind content; it's a soft top glow, not a
-   * landing-page field. The
-   * `<Aurora>` is composed WITHOUT an `intensity` prop, so it inherits this
-   * scoped value; `standard`/`subtle` drop it further, satisfying "aurora reduced
-   * or absent" at the calm levels. */
-  --aurora-opacity: 0.35;
 }
 
 /* `standard` — a gentle cast on glass, a faint aurora; substrate neutral. */
 .sidebar[data-tint='standard'] {
   --aurora-opacity: 0.16;
+}
+/* The glass cast is the dark expression; on light the glass family keeps its
+ * theme defaults (it has no light expression yet — redesigned surfaces compose
+ * the theme-aware `--atm-*` family), so this stays dark-theme-scoped to avoid
+ * painting a dark glass on the light panel. */
+:root:not([data-theme='light']) .sidebar[data-tint='standard'] {
   --glass-bg: oklch(0.23 0.014 var(--base-hue) / 0.5);
   --glass-bg-strong: oklch(0.25 0.016 var(--base-hue) / 0.66);
 }
 
 /* `subtle` — the calmest: neutral glass and NO aurora, so the substrate reads
- * truly near-neutral (identity carried by the edge stripe, chip, and label). */
+ * truly near-neutral (identity carried by the chip and label). */
 .sidebar[data-tint='subtle'] {
   --aurora-opacity: 0;
+}
+:root:not([data-theme='light']) .sidebar[data-tint='subtle'] {
   --glass-bg: oklch(0.22 0 0 / 0.5);
   --glass-bg-strong: oklch(0.24 0 0 / 0.66);
 }
@@ -158,20 +184,30 @@ body,
  * four signals → three.) */
 
 /* The aurora backdrop layer. The wrapper owns positioning at `--z-base` and a
- * top-down mask so the aurora only shows in the upper region of the sidebar:
- * fully present through the header band, fading to nothing by ~72% down. This is
- * the fix for the drifting blobs pooling into an uneven splotch in a tall, narrow
- * column — concentrating the glow at the top reads as one intentional identity
- * gesture cohesive with the wash, and leaves the working area on a clean
- * substrate. The inner `<Aurora>` fills this wrapper (its own `inset: 0`). */
+ * top-down mask. The redesign comp places TWO drifting blurred aurora blobs (a
+ * stronger one top-left, a softer one bottom-right) tinted by the active Space
+ * hue. The shared `<Aurora>` primitive IS that two-blob (it ships three slow
+ * drifting blobs) engine: each blob's colour reads the scoped
+ * `--space-l`/`--space-chroma`/`--space-h` — exactly the family the comp's
+ * `--space-blob`/`--space-blob-2` parameterise — so it recolours with the active
+ * Space and washes neutral for a `gray` Space. Reusing the primitive keeps the
+ * glares gate (`{#if sidebarGlares.value}` in App.svelte), the reduced-motion
+ * rule (no drift), and the `data-testid="aurora"` contract intact, instead of
+ * re-rolling inline `<span>` blobs.
+ *
+ * The mask keeps the glow concentrated toward the top — fully present through the
+ * header band, fading by the lower third — which both matches the comp's
+ * top-weighted spread and is the fix for blobs pooling into an uneven splotch in
+ * a tall, narrow column. The inner `<Aurora>` fills this wrapper (its own
+ * `inset: 0`). */
 .sidebar-aurora {
   position: absolute;
   inset: 0;
   z-index: var(--z-base);
   pointer-events: none;
   /* #000 is the mask channel value (fully opaque) — correct here; exempt from the token rule. */
-  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 28%, transparent 72%);
-  mask-image: linear-gradient(to bottom, #000 0%, #000 28%, transparent 72%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 32%, transparent 80%);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 32%, transparent 80%);
 }
 
 /* Foreground layering over the aurora. `.shell-search`, `.content-stage`,
@@ -186,6 +222,33 @@ body,
 .shell-search {
   position: relative;
   padding: var(--space-3) var(--list-pad) 0;
+}
+
+/* Search pill chrome (redesign comp §2). The shared trigger-mode `SearchField`
+ * primitive keeps its own structure/behaviour (it opens the launcher — never a
+ * live input, never re-rolled); the sidebar shell only restyles its pill to the
+ * comp's recessed look: a 40px `--input` field at `--r-lg` (13px) with a soft
+ * border + an inset shadow, the leading magnifier in `--text-faint`, and the
+ * `⌥L` hint as a `--surface-2` mono pill. All token-driven, so it flips cleanly
+ * in the light theme. Targets the primitive's global classes (this is the
+ * sidebar shell scope, not the primitive). */
+.shell-search .field[data-mode='trigger'] {
+  height: 40px;
+  padding: 0 var(--space-3);
+  background: var(--input);
+  border-color: var(--border-soft);
+  border-radius: var(--r-lg);
+  box-shadow: inset 0 1px 2px oklch(0 0 0 / 0.2);
+}
+.shell-search .field[data-mode='trigger']:hover {
+  background: var(--input);
+  border-color: var(--border);
+}
+.shell-search .field[data-mode='trigger'] .leading {
+  color: var(--text-faint);
+}
+.shell-search .field[data-mode='trigger'] .placeholder {
+  color: var(--text-faint);
 }
 
 /* Content stage: the single-track carousel viewport (the Model C spike). It CLIPS

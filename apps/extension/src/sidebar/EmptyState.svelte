@@ -32,19 +32,20 @@ const { title, subtitle, icon, over = false, testid = 'empty-state' }: Props = $
 </div>
 
 <style>
-  /* A self-contained drop zone, not a stray line of text: a SOFT ghost-outline frame
-   * (no dashed borders — dashed reads utilitarian; the soft outline reads like the
-   * product's own furniture awaiting use, echoing the favicon-row ghost tiles) around
-   * a glyph plate set BESIDE the title + hint — a compact, ~half-height row so
-   * dropping the first item barely reflows. Calm at rest; a tab dragged over it lifts
-   * the whole card to a solid, filled "drop here" treatment. */
+  /* The redesign's drop-zone card (comp §3 / §5a): a DASHED `--border` rule on a
+   * `--r-lg` rounded card — the universal "drop a thing here" affordance, reading as
+   * an empty slot waiting to be filled rather than a stray line of text. A glyph plate
+   * washed in the soft Space colour sits BESIDE the title + hint, so the card stays a
+   * compact band and dropping the first item barely reflows. Calm at rest; a tab
+   * dragged over it (`over`) lifts the whole card to a solid Space-hue frame on a
+   * filled wash with a popped, filled plate. */
   .empty {
     display: flex;
     flex-direction: row;
     align-items: center;
     gap: var(--space-3);
     padding: var(--space-2) var(--space-3);
-    border: 1px solid var(--border-soft);
+    border: 1.5px dashed var(--border);
     border-radius: var(--r-lg);
     color: var(--text-dim);
     /* Tokenised from the former `400 11.5px`: `--weight-regular` + `--text-xs`
@@ -109,12 +110,14 @@ const { title, subtitle, icon, over = false, testid = 'empty-state' }: Props = $
   }
 
   /* Drag-over: a tab is held over the zone — the dashed frame snaps to a solid
-   * Space-hue rule on a soft wash, the glyph plate fills with the true Space colour
+   * Space-line rule (the comp's `--space-line`, mapped to the alpha'd `--space-c-dim`)
+   * on a soft `--space-c-soft` wash, the glyph plate fills with the true Space colour
    * and pops, and the title lifts to full strength. Reads unmistakably as "drop
-   * here", matching the favicon-row strip's whole-grid drop wash. */
+   * here", matching the favicon-row strip's whole-grid drop wash and the active-row
+   * Space-line ring used across the tree. */
   .empty.over {
     border-style: solid;
-    border-color: var(--space-c);
+    border-color: var(--space-c-dim);
     background: var(--space-c-soft);
   }
   .glyph.over {

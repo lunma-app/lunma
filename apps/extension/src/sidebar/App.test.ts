@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/svelte';
 import { flushSync } from 'svelte';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { LunmaStore } from '../shared/store.svelte';
@@ -231,17 +231,23 @@ describe('App', () => {
     const store = makeStore('blue');
     const { container } = render(AppHarness, { props: { store, windowId: 1 } });
     const workSlide = container.querySelector('[data-space-id="work"]') as HTMLElement;
-    // Open the pinned header's kebab — the RowMenu morph (same primitive the tab
-    // + folder rows use), on the header's trailing edge, no count.
+    // Open the pinned header's kebab — now the bits-ui `BitsMenu` (testid
+    // `menu-trigger`), scoped to the section header. bits-ui portals the items to
+    // <body> and opens async, so query `document` + `waitFor`.
     const trigger = workSlide.querySelector(
-      '[data-testid="section-header"] [data-testid="section-header-menu-trigger"]',
+      '[data-testid="section-header"] [data-testid="menu-trigger"]',
     ) as HTMLButtonElement;
     expect(trigger).not.toBeNull();
+    await fireEvent.pointerDown(trigger);
+    await fireEvent.pointerUp(trigger);
     await fireEvent.click(trigger);
-    const item = [...workSlide.querySelectorAll('[data-testid="section-header-menu-item"]')].find(
-      (el) => el.getAttribute('data-menu-id') === 'new-folder',
-    ) as HTMLButtonElement;
-    expect(item).not.toBeNull();
+    let item!: HTMLButtonElement;
+    await waitFor(() => {
+      item = [...document.querySelectorAll('[data-testid="menu-item"]')].find(
+        (el) => el.getAttribute('data-menu-id') === 'new-folder',
+      ) as HTMLButtonElement;
+      expect(item).toBeTruthy();
+    });
     expect(item.textContent).toContain('New folder');
     await fireEvent.click(item);
     expect(sendMock).toHaveBeenCalledWith({ kind: 'createFolder', payload: { spaceId: 'work' } });

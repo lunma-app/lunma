@@ -139,19 +139,20 @@ describe('SpaceEditor', () => {
     expect(primary.disabled).toBe(true);
   });
 
-  test('the morph panel renders its chrome on a glass Surface with the hue glow', () => {
+  test('the panel is full-bleed in the sheet (no inner glass card) + rebinds the selected hue', () => {
     const store = makeStore([{ id: 'work', name: 'Work', color: 'blue', icon: 'briefcase' }]);
     render(EditorHarness, {
       props: { store, mode: { kind: 'edit', space: store.state.spaces[0] as Space } },
     });
     const panel = editor() as HTMLElement;
     expect(panel).not.toBeNull();
-    // Chrome is the shared Surface, not hand-rolled glass; the editor fields live
-    // inside it. The glow tracks the selected colour via the panel's hue rebind.
-    const surface = panel.querySelector('[data-variant="glass"]') as HTMLElement;
-    expect(surface).not.toBeNull();
-    expect(surface.getAttribute('data-glow')).toBe('true');
-    expect(surface.querySelector('[data-testid="text-input"]')).not.toBeNull();
+    // The BottomSheet IS the container — the form is full-bleed (no inner glass
+    // Surface card), matching the New-Lens sheet. The panel stays chromeless and
+    // only rebinds the selected hue so descendants (input focus, swatches, the
+    // primary button) preview the colour.
+    expect(panel.querySelector('[data-variant="glass"]')).toBeNull();
+    expect(panel.style.getPropertyValue('--space-h')).not.toBe('');
+    expect(panel.querySelector('[data-testid="text-input"]')).not.toBeNull();
   });
 
   test('the Create button is disabled until a non-whitespace name is entered', async () => {
@@ -325,12 +326,59 @@ describe('SpaceEditor — per-Space auto-archive override', () => {
     });
   });
 
-  test('create mode shows no auto-archive control', async () => {
+  test('create mode shows the control seeded to Inherit, local-only (no dispatch)', async () => {
     render(EditorHarness, {
       props: { store: makeStore([]), mode: { kind: 'create', windowId: 7 } },
     });
     await tick();
-    expect(document.querySelector('input[name="auto-archive-mode"]')).toBeNull();
+    expect(aaRadio('inherit')?.checked).toBe(true);
     expect(minutesField()).toBeNull();
+    // No Space id exists yet, so picking a mode must NOT dispatch setSpaceAutoArchive —
+    // it only updates the draft, applied via the createSpace payload on submit.
+    await fireEvent.click(aaRadio('off') as HTMLInputElement);
+    expect(sentCommands().some((c) => c.kind === 'setSpaceAutoArchive')).toBe(false);
+  });
+
+  test('create mode folds an Off override into the createSpace payload', async () => {
+    render(EditorHarness, {
+      props: { store: makeStore([]), mode: { kind: 'create', windowId: 3 } },
+    });
+    await tick();
+    await fireEvent.input(
+      document.querySelector('[data-testid="text-input"]') as HTMLInputElement,
+      { target: { value: 'Focus' } },
+    );
+    await fireEvent.click(aaRadio('off') as HTMLInputElement);
+    await fireEvent.click(
+      document.querySelector('.btn[data-variant="primary"]') as HTMLButtonElement,
+    );
+    const cmd = sentCommands().find((c) => c.kind === 'createSpace');
+    expect(cmd?.payload).toMatchObject({
+      name: 'Focus',
+      windowId: 3,
+      autoArchive: { mode: 'off' },
+    });
+  });
+
+  test('create mode folds a Custom override into the createSpace payload', async () => {
+    render(EditorHarness, {
+      props: { store: makeStore([]), mode: { kind: 'create', windowId: 4 } },
+    });
+    await tick();
+    await fireEvent.input(
+      document.querySelector('[data-testid="text-input"]') as HTMLInputElement,
+      { target: { value: 'Deep' } },
+    );
+    await fireEvent.click(aaRadio('custom') as HTMLInputElement);
+    await tick();
+    await fireEvent.input(minutesField() as HTMLInputElement, { target: { value: '20' } });
+    await fireEvent.click(
+      document.querySelector('.btn[data-variant="primary"]') as HTMLButtonElement,
+    );
+    const cmd = sentCommands().find((c) => c.kind === 'createSpace');
+    expect(cmd?.payload).toMatchObject({
+      name: 'Deep',
+      autoArchive: { mode: 'custom', idleMinutes: 20 },
+    });
   });
 });

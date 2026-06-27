@@ -4,7 +4,7 @@ import { flip } from 'svelte/animate';
 import { dispatch, TAB_DEDUP_FLASH } from '../shared/bus';
 import { labelFor } from '../shared/label-for';
 import type { LiveTab, SpaceId, TabId, WindowId } from '../shared/types';
-import ContextMenu from '../ui/ContextMenu.svelte';
+import BitsContextMenu from '../ui/BitsContextMenu.svelte';
 import { faviconCacheKey, faviconFor, faviconUrl } from '../ui/favicon';
 import IconButton from '../ui/IconButton.svelte';
 import type { MenuItem } from '../ui/menu-types';
@@ -250,7 +250,7 @@ function moveTemp(item: TempItem, dir: -1 | 1): void {
 }
 
 /** The right-click action menu for a temporary row: Favorite (non-destructive),
- * Rename (inline), Move up/down (reorder), and Close tab. Built as `ContextMenu`
+ * Rename (inline), Move up/down (reorder), and Close tab. Built as `BitsContextMenu`
  * `MenuItem[]` so temp + pinned rows share the favicon-tile right-click interaction.
  * The one-click close lives separately on the row's trailing ✕. */
 function tabMenuItems(item: TempItem): MenuItem[] {
@@ -296,31 +296,13 @@ function tabMenuItems(item: TempItem): MenuItem[] {
   ];
 }
 
-// --- right-click menu (one shared instance, opened at the cursor) -------------
-// Mirrors FaviconRow: a single ContextMenu floated at the pointer for whichever
-// row was right-clicked; the active row is re-derived by `tabId` against `items`
-// so the menu auto-closes when its row leaves the list.
-let menuOpen = $state(false);
-let menuX = $state(0);
-let menuY = $state(0);
-let menuTabId = $state<TabId | null>(null);
-// The row element a keyboard-invoked menu anchors to (see onRowContextMenu / D6).
-let menuAnchorEl = $state<HTMLElement | undefined>(undefined);
-const activeMenuItem = $derived(
-  menuTabId !== null ? (items.find((i) => i.tabId === menuTabId) ?? null) : null,
-);
-
-function onRowContextMenu(e: MouseEvent, item: TempItem): void {
-  // Open the action menu at the cursor and suppress Chrome's native menu. A
-  // right-click never focuses/switches the tab (design D4).
-  e.preventDefault();
-  menuX = e.clientX;
-  menuY = e.clientY;
-  // The invoking row — ContextMenu anchors to it for a keyboard-invoked menu (D6).
-  menuAnchorEl = e.currentTarget as HTMLElement;
-  menuTabId = item.tabId;
-  menuOpen = true;
-}
+// --- right-click menu ---------------------------------------------------------
+// Each temp row IS its own bits-ui ContextMenu trigger (see the template): bits-ui
+// owns the right-click capture, cursor anchor, keyboard invocation (menu key /
+// Shift+F10), dismissal, and keyboard nav. A right-click never focuses/switches
+// the tab — `drag.press` already ignores non-primary buttons, and bits-ui's
+// trigger `preventDefault`s the native menu, so no separate suppression is needed
+// (design D4). The menu is flat (no drill-in editor), so the items render directly.
 
 // Inline rename: double-click a row to name it. The custom name lives only in
 // this window's Space instance (ephemeral — see store `renameTempTab`). An
@@ -346,16 +328,23 @@ function commitRename(item: TempItem, newName: string): void {
     <div class="drop-line" style:top={`${lineTop(drag.state.targetIndex)}px`}></div>
   {/if}
   {#each items as item, i (item.id)}
+    <!-- `.row-wrap` stays the keyed each-block's only child so `animate:flip`
+         (FLIP reorder, duration sourced from `reorderFlipMs()`) is legal, and it
+         is the element the drag controller measures (`bind:this={rowEls[i]}`, fed
+         to the zone's `itemEls()`). The bits-ui ContextMenu trigger lives INSIDE,
+         on a `display:contents` `.menu-trigger` that wraps the row content — so
+         the whole row is right-clickable without inserting a layout box that would
+         break the measured row geometry. The menu is flat (no drill-in editor). -->
     <!-- Drag handle is the whole row; the focusable control lives in TabRow's
          button. Keyboard reorder is a Phase 7 a11y concern. -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="row-wrap"
+      class:active={item.active}
       class:dragging={isDragSource(item)}
       class:flash={item.tabId === flashTabId}
       bind:this={rowEls[i]}
       onpointerdown={(e) => onRowPointerDown(e, item)}
-      oncontextmenu={(e) => onRowContextMenu(e, item)}
       ondblclick={() => startRename(item)}
       onanimationend={(e) => {
         // Reset only the flash pulse (not the mount/flip animations that also
@@ -366,65 +355,59 @@ function commitRename(item: TempItem, newName: string): void {
       }}
       animate:flip={{ duration: () => reorderFlipMs() }}
     >
-      {#snippet closeButton()}
-        <!-- The ✕ stops pointerdown propagation so pressing it never arms the
-             row's drag; the button's own click closes the tab (it is not nested
-             inside the row's hit target, so it never focuses the row). -->
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <span class="close-slot" onpointerdown={(e) => e.stopPropagation()}>
-          <IconButton
-            icon="x"
-            ariaLabel="Close tab"
-            title="Close tab"
-            size={14}
-            testid="temp-close"
-            onclick={() => closeTab(item.tabId)}
-          />
-        </span>
-      {/snippet}
-      <TabRow
-        title={item.title}
-        faviconSrc={item.faviconSrc}
-        faviconFallbackSrc={item.faviconFallbackSrc}
-        active={item.active}
-        loading={item.loading}
-        editing={item.id === renamingId}
-        oncommitName={(next) => commitRename(item, next)}
-        oncancelName={() => (renamingId = null)}
-        onclick={() => focusTab(item)}
-        trailing={closeButton}
-      />
+      <BitsContextMenu items={tabMenuItems(item)} label="Tab actions" testid="temp-menu">
+        {#snippet children(menuProps)}
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div {...menuProps} class="menu-trigger">
+            {#snippet closeButton()}
+              <!-- The ✕ stops pointerdown propagation so pressing it never arms the
+                   row's drag; the button's own click closes the tab (it is not nested
+                   inside the row's hit target, so it never focuses the row). -->
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <span class="close-slot" onpointerdown={(e) => e.stopPropagation()}>
+                <IconButton
+                  icon="x"
+                  ariaLabel="Close tab"
+                  title="Close tab"
+                  size={14}
+                  testid="temp-close"
+                  onclick={() => closeTab(item.tabId)}
+                />
+              </span>
+            {/snippet}
+            <TabRow
+              title={item.title}
+              faviconSrc={item.faviconSrc}
+              faviconFallbackSrc={item.faviconFallbackSrc}
+              active={item.active}
+              loading={item.loading}
+              editing={item.id === renamingId}
+              oncommitName={(next) => commitRename(item, next)}
+              oncancelName={() => (renamingId = null)}
+              onclick={() => focusTab(item)}
+              trailing={closeButton}
+            />
+          </div>
+        {/snippet}
+      </BitsContextMenu>
     </div>
   {/each}
 </div>
-
-<!-- One shared right-click menu, opened at the cursor for whichever row was
-     right-clicked (mirrors FaviconRow). The active row is re-derived by id so the
-     menu auto-closes if that row leaves the list. -->
-{#if activeMenuItem}
-  <ContextMenu
-    bind:open={menuOpen}
-    x={menuX}
-    y={menuY}
-    anchorEl={menuAnchorEl}
-    items={tabMenuItems(activeMenuItem)}
-    label="Tab actions"
-    testid="temp-menu"
-  />
-{/if}
 
 <style>
   .temp-tabs {
     position: relative;
     display: flex;
     flex-direction: column;
-    /* Vertical padding gives the drag insertion line room at the first/last
-     * slot so it never crams against the section header above or the next
-     * section below. */
-    padding: var(--space-1) var(--list-pad);
+    /* Vertical padding gives the drag insertion line room at the first slot so it
+     * never crams against the New Tab row above; the comp's open-tabs list closes
+     * with trailing breathing room before the next section (§5f `padding-bottom:8px`
+     * → --space-2). Sides align to --list-pad (plumb with the New Tab row + favicons). */
+    padding: var(--space-1) var(--list-pad) var(--space-2);
   }
 
   .row-wrap {
+    position: relative;
     /* Inter-row gap as in-box padding so adjacent row rects stay contiguous;
      * tracks the active density. */
     padding-bottom: var(--row-gap);
@@ -432,6 +415,25 @@ function commitRename(item: TempItem, newName: string): void {
     /* No resting `touch-action: none` — touch users pan the temporary list; the
      * drag controller suppresses panning only during an active pointer drag
      * (row-drag-does-not-block-touch-panning). */
+  }
+
+  /* Active open-tab treatment (comp §5f): the soft Space wash is painted by the
+   * composed `TabRow` (`--space-c-soft`); the wrapper layers the comp's
+   * `inset 0 0 0 1px var(--space-line)` ring on the SAME row box. `--space-c-dim`
+   * is the codebase's dim Space-hue stroke (the `--space-line` equivalent in the
+   * `--space-c` family). Targeting the composed `.tab-row` (not the wrapper) keeps
+   * the ring hugging the --r-md row exactly, never bleeding into the --row-gap. */
+  .row-wrap.active :global(.tab-row) {
+    box-shadow: inset 0 0 0 1px var(--space-c-dim);
+  }
+
+  /* The bits-ui ContextMenu trigger that wraps the row content. `display: contents`
+   * makes it layout-transparent — `.row-wrap` stays the single measured row box the
+   * drag controller hit-tests, and the active-treatment selector still reaches the
+   * composed `.tab-row` directly. It only carries bits-ui's `contextmenu`/ARIA props
+   * so the whole row is right-clickable. */
+  .menu-trigger {
+    display: contents;
   }
 
   /* Wraps the trailing ✕ so it can swallow its own pointerdown (no drag) while the
@@ -446,8 +448,9 @@ function commitRename(item: TempItem, newName: string): void {
 
   /* tab-dedup flash: a single background pulse drawing the eye to the tab a
    * launcher open just focused (instead of duplicating). Starts on the row's
-   * hover wash (`--surface-2`) and fades to transparent; rounded to match the
-   * TabRow's own corners so the pulse reads as the row, not a full-bleed bar. */
+   * hover wash (the redesign comp's row hover is `var(--hover)`) and fades to
+   * transparent; rounded to match the composed `TabRow`'s own --r-md corners so
+   * the pulse reads as the row, not a full-bleed bar. */
   .row-wrap.flash {
     border-radius: var(--r-md);
     animation: tab-flash var(--motion-base) var(--ease-emphasised) 1;
@@ -455,7 +458,7 @@ function commitRename(item: TempItem, newName: string): void {
 
   @keyframes tab-flash {
     from {
-      background-color: var(--surface-2);
+      background-color: var(--hover);
     }
     to {
       background-color: transparent;

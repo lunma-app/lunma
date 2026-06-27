@@ -2,7 +2,7 @@ import { mount } from 'svelte';
 import { log } from '../shared/logger';
 import { onStateBroadcast, reportSidebarFocus, requestStateSnapshot } from '../shared/messages';
 import { readSettings, type Settings, watchSettings } from '../shared/settings';
-import { applyDensityToDocument } from '../shared/surface-boot';
+import { applyDensityToDocument, applyThemeToDocument } from '../shared/surface-boot';
 import type { AppState } from '../shared/types';
 import { getCurrentWindowId } from '../shared/window-id';
 import App from './App.svelte';
@@ -30,6 +30,13 @@ function applyDensity(settings: Settings): void {
   applyDensityToDocument(settings.density);
 }
 
+/** Reflect the light/dark theme onto `<html>` (like density — a document-level
+ * attribute) so `tokens.css`'s `:root[data-theme="light"]` set takes over. The
+ * sidebar's per-Space tint (`data-tint` on `.sidebar`) composes on top. */
+function applyTheme(settings: Settings): void {
+  applyThemeToDocument(settings.theme);
+}
+
 /** Reflect the colour-intensity preference onto the `.sidebar` root so the
  * `.sidebar[data-tint=…]` token rules apply. Unlike density, `data-tint` lives
  * on `.sidebar` (where `--base-hue` is rebound to the active Space), not on
@@ -55,6 +62,7 @@ async function boot(): Promise<void> {
   // pre-mount to prevent a layout flash — so only non-layout settings can move.
   const initialSettings = await readSettings();
   applyDensity(initialSettings);
+  applyTheme(initialSettings);
   // Seed the sidebar's live mirror of the pinned-tab boundary default so the
   // locked-row indicator + editor caption are correct on first paint.
   boundaryDefault.value = initialSettings.pinnedTabBoundaryDefault;
@@ -167,6 +175,7 @@ async function boot(): Promise<void> {
   // the options page). Registered once per successful boot, after mount.
   watchSettings((settings) => {
     applyDensity(settings);
+    applyTheme(settings);
     applyTint(settings);
     applyShowGlares(settings);
     boundaryDefault.value = settings.pinnedTabBoundaryDefault;

@@ -17,6 +17,7 @@ const COLORS: readonly SpaceColor[] = [
   'orange',
   'yellow',
   'green',
+  'teal',
   'cyan',
   'blue',
   'purple',
@@ -30,13 +31,13 @@ import { tick } from 'svelte';
 import { dispatch } from '../shared/bus';
 import { normalizeSpaceName } from '../shared/space-names';
 import type { IconName, SpaceAutoArchive, SpaceId } from '../shared/types';
+import BottomSheet from '../ui/BottomSheet.svelte';
 import Button from '../ui/Button.svelte';
 import ColorSwatch from '../ui/ColorSwatch.svelte';
 import { DEFAULT_ICON, isIconName } from '../shared/icon-names';
 import IconPicker from '../ui/IconPicker.svelte';
 import SegmentedControl from '../ui/SegmentedControl.svelte';
 import { colourToOklch, colourToOn } from '../shared/space-hue';
-import Surface from '../ui/Surface.svelte';
 import TextInput from '../ui/TextInput.svelte';
 import { nextUnusedColor } from './next-unused-color';
 import { useStore } from './store-context.svelte';
@@ -74,7 +75,7 @@ let autoArchiveMode = $state<AutoArchiveMode>('inherit');
 let autoArchiveMinutes = $state(DEFAULT_AUTO_ARCHIVE_MINUTES);
 
 const isCreate = $derived(mode.kind === 'create');
-const primaryLabel = $derived(isCreate ? 'Create' : 'Save');
+const primaryLabel = $derived(isCreate ? 'Create Space' : 'Save changes');
 
 let confirmingDelete = $state(false);
 
@@ -103,24 +104,14 @@ const canSubmit = $derived(name.trim() !== '' && !nameTaken);
 const previewOklch = $derived(colourToOklch(color));
 const previewOn = $derived(colourToOn(color));
 
-let panelEl = $state<HTMLElement>();
 let nameInputWrap = $state<HTMLElement>();
-// The morph grows by animating the clip's height from 0 → the panel's measured
-// height (the panel is absolutely bottom-anchored, so the clip unrolls it
-// upward out of the switcher). `revealed` flips true a couple of frames after
-// mount so the collapsed (height 0) state paints first and the height actually
-// transitions instead of snapping open.
-let revealed = $state(false);
-let panelH = $state(0);
 
-// Re-seed + animate-in each time the editor opens (the parent mounts/unmounts
-// the panel via `open`), so a stale draft never leaks between openings.
+// Re-seed each time the editor opens (the BottomSheet mounts/unmounts the body
+// via `open`), so a stale draft never leaks between openings.
 let wasOpen = false;
 $effect(() => {
   if (open && !wasOpen) void handleOpened();
   if (!open) {
-    revealed = false;
-    panelH = 0;
     confirmingDelete = false;
   }
   wasOpen = open;
@@ -128,21 +119,12 @@ $effect(() => {
 
 async function handleOpened(): Promise<void> {
   seed();
-  revealed = false;
-  panelH = 0;
   await tick();
-  // Measure the panel's natural height (it's position:absolute, so this is the
-  // content height regardless of the clip being collapsed).
-  if (panelEl) panelH = panelEl.offsetHeight;
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      revealed = true;
-    });
-  });
+  // Focus the name field so typing starts immediately. The BottomSheet's focus
+  // scope auto-focuses the sheet on open; moving focus to the name input is a
+  // deferred override (no `autofocus` attribute — that trips Chrome's "document
+  // already has a focused element" warning).
   await tick();
-  // Focus the name field so typing starts immediately (no `autofocus` attribute
-  // — that races the morph and trips Chrome's "document already has a focused
-  // element" warning).
   nameInputWrap?.querySelector<HTMLInputElement>('input')?.focus();
 }
 
@@ -151,6 +133,10 @@ function seed(): void {
     name = '';
     color = nextUnusedColor(store.state.spaces);
     icon = DEFAULT_ICON;
+    // A brand-new Space inherits the global default; the user may opt into an
+    // override up front (carried in the createSpace payload on submit).
+    autoArchiveMode = 'inherit';
+    autoArchiveMinutes = DEFAULT_AUTO_ARCHIVE_MINUTES;
   } else {
     name = mode.space.name;
     color = mode.space.color;
@@ -181,35 +167,45 @@ function sendAutoArchive(spaceId: SpaceId, autoArchive: SpaceAutoArchive | null)
   dispatch({ kind: 'setSpaceAutoArchive', payload: { spaceId, autoArchive } });
 }
 
-/** Switch the override mode. `Inherit` clears it (null), `Off` disables this
- * Space, `Custom` archives at its own threshold (seeded from the current draft
- * minutes). Dispatches immediately. */
+/** Build the override the current local state represents, or `undefined` for
+ * `inherit` (the createSpace payload omits the field in that case). */
+function currentAutoArchiveOverride(): SpaceAutoArchive | undefined {
+  if (autoArchiveMode === 'off') return { mode: 'off' };
+  if (autoArchiveMode === 'custom') {
+    return { mode: 'custom', idleMinutes: clampMinutes(autoArchiveMinutes) };
+  }
+  return undefined;
+}
+
+/** Switch the override mode. In EDIT mode it dispatches `setSpaceAutoArchive`
+ * immediately (the Space already exists); in CREATE mode it only updates the
+ * local draft, which `submit` folds into the `createSpace` payload (no Space id
+ * exists yet to target). */
 function selectAutoArchiveMode(next: string): void {
-  if (mode.kind !== 'edit') return;
-  const spaceId = mode.space.id;
-  if (next === 'inherit') {
-    autoArchiveMode = 'inherit';
-    sendAutoArchive(spaceId, null);
-  } else if (next === 'off') {
-    autoArchiveMode = 'off';
-    sendAutoArchive(spaceId, { mode: 'off' });
-  } else if (next === 'custom') {
+  if (next === 'inherit') autoArchiveMode = 'inherit';
+  else if (next === 'off') autoArchiveMode = 'off';
+  else if (next === 'custom') {
     autoArchiveMode = 'custom';
-    const minutes = clampMinutes(autoArchiveMinutes);
-    autoArchiveMinutes = minutes;
-    sendAutoArchive(spaceId, { mode: 'custom', idleMinutes: minutes });
+    autoArchiveMinutes = clampMinutes(autoArchiveMinutes);
+  } else return;
+
+  if (mode.kind === 'edit') {
+    sendAutoArchive(mode.space.id, currentAutoArchiveOverride() ?? null);
   }
 }
 
-/** Persist an edited custom threshold (positive integer, floor 1). Ignores
- * non-numeric / empty input — never dispatches a non-number. */
+/** Edit a custom threshold (positive integer, floor 1). Ignores non-numeric /
+ * empty input. Dispatches in edit mode; in create mode it only updates the draft
+ * (applied via the createSpace payload on submit). */
 function onAutoArchiveMinutesInput(raw: string): void {
-  if (mode.kind !== 'edit' || autoArchiveMode !== 'custom') return;
+  if (autoArchiveMode !== 'custom') return;
   const trimmed = raw.trim();
   if (!/^\d+$/.test(trimmed)) return;
   const minutes = clampMinutes(Number.parseInt(trimmed, 10));
   autoArchiveMinutes = minutes;
-  sendAutoArchive(mode.space.id, { mode: 'custom', idleMinutes: minutes });
+  if (mode.kind === 'edit') {
+    sendAutoArchive(mode.space.id, { mode: 'custom', idleMinutes: minutes });
+  }
 }
 
 function chooseColor(next: SpaceColor, index: number): void {
@@ -232,56 +228,9 @@ function onColorKeydown(event: KeyboardEvent): void {
   swatchRowEl?.querySelectorAll<HTMLButtonElement>('[data-testid="color-swatch"]')?.[next]?.focus();
 }
 
-// --- dismissal (hand-rolled — its own Esc/click-outside/focus pattern) -------
-
-function focusables(): HTMLElement[] {
-  if (!panelEl) return [];
-  return Array.from(panelEl.querySelectorAll<HTMLElement>('button:not([disabled]),input:not([disabled])'));
-}
-
-function onPanelKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Escape') {
-    event.preventDefault();
-    event.stopPropagation();
-    onClose();
-    return;
-  }
-  if (event.key === 'Tab') {
-    const f = focusables();
-    if (f.length === 0) return;
-    const first = f[0];
-    const last = f[f.length - 1];
-    const active = document.activeElement;
-    if (event.shiftKey && active === first) {
-      event.preventDefault();
-      last?.focus();
-    } else if (!event.shiftKey && active === last) {
-      event.preventDefault();
-      first?.focus();
-    }
-  }
-}
-
-function onDocPointerDown(event: PointerEvent): void {
-  if (panelEl && event.target instanceof Node && !panelEl.contains(event.target)) {
-    onClose();
-  }
-}
-
-$effect(() => {
-  if (!open) return;
-  // Defer attaching so the same click that opened the editor doesn't immediately
-  // close it.
-  let attached = false;
-  const id = requestAnimationFrame(() => {
-    document.addEventListener('pointerdown', onDocPointerDown, true);
-    attached = true;
-  });
-  return () => {
-    cancelAnimationFrame(id);
-    if (attached) document.removeEventListener('pointerdown', onDocPointerDown, true);
-  };
-});
+// Dismissal (Esc / scrim / ✕ / focus-leave) is owned by the BottomSheet shell,
+// which routes every close path to `onClose`. The editor keeps only its draft +
+// dispatch logic below.
 
 // --- dispatch ----------------------------------------------------------------
 
@@ -302,9 +251,10 @@ function executeDelete(): void {
 function submit(): void {
   if (!canSubmit) return;
   if (mode.kind === 'create') {
+    const autoArchive = currentAutoArchiveOverride();
     dispatch({
       kind: 'createSpace',
-      payload: { name: name.trim(), color, icon, windowId: mode.windowId },
+      payload: { name: name.trim(), color, icon, windowId: mode.windowId, autoArchive },
     });
   } else {
     const original = mode.space;
@@ -323,49 +273,43 @@ function submit(): void {
 }
 </script>
 
-{#if open}
-  <!-- The morph grows UPWARD out of the switcher: position:absolute + bottom
-       anchored to the switcher's top edge, so the sidebar's height never
-       changes and the tab list above is overlaid, not pushed. -->
-  <div class="morph" class:revealed data-testid="space-editor-morph">
-    <div class="clip" style:height={revealed ? `${panelH}px` : '0px'}>
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div
-        bind:this={panelEl}
-        class="panel"
-        role="dialog"
-        aria-modal="true"
-        aria-label={isCreate ? 'New Space' : 'Edit Space'}
-        tabindex={-1}
-        data-testid="space-editor"
-        data-mode={mode.kind}
-        style:--space-h={String(previewOklch.h)}
-        style:--space-chroma={String(previewOklch.c)}
-        style:--space-l={String(previewOklch.l)}
-        style:--space-on={previewOn}
-        onkeydown={onPanelKeydown}
-      >
-        <!-- The panel's visual chrome (frosted glass + hue glow) is the shared
-             `Surface`, not hand-rolled here. The glow tracks the SELECTED colour
-             because the panel rebinds `--space-h`/`--space-chroma` above, which
-             `--glow-space-soft` (and the glass fill) read — so the chrome
-             live-previews the colour you're shaping. The panel keeps only its
-             positioning, the morph opacity tween, and the `--accent` rebind its
-             descendants inherit. -->
-        <Surface variant="glass" glow radius="lg">
-          <div class="editor">
-            <div bind:this={nameInputWrap}>
-              <TextInput
-                label="Name"
-                bind:value={name}
-                placeholder="Space name"
-                invalid={nameTaken}
-                onenter={submit}
-              />
-              <!-- Height-reserving slot: the message is always in the DOM (its
-                   height is part of the panel's measured open height) and only
-                   its opacity toggles, so the morph never jumps when it appears.
-                   `nowrap` + ellipsis keep it exactly one line for any name. -->
+<!-- Comp §7: the editor is re-homed in a BottomSheet (bits-ui Dialog sheet
+     scoped to the sidebar panel), replacing the former "morph grows up from the
+     switcher" presentation. The sheet owns the scrim + ✕ + Esc + interact-outside
+     dismissal (all routed to `onClose`), the focus trap, return-focus to the
+     trigger, and the Instrument Serif title header. The editor keeps only its
+     hue-rebound accent panel, the glass-Surface chrome, and its form. -->
+<BottomSheet {open} title={isCreate ? 'New Space' : 'Edit Space'} {onClose} portalTo=".sidebar">
+  <div
+    class="panel"
+    data-testid="space-editor"
+    data-mode={mode.kind}
+    style:--space-h={String(previewOklch.h)}
+    style:--space-chroma={String(previewOklch.c)}
+    style:--space-l={String(previewOklch.l)}
+    style:--space-on={previewOn}
+  >
+    <!-- Full-bleed in the BottomSheet (the sheet IS the container) so the New
+         Space form matches the New Lens sheet — no inner glass card. The `.panel`
+         stays chromeless, owning only the selected-hue `--accent` rebind its
+         descendants inherit (live-previewing the colour you pick). -->
+    <div class="editor">
+            <div class="name-field">
+              <div class="field" bind:this={nameInputWrap}>
+                <span class="field-label">Name</span>
+                <TextInput
+                  ariaLabel="Name"
+                  bind:value={name}
+                  placeholder="e.g. Work, Reading, Personal"
+                  invalid={nameTaken}
+                  onenter={submit}
+                />
+              </div>
+              <!-- Duplicate-name feedback. Always in the DOM (so the `aria-live`
+                   announcement fires on toggle and tests can read `data-visible`),
+                   but COLLAPSED to zero height when hidden — otherwise it reserves
+                   a phantom line that opens an unexplained gap before COLOR. It
+                   expands in place when a duplicate name is typed. -->
               <p
                 class="dupe-msg"
                 class:visible={nameTaken}
@@ -378,7 +322,7 @@ function submit(): void {
             </div>
 
             <div class="field">
-              <span class="field-label">Colour</span>
+              <span class="field-label">Color</span>
               <!-- Roving tabindex: focus lives on the swatches; the group is
                    removed from the tab order with tabindex=-1. -->
               <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -386,8 +330,9 @@ function submit(): void {
                 bind:this={swatchRowEl}
                 class="swatch-row"
                 role="radiogroup"
-                aria-label="Space colour"
+                aria-label="Space color"
                 tabindex={-1}
+                style:--swatch-count={String(COLORS.length)}
                 onkeydown={onColorKeydown}
               >
                 {#each COLORS as c, index (c)}
@@ -406,33 +351,45 @@ function submit(): void {
               <IconPicker value={icon} onselect={(i) => (icon = i)} />
             </div>
 
-            {#if !isCreate}
-              <!-- Per-Space auto-archive override (auto-archive). Reuses the
-                   editor's control idiom — a SegmentedControl row + a conditional
-                   numeric field — so it reads as a native part of the editor; the
-                   composed primitives carry reduced-motion + WCAG-AA. -->
-              <div class="field">
-                <span class="field-label">Auto-archive</span>
-                <SegmentedControl
-                  name="auto-archive-mode"
-                  options={AUTO_ARCHIVE_OPTIONS}
-                  value={autoArchiveMode}
-                  ariaLabel="Auto-archive"
-                  onchange={selectAutoArchiveMode}
-                  block
-                />
-                {#if autoArchiveMode === 'custom'}
-                  <TextInput
-                    ariaLabel="Idle minutes before archiving"
-                    inputmode="numeric"
-                    value={String(autoArchiveMinutes)}
-                    placeholder="60"
-                    testid="auto-archive-minutes"
-                    oninput={onAutoArchiveMinutesInput}
-                  />
+            <!-- Per-Space auto-archive override (auto-archive). Shown in BOTH
+                 create + edit: an eyebrow + helper, the Inherit/Off/Custom
+                 segmented control, and (for Custom) an inline "after N minutes"
+                 field. In edit it dispatches immediately; in create it folds into
+                 the createSpace payload on submit. -->
+            <div class="field">
+              <span class="field-label">Auto-archive</span>
+              <p class="field-help">
+                {#if isCreate}
+                  Inherit the global setting, or set this Space's own idle-tab policy.
+                {:else}
+                  Override when this Space's idle tabs are archived.
                 {/if}
-              </div>
-            {/if}
+              </p>
+              <SegmentedControl
+                name="auto-archive-mode"
+                options={AUTO_ARCHIVE_OPTIONS}
+                value={autoArchiveMode}
+                ariaLabel="Auto-archive"
+                onchange={selectAutoArchiveMode}
+                block
+              />
+              {#if autoArchiveMode === 'custom'}
+                <div class="aa-custom">
+                  <span class="aa-custom-label">Archive after</span>
+                  <span class="aa-custom-field">
+                    <TextInput
+                      ariaLabel="Idle minutes before archiving"
+                      inputmode="numeric"
+                      value={String(autoArchiveMinutes)}
+                      placeholder="60"
+                      testid="auto-archive-minutes"
+                      oninput={onAutoArchiveMinutesInput}
+                    />
+                  </span>
+                  <span class="aa-custom-label">minutes idle</span>
+                </div>
+              {/if}
+            </div>
 
             {#if !isCreate && confirmingDelete}
               <div class="delete-confirm">
@@ -454,38 +411,10 @@ function submit(): void {
               </div>
             {/if}
           </div>
-        </Surface>
       </div>
-    </div>
-  </div>
-{/if}
+</BottomSheet>
 
 <style>
-  .morph {
-    position: absolute;
-    left: var(--space-2);
-    right: var(--space-2);
-    /* Bottom edge pinned to the switcher's top edge (1px overlap), so the panel
-     * grows UPWARD out of the switcher and the sidebar height never changes. */
-    bottom: calc(100% - 1px);
-    z-index: var(--z-dropdown);
-    pointer-events: none;
-  }
-  .morph.revealed {
-    pointer-events: auto;
-  }
-
-  /* The grow clip: its height animates 0 → the panel's measured height. The
-   * panel is absolutely bottom-anchored inside it, so as the clip's height
-   * grows (and, being bottom-pinned via .morph, extends upward) the panel
-   * unrolls from the switcher edge up — bottom (buttons) first, name last. */
-  .clip {
-    position: relative;
-    overflow: hidden;
-    height: 0;
-    transition: height var(--motion-base) var(--ease-emphasised);
-  }
-
   .panel {
     /* Re-declare the accent family HERE, resolved from the selected hue
      * (`--space-h`). `--accent` is declared at `:root`, so its `var(--base-hue)`
@@ -498,21 +427,10 @@ function submit(): void {
     --accent-soft: oklch(calc(var(--space-l, 0.62) + 0.065) var(--space-chroma, 0.15) var(--space-h) / 0.18);
     --accent-on: var(--space-on);
     --accent-text: oklch(0.965 0.01 var(--space-h));
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
     box-sizing: border-box;
-    /* Visual chrome (glass fill, border, glow, radius) is the child `Surface`;
-     * the panel itself is now chromeless and owns only positioning and the morph
-     * opacity tween. The Surface's glass + `--glow-space-soft` read the panel's
-     * rebound `--space-h`/`--space-chroma`, so the chrome live-previews the
-     * selected colour. */
-    opacity: 0;
-    transition: opacity var(--motion-base) var(--ease-emphasised);
-  }
-  .morph.revealed .panel {
-    opacity: 1;
+    /* Chromeless: the BottomSheet is the container, so the panel owns only the
+     * `--accent` rebind its descendants inherit — the input focus, selected-icon
+     * fill, primary button + focus rings preview the colour you're picking. */
   }
 
   /* Light theme uses a darker accent lightness + light on-accent text. */
@@ -526,39 +444,86 @@ function submit(): void {
   .editor {
     display: flex;
     flex-direction: column;
-    gap: var(--space-3);
-    padding: var(--space-4);
+    /* Comp §8 section rhythm (~16px between field groups). */
+    gap: var(--space-4);
+    /* No own padding — the BottomSheet body provides it (matches LensEditor),
+       so New Space + New Lens align. */
   }
 
   .field {
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
+    /* Comp §8: ~8px between an eyebrow and its control, so the label doesn't
+       crowd the swatches / search. */
+    gap: var(--space-2);
   }
+  /* Comp §8: an uppercase eyebrow — 11px, semibold, letter-spaced, --text-dim. */
   .field-label {
     font-size: var(--text-xs);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-semibold);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
     line-height: 1.2;
     font-family: var(--font-sans);
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
-  /* Duplicate-name feedback (unique-space-names). Inset to the input's left
-   * edge, danger-toned, and faded in over --motion-fast so it reads as
-   * responsive without flashing on every mid-word keystroke. Always rendered
-   * (opacity-toggled) + single-line so the panel height never jumps. */
+  /* Name field + its (collapsible) error, grouped so the section gap to COLOR
+     applies once, to the group — not once to the field AND once to the error. */
+  .name-field {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* One-line helper under an eyebrow (faint caption, matches LensEditor). */
+  .field-help {
+    margin: 0 0 var(--space-1);
+    font: var(--weight-medium) var(--text-xs) / 1.4 var(--font-sans);
+    color: var(--text-faint);
+  }
+
+  /* Custom auto-archive threshold as a sentence: "Archive after [N] minutes
+     idle" — the bare number field read ambiguously, so it's framed inline with a
+     compact, content-width input and quiet unit labels. */
+  .aa-custom {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+  .aa-custom-label {
+    font: var(--weight-medium) var(--text-sm) / 1 var(--font-sans);
+    color: var(--text-muted);
+  }
+  .aa-custom-field {
+    width: 72px;
+  }
+  .aa-custom-field :global(.input) {
+    text-align: center;
+  }
+
+  /* Duplicate-name feedback (unique-space-names). Inset to the input's left edge,
+   * danger-toned. Collapsed (max-height/margin 0) when hidden so it reserves NO
+   * vertical space — it expands + fades in over --motion-fast when a duplicate
+   * name is typed. `nowrap` + ellipsis keep it one line for any name. */
   .dupe-msg {
-    margin: var(--space-1) 0 0;
+    margin: 0;
     padding-left: var(--space-1);
+    max-height: 0;
     font: var(--weight-medium) var(--text-xs) / 1.3 var(--font-sans);
     color: var(--danger);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     opacity: 0;
-    transition: opacity var(--motion-fast) var(--ease-standard);
+    transition:
+      max-height var(--motion-fast) var(--ease-standard),
+      margin-top var(--motion-fast) var(--ease-standard),
+      opacity var(--motion-fast) var(--ease-standard);
   }
   .dupe-msg.visible {
+    max-height: 1.5rem;
+    margin-top: var(--space-1);
     opacity: 1;
   }
 
@@ -568,14 +533,30 @@ function submit(): void {
     }
   }
 
-  /* One row, evenly distributed across the full panel width (each swatch in a
-   * 1fr column, centred), so the palette uses the available width. */
+  /* Comp §8: one row of FIXED 30px swatches at ~10px spacing. We can't use a
+   * static 10px gap (10 swatches × 30px + 9 × 10px = 390px overflows a ~388px
+   * panel) nor a tiny fixed gap (the selected swatch's 4px ring then collides
+   * with its neighbours). So: `space-between` distributes the swatches, and a
+   * `max-width` of (count × 30 + gaps × 10) CAPS the row so on a wide panel the
+   * gaps settle at the comp's ~10px (ring fully clear) instead of ballooning;
+   * on a narrower panel space-between tightens the gaps down gracefully, and
+   * `wrap` is the last-resort fallback only below ~370px. Swatch width (30px)
+   * matches ColorSwatch; count tracks the live palette via --swatch-count. */
   .swatch-row {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: 1fr;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    /* Inset by the selected swatch's 4px ring overflow so that ring's outer edge
+     * lands on the form's left alignment line (the label/input edge) instead of
+     * poking past it — the first swatch is selected by default, so this is always
+     * visible. The padding is added back into max-width so the swatch spacing
+     * stays the comp's ~10px. */
+    box-sizing: border-box;
+    padding-inline: var(--space-1);
+    max-width: calc(
+      var(--swatch-count) * 30px + (var(--swatch-count) - 1) * 10px + 2 * var(--space-1)
+    );
     gap: var(--space-1);
-    justify-items: center;
   }
 
   .actions {
@@ -629,12 +610,5 @@ function submit(): void {
   .delete-confirm .actions :global(.btn:last-child:hover) {
     background: color-mix(in oklch, var(--danger) 12%, var(--surface));
     color: var(--danger);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .clip,
-    .panel {
-      transition-duration: var(--motion-fast);
-    }
   }
 </style>

@@ -26,6 +26,7 @@ import Divider from '../ui/Divider.svelte';
 import Icon from '../ui/Icon.svelte';
 import RowButton from '../ui/RowButton.svelte';
 import SearchField from '../ui/SearchField.svelte';
+import { scrollFade } from '../ui/scroll-fade';
 import Toast from '../ui/Toast.svelte';
 import ArchivedChip from './ArchivedChip.svelte';
 import DragClone from './DragClone.svelte';
@@ -38,6 +39,7 @@ import LensEditor from './LensEditor.svelte';
 import { openOptionsAt } from './open-options';
 import PinnedTabs from './PinnedTabs.svelte';
 import SectionHeader from './SectionHeader.svelte';
+// biome-ignore lint/style/useImportType: rendered as a component in the Svelte template (Biome only sees the `typeof` use, not the template).
 import SpaceSwitcher from './SpaceSwitcher.svelte';
 import { sidebarGlares } from './show-glares-state.svelte';
 import { setStore } from './store-context.svelte';
@@ -450,6 +452,10 @@ function onNewFolder(spaceId: SpaceId): void {
 let newLensSpaceId = $state<SpaceId | null>(null);
 let headerMenuOpenBySpace = $state<Record<SpaceId, boolean>>({});
 
+// The SpaceSwitcher owns the Space editor (BottomSheet). The Space-header menu
+// lives here, so we hold the switcher instance to drive Edit/New Space from it.
+let switcherRef = $state<ReturnType<typeof SpaceSwitcher> | undefined>();
+
 // ── swipe action callbacks ──────────────────────────────────────────────────
 
 function onDrag(offset: number): void {
@@ -575,6 +581,7 @@ function onCancel(): void {
             {#snippet newLensPanel()}
               <LensEditor
                 spaceId={panel.space.id}
+                {windowId}
                 onDone={() => {
                   newLensSpaceId = null;
                   headerMenuOpenBySpace[panel.space.id] = false;
@@ -601,6 +608,18 @@ function onCancel(): void {
                     newLensSpaceId = panel.space.id;
                   },
                 },
+                {
+                  id: 'edit-space',
+                  label: 'Edit Space…',
+                  icon: 'pencil',
+                  onSelect: () => switcherRef?.openEditForSpace(panel.space.id),
+                },
+                {
+                  id: 'new-space',
+                  label: 'New Space…',
+                  icon: 'plus',
+                  onSelect: () => switcherRef?.openCreateSpace(),
+                },
               ]}
               panel={newLensSpaceId === panel.space.id ? newLensPanel : undefined}
               panelTitle={newLensSpaceId === panel.space.id ? 'New lens' : undefined}
@@ -617,7 +636,7 @@ function onCancel(): void {
             <!-- Only this inner region scrolls; the Space header (SectionHeader)
                  above stays pinned at the slide's top so the icon + name never
                  ride away with the tab list. -->
-            <div class="slide-scroll" data-testid="slide-scroll">
+            <div class="slide-scroll" data-testid="slide-scroll" use:scrollFade>
               <PinnedTabs {windowId} spaceId={panel.space.id} active={i === activeIndex} />
               {#if temps > 0}
                 <Divider>
@@ -666,7 +685,7 @@ function onCancel(): void {
       onManage={openAutoArchiveSettings}
     />
   {/if}
-  <SpaceSwitcher {windowId} />
+  <SpaceSwitcher bind:this={switcherRef} {windowId} />
   <!-- Floating drag clone, rendered at the sidebar root (outside the transformed
        track) so its position:fixed is viewport-relative, not clipped. -->
   <DragClone />
