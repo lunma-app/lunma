@@ -721,13 +721,16 @@ const empty = $derived(
   .art-thumb {
     position: relative;
     flex-shrink: 0;
-    height: 84px;
+    /* Grid hero: a 16:9 frame (the ratio most feed images ship in), so `cover`
+       barely crops and faces aren't guillotined by a short letterbox band. */
+    aspect-ratio: 16 / 9;
     background: repeating-linear-gradient(135deg, var(--surface-3) 0 8px, var(--surface-2) 8px 16px);
   }
   .art-thumb.sm {
-    /* List view: a left strip that runs the FULL row height. `height: auto` drops
-       the grid card's fixed 84px so `align-self: stretch` actually governs (an
-       explicit height would win over stretch and stop the image short of the row). */
+    /* List view: a left strip that runs the FULL row height. `aspect-ratio: auto`
+       + `height: auto` drop the grid hero's 16:9 so `align-self: stretch` governs
+       (a definite height/ratio would win over stretch and stop the image short). */
+    aspect-ratio: auto;
     width: 128px;
     height: auto;
     align-self: stretch;
