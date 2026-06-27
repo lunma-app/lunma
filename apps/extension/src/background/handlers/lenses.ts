@@ -122,6 +122,7 @@ export function lensHandlers(
   | 'markLensItemUnread'
   | 'markAllLensItemsRead'
   | 'setLensHideRead'
+  | 'setLensFilter'
   | 'openLensListing'
   | 'openLensPage'
   | 'importOpml'
@@ -412,6 +413,19 @@ export function lensHandlers(
       const { spaceId, folderId, hideRead } = event.payload;
       requireLensNode(ctx, 'setLensHideRead', spaceId, folderId);
       ctx.store.setLensHideRead(folderId, hideRead);
+      ctx.markDirty();
+    },
+    setLensFilter: (ctx, event) => {
+      const { spaceId, folderId, filter } = event.payload;
+      // No-op (calm error) when the folderId does not resolve to a lens.
+      const node = (ctx.store.state.pinnedBySpace[spaceId] ?? []).find(
+        (n) => n.kind === 'lens' && n.id === folderId,
+      );
+      if (!node) {
+        log.warn('setLensFilter: folderId does not resolve to a lens', { folderId, spaceId });
+        return;
+      }
+      ctx.store.setLensFilter(folderId, filter);
       ctx.markDirty();
     },
     // Open the source's full listing in a new tab (rss-connector design D6) — the

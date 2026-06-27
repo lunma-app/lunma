@@ -1,4 +1,5 @@
 import type {
+  LensEntity,
   LensItem,
   LensKind,
   LensProvider,
@@ -6,6 +7,11 @@ import type {
   SourceAccount,
   SourceId,
 } from './types';
+
+// `LensEntity` now lives in `shared/types.ts` (moved to break the
+// `types → lens-entity → types` cycle). Re-exported here so existing
+// `import … from '../shared/lens-entity'` sites are unchanged.
+export type { LensEntity };
 
 /**
  * Lens taxonomy derivation (sources-redesign, design D4/D5). Two pure
@@ -21,22 +27,6 @@ import type {
  * render-time concern the launcher needs, kind is a SW concern, and neither may
  * import the other's layer.
  */
-
-/**
- * A lens row's canonical entity (design D5 + lens-overview) — the archetype its
- * items render as, independent of the persisted `lensKind`. The four entities,
- * realising `docs/lenses-vision.md`'s `Change`/`Ticket`/`Article` set plus the
- * untyped fallback:
- *   - `change` — a `github`/`gitlab` PR/MR (the `Change` entity);
- *   - `ticket` — a Jira issue OR a github/gitlab issue (the `Ticket` entity; the
- *     overview section titles it "Issues", but the code literal is `ticket` to
- *     match the `LensItem.ticket: TicketData` bag and `EntityRef.kind: 'ticket'`);
- *   - `article` — an `rss` item;
- *   - `generic` — anything with no populated typed bag (the untyped fallback).
- * Entity is NEVER persisted; it is derived at render time, so widening it needs
- * no migration.
- */
-export type LensEntity = 'change' | 'ticket' | 'article' | 'generic';
 
 /**
  * The PRIMARY entity of a source provider — the source-level hint for the

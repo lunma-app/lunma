@@ -339,6 +339,10 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
     kind: 'setLensHideRead',
     payload: { spaceId: 'sp', folderId: 'sf', hideRead: true },
   },
+  setLensFilter: {
+    kind: 'setLensFilter',
+    payload: { spaceId: 'sp', folderId: 'sf', filter: { entities: ['change'] } },
+  },
   openLensListing: {
     kind: 'openLensListing',
     payload: { spaceId: 'sp', folderId: 'sf', windowId: 1 },

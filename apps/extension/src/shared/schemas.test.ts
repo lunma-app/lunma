@@ -4,13 +4,29 @@ import {
   AppStateV11Schema,
   AppStateV12Schema,
   AppStateV13Schema,
+  AppStateV14Schema,
   CURRENT_SCHEMA_VERSION,
   EnvelopeSchema,
 } from './schemas';
 import { createInitialState } from './store.svelte';
 
 // Validates the freshly-minted initial state against the current persisted
-// schema (v13 — `createInitialState` now seeds the `sources` account map).
+// schema (v14 — lens-view-filters adds the optional `filter` on the lens node).
+describe('AppStateV14Schema validation', () => {
+  test('valid initial AppState parses', () => {
+    const state = createInitialState();
+    const result = AppStateV14Schema.safeParse(state);
+    expect(result.success).toBe(true);
+  });
+
+  test('missing required field rejects', () => {
+    const state = createInitialState() as unknown as Record<string, unknown>;
+    delete state.spaces;
+    const result = AppStateV14Schema.safeParse(state);
+    expect(result.success).toBe(false);
+  });
+});
+
 describe('AppStateV13Schema validation', () => {
   test('valid initial AppState parses', () => {
     const state = createInitialState();
@@ -158,6 +174,76 @@ describe('saved-tab boundary', () => {
 
   test('rejects a locked boundary missing its allow list', () => {
     expect(EnvelopeSchema.safeParse(envelopeWithSavedTab({ mode: 'locked' })).success).toBe(false);
+  });
+});
+
+// lens-view-filters (v14): schema round-trip, pre-14 parse, empty-filter handling.
+describe('lens-view-filters schema (v14)', () => {
+  function stateWithLensFilter(filter?: unknown) {
+    const base = createInitialState() as unknown as Record<string, unknown>;
+    const accId = 'acc-gh';
+    base.sources = { [accId]: { id: accId, provider: 'github', baseUrl: 'https://github.com' } };
+    base.spaces = [{ id: 's1', name: 'Work', color: 'blue', icon: 'star' }];
+    const node: Record<string, unknown> = {
+      kind: 'lens',
+      lensKind: 'general',
+      id: 'f1',
+      name: 'My PRs',
+      icon: 'folder-git-2',
+      sources: [{ sourceId: accId, queries: ['authored'] }],
+      maxItems: 20,
+      hideRead: true,
+      refreshMinutes: 10,
+    };
+    if (filter !== undefined) node.filter = filter;
+    base.pinnedBySpace = { s1: [node] };
+    return base;
+  }
+
+  test('a lens with a host-qualified repo filter round-trips under v14', () => {
+    const filter = { entities: ['change'], repos: ['github.com/owner/repo'] };
+    const result = AppStateV14Schema.safeParse(stateWithLensFilter(filter));
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const node = result.data.pinnedBySpace.s1?.[0];
+      expect(node?.kind === 'lens' && node.filter).toEqual(filter);
+    }
+  });
+
+  test('a lens without a filter (pre-v14 shape) validates under v14', () => {
+    const result = AppStateV14Schema.safeParse(stateWithLensFilter());
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const node = result.data.pinnedBySpace.s1?.[0];
+      expect(node?.kind === 'lens' && node.filter).toBeUndefined();
+    }
+  });
+
+  test('an empty filter object is valid (treated identically to no filter)', () => {
+    const result = AppStateV14Schema.safeParse(stateWithLensFilter({}));
+    expect(result.success).toBe(true);
+  });
+
+  test('a filter with empty arrays is valid (all axes absent = no narrowing)', () => {
+    const result = AppStateV14Schema.safeParse(
+      stateWithLensFilter({ entities: [], repos: [], projects: [] }),
+    );
+    expect(result.success).toBe(true);
+  });
+
+  test('a filter with an unknown entity value rejects', () => {
+    const result = AppStateV14Schema.safeParse(stateWithLensFilter({ entities: ['pr'] }));
+    expect(result.success).toBe(false);
+  });
+
+  test('the frozen v13 schema rejects a lens node carrying filter (downgrade detectable)', () => {
+    const filter = { entities: ['change'] };
+    const result = AppStateV13Schema.safeParse(stateWithLensFilter(filter));
+    expect(result.success).toBe(false);
+  });
+
+  test('CURRENT_SCHEMA_VERSION is 14', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(14);
   });
 });
 

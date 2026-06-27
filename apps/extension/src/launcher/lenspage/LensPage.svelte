@@ -8,12 +8,15 @@ import type { AppState, LensItem, PinNode, SpaceId } from '../../shared/types';
 import '@lunma/tokens/tokens.css';
 import '@lunma/tokens/fonts.css';
 import '@lunma/tokens/recipes.css';
+import { applyLensFilter, deriveLensFacets } from '../../shared/lens-filter';
+import type { LensFilter } from '../../shared/types';
 import Aurora from '../../ui/Aurora.svelte';
 import Icon from '../../ui/Icon.svelte';
 import OverviewPage from './OverviewPage.svelte';
 import {
   bucketByEntity,
   collectItems,
+  hostOf,
   type LensNode,
   resolveRefs,
   sourceKey,
@@ -96,7 +99,9 @@ $effect(() => {
 
 // Derived overview model for the lens (never stored).
 const tagged = $derived(node && appState ? collectItems(node, appState, heldItemsBySection) : []);
-const byEntity = $derived(bucketByEntity(tagged));
+// Facets from all currently-held items (unfiltered) for the LensFilterBar.
+const allRows = $derived(tagged.map((t) => ({ item: t.item, host: hostOf(t.cfg.baseUrl) })));
+const facets = $derived(deriveLensFacets(allRows));
 const readSet = $derived(new Set(node && appState ? (appState.lensReadState[node.id] ?? []) : []));
 
 const PROVIDER_NAME = { github: 'GitHub', gitlab: 'GitLab', jira: 'Jira', rss: 'Feeds' } as const;
@@ -137,6 +142,14 @@ function toggleRead(t: Tagged, makeRead: boolean): void {
     payload: { folderId: node.id, itemId: `${t.sk}:${t.item.id}` },
   });
 }
+
+function setFilter(filter: LensFilter): void {
+  if (!located || !node) return;
+  dispatch({
+    kind: 'setLensFilter',
+    payload: { spaceId: located.spaceId, folderId: node.id, filter },
+  });
+}
 </script>
 
 <svelte:head>
@@ -167,7 +180,7 @@ function toggleRead(t: Tagged, makeRead: boolean): void {
         </p>
       </section>
     {:else}
-      <OverviewPage {node} {byEntity} {lensSub} {readSet} {openItem} {toggleRead} />
+      <OverviewPage {node} {tagged} {facets} {lensSub} {readSet} {openItem} {toggleRead} {setFilter} />
     {/if}
   </main>
 </div>

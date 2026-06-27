@@ -5,6 +5,7 @@ import { dispatch } from '../shared/bus';
 import { requiredOriginsForConfig } from '../shared/connector-origins';
 import { setAccountToken } from '../shared/connectors';
 import { entityForItem, type LensEntity } from '../shared/lens-entity';
+import { applyLensFilter } from '../shared/lens-filter';
 import { sourceKey } from '../shared/lens-labels';
 import { requestHostPermissions } from '../shared/permissions';
 import type {
@@ -263,10 +264,26 @@ function displayItemsForSection(cfg: ResolvedLensSource): LensItem[] {
     if (seen) held.push(seen);
   }
   const ordered = held.length === 0 ? base : [...base, ...held];
+  // Apply the persisted lens filter before sorting and before feed windowing so
+  // maxItems counts only surviving rows (D9).
+  const host = (() => {
+    try {
+      return new URL(cfg.baseUrl).host;
+    } catch {
+      return cfg.baseUrl;
+    }
+  })();
+  const filterResult = applyLensFilter(
+    ordered.map((item) => ({ item, host })),
+    node.filter ?? {},
+  );
+  const filtered = filterResult.map((r) => r.item);
   // Stable sort by entity → changes group ahead of tickets; each connector's order
   // holds within a type. Single-entity sections (rss → article, jira → ticket) are
   // a no-op, so feed windowing/ordering downstream is unaffected.
-  return [...ordered].sort((a, b) => ENTITY_RANK[entityForItem(a)] - ENTITY_RANK[entityForItem(b)]);
+  return [...filtered].sort(
+    (a, b) => ENTITY_RANK[entityForItem(a)] - ENTITY_RANK[entityForItem(b)],
+  );
 }
 
 /** Feed windowing: newest N unread + interleaved read rows (identical to the
@@ -341,6 +358,12 @@ const badge = $derived.by<string | undefined>(() => {
   if (total === 0) return undefined;
   return anyCapped ? `${total}+` : String(total);
 });
+
+const isFilterActive = $derived(
+  (node.filter?.entities?.length ?? 0) > 0 ||
+    (node.filter?.repos?.length ?? 0) > 0 ||
+    (node.filter?.projects?.length ?? 0) > 0,
+);
 
 function openItem(cfg: ResolvedLensSource, item: LensItem): void {
   dispatch({
@@ -718,6 +741,18 @@ export function onContextMenu(_e: MouseEvent): void {
 
         {#if emptyNote}
           <div class="note-row" data-testid="smart-empty-note">{emptyNote}</div>
+        {/if}
+        {#if isFilterActive}
+          <button
+            class="filtered-note"
+            type="button"
+            data-testid="smart-filtered-note"
+            onclick={openPage}
+            title="Lens is filtered — open overview to change filter"
+          >
+            <Icon name="filter" size={11} />
+            <span>Filtered</span>
+          </button>
         {/if}
         {#if secState === 'error'}
           {@const secHost = (() => { try { return new URL(cfg.baseUrl).host; } catch { return cfg.baseUrl; } })()}
@@ -1113,6 +1148,34 @@ export function onContextMenu(_e: MouseEvent): void {
     color: var(--text-faint);
     font: var(--weight-regular) var(--text-sm) / 1.3 var(--font-sans);
     font-style: italic;
+  }
+
+  /* Filtered affordance — a muted funnel + label that taps through to the lens
+   * overview so the user can change the filter. Rendered only when the lens has
+   * a non-empty persisted filter (D-visual, design). */
+  .filtered-note {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-5);
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--text-faint);
+    font: var(--weight-regular) var(--text-xs) / 1 var(--font-sans);
+    cursor: pointer;
+    text-align: left;
+    transition: color var(--motion-fast) var(--ease-standard);
+  }
+  .filtered-note:hover {
+    color: var(--text-muted);
+  }
+  .filtered-note:focus-visible {
+    outline: var(--focus-width) solid var(--focus-color);
+    outline-offset: var(--focus-offset);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .filtered-note { transition: none; }
   }
 
   @keyframes smart-open {

@@ -339,6 +339,14 @@ export const migrations: Migration[] = [
       return raw;
     },
   },
+  {
+    // v14 (lens-view-filters): additive — the lens `PinNode` gains an OPTIONAL
+    // `filter?: LensFilter`. Pre-v14 nodes simply lack it and remain valid, so
+    // there is nothing to transform; identity pass-through, present only to
+    // advance the version (so a downgrade past v14 is detectable).
+    toVersion: 14,
+    migrate: (raw: unknown): unknown => raw,
+  },
 ];
 
 export function assertMigrationsTerminal(list: Migration[], currentVersion: number): void {

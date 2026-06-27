@@ -311,9 +311,18 @@ export function statusDot(category: 'todo' | 'in-progress' | 'done'): string {
   return 'var(--text-muted)';
 }
 
-// ── Filters: the distinct repos (Changes) / feeds (Articles) for the chip rows ──
+// ── Filters: the distinct repos (Changes) / projects (Issues) / feeds (Articles) ──
 export function reposOf(changes: Tagged[]): string[] {
   return [...new Set(changes.map((t) => t.item.change?.repo).filter((r): r is string => !!r))];
+}
+/** Distinct project names for the Issues scope facets (peer of `reposOf`).
+ * `undefined` projects are dropped — they contribute no facet. */
+export function projectsOf(tickets: Tagged[]): string[] {
+  return [
+    ...new Set(
+      tickets.map((t) => t.item.ticket?.project).filter((p): p is string => p !== undefined),
+    ),
+  ];
 }
 export function feedLabel(t: Tagged): string {
   return t.cfg.name ?? hostOf(t.cfg.baseUrl);

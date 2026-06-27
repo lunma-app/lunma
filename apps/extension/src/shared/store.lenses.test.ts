@@ -312,6 +312,28 @@ describe('feed read-state (rss-connector design D3)', () => {
     expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({ hideRead: true });
   });
 
+  test('setLensFilter sets filter on the lens node', () => {
+    store.addLens('work', feedNode());
+    store.setLensFilter('feed-1', { entities: ['change', 'ticket'] });
+    expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({
+      filter: { entities: ['change', 'ticket'] },
+    });
+  });
+
+  test('setLensFilter with empty arrays clears the filter', () => {
+    store.addLens('work', feedNode());
+    store.setLensFilter('feed-1', { entities: ['change'] });
+    store.setLensFilter('feed-1', { entities: [], repos: [], projects: [] });
+    const node = store.state.pinnedBySpace.work?.[0] as Record<string, unknown> | undefined;
+    expect(node?.['filter']).toBeUndefined();
+  });
+
+  test('setLensFilter with unknown folderId is a no-op', () => {
+    store.addLens('work', feedNode());
+    store.setLensFilter('nonexistent', { entities: ['change'] });
+    expect(store.state.pinnedBySpace.work?.[0]).not.toMatchObject({ filter: expect.anything() });
+  });
+
   test('pruneLensReadState drops read ids absent from the live window (18 → 12 live → 6 dropped)', () => {
     const sk = 'rss:a.example.com';
     const all = Array.from({ length: 18 }, (_, i) => `${sk}:item-${i}`);

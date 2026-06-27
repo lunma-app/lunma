@@ -130,6 +130,26 @@ export interface SavedTab {
 }
 
 /**
+ * A lens row's canonical entity (lens-entity) — moved here to break the
+ * `types → lens-entity → types` import cycle once `LensFilter` (which
+ * references `LensEntity`) lives beside the lens `PinNode`. Re-exported from
+ * `shared/lens-entity.ts` so existing import sites are unchanged.
+ */
+export type LensEntity = 'change' | 'ticket' | 'article' | 'generic';
+
+/**
+ * Per-lens view filter (lens-view-filters). Every axis is optional; an absent
+ * or fully-empty filter means "no narrowing" (identical to an unfiltered lens).
+ * `repos` holds host-qualified keys (`${host}/${owner}/${repo}`) so the same
+ * slug on two hosts never merges into one facet.
+ */
+export type LensFilter = {
+  entities?: LensEntity[] | undefined;
+  repos?: string[] | undefined;
+  projects?: string[] | undefined;
+};
+
+/**
  * The canned lens query set (lenses). Deliberately NOT a free-form query
  * language — three queries each connector translates to documented REST params.
  */
@@ -370,6 +390,11 @@ export type PinNode =
       hideRead: boolean;
       /** Poll cadence in minutes; default 10, floor 5 (SW-clamped). */
       refreshMinutes: number;
+      /** Optional view filter (lens-view-filters). An absent/empty filter means
+       * "no narrowing" — identical to today's behaviour for unfiltered lenses.
+       * Typed `| undefined` to match the persisted schema's `.optional()`
+       * inference under `exactOptionalPropertyTypes`. */
+      filter?: LensFilter | undefined;
     };
 
 /**

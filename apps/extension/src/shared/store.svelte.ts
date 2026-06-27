@@ -6,6 +6,7 @@ import type {
   AppState,
   ArchivedTab,
   FolderId,
+  LensFilter,
   LensKind,
   LensSectionRuntime,
   LensSourceRef,
@@ -1239,6 +1240,26 @@ export class LunmaStore {
       return;
     }
     node.hideRead = hideRead;
+  }
+
+  /** Set or clear a lens's persisted view filter (lens-view-filters). An empty
+   * filter (`{}` or every axis empty) clears the field so persisted state stays
+   * canonical. */
+  setLensFilter(folderId: FolderId, filter: LensFilter): void {
+    const node = this.findLensAnySpace(folderId);
+    if (!node) {
+      log.error('setLensFilter: unknown lens', { folderId });
+      return;
+    }
+    const isEmpty =
+      (filter.entities?.length ?? 0) === 0 &&
+      (filter.repos?.length ?? 0) === 0 &&
+      (filter.projects?.length ?? 0) === 0;
+    if (isEmpty) {
+      delete node.filter;
+    } else {
+      node.filter = filter;
+    }
   }
 
   /** Prune ONE resolved section's read ids to its live feed window (design D3).

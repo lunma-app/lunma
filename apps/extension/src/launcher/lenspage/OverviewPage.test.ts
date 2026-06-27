@@ -95,18 +95,28 @@ function renderOverview(
   byEntity: Record<LensEntity, Tagged[]>,
   openItem = vi.fn(),
   toggleRead = vi.fn(),
+  setFilter = vi.fn(),
 ) {
+  const taggedItems = [
+    ...byEntity.change,
+    ...byEntity.ticket,
+    ...byEntity.article,
+    ...byEntity.generic,
+  ];
   return {
     openItem,
     toggleRead,
+    setFilter,
     ...render(OverviewPage, {
       props: {
         node: NODE,
-        byEntity,
+        tagged: taggedItems,
+        facets: { entities: [], repos: [], projects: [] },
         lensSub: 'GitHub & Jira',
         readSet: new Set<string>(),
         openItem,
         toggleRead,
+        setFilter,
       },
     }),
   };
