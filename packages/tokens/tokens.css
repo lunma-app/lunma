@@ -19,10 +19,22 @@
  */
 
 :root {
-  /* Hue axis — every neutral and accent reads from here. The resting identity is
-   * a calm moonlit blue (aligning the lunar name), deliberately NOT Arc's violet
-   * (~268). Per-Space palette colours are independent of this and unchanged. */
-  --base-hue: 235;
+  /* ── Identity knobs (warm-substrate redesign) ──────────────────────────────
+   * "Warm light in a cool night." The neutral substrate carries a faint WARM
+   * cast: `--ds-warm-h` is its hue, `--ds-warm-amt` a chroma multiplier (set it
+   * to 0 to recover pure grey). The single must-not-miss action uses a FIXED
+   * cool-blue PRIMARY on its own axis (`--ds-primary-h`/`--ds-primary-c`),
+   * deliberately separate from the per-Space accent. */
+  --ds-warm-h: 60;
+  --ds-warm-amt: 1;
+  --ds-primary-h: 233;
+  --ds-primary-c: 0.15;
+
+  /* Hue axis — every neutral, the glass/glow/aurora fallbacks, and the resting
+   * Space hue read from here. It is now the warm substrate hue (was a cool
+   * moonlit 235). Per-Space palette colours are independent of this and
+   * unchanged. */
+  --base-hue: var(--ds-warm-h);
   --space-h: var(--base-hue);
 
   /* Per-Space canonical lightness + on-colour ink (space-palette-refresh).
@@ -99,25 +111,32 @@
    * the active Space hue onto these surfaces (overridden at `.sidebar
    * [data-tint='vivid']`) and the frosted-glass tokens below carry the same
    * whisper of hue — that colour-forward fill is the point of `vivid`. */
-  --bg: oklch(0.155 0 0);
-  --bg-elev: oklch(0.180 0 0);
-  --surface: oklch(0.200 0 0);
-  --surface-2: oklch(0.230 0 0);
-  --surface-3: oklch(0.265 0 0);
-  --hover: oklch(0.255 0 0);
-  --press: oklch(0.295 0 0);
+  --bg: oklch(0.135 calc(var(--ds-warm-amt) * 0.006) var(--ds-warm-h));
+  --bg-elev: oklch(0.158 calc(var(--ds-warm-amt) * 0.008) var(--ds-warm-h));
+  --surface: oklch(0.185 calc(var(--ds-warm-amt) * 0.010) var(--ds-warm-h));
+  --surface-2: oklch(0.205 calc(var(--ds-warm-amt) * 0.012) var(--ds-warm-h));
+  --surface-3: oklch(0.235 calc(var(--ds-warm-amt) * 0.013) var(--ds-warm-h));
+  --hover: oklch(0.225 calc(var(--ds-warm-amt) * 0.012) var(--ds-warm-h));
+  --press: oklch(0.265 calc(var(--ds-warm-amt) * 0.013) var(--ds-warm-h));
+  /* Recessed field fill (inputs/selects) — a step BELOW --bg so a control reads
+   * as inset on any surface (warm-substrate redesign). */
+  --input: oklch(0.145 calc(var(--ds-warm-amt) * 0.008) var(--ds-warm-h));
 
-  --border: oklch(0.300 0 0);
-  --border-soft: oklch(0.250 0 0 / 0.6);
-  --border-strong: oklch(0.380 0 0);
-  --divider: oklch(0.260 0 0 / 0.55);
+  --border: oklch(0.300 calc(var(--ds-warm-amt) * 0.012) var(--ds-warm-h));
+  --border-soft: oklch(0.260 calc(var(--ds-warm-amt) * 0.010) var(--ds-warm-h) / 0.7);
+  --border-strong: oklch(0.380 calc(var(--ds-warm-amt) * 0.014) var(--ds-warm-h));
+  --divider: oklch(0.260 calc(var(--ds-warm-amt) * 0.010) var(--ds-warm-h) / 0.55);
 
+  /* Text — the crisp white primary/secondary stay neutral; the dim labels pick
+   * up the warm cast to tie back to the substrate. Lightnesses chosen so every
+   * level clears WCAG 2 AA (4.5:1) on --surface (text 16.8 · text-2 13.5 ·
+   * muted 7.0 · dim 5.7 · faint 4.7). */
   --text: oklch(0.965 0 0);
   --text-2: oklch(0.890 0 0);
-  --text-muted: oklch(0.760 0 0);
-  --text-dim: oklch(0.640 0 0);
-  --text-faint: oklch(0.540 0 0);
-  --text-inverse: oklch(0.155 0 0);
+  --text-muted: oklch(0.710 0 0);
+  --text-dim: oklch(0.650 calc(var(--ds-warm-amt) * 0.010) var(--ds-warm-h));
+  --text-faint: oklch(0.600 calc(var(--ds-warm-amt) * 0.010) var(--ds-warm-h));
+  --text-inverse: oklch(0.135 0 0);
 
   /* Accent (used for focus rings, primary buttons). Derived from the per-Space
    * canonical triple (space-palette-refresh): a small `+0.065` lightness lift
@@ -131,19 +150,71 @@
   --accent-text: oklch(0.965 0.010 var(--space-h));
   --accent-on: var(--space-on);
 
-  /* Status. */
+  /* Primary action (warm-substrate redesign) — a FIXED cool-blue role, NOT
+   * derived from the active Space. It is the single highest-emphasis control
+   * (Connect / Save / Create): warm field, cool action, maximum legibility.
+   * `--accent` above stays Space-derived (focus rings, Space-tinted chrome);
+   * `--primary` is the global CTA. The fill is darkened to 0.54 so white label
+   * text clears WCAG 2 AA (4.57:1). */
+  --primary: oklch(0.54 var(--ds-primary-c) var(--ds-primary-h));
+  --primary-on: oklch(0.99 0.02 var(--ds-primary-h));
+  --primary-soft: oklch(0.55 0.10 var(--ds-primary-h) / 0.16);
+  --primary-text: oklch(0.82 0.06 var(--ds-primary-h));
+  --primary-border: oklch(0.52 0.07 var(--ds-primary-h) / 0.45);
+  --primary-disabled: oklch(0.24 0.004 var(--ds-primary-h));
+
+  /* Theme-aware accent/entity pills — `--accent-text-l` (label lightness) and
+   * `--accent-fill-a` (fill alpha) flip between dark/light so status/entity pills
+   * stay legible. Pattern: `color: oklch(var(--accent-text-l) 0.1 <hue>);
+   * background: oklch(0.55 0.13 <hue> / var(--accent-fill-a));`. */
+  --accent-text-l: 0.82;
+  --accent-fill-a: 0.16;
+
+  /* Per-lens hue family (lens-overview) — the active lens's identity hue. The
+   * lens page re-points `--lens-h` (inline, per active lens) and these derive
+   * from it, so lens tiles, the attention badge, section dots and the "All …"
+   * links recolour to the lens. Default `252` (the Payments-lens blue). */
+  --lens-h: 252;
+  --lens-soft: oklch(0.55 0.12 var(--lens-h) / 0.16);
+  --lens-text: oklch(0.80 0.10 var(--lens-h));
+  --lens-border: oklch(0.52 0.10 var(--lens-h) / 0.40);
+
+  /* Blue serif heading — a FIXED cool blue (like --primary, distinct from the
+   * warm --accent) for the redesigned section headings (Connections, Backup …). */
+  --accent-heading: oklch(0.74 0.13 235);
+
+  /* RSS provider mark — the warm feed-tile fill + glyph colour. */
+  --rss: oklch(0.74 0.11 45);
+  --rss-soft: oklch(0.62 0.11 40 / 0.16);
+
+  /* Resting / default Space colour (warm) — for a lens with no chosen Space hue
+   * (the lens rail's default tile, the resting accent). The per-Space tuples above
+   * remain the user-chosen identities; this is just the neutral-warm fallback. */
+  --space-default: oklch(0.70 0.13 var(--ds-warm-h));
+  --space-default-soft: oklch(0.55 0.13 var(--ds-warm-h) / 0.18);
+  --space-default-text: oklch(0.80 0.10 var(--ds-warm-h));
+
+  /* Role surfaces used across the redesigned surfaces. */
+  --header-bg: oklch(0.135 0.006 var(--ds-warm-h) / 0.82);
+  --selected-bg: oklch(0.20 0.014 var(--ds-warm-h));
+  --disabled-bg: oklch(0.24 0.004 var(--ds-primary-h));
+
+  /* Status. `--danger-soft` is the destructive-action hover wash. */
   --warning: oklch(0.770 0.150 75);
   --danger: oklch(0.660 0.205 25);
+  --danger-soft: oklch(0.62 0.16 25 / 0.14);
   --success: oklch(0.720 0.150 150);
-  --info: oklch(0.700 0.140 240);
+  --info: oklch(0.700 0.140 233);
 
-  /* Radii. */
+  /* Radii — the redesign rounds harder (inputs/buttons sit at 9, nav/cards at
+   * 11, panels at 16–18). */
   --r-2xs: 3px;
   --r-xs: 4px;
   --r-sm: 6px;
-  --r-md: 8px;
-  --r-lg: 12px;
+  --r-md: 9px;
+  --r-lg: 11px;
   --r-xl: 16px;
+  --r-2xl: 18px;
   --r-pill: 999px;
 
   /* Spacing scale. */
@@ -209,6 +280,9 @@
   --shadow-md: 0 4px 12px oklch(0 0 0 / 0.32);
   --shadow-lg: 0 12px 36px oklch(0 0 0 / 0.40);
   --shadow-pop: 0 18px 48px oklch(0 0 0 / 0.48);
+  /* Raised control (the primary CTA): a top inset highlight + a short drop, so
+     the button reads glossy/lifted (Sidebar Redesign + Design System buttons). */
+  --shadow-raise: inset 0 1px 0 oklch(1 0 0 / 0.15), 0 1px 3px oklch(0 0 0 / 0.4);
 
   /* Z-index layers — one scale so primitives stop inventing magic numbers
    * (the launcher's `2147483647`, ad-hoc `50`/`60` popovers). */
@@ -236,6 +310,11 @@
   --control-h-md: 36px;
   --control-h-lg: 48px;
   --control-h-xl: 56px;
+
+  /* Scroll affordance — the fade depth applied at any scrollable edge that still
+   * has content past it (driven by the shared `scrollFade` action). A size, so
+   * it's theme-independent (one declaration). */
+  --scroll-fade: 24px;
   --favicon-size: 16px;
   --icon-btn: 28px;
   /* Global favicon-row tile (a soft rounded-square plate) + its centred favicon image —
@@ -285,6 +364,26 @@
   --aurora-opacity: 0.5;
   --scrim: oklch(0.08 0.02 var(--base-hue) / 0.5);
   --scrim-blur: 8px;
+
+  /* Atmosphere layer (warm-substrate redesign) — the theme-aware immersive
+   * family the redesigned surfaces compose: a frosted panel fill (`--atm-glass`),
+   * two drifting aurora blobs (`--atm-blob-warm`/`-cool`), an ambient ring, and a
+   * chip fill. These read the warm `--ds-warm-h` (and the cool `--ds-primary-h`
+   * for the cool blob), and flip in the light block below. They sit alongside the
+   * existing `--glass-*`/`--glow-*` family (still used by current components)
+   * until those migrate. */
+  --atm-bg: oklch(0.175 0.016 var(--ds-warm-h));
+  --atm-border: oklch(0.4 0.03 var(--ds-warm-h) / 0.45);
+  --atm-ambient: 0 0 50px oklch(0.62 0.11 var(--ds-warm-h) / 0.14),
+    inset 0 1px 0 oklch(1 0.04 var(--ds-warm-h) / 0.06);
+  --atm-blob-warm: oklch(0.66 0.13 var(--ds-warm-h) / 0.22);
+  --atm-blob-cool: oklch(0.62 0.12 var(--ds-primary-h) / 0.16);
+  --atm-glass: oklch(0.24 0.03 var(--ds-warm-h) / 0.5);
+  --atm-glass-border: oklch(0.99 0.01 var(--ds-warm-h) / 0.1);
+  --atm-glass-inset: inset 0 1px 0 oklch(1 0 0 / 0.08);
+  --atm-chip: oklch(0.2 0.014 var(--ds-warm-h));
+  --atm-chip-border: transparent;
+  --atm-glow: 0 0 40px oklch(0.72 0.13 var(--ds-warm-h) / 0.35);
 }
 
 /* Density overrides — set `data-density` on `document.documentElement`. Normal
@@ -309,4 +408,100 @@
     --motion-slow: var(--motion-fast);
     --motion-space-switch: var(--motion-fast);
   }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * LIGHT THEME (warm-substrate redesign)
+ *
+ * Dark (the `:root` block above) is the resting default — the product ships
+ * dark-first. Light is opted into with `data-theme="light"` on the root element
+ * (the theme toggle sets it); everything is token-driven, so there are no
+ * per-component theme branches. It keeps the SAME warm cast and the SAME fixed
+ * cool-blue primary — the same identity lit from the front: a warm-paper
+ * substrate with near-black ink and a slightly darker, more saturated blue so
+ * the CTA holds weight on a light field.
+ *
+ * Per-Space tuples, radii, spacing, motion, and type are theme-independent and
+ * NOT redefined here. Contrast was verified per WCAG 2 AA on the rendered pixels
+ * (text 17.0 · text-2 11.7 · muted 7.2 · dim 5.5 · faint 4.6 · white-on-primary
+ * 4.9, all on --surface). NOTE: the legacy `--glass-*`/`--glow-*` family is not
+ * yet given a light expression — the redesigned surfaces compose the theme-aware
+ * `--atm-*` family (below) instead; current components migrate to it per surface.
+ * ════════════════════════════════════════════════════════════════════════════ */
+:root[data-theme='light'],
+[data-theme='light'] {
+  /* Warm paper substrate — same hue at a faint chroma, high lightness. */
+  --bg: oklch(0.965 calc(var(--ds-warm-amt) * 0.008) var(--ds-warm-h));
+  --bg-elev: oklch(0.978 calc(var(--ds-warm-amt) * 0.006) var(--ds-warm-h));
+  --surface: oklch(0.998 calc(var(--ds-warm-amt) * 0.004) var(--ds-warm-h));
+  --surface-2: oklch(0.945 calc(var(--ds-warm-amt) * 0.010) var(--ds-warm-h));
+  --surface-3: oklch(0.905 calc(var(--ds-warm-amt) * 0.014) var(--ds-warm-h));
+  --hover: oklch(0.930 calc(var(--ds-warm-amt) * 0.012) var(--ds-warm-h));
+  --press: oklch(0.890 calc(var(--ds-warm-amt) * 0.014) var(--ds-warm-h));
+  --input: oklch(0.975 calc(var(--ds-warm-amt) * 0.006) var(--ds-warm-h));
+
+  --border: oklch(0.875 calc(var(--ds-warm-amt) * 0.012) var(--ds-warm-h));
+  --border-soft: oklch(0.905 calc(var(--ds-warm-amt) * 0.010) var(--ds-warm-h) / 0.85);
+  --border-strong: oklch(0.800 calc(var(--ds-warm-amt) * 0.014) var(--ds-warm-h));
+  --divider: oklch(0.890 calc(var(--ds-warm-amt) * 0.010) var(--ds-warm-h) / 0.7);
+
+  /* Ink — near-black, faintly warm. */
+  --text: oklch(0.225 0.006 var(--ds-warm-h));
+  --text-2: oklch(0.340 0.006 var(--ds-warm-h));
+  --text-muted: oklch(0.455 0 0);
+  --text-dim: oklch(0.520 calc(var(--ds-warm-amt) * 0.012) var(--ds-warm-h));
+  --text-faint: oklch(0.560 calc(var(--ds-warm-amt) * 0.012) var(--ds-warm-h));
+  --text-inverse: oklch(0.985 0 0);
+
+  /* Primary — darker + more saturated so white text passes AA and the CTA holds
+   * weight on a light field. */
+  --primary: oklch(0.52 0.16 var(--ds-primary-h));
+  --primary-on: oklch(0.99 0.02 var(--ds-primary-h));
+  --primary-soft: oklch(0.55 0.14 var(--ds-primary-h) / 0.12);
+  --primary-text: oklch(0.46 0.14 var(--ds-primary-h));
+  --primary-border: oklch(0.55 0.12 var(--ds-primary-h) / 0.45);
+  --primary-disabled: oklch(0.91 0.004 var(--ds-primary-h));
+
+  /* Accent pills flip to a dark label on the light field. */
+  --accent-text-l: 0.42;
+  --accent-fill-a: 0.16;
+
+  /* Per-lens hue family on the light field (lens-overview). */
+  --lens-soft: oklch(0.62 0.14 var(--lens-h) / 0.14);
+  --lens-text: oklch(0.46 0.12 var(--lens-h));
+  --lens-border: oklch(0.55 0.12 var(--lens-h) / 0.40);
+
+  /* Blue heading + rss mark + danger, darkened/saturated for the light field. */
+  --accent-heading: oklch(0.48 0.15 252);
+  --rss: oklch(0.55 0.13 45);
+  --rss-soft: oklch(0.62 0.13 40 / 0.12);
+  --danger: oklch(0.55 0.20 25);
+  --danger-soft: oklch(0.62 0.18 25 / 0.1);
+
+  --space-default: oklch(0.62 0.14 var(--ds-warm-h));
+  --space-default-soft: oklch(0.62 0.14 var(--ds-warm-h) / 0.16);
+  --space-default-text: oklch(0.46 0.11 var(--ds-warm-h));
+  --header-bg: oklch(0.97 0.008 var(--ds-warm-h) / 0.82);
+  --selected-bg: oklch(0.965 0.03 var(--ds-primary-h));
+  --disabled-bg: oklch(0.91 0.004 var(--ds-primary-h));
+
+  /* Shadows soften on light. */
+  --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.08);
+  --shadow-md: 0 4px 12px oklch(0 0 0 / 0.10);
+  --shadow-lg: 0 12px 36px oklch(0 0 0 / 0.12);
+  --shadow-pop: 0 18px 48px oklch(0 0 0 / 0.16);
+  --shadow-raise: inset 0 1px 0 oklch(1 0 0 / 0.22), 0 1px 2px oklch(0 0 0 / 0.18);
+
+  /* Atmosphere layer, light expression — frosted-white vibrancy over warm paper. */
+  --atm-bg: oklch(0.955 0.014 var(--ds-warm-h));
+  --atm-border: oklch(0.82 0.035 var(--ds-warm-h) / 0.7);
+  --atm-ambient: 0 0 50px oklch(0.80 0.13 var(--ds-warm-h) / 0.12), inset 0 1px 0 oklch(1 0 0 / 0.85);
+  --atm-blob-warm: oklch(0.82 0.15 var(--ds-warm-h) / 0.2);
+  --atm-blob-cool: oklch(0.72 0.16 var(--ds-primary-h) / 0.12);
+  --atm-glass: oklch(1 0.015 var(--ds-warm-h) / 0.55);
+  --atm-glass-border: oklch(1 0 0 / 0.7);
+  --atm-glass-inset: inset 0 1px 0 oklch(1 0 0 / 0.9), 0 1px 2px oklch(0 0 0 / 0.04);
+  --atm-chip: oklch(0.99 0.006 var(--ds-warm-h));
+  --atm-chip-border: oklch(0.87 0.02 var(--ds-warm-h));
+  --atm-glow: 0 0 30px oklch(0.80 0.15 var(--ds-warm-h) / 0.22);
 }

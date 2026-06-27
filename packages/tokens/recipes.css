@@ -145,15 +145,16 @@
  * / dim translucent variants — composed ONCE from the scoped axes (`--space-l`,
  * `--space-chroma`, `--space-h`) so the four surfaces that need them (the
  * extension sidebar / new-tab / options page and the marketing-site mocks) share
- * one formula instead of hand-copying it (which had already drifted: the site's
- * `--space-c-dim` was 0.5 vs the extension's live 0.55). Add this class to the
+ * one formula instead of hand-copying it (which had already drifted once). The
+ * soft / dim alphas follow the redesign handoff (`--space-soft` 0.16,
+ * `--space-line` 0.5 — see lunma-svelte/tokens.css). Add this class to the
  * element that sets the three axes; a `gray` Space (chroma 0) resolves neutral.
  * The hue-glow redeclarations stay per-surface — they depend on substitution
  * timing the recipe can't capture. */
 .lunma-space-scope {
   --space-c: oklch(var(--space-l) var(--space-chroma) var(--space-h));
-  --space-c-soft: oklch(var(--space-l) var(--space-chroma) var(--space-h) / 0.22);
-  --space-c-dim: oklch(var(--space-l) var(--space-chroma) var(--space-h) / 0.55);
+  --space-c-soft: oklch(var(--space-l) var(--space-chroma) var(--space-h) / 0.16);
+  --space-c-dim: oklch(var(--space-l) var(--space-chroma) var(--space-h) / 0.5);
 }
 
 /* ── Hue glow ────────────────────────────────────────────────────────────────

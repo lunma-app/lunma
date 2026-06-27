@@ -34,28 +34,38 @@ function readTokens(): Map<string, string> {
   return out;
 }
 
-/** Collapse the `calc(a + b)` / `clamp(0, v, 1)` math the identity tokens use. */
+/** Collapse the `calc(a * b)` / `calc(a + b)` / `clamp(0, v, 1)` math the
+ * identity tokens use (the warm-substrate redesign multiplies the neutral chroma
+ * by `--ds-warm-amt`). */
 function evalMath(s: string): string {
   let out = s;
   let prev: string;
   do {
     prev = out;
-    out = out.replace(/calc\(\s*([\d.]+)\s*\+\s*([\d.]+)\s*\)/g, (_m, a, b) =>
-      String(Number(a) + Number(b)),
-    );
+    out = out
+      .replace(/calc\(\s*([\d.]+)\s*\*\s*([\d.]+)\s*\)/g, (_m, a, b) =>
+        String(Number(a) * Number(b)),
+      )
+      .replace(/calc\(\s*([\d.]+)\s*\+\s*([\d.]+)\s*\)/g, (_m, a, b) =>
+        String(Number(a) + Number(b)),
+      );
   } while (out !== prev);
   return out.replace(/clamp\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)/g, (_m, lo, v, hi) =>
     String(Math.min(Number(hi), Math.max(Number(lo), Number(v)))),
   );
 }
 
-/** Resolve an `oklch(...)` expression at the site's resting Space (moonlit blue,
- * hue 235): substitute the hue-axis custom properties to their `:root` defaults and
- * drop the alpha (we test the opaque colour). */
-function resolveOklch(expr: string, hue = 235): string {
+/** Resolve an `oklch(...)` expression at the site's resting Space (now the warm
+ * substrate, hue 60): substitute the hue-axis custom properties to their `:root`
+ * defaults and drop the alpha (we test the opaque colour). */
+function resolveOklch(expr: string, hue = 60): string {
   const stripped = expr.replace(/\s*\/\s*[\d.]+\s*\)/, ')');
   const substituted = stripped
     .replace(/var\(--base-hue\)/g, String(hue))
+    .replace(/var\(--ds-warm-h\)/g, String(hue))
+    .replace(/var\(--ds-warm-amt\)/g, '1')
+    .replace(/var\(--ds-primary-h\)/g, '233')
+    .replace(/var\(--ds-primary-c\)/g, '0.15')
     .replace(/var\(--space-h(?:,\s*[\d.]+)?\)/g, String(hue))
     .replace(/var\(--space-l(?:,\s*[\d.]+)?\)/g, '0.62')
     .replace(/var\(--space-chroma(?:,\s*[\d.]+)?\)/g, '0.15');
