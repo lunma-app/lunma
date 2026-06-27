@@ -2,11 +2,13 @@
 import { onMount } from 'svelte';
 import { dispatch } from '../../shared/bus';
 import { onStateBroadcast } from '../../shared/messages';
-import { colourToOklch, DEFAULT_HUE } from '../../shared/space-hue';
+import type { Tint } from '../../shared/settings';
+import { colourToOklch, DEFAULT_HUE, DEFAULT_L, SPACE_CHROMA } from '../../shared/space-hue';
 import type { AppState, LensItem, PinNode, SpaceId } from '../../shared/types';
 import '@lunma/tokens/tokens.css';
 import '@lunma/tokens/fonts.css';
 import '@lunma/tokens/recipes.css';
+import Aurora from '../../ui/Aurora.svelte';
 import Icon from '../../ui/Icon.svelte';
 import OverviewPage from './OverviewPage.svelte';
 import {
@@ -32,9 +34,14 @@ interface Props {
   folderId?: string | null;
   /** SW snapshot seed; null until the first broadcast lands. */
   initialState?: AppState | null;
+  /** Colour-intensity level, from `main.ts` (the `tint` setting; default `vivid`,
+   * mirroring the new-tab home). Drives the `<Aurora intensity>` backdrop opacity,
+   * captured at first paint; `main.ts` toggles `data-show-glares` live to hide the
+   * aurora when the atmosphere glow is switched off. */
+  tint?: Tint;
 }
 
-const { windowId, folderId = null, initialState = null }: Props = $props();
+const { windowId, folderId = null, initialState = null, tint = 'vivid' }: Props = $props();
 
 let liveState = $state<AppState | null>(null);
 const appState = $derived<AppState | null>(liveState ?? initialState);
@@ -57,11 +64,18 @@ const located = $derived.by<{ spaceId: SpaceId; node: LensNode } | null>(() => {
 });
 
 const node = $derived(located?.node ?? null);
-const activeHue = $derived.by(() => {
-  if (!located || !appState) return DEFAULT_HUE;
+// The lens's owning-Space colour in canonical OKLCH — drives `--lens-h` (the
+// identity hue) AND the aurora's `--space-l`/`--space-chroma`/`--space-h`, so the
+// ambient backdrop recolours with the lens's Space (a `gray` Space washes neutral).
+// Falls back to the resting ember when the lens/Space is unresolved.
+const activeOklch = $derived.by(() => {
+  if (!located || !appState) return null;
   const space = appState.spaces.find((s) => s.id === located.spaceId);
-  return space ? (colourToOklch(space.color).h ?? DEFAULT_HUE) : DEFAULT_HUE;
+  return space ? colourToOklch(space.color) : null;
 });
+const spaceHue = $derived(activeOklch?.h ?? DEFAULT_HUE);
+const spaceChroma = $derived(activeOklch?.c ?? SPACE_CHROMA);
+const spaceL = $derived(activeOklch?.l ?? DEFAULT_L);
 
 // Last-known items per section (lens-overview, mirrors the sidebar's
 // `heldItemsBySection`). A re-fetch flips a section to `'pending'` with its items
@@ -129,7 +143,20 @@ function toggleRead(t: Tagged, makeRead: boolean): void {
   <title>{pageTitle}</title>
 </svelte:head>
 
-<div class="lenspage" data-testid="lenspage-root" style:--lens-h={String(activeHue)}>
+<div
+  class="lenspage"
+  data-testid="lenspage-root"
+  data-tint={tint}
+  style:--lens-h={String(spaceHue)}
+  style:--space-h={String(spaceHue)}
+  style:--space-chroma={String(spaceChroma)}
+  style:--space-l={String(spaceL)}
+>
+  <!-- Immersive backdrop: the lens's Space colour as a drifting aurora, intensity
+       tracking the tint level. aria-hidden, never interactive. `main.ts` sets
+       `data-show-glares` to hide it when the atmosphere glow is off. -->
+  <Aurora intensity={tint} />
+
   <main class="main">
     {#if node === null || appState === null}
       <section class="missing" data-testid="lenspage-missing">
@@ -147,6 +174,8 @@ function toggleRead(t: Tagged, makeRead: boolean): void {
 
 <style>
   .lenspage {
+    position: relative;
+    isolation: isolate;
     min-height: 100vh;
     background: var(--bg);
     color: var(--text);
@@ -154,7 +183,20 @@ function toggleRead(t: Tagged, makeRead: boolean): void {
     font-size: var(--text-md);
     line-height: 1.5;
   }
+
+  /* Atmosphere glow off (`showGlares: false`, set live by `main.ts`): the aurora
+     intensity is captured at first paint and can't update live, so CSS is the
+     toggle path — mirrors the new-tab home. Fully `:global` because the
+     `data-show-glares` attribute is set on the root externally (not in this
+     template) and `.aurora` lives in the child Aurora component. */
+  :global(.lenspage[data-show-glares='false'] .aurora) {
+    display: none;
+  }
+
   .main {
+    position: relative;
+    /* Above the ambient aurora (`--z-base`), like the new-tab `.stage`. */
+    z-index: var(--z-raised);
     width: 100%;
     /* Responsive: fills the viewport (minus a small gutter) up to a 1080px cap, so
        the overview breathes on wide screens (the article grid gains columns) while
