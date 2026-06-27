@@ -844,9 +844,7 @@ status check; its `lint` step (Biome) fails on a layer-DAG, import-cycle, or
 cross-app violation, so `architecture-integrity` holds at the merge boundary. A
 parallel `e2e` job runs the Playwright MV3 smoke under `xvfb-run`.
 
-Planned: enforcing these as a merge gate via branch protection is deferred until
-the repo is public, since it needs a paid plan while the repo is private. See also the
-`release-engineering` capability.
+Merges to `main` are gated on green CI — `verify`, `e2e`, `dco`, and `identity` are required status checks enforced via a GitHub ruleset. See also the `release-engineering` capability.
 
 ### Continuous deployment
 
