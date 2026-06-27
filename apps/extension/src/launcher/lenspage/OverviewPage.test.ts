@@ -121,7 +121,7 @@ describe('OverviewPage', () => {
     expect(getByText('GitHub & Jira')).toBeTruthy();
   });
 
-  test('Changes: a relation-grouped row with the state pill + linked-ticket chip', () => {
+  test('Changes: a relation-grouped row composing the reviewer rail + diffstat, no state pill', () => {
     const { container, getByText } = renderOverview({ ...empty(), change: [PR] });
     expect(
       container.querySelector('[data-testid="overview-section"][data-entity="change"]'),
@@ -129,9 +129,35 @@ describe('OverviewPage', () => {
     expect(container.querySelector('[data-testid="change-row"]')).not.toBeNull();
     // No query on the cfg → grouped under "Authored".
     expect(getByText('Authored')).toBeTruthy();
-    // approved reviewers → the "approved" state pill.
-    expect(container.querySelector('[data-testid="verdict"]')?.textContent).toContain('approved');
+    // Reviewers render through the ReviewerRail primitive (not inline avatars).
+    expect(container.querySelector('[data-testid="reviewer-rail"]')).not.toBeNull();
+    // Diff size renders through the Diffstat primitive.
+    const diff = container.querySelector('[data-testid="diffstat"]');
+    expect(diff?.textContent).toContain('+142');
+    expect(diff?.textContent).toContain('18'); // −18
+    // The state pill is gone — the rail verdict glyph is the single review signal.
+    expect(container.querySelector('[data-testid="verdict"]')).toBeNull();
     expect(container.querySelector('[data-testid="ticket-ref"]')?.textContent).toBe('PAY-88');
+  });
+
+  test('Changes: a draft change shows a hollow CI light and no pill', () => {
+    const draft = tagged({
+      id: '43',
+      title: 'WIP: webhook retries',
+      url: 'u',
+      status: { tone: 'pending', label: 'pending' },
+      change: {
+        author: 'me',
+        repo: 'payments-api',
+        reviewers: [],
+        draft: true,
+        updatedAt: 1,
+      },
+    });
+    const { container } = renderOverview({ ...empty(), change: [draft] });
+    const ci = container.querySelector('.ci.hollow');
+    expect(ci?.getAttribute('title')).toBe('Draft');
+    expect(container.querySelector('[data-testid="verdict"]')).toBeNull();
   });
 
   test('Issues: status-grouped, key + priority pill, title stripped of its key prefix', () => {

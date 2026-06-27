@@ -3,14 +3,16 @@ import type { AppState, ChangeData, LensItem } from '../../shared/types';
 import {
   bucketByEntity,
   changeMeta,
-  changeState,
   changeVerdict,
   chipsFor,
   ciGlyph,
+  ciLight,
   collectItems,
+  initialsOf,
   type LensNode,
   priorityHue,
   relTime,
+  reviewersForRail,
   reviewState,
   statusVM,
   stripKeyPrefix,
@@ -107,34 +109,76 @@ describe('changeVerdict (priority-ordered, synthesized from real data)', () => {
 });
 
 describe('changeMeta', () => {
-  test('repo only when no diffstat', () => {
+  test('is the repo slug (diffstat is owned by the Diffstat primitive)', () => {
     expect(changeMeta(change({ repo: 'acme/api' }))).toBe('acme/api');
-  });
-  test('repo · +adds −dels (U+2212 minus)', () => {
     expect(changeMeta(change({ repo: 'acme/api', additions: 142, deletions: 18 }))).toBe(
-      'acme/api · +142 −18',
+      'acme/api',
     );
   });
 });
 
-describe('ciGlyph / changeState', () => {
-  test('ciGlyph maps tone → icon + hue', () => {
+describe('ciGlyph', () => {
+  test('maps tone → icon + hue', () => {
     expect(ciGlyph('ok')).toMatchObject({ icon: 'check', hue: 150 });
     expect(ciGlyph('fail')).toMatchObject({ icon: 'x', hue: 25 });
     expect(ciGlyph('pending')).toMatchObject({ icon: 'circle' });
     expect(ciGlyph(undefined)).toBeNull();
   });
-  test('changeState reflects draft/changes/approved/open', () => {
-    expect(changeState(item({ change: change({ draft: true }) })).label).toBe('draft');
+});
+
+describe('ciLight (the Changes-row light, draft-aware)', () => {
+  test('draft takes the locus as a hollow glyph, over any CI tone', () => {
     expect(
-      changeState(item({ change: change({ reviewers: [{ login: 'a', state: 'changes' }] }) }))
-        .label,
-    ).toBe('changes');
+      ciLight(item({ status: { tone: 'fail', label: 'x' }, change: change({ draft: true }) })),
+    ).toMatchObject({ glyph: '○', label: 'Draft', draft: true });
+  });
+  test('maps the status tone when not a draft', () => {
+    expect(ciLight(item({ status: { tone: 'ok', label: 'x' }, change: change() }))).toMatchObject({
+      glyph: '✓',
+      hue: 150,
+      draft: false,
+    });
+    expect(ciLight(item({ status: { tone: 'fail', label: 'x' }, change: change() }))).toMatchObject(
+      {
+        glyph: '✕',
+        draft: false,
+      },
+    );
+  });
+  test('null when neither draft nor a known tone', () => {
+    expect(ciLight(item({ change: change() }))).toBeNull();
+  });
+});
+
+describe('initialsOf', () => {
+  test('first char of each of the first two parts', () => {
+    expect(initialsOf('jane-doe')).toBe('JD');
+    expect(initialsOf('ada_lovelace')).toBe('AL');
+  });
+  test('first two chars of a single token', () => {
+    expect(initialsOf('octocat')).toBe('OC');
+    expect(initialsOf('x')).toBe('X');
+  });
+  test('empty login degrades to a placeholder', () => {
+    expect(initialsOf('   ')).toBe('?');
+  });
+});
+
+describe('reviewersForRail', () => {
+  test('maps each reviewer to initials + state + name title', () => {
     expect(
-      changeState(item({ change: change({ reviewers: [{ login: 'a', state: 'approved' }] }) }))
-        .label,
-    ).toBe('approved');
-    expect(changeState(item({ change: change() })).label).toBe('open');
+      reviewersForRail(
+        change({
+          reviewers: [
+            { login: 'jane-doe', state: 'approved' },
+            { login: 'bob', state: undefined },
+          ],
+        }),
+      ),
+    ).toEqual([
+      { initials: 'JD', state: 'approved', title: 'jane-doe' },
+      { initials: 'BO', state: undefined, title: 'bob' },
+    ]);
   });
 });
 
