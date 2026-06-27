@@ -6,7 +6,7 @@ Defines the versioned local-storage envelope, the append-only migration pipeline
 ## Requirements
 ### Requirement: Versioned local-storage envelope
 
-The persisted `AppState` SHALL live in `chrome.storage.local` under the key `lunma.state` as an envelope of shape `{ schemaVersion: number; state: AppState }`. The envelope's `schemaVersion` SHALL equal the `CURRENT_SCHEMA_VERSION` constant exported from `apps/extension/src/shared/schemas.ts` at write time. The current version SHALL be `12` (raised from `11` by the `review-lens` change, which **widens the persisted `lensKind` enum** on the `lens` `PinNode` from `'general'` to `'general' | 'review'` — an additive enum widening, structurally identical for existing nodes; version `11` came from the `establish-lens-model` change, the smart→lens rename, which flips each pinned node's discriminant `kind: 'smart'` to `kind: 'lens'`, stamps `lensKind: 'general'`, and renames the persisted keys `smartItemBindings → lensItemBindings` and `smartReadState → lensReadState`; version `10` came from the `smart-source-rename` change, which adds an **optional `name`** to each `LensSource`; version `9` came from `multi-filter-smart-connectors`, which replaced the flat `query?` triple with `sources: LensSource[]` carrying `queries[]` and re-keyed the lens-item bindings).
+The persisted `AppState` SHALL live in `chrome.storage.local` under the key `lunma.state` as an envelope of shape `{ schemaVersion: number; state: AppState }`. The envelope's `schemaVersion` SHALL equal the `CURRENT_SCHEMA_VERSION` constant exported from `apps/extension/src/shared/schemas.ts` at write time. The current version SHALL be `13` (raised from `12` by the `decouple-source-accounts` change, which adds the top-level `sources` slice — the `SourceAccount` map — and rewrites each lens node's `sources` from embedded `LensSource[]` to `LensSourceRef[]` references; version `12` came from `review-lens`, which widened the persisted lens `lensKind` enum to `'general' | 'review'`; version `11` came from `establish-lens-model`, the smart→lens rename — flipping each node's `kind: 'smart'` to `kind: 'lens'`, stamping `lensKind: 'general'`, and renaming `smartItemBindings → lensItemBindings` / `smartReadState → lensReadState`; version `10` came from `smart-source-rename`, adding an optional `name` to each source; version `9` came from `multi-filter-smart-connectors`, replacing the flat `query?` with `sources: LensSource[]` carrying `queries[]`).
 
 The `state.schemaVersion` field on `AppState` itself SHALL match the envelope's `schemaVersion` whenever both are present. The envelope-level field is the value the migration runner reads; the in-state field is informational.
 
@@ -19,48 +19,30 @@ The `state.schemaVersion` field on `AppState` itself SHALL match the envelope's 
 
 The `migrations: Migration[]` array exported from `apps/extension/src/shared/migrations.ts` SHALL be append-only **from the v1 baseline onward**. A `Migration` SHALL be `{ toVersion: number; migrate: (raw: unknown) => unknown }`. Each `migrate` function SHALL be synchronous and pure.
 
-The list holds eleven entries: the ten entries through `toVersion: 11` (as previously specified — the `toVersion: 9` entry is the `multi-filter-smart-connectors` real transformation; the `toVersion: 10` entry is the additive `name` migration from `smart-source-rename`; the `toVersion: 11` entry is the smart→lens rename from `establish-lens-model`) plus a new `{ toVersion: 12 }` migration added by `review-lens`. The **v12 migration** is **additive and structurally identity**: it returns its input unchanged apart from the bumped schema version. It exists because the `review-lens` change widens the persisted `lensKind` enum to admit `'review'`; every existing persisted node already carries `lensKind: 'general'`, which is valid under the widened enum, so no node is reshaped.
+The list holds twelve entries: the eleven entries through `toVersion: 12` (as previously specified — through the `review-lens` additive `lensKind` enum-widening migration) plus a new `{ toVersion: 13 }` migration added by `decouple-source-accounts`. The **v13 migration** is a **real transformation**: for every `kind: 'lens'` node it mints one `SourceAccount` per distinct `(provider, baseUrl)` pair across all lenses (de-duplicated, source `name` carried onto the account), adds them to a new top-level `sources` map, and rewrites each lens's `sources` entries from `{ source, baseUrl, queries, name? }` to `{ sourceId, queries }`. The re-keying of the **separate, unversioned** `lunma.connectors` secrets store (host → `sourceId`) is NOT performed by this pure migrate function; it is a boot-chain step (see Requirement: A v12→v13 migration extracts accounts and re-keys tokens, in the `connector-accounts` capability).
 
-#### Scenario: The chain holds exactly the v2 through v12 entries
+#### Scenario: The chain holds exactly the v2 through v13 entries
 
 - **GIVEN** the `migrations` list exported from `apps/extension/src/shared/migrations.ts`
-- **THEN** `migrations` SHALL equal an eleven-entry list — `{ toVersion: 2 }` through `{ toVersion: 11 }` (as previously specified), then `{ toVersion: 12 }` (the additive `lensKind` enum-widening migration)
+- **THEN** `migrations` SHALL have twelve entries with `toVersion` values `2, 3, …, 12, 13` in order — the eleven entries through `{ toVersion: 12 }` (as previously specified) plus `{ toVersion: 13 }` (the source-extraction migration)
 
-#### Scenario: The v10 migration leaves existing sources structurally unchanged
+#### Scenario: The v13 migration extracts embedded sources into accounts
 
-- **GIVEN** a v9 envelope with a pinned node whose sources carry no `name`
-- **WHEN** `runMigrations` applies the v10 migration
-- **THEN** the output is structurally unchanged apart from the bumped schema version, and the sources still validate (with `name` absent/optional)
-
-#### Scenario: The v11 migration renames smart nodes to lens nodes
-
-- **GIVEN** a v10 envelope containing a `kind: 'smart'` pinned node and top-level `smartItemBindings` / `smartReadState` keys
-- **WHEN** `runMigrations` applies the v11 migration
-- **THEN** every such node becomes `kind: 'lens'` with `lensKind: 'general'`, the keys are renamed to `lensItemBindings` / `lensReadState`, and each node's provider values and `queries[]` are unchanged
-
-#### Scenario: The v12 migration leaves existing lens nodes unchanged
-
-- **GIVEN** a v11 envelope containing a `kind: 'lens'` node with `lensKind: 'general'`
-- **WHEN** `runMigrations` applies the v12 migration
-- **THEN** the output is structurally identical apart from the bumped schema version, and the node still validates (its `lensKind` remains `'general'`)
+- **GIVEN** a v12 envelope with two lens nodes that each embed a `{ source: 'github', baseUrl: 'https://github.com', queries: […] }` source
+- **WHEN** `runMigrations` applies the v13 migration
+- **THEN** the output has a single `github`/`github.com` account in `sources` and both lenses reference it by the same `sourceId`, each keeping its own `queries`
 
 ### Requirement: Migration runner applies pending migrations in order
 
 On every SW boot, the storage layer SHALL invoke `runMigrations(raw, persistedVersion)` which iterates `migrations` in array order, applies the `migrate` function of every entry whose `toVersion > persistedVersion`, threading each output as the input to the next, and stops when there are no more entries to apply.
 
-After the runner returns, the resulting object SHALL be validated against the Zod schema for the current schema version, `AppStateV12Schema`. `AppStateV12Schema` is the v11 schema with `PinNodeSchema`'s lens branch widening `lensKind` from `z.enum(['general'])` to `z.enum(['general', 'review'])`; it is otherwise identical to `AppStateV11Schema`. If `persistedVersion < CURRENT_SCHEMA_VERSION` and validation succeeds, the storage layer SHALL write the new envelope `{ schemaVersion: 12, state }` back to `lunma.state` before returning. If `persistedVersion === CURRENT_SCHEMA_VERSION`, no write-back SHALL occur on boot.
+After the runner returns, the resulting object SHALL be validated against the Zod schema for the current schema version, `AppStateV13Schema`. `AppStateV13Schema` is the v12 schema with an added `sources` slice (`z.record(z.string(), SourceAccountSchema).default({})`) and the lens node's `sources` field validated as `LensSourceRef[]` (`{ sourceId, queries }`) instead of `LensSource[]`; it is otherwise identical to `AppStateV12Schema`. If `persistedVersion < CURRENT_SCHEMA_VERSION` and validation succeeds, the storage layer SHALL write the new envelope `{ schemaVersion: 13, state }` back to `lunma.state` before returning. If `persistedVersion === CURRENT_SCHEMA_VERSION`, no write-back SHALL occur on boot. After this write-back, the boot chain SHALL run the one-time `reconcileAccountSecrets` step against the separate `lunma.connectors` store (see the `connector-accounts` capability) — it is a boot-sequence side effect, not part of the pure migration runner.
 
 #### Scenario: A migrated envelope validates against the current schema
 
-- **GIVEN** a v11 envelope carrying a `kind: 'lens'` node with `lensKind: 'general'`
-- **WHEN** `readPersistedState` validates it after the v12 migration
-- **THEN** validation SHALL succeed against `AppStateV12Schema` and the envelope SHALL be written back as `{ schemaVersion: 12, state }`
-
-#### Scenario: A review lens node validates under the current schema
-
-- **GIVEN** a v12 envelope carrying a `kind: 'lens'` node with `lensKind: 'review'`
-- **WHEN** `readPersistedState` validates it
-- **THEN** validation SHALL succeed against `AppStateV12Schema` (the widened enum admits `'review'`) and no write-back occurs
+- **GIVEN** a v12 envelope carrying a `kind: 'lens'` node with embedded `sources`
+- **WHEN** `readPersistedState` validates it after the v13 migration
+- **THEN** validation SHALL succeed against `AppStateV13Schema` (the node's `sources` are now `LensSourceRef[]` and `state.sources` holds the minted accounts) and the envelope SHALL be written back as `{ schemaVersion: 13, state }`
 
 ### Requirement: Corruption quarantine and fallback
 
@@ -288,47 +270,27 @@ The **behavior** of populating, pruning, and consuming `archivedTabs` is owned b
 
 ### Requirement: Schema-to-type coherence
 
-`apps/extension/src/shared/schemas.ts` SHALL include a compile-time assertion that `z.infer<typeof AppStateV12Schema>` and `AppState` (from `apps/extension/src/shared/types.ts`) are structurally equivalent. A drift between the two SHALL cause `pnpm exec tsc --noEmit` to fail.
+`apps/extension/src/shared/schemas.ts` SHALL include a compile-time assertion that `z.infer<typeof AppStateV13Schema>` and `AppState` (from `apps/extension/src/shared/types.ts`) are structurally equivalent. A drift between the two SHALL cause `pnpm exec tsc --noEmit` to fail.
 
-The `AppStateV12Schema` SHALL define `lensItemBindings` as:
+The `AppStateV13Schema` SHALL define `sources` as:
 ```
-z.record(z.record(z.record(z.object({ tabId: z.number(), allowGlob: z.string() }))))
-  .default({})
+z.record(z.string(), SourceAccountSchema).default({})
 ```
-replacing the v6 `z.record(z.record(z.record(z.number()))).default({})`.
+where `SourceAccountSchema` is a `z.strictObject` of `{ id, provider, baseUrl, name? }` carrying no token field, so the inferred type is `Record<SourceId, SourceAccount>` matching `AppState.sources`.
 
-The `AppStateV12Schema` SHALL define `liveTabsById` as:
-```
-z.record(z.coerce.number(), LiveTabSchema).default({})
-```
-replacing the previous `.optional()` form — so the inferred type is `Record<number, LiveTab>` (not `Record<number, LiveTab> | undefined`), matching `AppState.liveTabsById`.
+The lens branch of `PinNodeSchema` SHALL validate `sources` as `z.array(LensSourceRefSchema).min(1)` where `LensSourceRefSchema` is `{ sourceId: z.string(); queries: z.array(z.enum(['authored','assigned','review-requested'])) }`, replacing the prior embedded `LensSourceSchema` array.
 
-The `AppStateV12Schema` SHALL define `lenses` as:
-```
-z.record(z.string(), LensRuntimeSchema).default({})
-```
-replacing the previous `.optional()` form — so the inferred type is `Record<string, LensRuntime>` (not `Record<string, LensRuntime> | undefined`), matching `AppState.lenses`.
-
-With these changes the `Persisted<T>` helper in `schemas.ts` (which previously omitted `liveTabsById` and `lenses` from the structural comparison to hide the optional/non-optional gap) SHALL be removed. The compile-time assertion SHALL compare `z.infer<typeof AppStateV12Schema>` and `AppState` directly, without stripping any fields.
-
-No `as unknown as AppState` cast SHALL remain in the codebase for values produced by `AppStateV12Schema.safeParse`.
+No `as unknown as AppState` cast SHALL remain in the codebase for values produced by `AppStateV13Schema.safeParse`.
 
 #### Scenario: Type drift fails the build
 
-- **WHEN** a developer changes the `lensItemBindings` slot type in `AppState` without updating `AppStateV12Schema`
+- **WHEN** a developer changes the `AppState.sources` value type without updating `SourceAccountSchema`
 - **THEN** `pnpm exec tsc --noEmit` SHALL fail with a type-equivalence error in `apps/extension/src/shared/schemas.ts`
 
-#### Scenario: liveTabsById gap removed — parse output is directly assignable to AppState
+#### Scenario: A lens node with embedded sources is rejected under v13
 
-- **WHEN** `AppStateV12Schema.safeParse(payload)` succeeds on a payload lacking a `liveTabsById` field
-- **THEN** `stateResult.data.liveTabsById` SHALL equal `{}` (the `.default({})` value)
-- **AND** `stateResult.data` SHALL be directly assignable to `AppState` without a cast
-
-#### Scenario: lenses gap removed — parse output is directly assignable to AppState
-
-- **WHEN** `AppStateV12Schema.safeParse(payload)` succeeds on a payload lacking a `lenses` field
-- **THEN** `stateResult.data.lenses` SHALL equal `{}`
-- **AND** `stateResult.data` SHALL be directly assignable to `AppState` without a cast
+- **WHEN** `AppStateV13Schema.safeParse` is given a lens node whose `sources` entry carries `{ source, baseUrl, queries }` (the v12 embedded shape) instead of `{ sourceId, queries }`
+- **THEN** validation SHALL fail (the lens branch now requires `LensSourceRef[]`)
 
 ### Requirement: liveTabsById is ephemeral and excluded from persistence
 

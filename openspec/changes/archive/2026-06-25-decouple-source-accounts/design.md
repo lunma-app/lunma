@@ -178,6 +178,56 @@ card. A `needs-token` section renders the inline reconnect beat. Creating a GitH
 lens **without** a token is allowed — the account exists in `needs-token` and the lane
 shows the reconnect beat — so account/lens creation is never hard-blocked on a secret.
 
+### D10 — Backup portability of accounts (agreed during apply)
+The data-backup portable subset (`PortableAppState`, `PortableAppStateSchema`,
+`buildBackup`) is widened to include `AppState.sources`. Accounts are portable user
+configuration carrying no secret (the token stays in the machine-bound
+`lunma.connectors` store and is never exported), so a backup that omitted them would
+restore every lens with a **dangling** reference. The schema gets a
+`sources: z.record(z.string(), SourceAccountSchema).default({})` (so a pre-v13
+backup, migrated forward, parses), and `parseBackup` validates against
+`AppStateV13Schema`. *Not in the original task list; agreed via AskUserQuestion
+because the alternative ships a visibly-broken backup.*
+
+### D11 — Where the derived-method + surface helpers live
+`deriveAuthMethod` / `deriveAuthStatus` (D3) and the `PROVIDER_AUTH_METHODS` map
+live in **`shared/auth-method.ts`** — DAG-legal for both the connectors
+(`background/`) and the surfaces. The connectors' `SourceConnector.authMethods`
+field references the same map (one source of truth; no drift). Surface presentation
+helpers (provider labels, default base URLs, `tokenRequirement`, `tokenHelpUrl`,
+`accountLabel`/`hostLabel`) live in **`shared/account-ui.ts`**, shared by the editor
+picker, the Options Accounts manager, and the signed-out reconnect lanes. The
+reusable `AccountConnectField` is used by the signed-out reconnect lanes (all three
+surfaces), the Options per-account replace-token control, and the editor's "+ Connect
+an account" flow (for the token rung; a no-token "Add account/feed" button covers
+the session/public path). The editor's connect form **drops the prior inline OPML
+importer** — OPML import stays in Options (`FeedSubscriptions` → `importOpml`, which
+now find-or-mints rss accounts), consistent with "the editor is assembly, not a URL
+form."
+
+### D12 — A Source is an Account or a Feed (presentation split; agreed during apply)
+The uniform `SourceAccount` model collapsed two genuinely different things, which
+read wrong in the UI (a public RSS feed shown as a "connected account"). The data
+model stays uniform — both are `SourceAccount` in `AppState.sources`, referenced by
+`LensSourceRef`, resolved through one path — but they are **presented and managed as
+two kinds**:
+
+- an **Account** — a connected identity with derived auth (`github`/`gitlab`/`jira`).
+  Managed in **Options → Accounts** (the manager lists auth providers ONLY), added
+  inline via the editor's **"+ Connect an account"** beat (token-aware).
+- a **Feed** — a public RSS subscription (`rss`): just a URL, no auth, no "account".
+  Managed in **Options → Feed subscriptions** (OPML **import** + export), added inline
+  via the editor's **"+ Add a feed"** affordance (URL only). A `review` lens has no
+  feed affordance (auth accounts only); a `general` lens has both.
+
+`shared/account-ui.ts` carries `ACCOUNT_PROVIDERS` (the auth set) and
+`isFeedProvider`; the `AccountChip`'s `status` is optional (a feed shows just its
+glyph + identity, no auth pip). **`importOpml` is wired to the Feed subscriptions
+card** (it had been only in the old editor's inline importer, which the account-picker
+rework removed — restoring it un-breaks OPML import, and matches the
+`opml-import-export` spec, which already places the import flow in
+`FeedSubscriptions.svelte`).
+
 ## Risks / Trade-offs
 
 - **Breaking persisted lens shape + secrets re-key** → the v13 migration + the boot

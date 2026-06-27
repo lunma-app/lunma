@@ -1,5 +1,8 @@
-## ADDED Requirements
+# connector-accounts Specification
 
+## Purpose
+TBD - created by archiving change decouple-source-accounts. Update Purpose after archive.
+## Requirements
 ### Requirement: A connected Account is a first-class persisted entity
 
 Lunma SHALL persist connected **Accounts** as a top-level `AppState.sources` map,
@@ -154,11 +157,35 @@ section re-fetches without navigation. A stored token SHALL render as a
 - **WHEN** the connect affordance renders
 - **THEN** the token field is an optional "add a token" upgrade, not a required step
 
+### Requirement: A Source is an Account or a Feed
+
+A lens **Source** SHALL be one of two KINDS, persisted uniformly as `SourceAccount` in
+`AppState.sources` and referenced uniformly by `LensSourceRef`, but **presented and
+managed distinctly**:
+
+- an **Account** — a connected identity with derived auth: `github`, `gitlab`, or
+  `jira` (`ACCOUNT_PROVIDERS`). Managed in the Options **Accounts** manager; added
+  inline via the lens editor's "Connect an account" affordance.
+- a **Feed** — a public RSS subscription (`rss`): a URL with no auth. Managed in the
+  Options **Feed subscriptions** card (OPML import/export — see the
+  `opml-import-export` capability); added inline via the lens editor's "Add a feed"
+  affordance. A `review` lens admits no feed; a `general` lens admits both.
+
+The shared `isFeedProvider(provider)` (`provider === 'rss'`) is the single
+discriminator. The `AccountChip` renders an auth status only for Accounts; a Feed
+shows just its provider glyph + identity (no status pip).
+
+#### Scenario: RSS is a Feed, not an Account
+
+- **WHEN** the Options Accounts manager renders
+- **THEN** it SHALL list only Accounts (github/gitlab/jira); rss sources SHALL NOT appear there (they are managed under Feed subscriptions)
+
 ### Requirement: The options page manages accounts and shows their reach
 
 The options page SHALL present an **Accounts** manager (evolved from the prior
-Connectors section, anchor `#connectors`) listing every connected account with its
-provider, host/name, derived status, and its **reach**. **Reach** SHALL be the count of
+Connectors section, anchor `#connectors`) listing every connected **Account** (auth
+providers only — rss Feeds are managed under Feed subscriptions) with its provider,
+host/name, derived status, and its **reach**. **Reach** SHALL be the count of
 distinct lens nodes — across **every** `pinnedBySpace[*]` (all Spaces, not the active
 one) — whose `sources[].sourceId` includes the account's id. Computing reach therefore
 requires the options page to read `pinnedBySpace` (a change from the prior Connectors
@@ -218,3 +245,4 @@ account by stable id order and leave the rest tokenless. A key already equal to 
 - **GIVEN** a legacy `lunma.connectors` record `{ 'ghe.example.com': 'ghp-y' }` for a host no lens (and thus no minted account) references
 - **WHEN** `reconcileAccountSecrets` runs
 - **THEN** the `ghe.example.com` token is left under its host key (never dropped), and binds to an account the next time one is created on that host
+

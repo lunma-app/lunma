@@ -39,7 +39,7 @@ lunma/                              # pnpm workspace root (private)
 │  │  │  │  ├─ lenspage/              # full Svelte page — one lens's read-only dashboard (vite rollupOptions.input entry)
 │  │  │  │  └─ shared/              # SearchEngine, scoring, providers, result/query types
 │  │  │  ├─ content/               # second declarative content script (tab-boundary.ts)
-│  │  │  └─ options/               # Options.svelte (orchestrator) · BackupRestore · FeedSubscriptions · RecentlyArchived · ConnectorsCard · ResultSourcesCard · ShortcutGuidanceCard · main.ts
+│  │  │  └─ options/               # Options.svelte (orchestrator) · BackupRestore · ConnectionsCard (Accounts + Feeds, one manager) · RecentlyArchived · ResultSourcesCard · ShortcutGuidanceCard · main.ts
 │  │  ├─ public/manifest.json       # MV3 manifest — crxjs derives build entries from it (+ vite rollupOptions.input for lenspage)
 │  │  ├─ e2e/                       # Playwright specs + fixtures (playwright.config.ts in apps/extension)
 │  │  │                             # unit tests are co-located: src/**/*.test.ts (no top-level tests/)
@@ -77,11 +77,11 @@ that mutate the store. Everything else is read-only or settings-only.
 | Surface | Owns | Reads from store | Writes to store |
 |---|---|---|---|
 | Background SW | Chrome event listeners, alarms, saved-tab bindings, auto-archive | yes (owns the store) | yes (invokes store methods directly) |
-| Sidebar | DOM, user interaction, drag-drop | yes (subscriber via state broadcast) | yes (calls store methods through the SW message bridge) |
+| Sidebar | DOM, user interaction, drag-drop | yes (subscriber via state broadcast) | yes (calls store methods through the SW message bridge); also mints accounts (`createAccount`) + writes a per-source token inline (`setAccountToken` via `shared/connectors.ts`) from the lens editor's "+ Connect an account" and a section's signed-out reconnect |
 | Launcher overlay | `Alt+L` page injection, search UI | no (queries the suggestions channel) | no — dispatches `focusTab` / `focusSavedTab` / `openSavedTab` / `openUrl` over the bus |
 | Launcher newtab | Empty-Space home (Space identity) + inline search | yes (read-only: snapshot + `state-broadcast`, like the sidebar) + queries the suggestions channel | no — dispatches result actions over the bus |
-| Lens page | One lens's spacious read-only dashboard (`launcher/lenspage/`, `?folderId=…`) | yes (read-only: snapshot + `state-broadcast`, like newtab) | no — dispatches `openLensItem` / `openLensListing` over the bus |
-| Options | Settings UI + Connectors (per-host PATs) | reads `chrome.storage.sync` directly; reads `chrome.storage.local` for archived tabs + the `lunma.connectors` record | writes `chrome.storage.sync`; writes `lunma.connectors` in `chrome.storage.local` via `shared/connectors.ts` |
+| Lens page | One lens's spacious read-only dashboard (`launcher/lenspage/`, `?folderId=…`) | yes (read-only: snapshot + `state-broadcast`, like newtab) + writes a per-source token inline (`setAccountToken`) when a section's signed-out reconnect is used | no — dispatches `openLensItem` / `openLensListing` / `refreshLens` over the bus |
+| Options | Settings UI + one **Connections** manager (`ConnectionsCard`: an Accounts group for auth Accounts with per-**source** PATs, and a Feeds group for rss Feeds with OPML import/export), via the shared `ui/ServiceConnectPicker` connect picker | reads `chrome.storage.sync` directly; reads `chrome.storage.local` for archived tabs, the persisted `AppState` (for `AppState.sources` + `pinnedBySpace` reach), and the `lunma.connectors` record | writes `chrome.storage.sync`; account entity over the bus (`createAccount`/`renameAccount`/`deleteAccount`); writes the per-`sourceId` token in `lunma.connectors` via `shared/connectors.ts` (`setAccountToken`) |
 | Onboarding | Static content + open links (Planned) | no | no |
 
 The lens page is opened/focused (one reused tab per window) by the
@@ -89,11 +89,25 @@ The lens page is opened/focused (one reused tab per window) by the
 URL + `folderId` — no persisted binding. It is reached from the sidebar lens
 folder header: the row body + chevron keep normal expand/collapse, and a
 hover/focus-revealed "open as page" icon (`ui/FolderRow` gains an optional
-`onOpenPage`; regular folders pass none) + the kebab item open the page. It
-renders feed entries as rich magazine cards (title + excerpt +
-thumbnail + date) from the optional `LensItem` fields the RSS connector
-now parses; queue items stay compact. It is registered as a vite
-`rollupOptions.input` entry (not `web_accessible_resources` — least privilege).
+`onOpenPage`; regular folders pass none) + the kebab item open the page. The
+connection-first lens editor also opens it on **Create** (the editor client-mints
+the lens id — `createLens.id`, mirroring `createAccount` — then dispatches
+`openLensPage`). The page renders **by canonical entity** (lens-overview):
+`LensPage` is a **single-lens** page — it renders the one lens its `?folderId`
+opened (lens-to-lens navigation is the side panel's job, not a second in-page
+rail), tinting `--lens-h` to the lens's owning-Space hue. It shows the lens's
+identity row + scoped connection chips, a view router (overview ↔ the three
+"All …" drill-downs), and the body. `OverviewPage` buckets items **per item** via
+`entityForItem` (the
+populated typed bag, NOT the source provider) — so ONE github section yields both
+Change rows (PRs, the `change` bag) and Issue rows (issues, the `ticket` bag) — and
+renders one section card per non-empty bucket in the order **Changes → Issues →
+Reading → Other**: the Change row carries a synthesized CI verdict + an inline
+linked-ticket chip (`refs[0]`); the Issues board (`IssuesBoard`) renders the
+`Ticket` entity (priority/status/project, merging Jira + git issues); Reading
+(`ReadingMagazine`) is the feed magazine. Pills are the shared `ui/Pill` primitive.
+It is registered as a vite `rollupOptions.input` entry (not
+`web_accessible_resources` — least privilege).
 
 ### Why the launcher overlay stays vanilla
 
@@ -274,15 +288,21 @@ const initial: AppState = {
   tabLastActivity: {},
   archivedTabs: [],
   trash: {},
+  sources: {},                 // { [sourceId]: SourceAccount } — connected ACCOUNTS (connector-accounts).
+                               //   SourceAccount = { id; provider:'gitlab'|'github'|'jira'|'rss'; baseUrl; name? }
+                               //   — a first-class, broadcast-safe source identity carrying NO token (the
+                               //     secret lives only in lunma.connectors, keyed by the same id). Lenses
+                               //     reference accounts; one account may feed many lenses (many-to-many).
   pinnedBySpace: {},           // { [spaceId]: PinNode[] } — ordered tree of tab|folder|lens nodes
                                //   PinNode = { kind:'tab'; id }
                                //           | { kind:'folder'; id; name; icon; color; children: savedTabId[] }
-                               //           | {  kind:'lens'; id; name; icon; sources: LensSource[]; maxItems; hideRead; refreshMinutes }
-                               //               LensSource = { source:'gitlab'|'github'|'jira'|'rss'; baseUrl; queries: SmartQuery[] }
-                               //               — one entry per connector INSTANCE (source+host); `queries` is its set of
-                               //                 canned filters (queue: non-empty; rss: []). The engine expands each entry
-                               //                 over `queries[]` into per-filter ResolvedSourceConfig = { source; baseUrl; query? }
-                               //                 (one fetch/section per filter) via resolvedConfigs(node).
+                               //           | {  kind:'lens'; id; name; icon; sources: LensSourceRef[]; maxItems; hideRead; refreshMinutes }
+                               //               LensSourceRef = { sourceId; queries: LensQuery[] }
+                               //               — a REFERENCE to an AppState.sources account; `queries` is its set of
+                               //                 canned filters (queue: non-empty; rss: []). resolvedConfigs(node, sources)
+                               //                 resolves each ref against the accounts map and expands it over `queries[]`
+                               //                 into per-filter ResolvedLensSource = { source; baseUrl; query?; sourceId; lensKind }
+                               //                 (one fetch/section per filter); a dangling ref (account removed) yields none.
                                //   single-level (folder children are tab ids, never nested folders);
                                //   a lens node is connector CONFIG only — its displayed children are
                                //   ephemeral query results in lenses, never persisted on the node
@@ -681,6 +701,7 @@ schema widened but old data needs no transformation:
 | 7 | reshaped each `lensItemBindings` slot from a bare `tabId` number into `{ tabId, allowGlob: '' }` |
 | 8 | replaced the flat `source`/`baseUrl`/`query?` on each lens node with `sources: [{ source, baseUrl, query }]`; re-keyed `lensItemBindings` item ids to `"${sourceKey}:${nativeId}"` |
 | 9 | rewrote each `sources[]` entry from the flat `query?` shape to `queries: LensQuery[]` (queue → `[query]`, rss → `[]`); re-keyed `lensItemBindings` from `"${source}:${host}:${nativeId}"` to the per-filter `"${source}:${host}:${query}:${nativeId}"` (orphans dropped) |
+| 13 | extracted each lens node's embedded `sources: LensSource[]` into first-class `SourceAccount`s under a new `AppState.sources` map (one per distinct `(provider, baseUrl)`, deduped, `name` carried onto the account) and rewrote each lens's `sources` to `LensSourceRef[]` (`{ sourceId, queries }`). The separate, unversioned `lunma.connectors` secrets store is re-keyed host→`sourceId` by the boot-chain `reconcileAccountSecrets` step (NOT the pure migrate fn) |
 
 The v7 migration walks `smartItemBindings[folderId][itemId][windowId]` and
 rewrites any numeric slot to `{ tabId, allowGlob: '' }`. The v8 migration wraps

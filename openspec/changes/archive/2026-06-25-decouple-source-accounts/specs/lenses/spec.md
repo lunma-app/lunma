@@ -226,11 +226,15 @@ kind's allowed providers — e.g. a `review` lens shows only github/gitlab accou
 **pickable rows**: each row shows the account identity (provider glyph + name/host) and
 its derived status, a checkbox to include it, and — once included — the per-reference
 **filter multi-select** (authored / assigned / review-requested; hidden for an rss
-account). A **"+ Connect an account"** action SHALL append a connect flow that captures
-provider + `baseUrl` (+ optional name) and the inline connect affordance (method-aware:
-required token for a `pat`-only provider, optional for a session-capable one), mints
-the account (client-minted id via `createAccount` + `setAccountToken`), and returns the
-new account to the picker pre-selected. Confirming SHALL be blocked when no account is
+account). A **"+ Connect an account"** action SHALL append a connect flow that captures an
+**Account** provider (auth providers only — github/gitlab/jira) + `baseUrl` and the
+inline connect affordance (method-aware: required token for a `pat`-only provider,
+optional for a session-capable one), mints the account (client-minted id via
+`createAccount` + optional `setAccountToken`), and returns it to the picker
+pre-selected. A `general` lens SHALL also offer **"+ Add a feed"** — a URL-only flow
+(no provider, no token) that mints an rss **Feed** (`createAccount` with `provider:
+'rss'`) and returns it pre-selected (`queries: []`); a `review` lens SHALL NOT offer
+it (auth accounts only). RSS is added as a Feed, never via "Connect an account". Confirming SHALL be blocked when no account is
 selected, when a selected queue account has zero filters, or when a connect flow is
 incomplete. `createLens`/`updateLens` SHALL carry `sources: LensSourceRef[]`
 (references, not embedded configs). A reference or filter change on an existing lens

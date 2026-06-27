@@ -737,40 +737,57 @@ unknown-id convention. Closing a bound tab rides the existing
 
 ### Requirement: Lens lifecycle commands
 
-The `SidebarCommand` union SHALL include four lens lifecycle kinds with flat payloads (no nested config object); update/delete/refresh address `{ spaceId, folderId }`, matching the existing folder-command convention (`renameFolder`, `deleteFolder`, …):
+The `SidebarCommand` union SHALL include four lens lifecycle kinds; update/delete/refresh address `{ spaceId, folderId }`, matching the existing folder-command convention. After this change a lens's sources are **references to connected Accounts** (see the `connector-accounts` capability), so the create/update payloads carry `sources: LensSourceRef[]` (`{ sourceId: SourceId; queries: LensQuery[] }`) rather than embedded connector configs:
 
-- `createLens` — `{ spaceId: SpaceId; source: LensProvider; name: string; baseUrl: string; query: 'authored' | 'assigned' | 'review-requested'; refreshMinutes: number }`. The SW mints the node id (`crypto.randomUUID`) and the `icon` (the source connector's `mintedIcon` — `'folder-git-2'` for the git forges, `'folder-kanban'` for Jira), normalizes `baseUrl` (absolute http(s) URL required, trailing slash stripped; invalid SHALL throw), clamps `refreshMinutes` to the floor of 5, inserts the node at the top of the Space's pinned list via `store.addLens(spaceId, node)` (matching `createFolder`'s top insertion), retunes the poll alarm, and triggers an immediate first fetch. Unknown `spaceId` SHALL throw (error ack).
-- `updateLens` — `{ spaceId: SpaceId; folderId: FolderId; source: LensProvider; name: string; baseUrl: string; query: 'authored' | 'assigned' | 'review-requested'; refreshMinutes: number }`. Edits the node in place via `store.updateLens(spaceId, folderId, config)`; a `baseUrl`, `query`, or `source` change invalidates `fetchedAt` and triggers an immediate refetch. Unknown `spaceId` or `folderId` SHALL throw.
-- `deleteLens` — `{ spaceId: SpaceId; folderId: FolderId }`. Removes the node from its pinned list and drops its `lenses` runtime entry via `store.deleteLens(spaceId, folderId)`, then retunes (or clears) the poll alarm. Unknown `spaceId` or `folderId` SHALL throw. No tabs are closed.
-- `refreshLens` — `{ spaceId: SpaceId; folderId: FolderId }`. Refreshes that folder unconditionally. The handler SHALL ack `ok` once the refresh is underway; the fetch **outcome** (ok / signed-out / error) lands via the runtime slice and the state broadcast, never via the ack. Unknown `spaceId` or `folderId` SHALL throw.
+- `createLens` — `{ spaceId: SpaceId; sources: LensSourceRef[]; name: string; maxItems: number; refreshMinutes: number; lensKind?: LensKind }`. The SW mints the node id (`crypto.randomUUID`) and the `icon` (the first referenced account's provider `mintedIcon` when all referenced accounts share a provider, else `'layers'`), validates that every `sourceId` resolves to an existing `AppState.sources` account, clamps `refreshMinutes` to the floor of 5, inserts the node at the top of the Space's pinned list via `store.addLens(spaceId, node)`, stamps `lensKind` (defaulting to `'general'` when absent), retunes the poll alarm, and triggers an immediate first fetch. Unknown `spaceId`, an empty `sources`, or any unresolved `sourceId` SHALL throw (error ack).
+- `updateLens` — `{ spaceId: SpaceId; folderId: FolderId; sources: LensSourceRef[]; name: string; maxItems: number; refreshMinutes: number; lensKind?: LensKind }`. Edits the node in place via `store.updateLens`; a `sources` (reference set) or filter change invalidates `fetchedAt` for the affected resolved sections and triggers an immediate refetch of those only. An absent `lensKind` preserves the existing kind. Unknown `spaceId`/`folderId`, an empty `sources`, or an unresolved `sourceId` SHALL throw.
+- `deleteLens` — `{ spaceId: SpaceId; folderId: FolderId }`. Removes the node and drops its `lenses` runtime entry via `store.deleteLens`, then retunes (or clears) the poll alarm. No tabs are closed. Unknown `spaceId`/`folderId` SHALL throw.
+- `refreshLens` — `{ spaceId: SpaceId; folderId: FolderId }`. Refreshes that folder unconditionally and acks `ok` once underway; the fetch **outcome** lands via the runtime slice and the state broadcast, never via the ack. Unknown `spaceId`/`folderId` SHALL throw.
 
-All four payloads SHALL be validated by Zod schemas in the `bus.ts` discriminated union, with `query` and `source` as `z.enum`s (`source` over `['gitlab', 'github', 'jira']`) and `refreshMinutes` as a number. The `bus.ts` `PinNode` mirror's lens member SHALL admit all three `source` values, so a tree containing a lens node of any source round-trips `reorderPinned` losslessly. Connector fetch failures SHALL never reject any command ack.
+All four payloads SHALL be validated by Zod schemas in the `bus.ts` discriminated union (`LensQuery` and the account `provider` as `z.enum`s over `['gitlab', 'github', 'jira', 'rss']`; `lensKind` over `['general', 'review']`). Connector fetch failures SHALL never reject any command ack.
 
-#### Scenario: createLens inserts a SW-minted node at the top and fetches
+#### Scenario: createLens references accounts and inserts a SW-minted node
 
-- **WHEN** the sidebar dispatches `bus.send({ kind: 'createLens', payload: { spaceId: 'work', source: 'github', name: 'My pull requests', baseUrl: 'https://github.com', query: 'review-requested', refreshMinutes: 10 } })`
-- **THEN** the handler SHALL insert a `lens` node with a SW-minted id, `source: 'github'`, and the source's minted icon at the top of `pinnedBySpace.work`
-- **AND** SHALL trigger an immediate first fetch and ack `ok`
+- **WHEN** the sidebar dispatches `createLens` with `sources: [{ sourceId: 'acc-1', queries: ['review-requested'] }]` referencing an existing `github` account
+- **THEN** the handler SHALL insert a `lens` node with a SW-minted id, the referenced account's minted icon, and the stamped `lensKind` at the top of `pinnedBySpace.work`, and trigger an immediate first fetch and ack `ok`
 
-#### Scenario: A jira createLens is accepted and mints the kanban icon
+#### Scenario: createLens with an unresolved sourceId rejects
 
-- **WHEN** the sidebar dispatches `bus.send({ kind: 'createLens', payload: { spaceId: 'work', source: 'jira', name: 'My reported issues', baseUrl: 'https://acme.atlassian.net', query: 'authored', refreshMinutes: 10 } })`
-- **THEN** `SidebarCommandSchema` validation SHALL pass and the handler SHALL insert a `lens` node with `source: 'jira'` and `icon: 'folder-kanban'` at the top of `pinnedBySpace.work`
-- **AND** a tree containing that node SHALL round-trip `reorderPinned` losslessly
+- **WHEN** a `createLens` payload carries a `sourceId` absent from `AppState.sources`
+- **THEN** `SidebarCommandSchema` validation passes but the handler SHALL throw and the ack SHALL carry `{ error }`, and no node SHALL be persisted
 
 #### Scenario: refreshLens acks before the fetch resolves
 
 - **WHEN** the sidebar dispatches `refreshLens` for an existing folder
-- **THEN** the ack SHALL be `ok` without awaiting the network fetch
-- **AND** a subsequent `state-broadcast` SHALL carry the fetch outcome in the runtime slice
+- **THEN** the ack SHALL be `ok` without awaiting the network fetch, and a subsequent `state-broadcast` SHALL carry the fetch outcome in the runtime slice
 
 #### Scenario: Lifecycle commands on an unknown folder reject
 
-- **WHEN** `updateLens`, `deleteLens`, or `refreshLens` is dispatched with a `spaceId` absent from `state.spaces`, or a `folderId` that matches no lens node in `pinnedBySpace[spaceId]`
+- **WHEN** `updateLens`, `deleteLens`, or `refreshLens` is dispatched with a `spaceId` absent from `state.spaces`, or a `folderId` matching no lens node
 - **THEN** the handler SHALL throw and the ack SHALL carry `{ error }`
 
-#### Scenario: An out-of-vocabulary source is rejected at the bus boundary
+### Requirement: Account lifecycle commands
 
-- **WHEN** a `createLens` payload carries `source: 'bitbucket'` (a source the registry does not hold)
-- **THEN** `SidebarCommandSchema` validation SHALL fail and the command is never enqueued
+The `SidebarCommand` union SHALL include three account lifecycle kinds operating on the persisted `AppState.sources` map (the token is NOT carried over the bus — it is written directly via `setAccountToken`; see the `connector-accounts` capability):
+
+- `createAccount` — `{ id: SourceId; provider: LensProvider; baseUrl: string; name?: string }`. The `id` is **client-minted** (a UUID generated on the surface) so a surface can reference the new account inline in a following `createLens` without awaiting the `void` ack. The SW SHALL normalize/validate `baseUrl` (absolute http(s), trailing slash stripped; invalid throws), reject a duplicate `id` (error ack), and store the account via the single-writer store.
+- `renameAccount` — `{ id: SourceId; name: string }`. Sets the account's display name. Unknown `id` SHALL throw.
+- `deleteAccount` — `{ id: SourceId }`. Removes the account from `AppState.sources`. Lens references to the removed `sourceId` are left dangling and render the calm "account removed" state (the surface pairs this with `setAccountToken(id, null)` to clear the secret). Unknown `id` SHALL throw.
+
+All three payloads SHALL be validated by Zod schemas in the `bus.ts` discriminated union, with `provider` as a `z.enum` over `['gitlab', 'github', 'jira', 'rss']`.
+
+#### Scenario: createAccount persists a client-minted account
+
+- **WHEN** the sidebar dispatches `createAccount` with `{ id: 'acc-1', provider: 'github', baseUrl: 'https://github.com/' }`
+- **THEN** `AppState.sources['acc-1']` SHALL be stored with `baseUrl` normalized to `https://github.com`, and a subsequent `createLens` referencing `acc-1` SHALL resolve
+
+#### Scenario: A duplicate account id rejects
+
+- **WHEN** `createAccount` is dispatched with an `id` already present in `AppState.sources`
+- **THEN** the handler SHALL throw and the ack SHALL carry `{ error }`
+
+#### Scenario: deleteAccount removes the entity and leaves refs dangling
+
+- **WHEN** `deleteAccount` is dispatched for an account referenced by a lens
+- **THEN** `AppState.sources` drops the account and the referencing lens section renders the calm "account removed" state (no crash, no error ack)
 
