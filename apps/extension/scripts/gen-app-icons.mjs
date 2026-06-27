@@ -9,9 +9,10 @@
 // gradients + the crescent mask exactly), then screenshot at each pixel size into
 // public/icons/.
 //
-// Small-size rule (§5): at 16px the outer halo blur muddies into a smudge, so the
-// 16px variant drops the halos and keeps the crescent + ember dot, slightly
-// enlarged, on the dark tile.
+// No background tile: the mark renders on transparent (a rounded SQUARE behind a
+// round moon read oddly and ate space — the crescent IS the icon, edge to edge).
+// Small-size rule (§5): at 16px the ember glow muddies into a smudge, so the 16px
+// variant drops it and keeps just the crescent + ember dot.
 //
 // Run: `node scripts/gen-app-icons.mjs` (from apps/extension). Not wired into the
 // build — the source is static, so regenerate only when the mark changes.
@@ -23,8 +24,6 @@ import { chromium } from '@playwright/test';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = resolve(here, '../public/icons');
-
-const BG = '#201b15'; // dark warm substrate (matches brand --bg)
 
 /** The crescent gradients + mask, authored on the brand's 200-unit grid. `id`
  * namespaces them so two inlined sizes never collide. */
@@ -54,15 +53,18 @@ function defs(id) {
 }
 
 /**
- * The full mark: dark rounded tile + the crescent (masked gradient), the ember
- * dot in its mouth, and the hue-glow halos. The art is inset to 80% of the tile.
+ * The full mark: NO background tile — just the crescent (masked gradient) + the
+ * ember dot in its mouth, on transparent, so the moon IS the icon (a square tile
+ * behind a round moon read oddly and ate space). `FILL` scales the crescent about
+ * its own centre (96,102) — its outer circle is r64, ≈64% of the 200-grid — and
+ * recentres it on the canvas (100,100) so it reaches near the edges. The big outer
+ * hue-halo is dropped (no tile to glow over); a soft ember glow stays around the dot.
  */
+const FILL = 'translate(100 100) scale(1.45) translate(-96 -102)';
 function fullSvg(px, id) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 200 200" fill="none">
   ${defs(id)}
-  <rect width="200" height="200" rx="53" fill="${BG}" />
-  <g transform="translate(20 20) scale(0.8)">
-    <circle cx="108" cy="96" r="96" fill="url(#${id}-halo)" />
+  <g transform="${FILL}">
     <g mask="url(#${id}-cmask)"><rect x="0" y="0" width="200" height="200" fill="url(#${id}-cres)" /></g>
     <circle cx="124" cy="92" r="30" fill="url(#${id}-halo)" />
     <circle cx="124" cy="92" r="14" fill="url(#${id}-dot)" />
@@ -71,14 +73,14 @@ function fullSvg(px, id) {
 }
 
 /**
- * The 16px variant: crescent + ember dot only (halos dropped), enlarged to 88%
- * so the moon stays a recognisable shape on the dark tile at tab size.
+ * The 16px variant: crescent + ember dot only (ember glow dropped too), on
+ * transparent, filling the canvas via the same `FILL` transform so the moon reads
+ * boldly at tab size.
  */
 function miniSvg(px, id) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 200 200" fill="none">
   ${defs(id)}
-  <rect width="200" height="200" rx="44" fill="${BG}" />
-  <g transform="translate(12 12) scale(0.88)">
+  <g transform="${FILL}">
     <g mask="url(#${id}-cmask)"><rect x="0" y="0" width="200" height="200" fill="url(#${id}-cres)" /></g>
     <circle cx="124" cy="92" r="14" fill="url(#${id}-dot)" />
   </g>
