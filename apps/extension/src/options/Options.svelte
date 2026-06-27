@@ -10,16 +10,14 @@ import {
   TOGGLE_SEGMENTS,
   writeSetting,
 } from '../shared/settings';
-import { applyDensityToDocument } from '../shared/surface-boot';
-import Aurora from '../ui/Aurora.svelte';
+import { applyDensityToDocument, applyThemeToDocument } from '../shared/surface-boot';
 import SegmentedControl from '../ui/SegmentedControl.svelte';
 import Select from '../ui/Select.svelte';
 import SettingsCard from '../ui/SettingsCard.svelte';
 import SettingText from '../ui/SettingText.svelte';
 import TextInput from '../ui/TextInput.svelte';
 import BackupRestore from './BackupRestore.svelte';
-import ConnectorsCard from './ConnectorsCard.svelte';
-import FeedSubscriptions from './FeedSubscriptions.svelte';
+import ConnectionsCard from './ConnectionsCard.svelte';
 import RecentlyArchived from './RecentlyArchived.svelte';
 import ResultSourcesCard from './ResultSourcesCard.svelte';
 import ShortcutGuidanceCard from './ShortcutGuidanceCard.svelte';
@@ -49,6 +47,12 @@ const groups = $derived.by(() => {
   }
   return [...map.entries()];
 });
+
+// The comp leads with Connections, then Look & feel; the remaining registry
+// groups (Search, Appearance, Pinned tabs, Tabs, Auto-archive) follow as
+// kept-but-restyled cards.
+const lookAndFeel = $derived(groups.find(([group]) => group === 'Look & feel'));
+const otherGroups = $derived(groups.filter(([group]) => group !== 'Look & feel'));
 
 // The custom-search-URL template is invalid only when it is actually the active
 // engine (`custom`) AND lacks the `%s` placeholder — then `resolveDefaultEngine`
@@ -103,15 +107,11 @@ function applyDensity(density: Settings['density']): void {
   applyDensityToDocument(density);
 }
 
-/** Reflect the colour-intensity (tint) onto this document's `<html>` so the
- * `:root[data-tint=…]` glass overrides recolour the cards live — the same
- * attribute-driven mechanism `[data-density]` uses for the preview rows. The
- * cards are glass at every level; the tint only calms the glass fill (neutral
- * → faintly tinted → full hue), so the dial ramps smoothly across all three
- * stops. The explicit value is written for every level, including `vivid`,
- * which uses the hue-tinted `:root` glass default. */
-function applyTint(tint: Settings['tint']): void {
-  document.documentElement.dataset.tint = tint;
+/** Reflect the light/dark theme onto `<html>` so the warm-paper
+ * `:root[data-theme="light"]` token set takes over (or the warm-night default).
+ * The atmosphere glow + cards recolour live as the dial flips. */
+function applyTheme(theme: Settings['theme']): void {
+  applyThemeToDocument(theme);
 }
 
 onMount(() => {
@@ -121,7 +121,7 @@ onMount(() => {
     if (cancelled) return;
     settings = s;
     applyDensity(s.density);
-    applyTint(s.tint);
+    applyTheme(s.theme);
   })();
   return () => {
     cancelled = true;
@@ -158,10 +158,9 @@ function onSelect(decl: SettingDeclaration, value: string): void {
   settings = { ...settings, [decl.key]: next };
   void writeSetting(decl.key, next);
   // Read the freshly-merged value back from `settings` so each apply call is
-  // typed precisely (`settings.density`/`settings.tint`) rather than the cast
-  // `DensityMode | Tint` union.
+  // typed precisely rather than the cast `DensityMode | Tint | ThemeMode` union.
   if (decl.key === 'density') applyDensity(settings.density);
-  else if (decl.key === 'tint') applyTint(settings.tint);
+  else if (decl.key === 'theme') applyTheme(settings.theme);
 }
 
 /** Persist a `text` setting on every keystroke (immediate-apply, like the enum
@@ -192,154 +191,160 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
 }
 </script>
 
-<div class="page lunma-space-scope" data-show-glares={String(settings.showGlares)}>
+<div class="page">
+  <!-- Atmosphere glow (redesign): two soft, blurred colour fields drifting behind
+       the page — a warm one top-left, a cool one bottom-right. Gated on the
+       "Atmosphere glow" toggle; the drift is held when "Reduce motion" is on (and
+       always under the OS reduced-motion preference). -->
   {#if settings.showGlares}
-    <Aurora intensity="subtle" />
+    <div class="atmosphere" aria-hidden="true">
+      <span class="blob warm" class:still={settings.reduceMotion}></span>
+      <span class="blob cool" class:still={settings.reduceMotion}></span>
+    </div>
   {/if}
 
   <header class="topbar">
-    <span class="wordmark">
-      <span class="dot" aria-hidden="true"></span>
-      Lunma
-    </span>
-    <span class="version">v{version}</span>
+    <div class="topbar-inner">
+      <span class="wordmark">Lunma</span>
+      <span class="subtitle">Options</span>
+    </div>
   </header>
 
   <main class="column">
     <!-- Unbound-shortcut guidance (renders only when Alt+L is unbound). -->
     <ShortcutGuidanceCard />
 
-    {#each groups as [group, decls] (group)}
-      <SettingsCard heading={group} id={groupSlug(group)} headingTestid="group-heading">
-        {#each decls as decl (decl.key)}
-          {#if isVisible(decl)}
-            <div class="setting" class:stacked={isStacked(decl)}>
-              <SettingText label={decl.label} description={decl.description} />
-              {#if decl.type === 'enum' && decl.options.length > SEGMENTED_MAX}
-                <Select
-                  options={decl.options}
-                  value={String(settings[decl.key])}
-                  ariaLabel={decl.label}
-                  onchange={(value) => onSelect(decl, value)}
-                />
-              {:else if decl.type === 'enum'}
-                <SegmentedControl
-                  name={decl.key}
-                  options={decl.options}
-                  value={String(settings[decl.key])}
-                  ariaLabel={decl.label}
-                  onchange={(value) => onSelect(decl, value)}
-                />
-              {:else if decl.type === 'text'}
-                <div class="text-field">
-                  <TextInput
-                    ariaLabel={decl.label}
-                    value={String(settings[decl.key])}
-                    placeholder={decl.placeholder}
-                    invalid={decl.key === 'customSearchUrl' && customUrlInvalid}
-                    oninput={(value) => onTextInput(decl, value)}
-                  />
-                  {#if decl.key === 'customSearchUrl'}
-                    <!-- Height-reserved danger slot (mirrors SpaceEditor's
-                         duplicate-name hint): always in the DOM so the row never
-                         jumps; only its opacity toggles when the template is
-                         invalid. One line, ellipsised. -->
-                    <p
-                      class="field-hint"
-                      class:visible={customUrlInvalid}
-                      data-visible={customUrlInvalid}
-                      data-testid="custom-url-hint"
-                      aria-live="polite"
-                    >
-                      Include <code>%s</code> where the query goes.
-                    </p>
-                  {/if}
-                  {#if decl.key === 'customSearchKeyword'}
-                    <!-- Same height-reserved slot for the Tab-to-search keyword:
-                         warns when the keyword collides with a built-in (the
-                         built-in wins; the keyword is shadowed). -->
-                    <p
-                      class="field-hint"
-                      class:visible={customKeywordColliding}
-                      data-visible={customKeywordColliding}
-                      data-testid="custom-keyword-hint"
-                      aria-live="polite"
-                    >
-                      <code>{settings.customSearchKeyword.trim()}</code> is a built-in keyword — the
-                      built-in wins.
-                    </p>
-                  {/if}
-                </div>
-              {:else if decl.type === 'toggle'}
-                <SegmentedControl
-                  name={decl.key}
-                  options={TOGGLE_SEGMENTS}
-                  value={settings[decl.key] ? 'on' : 'off'}
-                  ariaLabel={decl.label}
-                  onchange={(value) => onToggle(decl, value === 'on')}
-                />
-              {:else if decl.type === 'number'}
-                <div class="text-field">
-                  <TextInput
-                    ariaLabel={decl.label}
-                    inputmode="numeric"
-                    value={String(settings[decl.key])}
-                    placeholder={decl.placeholder}
-                    testid={`number-${decl.key}`}
-                    oninput={(value) => onNumberInput(decl, value)}
-                  />
-                </div>
-              {/if}
-            </div>
-          {/if}
-        {/each}
-      </SettingsCard>
+    <!-- Connections (sources-redesign, D1): the single manager for every
+         connected source — leads the page per the comp. -->
+    <ConnectionsCard />
+
+    <!-- Look & feel (redesign): theme + atmosphere glow + reduce-motion, rendered
+         from the settings registry as segmented rows. -->
+    {#if lookAndFeel}
+      {@render groupCard(lookAndFeel[0], lookAndFeel[1])}
+    {/if}
+
+    <!-- The remaining settings groups (Search, Appearance, Pinned tabs, Tabs,
+         Auto-archive) — kept, restyled into the same solid section card. -->
+    {#each otherGroups as [group, decls] (group)}
+      {@render groupCard(group, decls)}
     {/each}
 
     <!-- Recently archived (auto-archive): the management view the sidebar chip
-         deep-links to (`#recently-archived`). Placed directly under the Auto-archive
-         registry group (`#auto-archive`) — policy and the view it produces sit
-         together, matching the sidebar's first-run "Manage in settings" deep-link. -->
+         deep-links to (`#recently-archived`). -->
     <RecentlyArchived />
 
     <!-- Result sources (least-privilege-permissions D5): the launcher's optional
-         history/bookmarks providers, granted in-context. This is the canonical
-         grant control — the Alt+L overlay (which can't call chrome.permissions)
-         deep-links here via the SW (#result-sources). -->
+         history/bookmarks providers, granted in-context (#result-sources). -->
     <ResultSourcesCard />
 
-    <!-- Connectors (smart-folders, D10): per-instance access tokens, kept in
-         chrome.storage.local via shared/connectors.ts — never sync, never the
-         settings registry, never echoed back into the page. The `#connectors`
-         deep-link anchor moves intact with the extracted card. -->
-    <ConnectorsCard />
-
-    <!-- Feed subscriptions (opml-import-export): import/export RSS feed lists as
-         OPML. Self-contained: reads storage at action time; import goes through
-         the bus to the SW. Grouped with Connectors — both configure smart-folder
-         data sources. -->
-    <FeedSubscriptions />
-
-    <!-- Backup & restore (data-backup): export/import a portable JSON snapshot of
-         Spaces and settings. Terminal data-management action — natural footer
-         before the privacy link. Self-contained: export reads storage directly;
-         import goes through the bus to the SW. -->
+    <!-- Backup & restore (data-backup): the terminal data-management action —
+         natural footer before the privacy link. -->
     <BackupRestore />
 
     <!-- Privacy policy lives on the marketing site (never bundled in the
-         extension), so this is a plain outbound link opening in a new tab — the
-         options page is a full tab, so no bus round-trip is needed. -->
+         extension), so this is a plain outbound link opening in a new tab. -->
     <footer class="footer">
       <a href={PRIVACY_URL} target="_blank" rel="noopener" data-testid="options-privacy-link">
         Privacy policy
       </a>
+      <span class="version">v{version}</span>
     </footer>
   </main>
 </div>
 
+<!-- One registry group → one solid section card with full-bleed setting rows. -->
+{#snippet groupCard(group: string, decls: SettingDeclaration[])}
+  <SettingsCard heading={group} id={groupSlug(group)} headingTestid="group-heading" flush>
+    {#each decls as decl (decl.key)}
+      {#if isVisible(decl)}
+        <div class="setting" class:stacked={isStacked(decl)}>
+          <SettingText label={decl.label} description={decl.description} />
+          {#if decl.type === 'enum' && decl.options.length > SEGMENTED_MAX}
+            <Select
+              options={decl.options}
+              value={String(settings[decl.key])}
+              ariaLabel={decl.label}
+              onchange={(value) => onSelect(decl, value)}
+            />
+          {:else if decl.type === 'enum'}
+            <SegmentedControl
+              name={decl.key}
+              options={decl.options}
+              value={String(settings[decl.key])}
+              ariaLabel={decl.label}
+              onchange={(value) => onSelect(decl, value)}
+            />
+          {:else if decl.type === 'text'}
+            <div class="text-field">
+              <TextInput
+                ariaLabel={decl.label}
+                value={String(settings[decl.key])}
+                placeholder={decl.placeholder}
+                invalid={decl.key === 'customSearchUrl' && customUrlInvalid}
+                oninput={(value) => onTextInput(decl, value)}
+              />
+              {#if decl.key === 'customSearchUrl'}
+                <!-- Height-reserved danger slot (mirrors SpaceEditor's
+                     duplicate-name hint): always in the DOM so the row never
+                     jumps; only its opacity toggles when the template is
+                     invalid. One line, ellipsised. -->
+                <p
+                  class="field-hint"
+                  class:visible={customUrlInvalid}
+                  data-visible={customUrlInvalid}
+                  data-testid="custom-url-hint"
+                  aria-live="polite"
+                >
+                  Include <code>%s</code> where the query goes.
+                </p>
+              {/if}
+              {#if decl.key === 'customSearchKeyword'}
+                <!-- Same height-reserved slot for the Tab-to-search keyword:
+                     warns when the keyword collides with a built-in (the
+                     built-in wins; the keyword is shadowed). -->
+                <p
+                  class="field-hint"
+                  class:visible={customKeywordColliding}
+                  data-visible={customKeywordColliding}
+                  data-testid="custom-keyword-hint"
+                  aria-live="polite"
+                >
+                  <code>{settings.customSearchKeyword.trim()}</code> is a built-in keyword — the
+                  built-in wins.
+                </p>
+              {/if}
+            </div>
+          {:else if decl.type === 'toggle'}
+            <SegmentedControl
+              name={decl.key}
+              options={TOGGLE_SEGMENTS}
+              value={settings[decl.key] ? 'on' : 'off'}
+              ariaLabel={decl.label}
+              onchange={(value) => onToggle(decl, value === 'on')}
+            />
+          {:else if decl.type === 'number'}
+            <div class="text-field">
+              <TextInput
+                ariaLabel={decl.label}
+                inputmode="numeric"
+                value={String(settings[decl.key])}
+                placeholder={decl.placeholder}
+                testid={`number-${decl.key}`}
+                oninput={(value) => onNumberInput(decl, value)}
+              />
+            </div>
+          {/if}
+        </div>
+      {/if}
+    {/each}
+  </SettingsCard>
+{/snippet}
+
 <style>
   /* The options page is a standalone Chrome page with no app.css and no Svelte
-   * context — it owns its dark substrate so there's no white flash. */
+   * context — it owns its warm substrate (themed dark/light by `--bg`) so there's
+   * no white flash before the settings read resolves. */
   :global(html),
   :global(body) {
     margin: 0;
@@ -352,100 +357,95 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
   .page {
     position: relative;
     isolation: isolate;
+    display: flex;
+    flex-direction: column;
     min-height: 100vh;
-    /* Identity-hue token family — `--space-chroma` is declared HERE (not at :root)
-     * the same way `.sidebar`/`.home` do, so the shared `.lunma-space-scope` recipe
-     * (`@lunma/tokens`, applied on the `.page` element) can compose `--space-c` (the
-     * dot fill). This page has no active-Space context, so it reads the base
-     * identity hue via the `:root` `--space-h`. */
-    --space-chroma: 0.15;
-    /* `--glow-space` is declared at `:root` referencing `--space-chroma` with no
-     * fallback; since `--space-chroma` is undefined at `:root`, that token is
-     * invalid-at-computed-value where it is declared and inherits down EMPTY —
-     * so the local `--space-chroma` above can't rescue it. Redeclare it here,
-     * where `--space-chroma` is in scope, so the wordmark dot's hue glow renders
-     * (the same reason `--space-c` is redeclared, not just referenced). This page
-     * has no active Space, so `--space-l` inherits the `:root` ember default. */
-    --glow-space: 0 0 40px
-      oklch(clamp(0, calc(var(--space-l) + 0.1), 1) var(--space-chroma) var(--space-h) / 0.35);
+    font-size: var(--text-md);
+    line-height: 1.5;
   }
 
-  /* Background-effects off (`showGlares: false`): suppress the hue-glow tokens at
-   * `.page` scope (redeclared here so the substitution captures the local
-   * `--space-chroma`; the override must live at the same scope to win the cascade).
-   * Aurora is gated by `{#if settings.showGlares}` in the template. */
-  .page[data-show-glares='false'] {
-    --glow-space: 0 0 0 0 transparent;
-    --glow-space-soft: 0 0 0 0 transparent;
-    --glow-hearth: transparent;
+  /* Atmosphere glow: a fixed, non-interactive backdrop behind the content. */
+  .atmosphere {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
   }
-
-  /* Foreground above the aurora (positioned, z-base): the masthead and column
-   * are lifted into the raised layer so they paint over the backdrop. */
-  .topbar {
-    position: relative;
-    z-index: var(--z-raised);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 var(--space-5);
-    height: var(--control-h-xl);
-    background: var(--bg-elev);
-    border-bottom: 1px solid var(--divider);
-  }
-  /* Masthead wordmark at brand presence (D5): the display serif at `--text-2xl`
-   * with the identity glow dot, so the page opens on the brand rather than a faint
-   * label. Fits the `--control-h-xl` topbar with room to spare. */
-  .wordmark {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-family: var(--font-display);
-    font-size: var(--text-2xl);
-    font-weight: var(--weight-regular);
-    line-height: 1;
-    color: var(--text);
-  }
-  /* Identity hue dot with the shared hue glow — same gesture as the sidebar edge
-   * stripe and the new-tab tile, at the masthead. */
-  .dot {
-    width: var(--space-3);
-    height: var(--space-3);
+  .blob {
+    position: absolute;
     border-radius: var(--r-pill);
-    background: var(--space-c);
-    box-shadow: var(--glow-space);
+    filter: blur(36px);
   }
-  .version {
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    font-weight: var(--weight-regular);
-    color: var(--text-dim);
+  .blob.warm {
+    top: -20%;
+    left: -14%;
+    width: 60%;
+    height: 62%;
+    background: radial-gradient(closest-side, var(--atm-blob-warm), transparent 74%);
+    animation: opt-drift-warm 32s var(--ease-standard) infinite alternate;
   }
-
-  /* A quiet outbound link to the privacy policy, centred under the last card. */
-  .footer {
-    display: flex;
-    justify-content: center;
-    padding-top: var(--space-2);
+  .blob.cool {
+    right: -14%;
+    bottom: -20%;
+    width: 55%;
+    height: 58%;
+    background: radial-gradient(closest-side, var(--atm-blob-cool), transparent 74%);
+    animation: opt-drift-cool 36s var(--ease-standard) infinite alternate;
   }
-  .footer a {
-    color: var(--text-dim);
-    font-size: var(--text-sm);
-    text-decoration: underline;
-    text-underline-offset: 2px;
-    transition: color var(--motion-fast) var(--ease-standard);
+  .blob {
+    will-change: transform;
   }
-  .footer a:hover {
-    color: var(--text);
-  }
-  .footer a:focus-visible {
-    outline: var(--focus-width) solid var(--focus-color);
-    outline-offset: var(--focus-offset);
+  /* Reduce-motion (setting or OS): hold the drift; the glow stays, just still. */
+  .blob.still {
+    animation: none;
   }
   @media (prefers-reduced-motion: reduce) {
-    .footer a {
-      transition: none;
+    .blob {
+      animation: none;
     }
+  }
+  @keyframes opt-drift-warm {
+    to {
+      transform: translate3d(7%, 9%, 0) scale(1.12);
+    }
+  }
+  @keyframes opt-drift-cool {
+    to {
+      transform: translate3d(-8%, 7%, 0) scale(1.1);
+    }
+  }
+
+  /* Sticky frosted masthead: the wordmark + "Options", blurred over the warm
+   * header tint so the cards scroll under it. */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: var(--z-sticky);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    background: var(--header-bg);
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .topbar-inner {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    max-width: 680px;
+    margin: 0 auto;
+    padding: var(--space-3) var(--space-5);
+  }
+  .wordmark {
+    font-family: var(--font-display);
+    font-size: var(--text-xl);
+    font-weight: var(--weight-regular);
+    line-height: 1;
+    letter-spacing: 0.01em;
+    color: var(--text);
+  }
+  .subtitle {
+    font-size: var(--text-sm);
+    color: var(--text-dim);
   }
 
   .column {
@@ -453,64 +453,29 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
     z-index: var(--z-raised);
     display: flex;
     flex-direction: column;
-    /* `--space-6` inter-group rhythm (D5) so the page breathes between the serif
-     * group headings. */
-    gap: var(--space-6);
-    max-width: 560px;
+    gap: var(--space-4);
+    width: 100%;
+    max-width: 680px;
     margin: 0 auto;
     padding: var(--space-6) var(--space-5);
   }
 
-  /* Colour-intensity ramp — the cards are frosted glass at EVERY level; the tint
-   * only calms the glass fill, mirroring `.sidebar[data-tint]` / `.home[data-tint]`
-   * so the dial progresses smoothly instead of jumping opaque→glass. `vivid` (the
-   * default) keeps the hue-tinted `:root` `--glass-bg`; `standard` softens the
-   * chroma; `subtle` goes neutral. `data-tint` is written on `<html>` (= `:root`)
-   * by `applyTint`, so these override the inherited fill for the cards below. */
-  :global(:root[data-tint='standard']) {
-    --glass-bg: oklch(0.23 0.014 var(--base-hue) / 0.5);
-    --glass-bg-strong: oklch(0.25 0.016 var(--base-hue) / 0.66);
-  }
-  :global(:root[data-tint='subtle']) {
-    --glass-bg: oklch(0.22 0 0 / 0.5);
-    --glass-bg-strong: oklch(0.24 0 0 / 0.66);
-  }
-
-  /* The composed Surface cards cross-fade their glass fill as the tint changes
-   * (the `background` tweens between the per-level `--glass-bg` values); the blur
-   * is constant since every level is glass, so there is no opaque→glass snap. */
-  .column :global(.surface) {
-    transition:
-      background var(--motion-slow) var(--ease-emphasised),
-      border-color var(--motion-slow) var(--ease-emphasised),
-      box-shadow var(--motion-slow) var(--ease-emphasised);
-  }
-  /* Reduced motion: the tint change applies instantly (no cross-fade); the end
-   * state is identical, so reduced motion holds at every colour-intensity level. */
-  @media (prefers-reduced-motion: reduce) {
-    .column :global(.surface) {
-      transition: none;
-    }
-  }
-
-  /* Each glass group card is its own stacking context (backdrop-filter), so a
-   * dropdown popover anchored inside the Search card would otherwise paint
-   * BEHIND the next card. While a setting's listbox is open, lift its whole
-   * group card onto the dropdown layer so the popover overlays the cards below.
-   * `[role='listbox']` is unscoped, so `:has()` crosses the Select boundary. */
+  /* While a setting's listbox (the engine Select) is open, lift its card so the
+   * popover overlays the cards below it rather than tucking under the next one. */
   .column :global(.surface:has([role='listbox'])) {
     z-index: var(--z-dropdown);
   }
 
-  /* The registry card now composes the shared `SettingsCard` / `CardHeading`
-   * primitives; the shortcut-guidance card and the Connectors / Result-sources
-   * sections are extracted sibling components that own their own chrome. */
+  /* A full-bleed setting row: label + control with a divider above, owning its
+   * own horizontal inset so dividers reach the card edges (the comp's flush
+   * rows). */
   .setting {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: var(--space-4);
-    padding: var(--space-3) 0;
+    padding: var(--space-4) var(--space-5);
+    border-top: 1px solid var(--border-soft);
   }
 
   /* A wide control (the engine dropdown, any text field) can't share a row with
@@ -532,8 +497,7 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
   }
 
   /* Inline danger hint for the custom-URL template — always rendered (so the
-   * row height never jumps), opacity-toggled, single-line. Tinted from the
-   * shared `--danger` token, mirroring SpaceEditor's `.dupe-msg`. */
+   * row height never jumps), opacity-toggled, single-line. */
   .field-hint {
     margin: 0;
     padding-left: var(--space-1);
@@ -557,5 +521,37 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
     }
   }
 
-
+  /* A quiet outbound link to the privacy policy + the build version, centred
+     under the last card. */
+  .footer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    padding-top: var(--space-2);
+  }
+  .version {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--text-faint);
+  }
+  .footer a {
+    color: var(--text-dim);
+    font-size: var(--text-sm);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    transition: color var(--motion-fast) var(--ease-standard);
+  }
+  .footer a:hover {
+    color: var(--text);
+  }
+  .footer a:focus-visible {
+    outline: var(--focus-width) solid var(--focus-color);
+    outline-offset: var(--focus-offset);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .footer a {
+      transition: none;
+    }
+  }
 </style>

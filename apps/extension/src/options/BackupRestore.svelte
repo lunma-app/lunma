@@ -112,6 +112,7 @@ async function cancelImport(): Promise<void> {
 <SettingsCard
   heading="Backup & restore"
   description="Move your Spaces to another machine, or keep a copy."
+  flush
 >
   <div class="setting">
     <SettingText label="Include settings" description="Carry your preferences to the new machine." />
@@ -125,7 +126,7 @@ async function cancelImport(): Promise<void> {
   </div>
 
   <div class="actions" bind:this={actionsEl}>
-    <Button variant="primary" onclick={() => void handleExport()}>Export backup</Button>
+    <Button variant="secondary" onclick={() => void handleExport()}>Export backup</Button>
     {#if confirmingImport}
       <div class="import-confirm" data-testid="import-confirm" bind:this={confirmRowEl}>
         <span class="confirm-text">Replace your data? This cannot be undone.</span>
@@ -140,7 +141,9 @@ async function cancelImport(): Promise<void> {
   </div>
 
   {#if importError}
-    <InlineError message={importError} testid="import-error" />
+    <div class="card-foot">
+      <InlineError message={importError} testid="import-error" />
+    </div>
   {/if}
 
   <!-- Hidden file input — activated by Import backup button click. -->
@@ -163,19 +166,19 @@ async function cancelImport(): Promise<void> {
    * primitives; this card owns only its row layout. */
   .setting {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: var(--space-4);
-    padding: var(--space-3) 0;
-    border-top: 1px solid var(--divider);
+    padding: var(--space-4) var(--space-5);
+    border-top: 1px solid var(--border-soft);
   }
 
   .actions {
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    padding-top: var(--space-4);
-    border-top: 1px solid var(--divider);
+    padding: var(--space-4) var(--space-5) var(--space-5);
+    border-top: 1px solid var(--border-soft);
   }
 
   /* Inline import confirm row — same shape as RecentlyArchived "Clear all". */
@@ -187,5 +190,9 @@ async function cancelImport(): Promise<void> {
   .confirm-text {
     font: var(--weight-medium) var(--text-sm) / 1.3 var(--font-sans);
     color: var(--text-muted);
+  }
+  /* The error box keeps the card's gutter under the flush body. */
+  .card-foot {
+    padding: 0 var(--space-5) var(--space-4);
   }
 </style>

@@ -16,8 +16,8 @@ const REGISTRY_RADIOS = SETTINGS.reduce((n, decl) => {
   return n;
 }, 0);
 
-// Options is now an orchestrator: the Connectors / Result-sources / Shortcut
-// guidance behaviours are covered by `ConnectorsCard.test.ts`,
+// Options is now an orchestrator: the Connections / Result-sources / Shortcut
+// guidance behaviours are covered by `ConnectionsCard.test.ts`,
 // `ResultSourcesCard.test.ts`, and `ShortcutGuidanceCard.test.ts`. This mock
 // only carries what the orchestrator + its still-mounted child cards need on
 // mount (settings sync, a benign storage.local for the data cards, and stubbed
@@ -43,7 +43,7 @@ function installChromeMock(): ChromeMock {
   (globalThis as unknown as { chrome: unknown }).chrome = {
     storage: {
       sync: { get: mock.get, set: mock.set },
-      // The Connectors / Feeds / RecentlyArchived child cards read storage.local
+      // The Connections / RecentlyArchived child cards read storage.local
       // on mount; an empty record is fine for the orchestrator's own tests.
       local: {
         get: vi.fn(async () => ({})),
@@ -154,7 +154,9 @@ describe('Options', () => {
         'lunma.settings': {
           density: 'comfort',
           tint: 'vivid',
+          theme: 'dark',
           showGlares: true,
+          reduceMotion: false,
           pinnedTabBoundaryDefault: 'off',
           defaultSearchEngine: 'google',
           customSearchUrl: '',
@@ -182,7 +184,9 @@ describe('Options', () => {
         'lunma.settings': {
           density: 'normal',
           tint: 'subtle',
+          theme: 'dark',
           showGlares: true,
+          reduceMotion: false,
           pinnedTabBoundaryDefault: 'off',
           defaultSearchEngine: 'google',
           customSearchUrl: '',
@@ -209,7 +213,9 @@ describe('Options', () => {
         'lunma.settings': {
           density: 'normal',
           tint: 'vivid',
+          theme: 'dark',
           showGlares: true,
+          reduceMotion: false,
           pinnedTabBoundaryDefault: 'domain',
           defaultSearchEngine: 'google',
           customSearchUrl: '',
@@ -263,14 +269,17 @@ describe('Options — Search group', () => {
     expect(container.querySelectorAll('[data-testid="text-input"]').length).toBe(2);
   });
 
-  test('the Search group renders first, ahead of Appearance', () => {
+  test('Look & feel leads the registry groups (per the comp), Search ahead of Appearance', () => {
     const { container } = render(Options, { props: {} });
     // Assert against the registry-group heading testid (not the `.group-label`
-    // class, which the primitive swap + section extraction would break).
+    // class, which the primitive swap + section extraction would break). The
+    // redesign leads with Connections (a standalone card) then Look & feel — so
+    // Look & feel is the first registry group-heading; the remaining groups keep
+    // their declared order (Search before Appearance).
     const labels = [...container.querySelectorAll('[data-testid="group-heading"]')].map((el) =>
       el.textContent?.trim(),
     );
-    expect(labels[0]).toBe('Search');
+    expect(labels[0]).toBe('Look & feel');
     expect(labels.indexOf('Search')).toBeLessThan(labels.indexOf('Appearance'));
   });
 
