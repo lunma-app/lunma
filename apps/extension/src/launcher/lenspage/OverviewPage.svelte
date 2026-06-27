@@ -1,10 +1,11 @@
 <script lang="ts">
+import Diffstat from '../../ui/Diffstat.svelte';
 import Icon from '../../ui/Icon.svelte';
 import Pill from '../../ui/Pill.svelte';
+import ReviewerRail from '../../ui/ReviewerRail.svelte';
 import {
   changeMeta,
-  changeState,
-  ciCircle,
+  ciLight,
   feedLabel,
   feedsOf,
   groupByRelation,
@@ -14,7 +15,7 @@ import {
   RELATION_LABEL,
   relTime,
   reposOf,
-  reviewerHue,
+  reviewersForRail,
   statusDot,
   statusVM,
   stripKeyPrefix,
@@ -145,8 +146,7 @@ const empty = $derived(
                 <span class="group-count">{group.items.length}</span>
               </div>
               {#each group.items as t (t.sk + t.item.id)}
-                {@const ci = ciCircle(t.item.status?.tone)}
-                {@const st = changeState(t.item)}
+                {@const ci = ciLight(t.item)}
                 <button class="row" type="button" data-testid="change-row" onclick={() => openItem(t)}>
                   <span class="mono" aria-hidden="true">{t.cfg.source === 'gitlab' ? 'GL' : 'GH'}</span>
                   <span class="row-body">
@@ -158,21 +158,15 @@ const empty = $derived(
                     </span>
                     {#if t.item.change}<span class="row-meta">{changeMeta(t.item.change)}</span>{/if}
                   </span>
-                  <span class="row-right">
-                    <span class="row-right-top">
-                      {#if t.item.change && t.item.change.reviewers.length > 0}
-                        <span class="reviewers" title={`Reviewers: ${t.item.change.reviewers.map((r) => r.login).join(', ')}`}>
-                          {#each t.item.change.reviewers.slice(0, 4) as r, i (r.login)}
-                            <span class="avatar" class:stacked={i > 0} style:--rv-h={String(reviewerHue(r.login))} aria-hidden="true"></span>
-                          {/each}
-                        </span>
-                      {/if}
+                  {#if t.item.change}
+                    <span class="row-right">
                       {#if ci}
-                        <span class="ci" style:--ci-h={String(ci.hue)} title={ci.label} aria-hidden="true">{ci.glyph}</span>
+                        <span class="ci" class:hollow={ci.draft} style:--ci-h={String(ci.hue)} title={ci.label} aria-hidden="true">{ci.glyph}</span>
                       {/if}
+                      <ReviewerRail reviewers={reviewersForRail(t.item.change)} />
+                      <Diffstat additions={t.item.change.additions} deletions={t.item.change.deletions} />
                     </span>
-                    <Pill hue={st.hue} size="md" testid="verdict">{st.label}</Pill>
-                  </span>
+                  {/if}
                 </button>
               {/each}
             </div>
@@ -628,30 +622,13 @@ const empty = $derived(
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  /* Trailing triage cluster: CI light · ReviewerRail · Diffstat — three
+     orthogonal signals (pipeline / review / size), none duplicated. */
   .row-right {
     flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 6px;
-  }
-  .row-right-top {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-  }
-  .reviewers {
-    display: inline-flex;
-  }
-  .avatar {
-    width: 18px;
-    height: 18px;
-    border-radius: var(--r-pill);
-    background: oklch(0.5 0.09 var(--rv-h));
-    border: 2px solid var(--surface-2);
-  }
-  .avatar.stacked {
-    margin-left: -6px;
+    gap: 10px;
   }
   .ci {
     display: inline-flex;
@@ -664,6 +641,13 @@ const empty = $derived(
     font-weight: var(--weight-bold);
     color: oklch(0.82 0.1 var(--ci-h));
     background: oklch(0.55 0.13 var(--ci-h) / 0.2);
+  }
+  /* Draft: a hollow ring (no fill) so the locus reads as "not yet under CI",
+     distinguished by shape, not colour alone. */
+  .ci.hollow {
+    color: var(--text-dim);
+    background: none;
+    box-shadow: inset 0 0 0 1.5px var(--border);
   }
 
   /* ── Articles ─────────────────────────────────────────────────────────────── */

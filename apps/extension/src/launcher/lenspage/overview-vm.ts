@@ -155,23 +155,10 @@ export function ciGlyph(
   return null;
 }
 
-/** The drill-down per-row state pill, derived from draft + aggregate review. */
-export function changeState(item: LensItem): { label: string; hue?: number } {
-  if (item.change?.draft) return { label: 'draft' };
-  const rs = item.change ? reviewState(item.change.reviewers) : undefined;
-  if (rs === 'changes') return { label: 'changes', hue: 25 };
-  if (rs === 'approved') return { label: 'approved', hue: 150 };
-  return { label: 'open', hue: 252 };
-}
-
-/** Change row meta — `repo · +adds −dels` (U+2212 minus); diffstat omitted when
- * the connector couldn't supply it (GitLab MRs). */
+/** Change row subline — the `owner/repo` slug. The diffstat rides the `Diffstat`
+ * primitive (not baked into this text). */
 export function changeMeta(change: ChangeData): string {
-  const parts = [change.repo];
-  if (change.additions !== undefined || change.deletions !== undefined) {
-    parts.push(`+${change.additions ?? 0} −${change.deletions ?? 0}`);
-  }
-  return parts.join(' · ');
+  return change.repo;
 }
 
 // ── Ticket (Issues) view-model ─────────────────────────────────────────────────
@@ -261,20 +248,50 @@ export function groupByRelation(changes: Tagged[]): { relation: Relation; items:
   })).filter((g) => g.items.length > 0);
 }
 
-// ── Changes: reviewer avatar hue (stable, derived from the login) ───────────────
-export function reviewerHue(login: string): number {
-  let h = 0;
-  for (let i = 0; i < login.length; i++) h = (h * 31 + login.charCodeAt(i)) % 360;
-  return h;
+// ── Changes: reviewer rail mapping (login → ReviewerRail's Reviewer shape) ───────
+/** 1–2 uppercase initials from a login: the first char of each of the first two
+ * `-`/`_`/`.`/space-separated parts, or the first two chars of a single token. */
+export function initialsOf(login: string): string {
+  const parts = login
+    .trim()
+    .split(/[-_. ]+/)
+    .filter(Boolean);
+  const a = parts[0];
+  if (!a) return '?';
+  const b = parts[1];
+  if (!b) return a.slice(0, 2).toUpperCase();
+  return ((a[0] ?? '') + (b[0] ?? '')).toUpperCase();
 }
 
-// ── Changes: the CI circle (passed ✓ / failed ✕ / running ●), the comp's glyph ──
-export function ciCircle(
-  tone?: 'ok' | 'pending' | 'warn' | 'fail',
-): { glyph: string; hue: number; label: string } | null {
-  if (tone === 'ok' || tone === 'warn') return { glyph: '✓', hue: 150, label: 'CI passed' };
-  if (tone === 'fail') return { glyph: '✕', hue: 25, label: 'CI failing' };
-  if (tone === 'pending') return { glyph: '●', hue: 75, label: 'CI running' };
+/** A ReviewerRail reviewer: initials disc + verdict ring + name tooltip. `state`
+ * passes through from `ChangeData` (absent → the rail renders `pending`). */
+export interface RailReviewer {
+  initials: string;
+  state?: 'approved' | 'changes' | 'pending' | undefined;
+  title: string;
+}
+/** Map a change's reviewers into the `ReviewerRail` input shape. */
+export function reviewersForRail(change: ChangeData): RailReviewer[] {
+  return change.reviewers.map((r) => ({
+    initials: initialsOf(r.login),
+    state: r.state,
+    title: r.login,
+  }));
+}
+
+// ── Changes: the CI light (passed ✓ / failed ✕ / running ●, or a hollow draft ○) ─
+/** The Changes-row CI light from the status tone, or a distinct hollow glyph when
+ * the change is a draft (`draft` takes the locus over CI). Null when neither a
+ * draft nor a known tone — the row renders no light. */
+export function ciLight(
+  item: LensItem,
+): { glyph: string; hue: number; label: string; draft: boolean } | null {
+  if (item.change?.draft) return { glyph: '○', hue: 252, label: 'Draft', draft: true };
+  const tone = item.status?.tone;
+  if (tone === 'ok' || tone === 'warn')
+    return { glyph: '✓', hue: 150, label: 'CI passed', draft: false };
+  if (tone === 'fail') return { glyph: '✕', hue: 25, label: 'CI failing', draft: false };
+  if (tone === 'pending') return { glyph: '●', hue: 75, label: 'CI running', draft: false };
   return null;
 }
 

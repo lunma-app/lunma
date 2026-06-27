@@ -148,9 +148,13 @@ describe('LensPage — single-lens shell + per-item bucketing', () => {
     expect(sections).toContain('ticket');
     expect(container.querySelector('[data-testid="change-row"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="issue-row"]')).not.toBeNull();
-    // The Change row carries the review-state pill, a failing CI circle, + its ticket chip.
-    expect(container.querySelector('[data-testid="verdict"]')?.textContent).toContain('open');
+    // The Change row carries a failing CI light, a Diffstat, + its ticket chip — and
+    // no separate review-state pill (the ReviewerRail verdict glyph carries that).
     expect(container.querySelector('[data-entity="change"] .ci')?.textContent).toBe('✕');
+    expect(
+      container.querySelector('[data-entity="change"] [data-testid="diffstat"]')?.textContent,
+    ).toContain('+10');
+    expect(container.querySelector('[data-testid="verdict"]')).toBeNull();
     expect(container.querySelector('[data-testid="ticket-ref"]')?.textContent).toBe('PAY-88');
   });
 
