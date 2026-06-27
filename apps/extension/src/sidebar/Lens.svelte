@@ -5,6 +5,7 @@ import { dispatch } from '../shared/bus';
 import { requiredOriginsForConfig } from '../shared/connector-origins';
 import { setAccountToken } from '../shared/connectors';
 import { entityForItem, type LensEntity } from '../shared/lens-entity';
+import { sourceKey } from '../shared/lens-labels';
 import { requestHostPermissions } from '../shared/permissions';
 import type {
   AppState,
@@ -82,14 +83,6 @@ const isActivePeek = $derived.by(() => {
 });
 
 const spaceColor = $derived(store.state.spaces.find((s) => s.id === spaceId)?.color ?? 'gray');
-
-// Per-filter section identity key — same formula as background/smart-folders.ts
-// but defined locally to respect the layer DAG (sidebar cannot import from
-// background/): `${source}:${host}:${query}` for queue, `${source}:${host}` for rss.
-function sourceKey(cfg: ResolvedLensSource): string {
-  const base = `${cfg.source}:${new URL(cfg.baseUrl).host}`;
-  return cfg.query !== undefined ? `${base}:${cfg.query}` : base;
-}
 
 // Per-section collapse read — `collapsedLensSectionsByWindow` is augmented onto
 // the store by the sidebar (sidebar-local, never part of `AppState`), so read it

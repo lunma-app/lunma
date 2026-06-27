@@ -1,3 +1,4 @@
+import { sourceKey } from '../shared/lens-labels';
 import { log } from '../shared/logger';
 import { hasHostPermissions, onPermissionsChange } from '../shared/permissions';
 import type { LunmaStore } from '../shared/store.svelte';
@@ -43,17 +44,7 @@ export const REFRESH_MINUTES_DEFAULT = 10;
 
 export type LensNode = Extract<PinNode, { kind: 'lens' }>;
 
-/**
- * Stable per-**section** identity key for a RESOLVED single-query config:
- * `${source}:${host}:${query}` for queue sections, `${source}:${host}` for rss
- * (no query). Derived from `baseUrl` + the resolved `query`, so two filters of
- * the same connector instance land in distinct sections. Exported so the
- * sidebar can derive the same key without importing from `background/`.
- */
-export function sourceKey(cfg: ResolvedLensSource): string {
-  const base = `${cfg.source}:${new URL(cfg.baseUrl).host}`;
-  return cfg.query !== undefined ? `${base}:${cfg.query}` : base;
-}
+export { sourceKey };
 
 /**
  * Resolve a lens node's `sources[]` account REFERENCES against
