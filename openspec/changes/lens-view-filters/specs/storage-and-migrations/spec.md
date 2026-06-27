@@ -14,7 +14,7 @@ empty default. Per schema-to-type coherence, `LensFilterSchema` SHALL match the
 
 #### Scenario: A lens with a filter round-trips under schema 14
 
-- **GIVEN** a state at schema version 14 with a lens whose node carries `filter: { entities: ['change'], repos: ['o/a'] }`
+- **GIVEN** a state at schema version 14 with a lens whose node carries `filter: { entities: ['change'], repos: ['github.com/o/a'] }`
 - **WHEN** the state is persisted and reloaded
 - **THEN** it validates and the lens's `filter` is restored unchanged
 
