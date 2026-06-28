@@ -53,12 +53,12 @@ All reads and writes of settings SHALL go through `apps/extension/src/shared/set
 
 ### Requirement: Settings reads are Zod-validated with safe field-level fallback
 
-`readSettings()` SHALL parse the stored object through the derived Zod schema. Each field SHALL use `.catch(<declared default>)` so an out-of-range or wrong-typed stored value falls back to that setting's default rather than failing the whole read. A completely absent or unparseable object SHALL yield `DEFAULTS`.
+`readSettings()` SHALL parse the stored object through the derived Zod schema. Each field SHALL use `.catch(<declared default>)` so an out-of-range or wrong-typed stored value falls back to that setting's default rather than failing the whole read. A completely absent or unparseable object SHALL yield `DEFAULTS`. The declared default for `density` SHALL be `comfort`.
 
 #### Scenario: Unknown enum value falls back to the declared default
 
 - **WHEN** `'lunma.settings'` contains `{ density: 'ultra' }`
-- **THEN** `readSettings()` resolves with `density: 'normal'`
+- **THEN** `readSettings()` resolves with `density: 'comfort'`
 
 #### Scenario: Malformed object yields defaults
 
@@ -180,7 +180,7 @@ changes via `watchSettings`.
 ### Requirement: Global default for keeping pinned tabs on their site
 
 Settings SHALL declare `pinnedTabBoundaryDefault: 'off' | 'domain' | 'page'`
-(default `'off'`) as an enum setting in a `Pinned tabs` group, rendered by the
+(default `'off'`) as an enum setting in the `Tabs` group, rendered by the
 existing declarative settings engine and persisted to `chrome.storage.sync`. The
 setting SHALL be the **baseline** that an individual pinned tab's `boundary`
 overrides:
@@ -210,18 +210,11 @@ whose `boundary` is explicitly set.
 
 - **WHEN** the user changes `pinnedTabBoundaryDefault` to `'domain'`
 - **THEN** every bound pinned tab with no explicit boundary SHALL become confined to its registrable domain without re-pinning
-- **AND** a pinned tab whose boundary is explicitly `{ mode: 'off' }` SHALL remain free
 
-#### Scenario: Flipping the default to page locks inheriting tabs to their view
+#### Scenario: The control renders under the Tabs group
 
-- **WHEN** the user changes `pinnedTabBoundaryDefault` to `'page'`
-- **THEN** every bound inheriting pinned tab SHALL become confined to `pageGlob(originalURL)` (origin + path + `*`) without re-pinning
-- **AND** every inheriting global favorite SHALL likewise resolve to `'page'` scope (the favorite floor is domain, which `'page'` exceeds)
-
-#### Scenario: An unknown stored value falls back to the default
-
-- **WHEN** the stored `pinnedTabBoundaryDefault` is not a declared option
-- **THEN** the settings read SHALL fall back to `'off'` (the declared default)
+- **WHEN** the options page is rendered from the settings declarations
+- **THEN** the `pinnedTabBoundaryDefault` control SHALL appear under the `Tabs` group, not a separate `Pinned tabs` group
 
 ### Requirement: Default search engine and custom template settings
 
@@ -350,7 +343,7 @@ explaining the behaviour.
 ### Requirement: Background effects (showGlares) toggle setting
 
 The settings registry SHALL declare a `showGlares` toggle (`type: 'toggle'`,
-`group: 'Appearance'`, `label: 'Background effects'`, `default: true`) on the
+`group: 'Appearance'`, `label: 'Atmosphere glow'`, `default: true`) on the
 `Settings` interface. When `false`, all aurora backdrop and hue-glow light
 effects SHALL be suppressed on every surface; the setting has no effect on
 glass panels (`backdrop-filter`). Persistence, Zod schema (`z.boolean().catch(true)`),
@@ -375,11 +368,11 @@ without a reload.
 #### Scenario: The toggle renders on the options page
 
 - **WHEN** the options page is rendered from the settings declarations
-- **THEN** a two-segment Off | On `SegmentedControl` for "Background effects" SHALL appear under the "Appearance" group
+- **THEN** a two-segment Off | On `SegmentedControl` for "Atmosphere glow" SHALL appear under the "Appearance" group
 
 #### Scenario: Changing the toggle updates the surface live
 
-- **WHEN** the user sets "Background effects" to Off
+- **WHEN** the user sets "Atmosphere glow" to Off
 - **THEN** the new value SHALL persist to `chrome.storage.sync`
 - **AND** a consuming surface SHALL update its `data-show-glares` attribute via `watchSettings` without reload
 
@@ -457,4 +450,63 @@ D4 holds, enforced by `biome check`'s `noImportCycles`). The endonym option labe
 
 - **WHEN** the `language` setting's options render
 - **THEN** each option SHALL show its endonym literal (Español, 日本語, …), not a message-backed string
+
+### Requirement: Theme setting
+
+The settings registry SHALL declare a `theme` enum (`type: 'enum'`,
+`group: 'Appearance'`, `label: 'Theme'`, `default: 'dark'`, options
+`dark | light`) on the `Settings` interface. It SHALL render under the
+`Appearance` group as a segmented control reflecting the stored value, and a
+consuming surface SHALL reflect it onto `data-theme` and update live via
+`watchSettings`.
+
+#### Scenario: Theme defaults to dark and renders under Appearance
+
+- **WHEN** the options page renders with no stored `theme`
+- **THEN** a `Dark | Light` segmented control labelled "Theme" SHALL appear under the "Appearance" group with `Dark` selected
+
+### Requirement: Reduce motion setting
+
+The settings registry SHALL declare a `reduceMotion` toggle (`type: 'toggle'`,
+`group: 'Appearance'`, `label: 'Reduce motion'`, `default: false`) on the
+`Settings` interface. When `true`, drifting/ambient motion SHALL be held and
+transitions eased; the OS `prefers-reduced-motion` preference SHALL still force
+the reduced state regardless of this setting.
+
+#### Scenario: Reduce motion defaults to false and renders under Appearance
+
+- **WHEN** the options page renders with no stored `reduceMotion`
+- **THEN** a two-segment Off | On control labelled "Reduce motion" SHALL appear under the "Appearance" group set to Off
+
+### Requirement: Options page sections are organised, named, and self-describing
+
+The options page SHALL present its settings under a small set of named sections
+rendered in this order: `Connections`, `Search & launcher`, `Appearance`,
+`Tabs`, `Auto-archive`, `Backup & restore`. There SHALL be no separate
+`Look & feel` or `Pinned tabs` section — `theme`, `showGlares`, `reduceMotion`,
+`density`, and `tint` all live under `Appearance`, and `pinnedTabBoundaryDefault`
+lives under `Tabs`.
+
+Each section card SHALL render a one-line description beneath its heading
+(via a `SettingsCard` `description` prop). The launcher's optional result-source
+providers card SHALL render directly beneath the `Search & launcher` group, and
+the recently-archived management card directly beneath the `Auto-archive` group,
+so each management surface sits with the settings it relates to.
+
+#### Scenario: Appearance is the single visual section
+
+- **WHEN** the options page renders
+- **THEN** a single `Appearance` section SHALL contain Theme, Colour intensity, Density, Atmosphere glow, and Reduce motion
+- **AND** no `Look & feel` section SHALL render
+
+#### Scenario: Sections carry intro copy
+
+- **WHEN** the options page renders
+- **THEN** each section card SHALL show a one-line description beneath its heading
+
+#### Scenario: Management cards sit with their settings
+
+- **WHEN** the options page renders
+- **THEN** the result-sources card SHALL appear directly beneath the `Search & launcher` group
+- **AND** the recently-archived card SHALL appear directly beneath the `Auto-archive` group
 
