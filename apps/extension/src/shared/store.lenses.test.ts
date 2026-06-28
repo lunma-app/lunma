@@ -320,6 +320,16 @@ describe('feed read-state (rss-connector design D3)', () => {
     expect(node?.['filter']).toBeUndefined();
   });
 
+  test('setLensFilter persists a feeds-only filter (feeds counts toward non-empty)', () => {
+    store.addLens('work', feedNode());
+    store.setLensFilter('feed-1', { feeds: ['The Verge'] });
+    expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({ filter: { feeds: ['The Verge'] } });
+    // …and clearing the only feed empties the filter back out.
+    store.setLensFilter('feed-1', { feeds: [] });
+    const node = store.state.pinnedBySpace.work?.[0] as Record<string, unknown> | undefined;
+    expect(node?.['filter']).toBeUndefined();
+  });
+
   test('setLensFilter with unknown folderId is a no-op', () => {
     store.addLens('work', feedNode());
     store.setLensFilter('nonexistent', { entities: ['change'] });

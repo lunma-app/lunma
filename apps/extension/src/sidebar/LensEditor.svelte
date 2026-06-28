@@ -18,8 +18,8 @@ import type {
 } from '../shared/types';
 import AccountChip from '../ui/AccountChip.svelte';
 import Button from '../ui/Button.svelte';
-import Chip from '../ui/Chip.svelte';
 import Icon from '../ui/Icon.svelte';
+import MultiSelect, { type MultiSelectOption } from '../ui/MultiSelect.svelte';
 import Select from '../ui/Select.svelte';
 import ServiceConnectPicker from '../ui/ServiceConnectPicker.svelte';
 import { scrollFade } from '../ui/scroll-fade';
@@ -50,39 +50,8 @@ const { spaceId, windowId, node, onDone }: Props = $props();
 
 const store = useStore();
 
-/** Canonical filter order — keeps section order stable regardless of tick order. */
+/** Canonical query order — keeps section order stable regardless of tick order. */
 const QUERY_ORDER: LensQuery[] = ['authored', 'assigned', 'review-requested'];
-
-const SUGGESTED_QUEUE_NAME: Record<Exclude<LensProvider, 'rss'>, Record<LensQuery, string>> = {
-  gitlab: {
-    authored: 'My merge requests',
-    assigned: 'Assigned to me',
-    'review-requested': 'Review requests',
-  },
-  github: {
-    authored: 'My pull requests',
-    assigned: 'Assigned to me',
-    'review-requested': 'Review requests',
-  },
-  bitbucket: {
-    authored: 'My pull requests',
-    assigned: 'Assigned to me',
-    'review-requested': 'Review requests',
-  },
-  jira: {
-    authored: 'My reported issues',
-    assigned: 'Assigned to me',
-    'review-requested': 'Watching',
-  },
-};
-
-const CADENCE_OPTIONS = [
-  { value: '5', label: m.sidebar_lensCadence5() },
-  { value: '10', label: m.sidebar_lensCadence10() },
-  { value: '30', label: m.sidebar_lensCadence30() },
-  { value: '60', label: m.sidebar_lensCadenceHour() },
-];
-const MAX_ITEMS_VALUES = ['10', '20', '30', '50'];
 
 /** Whether an account is Bitbucket Cloud (host bitbucket.org) — the deployment
  * that supports `authored` only (add-bitbucket-connector, D4). A malformed
@@ -96,40 +65,34 @@ function isCloudBitbucket(account: Pick<SourceAccount, 'provider' | 'baseUrl'>):
   }
 }
 
-/** The canned queries an account offers in the editor. Bitbucket's set is
- * deployment-dependent (add-bitbucket-connector, D4): Cloud → `authored` only;
- * Server/DC → `authored` + `review-requested`; never `assigned` (Bitbucket has
- * no assignee). Every other queue provider offers all three. */
+/** The queries an account actually supports. Bitbucket's set is deployment-bounded
+ * (add-bitbucket-connector, D4): Cloud → `authored` only; Server/DC → `authored` +
+ * `review-requested`; never `assigned` (Bitbucket has no assignee). Every other
+ * queue provider offers all three. */
 function supportedQueriesFor(account: Pick<SourceAccount, 'provider' | 'baseUrl'>): LensQuery[] {
   if (account.provider === 'bitbucket') {
     return isCloudBitbucket(account) ? ['authored'] : ['authored', 'review-requested'];
   }
-  return ['authored', 'assigned', 'review-requested'];
+  return [...QUERY_ORDER];
 }
 
-/** The default query stamped on a newly-selected queue account: `review-requested`
- * for the forges/jira (its established default), but `authored` for bitbucket —
- * the one query valid on BOTH bitbucket deployments. */
-function defaultQueriesFor(account: SourceAccount): LensQuery[] {
-  if (account.provider === 'rss') return [];
-  return account.provider === 'bitbucket' ? ['authored'] : ['review-requested'];
+/** Including a source contributes ALL of its SUPPORTED queries (D7, "a lens is all
+ * your stuff from its sources, narrowed in the overview"): the deployment-bounded
+ * relation set for a git/jira account, none for an rss feed. Filtering to the
+ * supported set keeps the editor from ever minting a ref the SW rejects (a Cloud
+ * Bitbucket `review-requested`, or any Bitbucket `assigned`). Used by `confirm`,
+ * the section count, and the entity preview so they always agree. */
+function queriesFor(account: SourceAccount): LensQuery[] {
+  return account.provider === 'rss' ? [] : supportedQueriesFor(account);
 }
 
-function queryOptionsFor(
-  account: Pick<SourceAccount, 'provider' | 'baseUrl'>,
-): Array<{ value: LensQuery; label: string }> {
-  const supported = supportedQueriesFor(account);
-  const all: Array<{ value: LensQuery; label: string }> = [
-    { value: 'authored', label: m.sidebar_lensRoleAuthored() },
-    { value: 'assigned', label: m.sidebar_lensRoleAssigned() },
-    {
-      value: 'review-requested',
-      label:
-        account.provider === 'jira' ? m.sidebar_lensRoleWatching() : m.sidebar_lensRoleReviewing(),
-    },
-  ];
-  return all.filter((opt) => supported.includes(opt.value));
-}
+const CADENCE_OPTIONS = [
+  { value: '5', label: m.sidebar_lensCadence5() },
+  { value: '10', label: m.sidebar_lensCadence10() },
+  { value: '30', label: m.sidebar_lensCadence30() },
+  { value: '60', label: m.sidebar_lensCadenceHour() },
+];
+const MAX_ITEMS_VALUES = ['10', '20', '30', '50'];
 
 // The entity each canonical bucket shows, with its preview label + dot colour.
 const ENTITY_LABEL: Record<LensEntity, string> = {
@@ -140,12 +103,10 @@ const ENTITY_LABEL: Record<LensEntity, string> = {
 };
 
 // ── selection model ────────────────────────────────────────────────────────────
+// Just the chosen source ids (in pick order); each contributes its full query set
+// at confirm time (D7), so there is no per-source query state to track.
 // svelte-ignore state_referenced_locally
 let selectedOrder = $state<string[]>(node ? node.sources.map((ref) => ref.sourceId) : []);
-// svelte-ignore state_referenced_locally
-let queriesById = $state<Record<string, LensQuery[]>>(
-  node ? Object.fromEntries(node.sources.map((ref) => [ref.sourceId, [...ref.queries]])) : {},
-);
 
 // Accounts minted in THIS editing session (the picker dispatched `createAccount`)
 // — shown before the SW broadcast round-trips back into `store.state.sources`.
@@ -161,8 +122,6 @@ let name = $state(node?.name ?? '');
 let maxItems = $state(String(node?.maxItems ?? 10));
 // svelte-ignore state_referenced_locally
 let refreshMinutes = $state(String(node?.refreshMinutes ?? 10));
-// svelte-ignore state_referenced_locally
-let nameTouched = $state(node !== undefined);
 
 // The picker list: ALL connected sources (no provider filtering — connection-first),
 // live + this-session pending, sorted by label.
@@ -177,31 +136,18 @@ function accountById(id: string): SourceAccount | undefined {
   return store.state.sources[id] ?? pendingAccounts.find((a) => a.id === id);
 }
 
-function isSelected(id: string): boolean {
-  return selectedOrder.includes(id);
-}
-
-function toggleAccount(account: SourceAccount): void {
-  if (isSelected(account.id)) {
-    selectedOrder = selectedOrder.filter((id) => id !== account.id);
-    const next = { ...queriesById };
-    delete next[account.id];
-    queriesById = next;
-  } else {
-    selectedOrder = [...selectedOrder, account.id];
-    queriesById = {
-      ...queriesById,
-      [account.id]: defaultQueriesFor(account),
-    };
-  }
-}
-
-function toggleQuery(id: string, q: LensQuery): void {
-  const cur = new Set(queriesById[id] ?? []);
-  if (cur.has(q)) cur.delete(q);
-  else cur.add(q);
-  queriesById = { ...queriesById, [id]: QUERY_ORDER.filter((x) => cur.has(x)) };
-}
+// The inline MultiSelect rows: one per connected source, the account name driving
+// search + the option's accessible name. The visible identity is the `leading`
+// AccountChip (the plain label span is suppressed when a leading snippet is set).
+// `keywords` folds the provider/type + host into the fuzzy search corpus, so typing a
+// type (e.g. "rss", "git") or host finds sources whose visible name doesn't contain it.
+const sourceOptions = $derived<MultiSelectOption[]>(
+  pickerAccounts.map((account) => ({
+    value: account.id,
+    label: accountLabel(account),
+    keywords: `${account.provider} ${hostLabel(account.baseUrl)}`,
+  })),
+);
 
 function statusOf(account: SourceAccount): ReturnType<typeof deriveAuthStatus> {
   return deriveAuthStatus(account.provider, tokenIds.has(account.id));
@@ -219,10 +165,6 @@ function onConnected(account: SourceAccount): void {
   }
   if (!selectedOrder.includes(account.id)) {
     selectedOrder = [...selectedOrder, account.id];
-    queriesById = {
-      ...queriesById,
-      [account.id]: defaultQueriesFor(account),
-    };
   }
   showPicker = false;
 }
@@ -231,7 +173,7 @@ function onConnected(account: SourceAccount): void {
  * rss account per parsed feed and pre-select each INTO this lens — the bulk
  * sibling of `onConnected`, so importing feeds while building a lens fills the
  * lens instead of spawning a separate "Feeds" lens (the Options-only behavior).
- * Dedupes by normalized baseUrl (one account per feed url) — within the
+ * Dedupes by normalized baseUrl (rss `sourceKey` is host-derived) — within the
  * batch and against already-connected accounts — so repeats reuse one account.
  * Mirrors `importOpml`'s find-or-mint, client-side with client-minted ids. */
 function importFeedsIntoLens(feeds: { name: string; feedUrl: string }[]): void {
@@ -277,50 +219,25 @@ const previewEntities = $derived.by<LensEntity[]>(() => {
   return (['change', 'ticket', 'article', 'generic'] as LensEntity[]).filter((e) => present.has(e));
 });
 
+// One section per included query (git/jira) or per rss feed — i.e. the full query
+// set each chosen source contributes (D7).
 const resolvedSectionCount = $derived(
   selectedOrder.reduce((n, id) => {
-    const provider = accountById(id)?.provider;
-    if (provider === 'rss') return n + 1;
-    return n + (queriesById[id]?.length ?? 0);
+    const account = accountById(id);
+    if (!account) return n;
+    return n + (account.provider === 'rss' ? 1 : queriesFor(account).length);
   }, 0),
 );
 
-const suggestedName = $derived.by(() => {
-  if (selectedOrder.length === 1) {
-    const id = selectedOrder[0] as string;
-    const account = accountById(id);
-    const queries = queriesById[id] ?? [];
-    if (account && account.provider !== 'rss' && queries.length === 1 && queries[0]) {
-      return SUGGESTED_QUEUE_NAME[account.provider][queries[0]] ?? '';
-    }
-  }
-  return '';
-});
-
-$effect(() => {
-  if (nameTouched) return;
-  if (name !== suggestedName) name = suggestedName;
-});
-
-const canConfirm = $derived.by(() => {
-  if (showPicker) return false;
-  if (selectedOrder.length === 0) return false;
-  for (const id of selectedOrder) {
-    const provider = accountById(id)?.provider;
-    if (provider !== 'rss' && (queriesById[id]?.length ?? 0) === 0) return false;
-  }
-  return true;
-});
+// Confirm gates only on having a source (and no half-finished connect flow); a
+// chosen source always contributes its full query set, so there is no per-source
+// "pick a filter" gate any more (D7).
+const canConfirm = $derived(!showPicker && selectedOrder.length > 0);
 
 const hint = $derived.by(() => {
   if (showPicker) return 'Finish connecting the service, or cancel.';
   if (pickerAccounts.length === 0) return 'Connect a service to build a lens.';
   if (selectedOrder.length === 0) return 'Pick a connection to continue.';
-  const needsFilter = selectedOrder.some((id) => {
-    const provider = accountById(id)?.provider;
-    return provider !== 'rss' && (queriesById[id]?.length ?? 0) === 0;
-  });
-  if (needsFilter) return 'Pick at least one filter for each queue account.';
   return 'Each connection fetches independently. Grant access when prompted.';
 });
 
@@ -356,13 +273,16 @@ function requestOrigins(refs: LensSourceRef[], prev: LensNode | undefined): void
 
 function confirm(): void {
   if (!canConfirm) return;
-  const refs: LensSourceRef[] = selectedOrder.map((id) => ({
-    sourceId: id,
-    queries: queriesById[id] ?? [],
-  }));
+  // Each chosen source contributes its full query set (D7): the canonical relation
+  // set for git/jira, none for rss. Sources whose account can't be resolved are
+  // dropped (defensive — a selected id should always resolve).
+  const refs: LensSourceRef[] = selectedOrder.flatMap((id) => {
+    const account = accountById(id);
+    return account ? [{ sourceId: id, queries: queriesFor(account) }] : [];
+  });
   const base = {
     spaceId,
-    name: name.trim() === '' ? suggestedName || 'Lens' : name.trim(),
+    name: name.trim() === '' ? m.sidebar_lensNamePlaceholder() : name.trim(),
     sources: refs,
     maxItems: Number(maxItems),
     refreshMinutes: Number(refreshMinutes),
@@ -394,11 +314,8 @@ function confirm(): void {
       <TextInput
         ariaLabel={m.common_name()}
         bind:value={name}
-        placeholder={suggestedName || 'Lens'}
+        placeholder={m.sidebar_lensNamePlaceholder()}
         testid="smart-folder-name"
-        oninput={() => {
-          nameTouched = true;
-        }}
         onenter={confirm}
       />
     </div>
@@ -408,21 +325,26 @@ function confirm(): void {
     <div class="field">
     <span class="field-label">{m.sidebar_lensReadFrom()}</span>
     <p class="field-help">{m.sidebar_lensReadFromHelp()}</p>
-    <div class="account-list" data-testid="smart-source-list">
-      {#each pickerAccounts as account (account.id)}
-        {@const selected = isSelected(account.id)}
-        <div class="account-pick" class:selected data-testid="account-pick-row" data-account-id={account.id}>
-          <button
-            type="button"
-            class="account-pick-toggle"
-            role="checkbox"
-            aria-checked={selected}
-            data-testid="account-pick-toggle"
-            onclick={() => toggleAccount(account)}
-          >
-            <span class="check" class:on={selected} aria-hidden="true">
-              {#if selected}<Icon name="check" size={12} />{/if}
-            </span>
+    <!-- Connection picker (D7): an inline MultiSelect of every connected source.
+         Ticking a source includes it (and all its queries); the leading AccountChip
+         is the row's identity (glyph + name + auth status). Rendered only once a
+         source exists — before that the "+ Connect a service" row is the entry. -->
+    {#if pickerAccounts.length > 0}
+      <MultiSelect
+        mode="inline"
+        options={sourceOptions}
+        values={selectedOrder}
+        onchange={(vals) => (selectedOrder = vals)}
+        label=""
+        ariaLabel={m.sidebar_lensReadFrom()}
+        searchPlaceholder={m.sidebar_lensSourceSearch()}
+        selectAllLabel={m.common_selectAll()}
+        clearLabel={m.common_deselectAll()}
+        testid="smart-source-list"
+      >
+        {#snippet leading(option)}
+          {@const account = accountById(option.value)}
+          {#if account}
             <AccountChip
               bare
               provider={account.provider}
@@ -430,22 +352,10 @@ function confirm(): void {
               status={isFeedProvider(account.provider) ? undefined : statusOf(account)}
               title={hostLabel(account.baseUrl)}
             />
-          </button>
-          {#if selected && account.provider !== 'rss'}
-            <div class="filter-pills" role="group" aria-label={m.sidebar_lensFiltersLabel()}>
-              {#each queryOptionsFor(account) as opt (opt.value)}
-                <Chip
-                  label={opt.label}
-                  selected={(queriesById[account.id] ?? []).includes(opt.value)}
-                  onToggle={() => toggleQuery(account.id, opt.value)}
-                  testid="smart-filter-pill"
-                />
-              {/each}
-            </div>
           {/if}
-        </div>
-      {/each}
-    </div>
+        {/snippet}
+      </MultiSelect>
+    {/if}
 
     {#if showPicker}
       <div class="connect-flow" data-testid="connect-flow">
@@ -596,66 +506,6 @@ function confirm(): void {
     flex-shrink: 0;
   }
 
-  .account-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    /* No own height cap — the `.editor-body` region is the scroll bound now, so
-     * the list, the inline picker, and the add-row all scroll together while the
-     * Name head and the settings/action foot stay pinned. */
-  }
-  .account-pick {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    padding: var(--space-1);
-    border-radius: var(--r-md);
-    transition: background var(--motion-fast) var(--ease-standard);
-  }
-  .account-pick:hover {
-    background: var(--surface-2);
-  }
-  .account-pick-toggle {
-    appearance: none;
-    border: 0;
-    background: transparent;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: 0;
-    text-align: left;
-    min-width: 0;
-  }
-  .account-pick-toggle:focus-visible {
-    outline: var(--focus-width) solid var(--focus-color);
-    outline-offset: var(--focus-offset);
-    border-radius: var(--r-sm);
-  }
-  .check {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
-    border-radius: var(--r-2xs);
-    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--text-faint) 32%, transparent);
-    color: var(--space-c);
-  }
-  .check.on {
-    background: var(--space-c-soft);
-    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--space-c) 45%, transparent);
-  }
-
-  .filter-pills {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-1);
-    padding-left: var(--space-2);
-    margin-top: var(--space-1);
-  }
-
   /* Derived entity preview (D4) — entity-coloured chips naming what the chosen
    * connections produce. */
   .entity-preview {
@@ -740,9 +590,6 @@ function confirm(): void {
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .account-pick {
-      transition: none;
-    }
     .connect-flow {
       animation: none;
     }
