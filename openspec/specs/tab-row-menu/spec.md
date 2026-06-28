@@ -7,7 +7,7 @@ TBD - created by archiving change pinned-tab-row-menu. Update Purpose after arch
 
 A pinned tab's action menu SHALL open on a **`contextmenu`** event (right-click,
 or the platform context-menu key / `Shift+F10`) as the shared floating
-`ContextMenu` popover anchored at the pointer position
+`Menu` primitive (`trigger: 'context'`) popover anchored at the pointer position
 (`event.clientX`/`event.clientY`), clamped into the viewport — the SAME primitive
 and interaction the global favicon tiles use. There SHALL be no on-row kebab
 trigger and no morph drawer. Opening the menu SHALL `preventDefault()` the
@@ -21,10 +21,10 @@ keyboard-invoked event — context-menu key / `Shift+F10` — reports
 bounding rect (at the row's title column, vertically centred on the row),
 clamped into the viewport, instead of the event coordinates — so a keyboard
 user's menu opens at the focused row, not at the viewport corner. This
-anchoring rule applies to every surface sharing the `ContextMenu` primitive
-(pinned rows, temporary rows, favorite tiles).
+anchoring rule applies to every surface sharing the `Menu` primitive
+(`trigger: 'context'`) (pinned rows, temporary rows, favorite tiles).
 
-A single `ContextMenu` instance SHALL be shared across the pinned list, opened
+A single `Menu` (`trigger: 'context'`) instance SHALL be shared across the pinned list, opened
 for whichever row was right-clicked; the active row SHALL be re-derived from the
 right-clicked row's id against live state, so the menu reflects state after each
 round-trip and disappears if that row leaves the list.
@@ -163,7 +163,7 @@ dispatches the delete and closes the menu.
 
 ### Requirement: Animated reveal honours reduced motion
 
-Opening the menu SHALL use the floating `ContextMenu`'s entrance animation (a
+Opening the menu SHALL use the floating `Menu` primitive's (`trigger: 'context'`) entrance animation (a
 short rise + fade over the `--motion-fast`/`--ease-emphasised` token pair), the
 same entrance the favicon menu uses, rather than a drawer growing from behind the
 row. Under `prefers-reduced-motion: reduce`, the entrance SHALL be suppressed via
@@ -202,7 +202,7 @@ A pinned tab's right-click menu SHALL offer a **"Lock to its site…"** entry th
 opens a boundary editor for that tab. Choosing the entry SHALL **drill into a
 dedicated view inside the floating menu** — the action list is replaced by a back
 affordance (`‹ Lock to its site`) above the editor, and the back affordance (or
-`Esc`) SHALL return to the actions — using the `ContextMenu` primitive's
+`Esc`) SHALL return to the actions — using the `Menu` primitive's (`trigger: 'context'`)
 `panel`/`panelTitle` drill-in (the same drill-in the favicon menu uses). The
 editor SHALL present a tri-state mode control (**Default** · **Off** · **On** —
 the user-facing labels for the inherit/off/locked modes) and, when **On**, an
@@ -227,7 +227,7 @@ it SHALL NOT re-roll any primitive inline. The add field SHALL validate input
 against a **URL-glob validator** (accepting a host glob OR a URL pattern), tinting
 the field invalid for whitespace or obviously-malformed input, and SHALL reject
 duplicates of an already-listed pattern. The "Lock to its site…" entry SHALL be a
-data-driven `ContextMenu` action (a `MenuItem`), so the menu primitive stays
+data-driven `Menu` action (a `MenuItem`), so the menu primitive stays
 generic.
 
 #### Scenario: Opening the editor from the row menu

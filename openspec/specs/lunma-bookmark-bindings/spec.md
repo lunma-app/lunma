@@ -699,8 +699,8 @@ same no-optimistic-update discipline as pinned reorder and chip activation).
 
 ### Requirement: A favorite tile exposes a right-click context menu
 
-Right-clicking (the context-menu gesture) a `FaviconTile` SHALL open a `ContextMenu`
-primitive anchored at the cursor and SHALL suppress the native browser context menu.
+Right-clicking (the context-menu gesture) a `FaviconTile` SHALL open a `Menu` primitive
+(`trigger: 'context'`) anchored at the cursor and SHALL suppress the native browser context menu.
 At parity with the pinned-row menu (see the `tab-row-menu` capability), the menu SHALL
 offer:
 
@@ -731,7 +731,7 @@ offer:
   without deleting. A favorite dormant in all windows SHALL still delete without
   prompting (per the existing deletion requirement).
 
-The menu SHALL be the shared `apps/extension/src/ui/ContextMenu.svelte` primitive composed by the
+The menu SHALL be the shared `apps/extension/src/ui/Menu.svelte` primitive (`trigger: 'context'`) composed by the
 feature component `FaviconRow.svelte` (one instance, opened at the right-clicked tile's
 cursor position); neither SHALL re-roll a menu inline. Right-click removal exists because
 drag-out alone proved undiscoverable.
