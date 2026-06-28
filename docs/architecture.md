@@ -326,7 +326,7 @@ const initial: AppState = {
                                //   the ids whose SavedTab.spaceId === null (decoupled). Sibling to
                                //   pinnedBySpace, NOT keyed by Space; a record is in one XOR the other.
   smartItemBindings: {},       // { [folderId]: { [namespacedItemId]: { [windowId]: { tabId, allowGlob } } } }
-                               //   namespacedItemId = "${sourceKey}:${nativeId}" (e.g. "gitlab:gitlab.com:authored:42")
+                               //   namespacedItemId = "${sourceKey}:${nativeId}" (e.g. "acc-1:authored:42")
                                //   PERSISTED, IDS ONLY — work-sensitive payload stays off disk.
                                //   Heals SW restarts, prunes across browser restarts.
   liveTabsById: {},            // { [tabId]: LiveTab } — EPHEMERAL, stripped before persist
@@ -408,8 +408,9 @@ folder's live query results and fetch state, sectioned by per-filter source key.
 - `LensRuntime = { sections: { [sourceKey]: LensSectionRuntime } }` —
   one entry per RESOLVED section (each `sources[]` instance × each of its
   `queries[]`, or a single section for an rss feed);
-  `sourceKey = "${source}:${host}:${query}"` for a queue section,
-  `"${source}:${host}"` for an rss section.
+  `sourceKey = "${sourceId}:${query}"` for a queue section,
+  `"${sourceId}"` for an rss section (keyed by the referenced account's id, so
+  two accounts on the same host occupy distinct sections).
 - `LensSectionRuntime = { state: 'pending'|'ok'|'signed-out'|'error'|'needs-access'; items: LensItem[]; fetchedAt: number | null }`.
 - The coordinator drain writes it via `setLensSectionRuntime(folderId, sourceKey, runtime)`.
 - `persist()` strips it alongside `liveTabsById`, so work-sensitive item titles
@@ -806,6 +807,7 @@ schema widened but old data needs no transformation:
 | 8 | replaced the flat `source`/`baseUrl`/`query?` on each lens node with `sources: [{ source, baseUrl, query }]`; re-keyed `lensItemBindings` item ids to `"${sourceKey}:${nativeId}"` |
 | 9 | rewrote each `sources[]` entry from the flat `query?` shape to `queries: LensQuery[]` (queue → `[query]`, rss → `[]`); re-keyed `lensItemBindings` from `"${source}:${host}:${nativeId}"` to the per-filter `"${source}:${host}:${query}:${nativeId}"` (orphans dropped) |
 | 13 | extracted each lens node's embedded `sources: LensSource[]` into first-class `SourceAccount`s under a new `AppState.sources` map (one per distinct `(provider, baseUrl)`, deduped, `name` carried onto the account) and rewrote each lens's `sources` to `LensSourceRef[]` (`{ sourceId, queries }`). The separate, unversioned `lunma.connectors` secrets store is re-keyed host→`sourceId` by the boot-chain `reconcileAccountSecrets` step (NOT the pure migrate fn) |
+| 15 | re-keyed lens sections by account `sourceId`: rewrote `lensItemBindings` keys AND `lensReadState` ids from `"${source}:${host}:${query}:${nativeId}"` (rss: `"${source}:${host}:${nativeId}"`) to `"${sourceId}:${query}:${nativeId}"` (rss: `"${sourceId}:${nativeId}"`), resolving each legacy id match-first by **longest** account prefix (port-bearing host carried; a blind `split(':')` is unsafe — host carries ports, rss nativeIds are URLs); unmappable / same-origin-ambiguous ids are dropped (a binding re-arms, a read mark reappears unread once). Idempotent |
 
 The v7 migration walks `smartItemBindings[folderId][itemId][windowId]` and
 rewrites any numeric slot to `{ tabId, allowGlob: '' }`. The v8 migration wraps

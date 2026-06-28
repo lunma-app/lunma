@@ -33,9 +33,9 @@ export function isFeedProvider(provider: LensProvider): boolean {
  * http(s) URL with a single trailing slash stripped. Throws on a relative or
  * non-http(s) URL. Lives in `shared/` (not `background/`) so the surface-side
  * find-or-mint (the editor's OPML "add to this lens" path) and the SW handlers
- * (`createAccount`, `importOpml`) normalize identically — the rss `sourceKey` is
- * host-derived, so a divergent normalization would mint duplicate accounts that
- * collide on one lens.
+ * (`createAccount`, `importOpml`) normalize identically — find-or-mint dedupes
+ * by normalized baseUrl, so a divergent normalization would mint duplicate
+ * accounts for one feed.
  */
 export function normalizeBaseUrl(raw: string): string {
   let url: URL;

@@ -5,7 +5,7 @@ import type { FolderId, LensRuntime, SpaceId } from '../../../shared/types';
  * Map the live lens runtime slice (`LunmaStore.state.lenses`) to
  * candidate `lens` results (launcher-fuzzy-smart-folders, design D5). Flattens
  * **every** lens's items across **all** sections (sections keyed by sourceKey
- * `${source}:${host}`) — each item is link-shaped (`{ id, title, url, status? }`)
+ * `${sourceId}:${query}`, rss `${sourceId}`) — each item is link-shaped (`{ id, title, url, status? }`)
  * and becomes a result with `source: 'lens'`, `id: 'lens:<namespacedId>'`,
  * carrying no binding and no `tabId`/`savedTabId`, so `act()` routes it through
  * the existing `openUrl` branch.

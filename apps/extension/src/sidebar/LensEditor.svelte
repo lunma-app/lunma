@@ -190,7 +190,7 @@ function onConnected(account: SourceAccount): void {
  * rss account per parsed feed and pre-select each INTO this lens — the bulk
  * sibling of `onConnected`, so importing feeds while building a lens fills the
  * lens instead of spawning a separate "Feeds" lens (the Options-only behavior).
- * Dedupes by normalized baseUrl (rss `sourceKey` is host-derived) — within the
+ * Dedupes by normalized baseUrl (one account per feed url) — within the
  * batch and against already-connected accounts — so repeats reuse one account.
  * Mirrors `importOpml`'s find-or-mint, client-side with client-minted ids. */
 function importFeedsIntoLens(feeds: { name: string; feedUrl: string }[]): void {

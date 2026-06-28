@@ -110,8 +110,7 @@ function makeFeedStore(
   seedAccounts(store);
   if (section) {
     const cfg = node.sources[0];
-    const account = cfg ? ACCOUNTS[cfg.sourceId] : undefined;
-    const key = account ? `${account.provider}:${new URL(account.baseUrl).host}` : '';
+    const key = cfg ? cfg.sourceId : '';
     store.state.lenses[node.id] = { sections: { [key]: section } };
   }
   if (readIds.length > 0) store.state.lensReadState[node.id] = readIds;
@@ -134,7 +133,7 @@ function makeStore(section?: LensSectionRuntime): LunmaStore {
   seedAccounts(store);
   if (section)
     store.state.lenses['sf-1'] = {
-      sections: { 'gitlab:gitlab.example.com:review-requested': section },
+      sections: { 'acc:gitlab:https://gitlab.example.com:review-requested': section },
     };
   return store;
 }
@@ -174,12 +173,12 @@ describe('Lens — multi-filter sections (multi-filter-smart-connectors)', () =>
     store.state.pinnedBySpace.work = [node];
     store.state.lenses['sf-1'] = {
       sections: {
-        'gitlab:gitlab.example.com:authored': {
+        'acc:gitlab:https://gitlab.example.com:authored': {
           state: 'ok',
           items: [item(1), item(2), item(3), item(4), item(5), item(6), item(7)],
           fetchedAt: 1,
         },
-        'gitlab:gitlab.example.com:review-requested': {
+        'acc:gitlab:https://gitlab.example.com:review-requested': {
           state: 'ok',
           items: [item(8), item(9), item(10)],
           fetchedAt: 1,
@@ -200,8 +199,8 @@ describe('Lens — multi-filter sections (multi-filter-smart-connectors)', () =>
     const store = makeTwoFilterStore();
     const sections = store.state.lenses['sf-1']?.sections ?? {};
     expect(Object.keys(sections).sort()).toEqual([
-      'gitlab:gitlab.example.com:authored',
-      'gitlab:gitlab.example.com:review-requested',
+      'acc:gitlab:https://gitlab.example.com:authored',
+      'acc:gitlab:https://gitlab.example.com:review-requested',
     ]);
   });
 
@@ -272,7 +271,7 @@ describe('Lens — count badge', () => {
     store.state.pinnedBySpace.work = [node];
     store.state.lenses['sf-1'] = {
       sections: {
-        'gitlab:gitlab.example.com:review-requested': {
+        'acc:gitlab:https://gitlab.example.com:review-requested': {
           state: 'ok',
           items: Array.from({ length: 30 }, (_, i) => item(i)),
           fetchedAt: 1,
@@ -302,7 +301,7 @@ describe('Lens — pinned-tab activation (smart-folder-item-bindings)', () => {
       payload: {
         spaceId: 'work',
         folderId: 'sf-1',
-        itemId: 'gitlab:gitlab.example.com:review-requested:mr-42',
+        itemId: 'acc:gitlab:https://gitlab.example.com:review-requested:mr-42',
         windowId: 100,
       },
     });
@@ -311,7 +310,9 @@ describe('Lens — pinned-tab activation (smart-folder-item-bindings)', () => {
   test("a bound row whose tab is the window's focused tab takes the active treatment", () => {
     const store = makeStore({ state: 'ok', items: [item(1), item(2)], fetchedAt: 1 });
     store.state.lensItemBindings['sf-1'] = {
-      'gitlab:gitlab.example.com:review-requested:mr-1': { 100: { tabId: 7, allowGlob: '' } },
+      'acc:gitlab:https://gitlab.example.com:review-requested:mr-1': {
+        100: { tabId: 7, allowGlob: '' },
+      },
     };
     store.state.liveTabsById[7] = {
       tabId: 7,
@@ -335,7 +336,9 @@ describe('Lens — pinned-tab activation (smart-folder-item-bindings)', () => {
   test('a bound-but-unfocused row reads as a normal row (no active wash)', () => {
     const store = makeStore({ state: 'ok', items: [item(1)], fetchedAt: 1 });
     store.state.lensItemBindings['sf-1'] = {
-      'gitlab:gitlab.example.com:review-requested:mr-1': { 100: { tabId: 7, allowGlob: '' } },
+      'acc:gitlab:https://gitlab.example.com:review-requested:mr-1': {
+        100: { tabId: 7, allowGlob: '' },
+      },
     };
     store.state.liveTabsById[7] = {
       tabId: 7,
@@ -354,7 +357,9 @@ describe('Lens — pinned-tab activation (smart-folder-item-bindings)', () => {
   test('a binding for ANOTHER window carries no treatment here', () => {
     const store = makeStore({ state: 'ok', items: [item(1)], fetchedAt: 1 });
     store.state.lensItemBindings['sf-1'] = {
-      'gitlab:gitlab.example.com:review-requested:mr-1': { 200: { tabId: 7, allowGlob: '' } },
+      'acc:gitlab:https://gitlab.example.com:review-requested:mr-1': {
+        200: { tabId: 7, allowGlob: '' },
+      },
     }; // window 200, not 100
     const { container } = renderLens(store);
     const row = container.querySelector('[data-testid="lens-result-row"]');
@@ -369,7 +374,9 @@ describe('Lens — pinned-tab activation (smart-folder-item-bindings)', () => {
       fetchedAt: 1,
     });
     store.state.lensItemBindings['sf-1'] = {
-      'gitlab:gitlab.example.com:review-requested:mr-1': { 100: { tabId: 7, allowGlob: '' } },
+      'acc:gitlab:https://gitlab.example.com:review-requested:mr-1': {
+        100: { tabId: 7, allowGlob: '' },
+      },
     };
     const { container } = renderLens(store);
 
@@ -396,7 +403,9 @@ describe('Lens — binding-held rows (open work holds its row)', () => {
   test('a bound item dropped from an ok result keeps rendering, and evaporates on unbind', async () => {
     const store = makeStore({ state: 'ok', items: [item(1), item(2)], fetchedAt: 1 });
     store.state.lensItemBindings['sf-1'] = {
-      'gitlab:gitlab.example.com:review-requested:mr-1': { 100: { tabId: 7, allowGlob: '' } },
+      'acc:gitlab:https://gitlab.example.com:review-requested:mr-1': {
+        100: { tabId: 7, allowGlob: '' },
+      },
     };
     const { container } = renderLens(store);
     await tick();
@@ -406,7 +415,7 @@ describe('Lens — binding-held rows (open work holds its row)', () => {
     // the row holds, rendered from component memory with its bound treatment.
     store.state.lenses['sf-1'] = {
       sections: {
-        'gitlab:gitlab.example.com:review-requested': {
+        'acc:gitlab:https://gitlab.example.com:review-requested': {
           state: 'ok',
           items: [item(2)],
           fetchedAt: 2,
@@ -430,14 +439,20 @@ describe('Lens — binding-held rows (open work holds its row)', () => {
   test('an honest ok-empty result keeps ONLY binding-held rows', async () => {
     const store = makeStore({ state: 'ok', items: [item(1), item(2)], fetchedAt: 1 });
     store.state.lensItemBindings['sf-1'] = {
-      'gitlab:gitlab.example.com:review-requested:mr-1': { 100: { tabId: 7, allowGlob: '' } },
+      'acc:gitlab:https://gitlab.example.com:review-requested:mr-1': {
+        100: { tabId: 7, allowGlob: '' },
+      },
     };
     const { container } = renderLens(store);
     await tick();
 
     store.state.lenses['sf-1'] = {
       sections: {
-        'gitlab:gitlab.example.com:review-requested': { state: 'ok', items: [], fetchedAt: 2 },
+        'acc:gitlab:https://gitlab.example.com:review-requested': {
+          state: 'ok',
+          items: [],
+          fetchedAt: 2,
+        },
       },
     };
     await tick();
@@ -718,7 +733,11 @@ describe('Lens — calm states (design D7)', () => {
     const store = makeStore();
     store.state.lenses['sf-1'] = {
       sections: {
-        'github:github.com:review-requested': { state: 'signed-out', items: [], fetchedAt: 1 },
+        'acc:github:https://github.com:review-requested': {
+          state: 'signed-out',
+          items: [],
+          fetchedAt: 1,
+        },
       },
     };
     store.state.pinnedBySpace.work = [ghNode];
@@ -749,7 +768,11 @@ describe('Lens — calm states (design D7)', () => {
     const store = makeStore();
     store.state.lenses['sf-1'] = {
       sections: {
-        'jira:acme.atlassian.net:assigned': { state: 'signed-out', items: [], fetchedAt: 1 },
+        'acc:jira:https://acme.atlassian.net:assigned': {
+          state: 'signed-out',
+          items: [],
+          fetchedAt: 1,
+        },
       },
     };
     store.state.pinnedBySpace.work = [jiraNode];
@@ -783,7 +806,11 @@ describe('Lens — calm states (design D7)', () => {
     const store = makeStore();
     store.state.lenses['sf-1'] = {
       sections: {
-        'github:github.com:review-requested': { state: 'signed-out', items: [], fetchedAt: 1 },
+        'acc:github:https://github.com:review-requested': {
+          state: 'signed-out',
+          items: [],
+          fetchedAt: 1,
+        },
       },
     };
     store.state.pinnedBySpace.work = [ghNode];
@@ -836,7 +863,11 @@ describe('Lens — calm states (design D7)', () => {
     const store = makeStore();
     store.state.lenses['sf-1'] = {
       sections: {
-        'github:github.com:review-requested': { state: 'needs-access', items: [], fetchedAt: 1 },
+        'acc:github:https://github.com:review-requested': {
+          state: 'needs-access',
+          items: [],
+          fetchedAt: 1,
+        },
       },
     };
     store.state.pinnedBySpace.work = [ghNode];
@@ -890,7 +921,7 @@ describe('Lens — calm states (design D7)', () => {
       payload: {
         spaceId: 'work',
         folderId: 'sf-1',
-        itemId: 'gitlab:gitlab.example.com:review-requested:mr-1',
+        itemId: 'acc:gitlab:https://gitlab.example.com:review-requested:mr-1',
         windowId: 100,
       },
     });
@@ -904,7 +935,11 @@ describe('Lens — calm states (design D7)', () => {
     // The queue genuinely empties.
     store.state.lenses['sf-1'] = {
       sections: {
-        'gitlab:gitlab.example.com:review-requested': { state: 'ok', items: [], fetchedAt: 2 },
+        'acc:gitlab:https://gitlab.example.com:review-requested': {
+          state: 'ok',
+          items: [],
+          fetchedAt: 2,
+        },
       },
     };
     await tick();
@@ -913,7 +948,7 @@ describe('Lens — calm states (design D7)', () => {
     // A later reload shows ghosts, not the long-gone items.
     store.state.lenses['sf-1'] = {
       sections: {
-        'gitlab:gitlab.example.com:review-requested': {
+        'acc:gitlab:https://gitlab.example.com:review-requested': {
           state: 'pending',
           items: [],
           fetchedAt: null,
@@ -935,7 +970,7 @@ describe('Lens — the reading nook (rss-connector)', () => {
     const store = makeFeedStore(
       node,
       { state: 'ok', items: [post(1), post(2)], fetchedAt: 1 },
-      ['rss:news.ycombinator.com:post-2'], // post-2 is read
+      ['acc:rss:https://news.ycombinator.com/rss:post-2'], // post-2 is read
     );
     const { container } = renderLens(store, { node });
     const [r1, r2] = rows(container);
@@ -967,7 +1002,7 @@ describe('Lens — the reading nook (rss-connector)', () => {
     await fireEvent.click(close);
     expect(sendMock).toHaveBeenCalledWith({
       kind: 'markLensItemRead',
-      payload: { folderId: 'feed-1', itemId: 'rss:news.ycombinator.com:post-1' },
+      payload: { folderId: 'feed-1', itemId: 'acc:rss:https://news.ycombinator.com/rss:post-1' },
     });
   });
 
@@ -976,16 +1011,16 @@ describe('Lens — the reading nook (rss-connector)', () => {
     const store = makeFeedStore(
       node,
       { state: 'ok', items: [post(1), post(2), post(3)], fetchedAt: 1 },
-      ['rss:news.ycombinator.com:post-1'], // 1 read → 2 unread
+      ['acc:rss:https://news.ycombinator.com/rss:post-1'], // 1 read → 2 unread
     );
     const { container } = renderLens(store, { node });
     expect(container.querySelector('[data-testid="lens-row-badge"]')?.textContent).toBe('2');
 
     // Everything read → the badge is absent (the calm "caught up" state).
     store.state.lensReadState['feed-1'] = [
-      'rss:news.ycombinator.com:post-1',
-      'rss:news.ycombinator.com:post-2',
-      'rss:news.ycombinator.com:post-3',
+      'acc:rss:https://news.ycombinator.com/rss:post-1',
+      'acc:rss:https://news.ycombinator.com/rss:post-2',
+      'acc:rss:https://news.ycombinator.com/rss:post-3',
     ];
     await tick();
     expect(container.querySelector('[data-testid="lens-row-badge"]')).toBeNull();
@@ -1002,13 +1037,13 @@ describe('Lens — the reading nook (rss-connector)', () => {
       payload: {
         spaceId: 'work',
         folderId: 'feed-1',
-        itemId: 'rss:news.ycombinator.com:post-1',
+        itemId: 'acc:rss:https://news.ycombinator.com/rss:post-1',
         windowId: 100,
       },
     });
 
     // The SW marks it read and re-broadcasts — the row settles to read in place.
-    store.state.lensReadState['feed-1'] = ['rss:news.ycombinator.com:post-1'];
+    store.state.lensReadState['feed-1'] = ['acc:rss:https://news.ycombinator.com/rss:post-1'];
     await tick();
     expect(rows(container)[0]?.classList).toContain('read');
     expect(rows(container)[0]?.getAttribute('aria-label')).toBe('Post 1 — read');
@@ -1017,7 +1052,7 @@ describe('Lens — the reading nook (rss-connector)', () => {
   test('with hideRead OFF the read row is visible and the footer offers "Hide N read"', () => {
     const node = feedNode({ hideRead: false });
     const store = makeFeedStore(node, { state: 'ok', items: [post(1), post(2)], fetchedAt: 1 }, [
-      'rss:news.ycombinator.com:post-2',
+      'acc:rss:https://news.ycombinator.com/rss:post-2',
     ]);
     const { container } = renderLens(store, { node });
     const readWrap = [...container.querySelectorAll('[data-testid="smart-row-wrap"]')].find(
@@ -1032,7 +1067,7 @@ describe('Lens — the reading nook (rss-connector)', () => {
   test('with hideRead ON the read row collapses (mounted-but-inert) and the footer offers "Show N read"', () => {
     const node = feedNode({ hideRead: true });
     const store = makeFeedStore(node, { state: 'ok', items: [post(1), post(2)], fetchedAt: 1 }, [
-      'rss:news.ycombinator.com:post-2',
+      'acc:rss:https://news.ycombinator.com/rss:post-2',
     ]);
     const { container } = renderLens(store, { node });
     const readWrap = [...container.querySelectorAll('[data-testid="smart-row-wrap"]')].find(
@@ -1057,7 +1092,7 @@ describe('Lens — the reading nook (rss-connector)', () => {
   test('the footer toggle reveals THIS section in place (sidebar-local, no folder-wide dispatch)', async () => {
     const node = feedNode({ hideRead: true });
     const store = makeFeedStore(node, { state: 'ok', items: [post(1), post(2)], fetchedAt: 1 }, [
-      'rss:news.ycombinator.com:post-2',
+      'acc:rss:https://news.ycombinator.com/rss:post-2',
     ]);
     const { container } = renderLens(store, { node });
     const readWrap = () =>
@@ -1078,7 +1113,7 @@ describe('Lens — the reading nook (rss-connector)', () => {
     expect(
       (store.state as AppState & SidebarLocalState).revealedReadLensSectionsByWindow?.[100]?.[
         'feed-1'
-      ]?.['rss:news.ycombinator.com'],
+      ]?.['acc:rss:https://news.ycombinator.com/rss'],
     ).toBe(true);
   });
 
@@ -1140,7 +1175,7 @@ describe('Lens — the draining queue (rss-connector, maxItems = unread budget)'
     expect(visibleLabels(container)).toEqual(['Post 5 — unread', 'Post 4 — unread']);
 
     // The SW marks Post 5 read (the open path) and re-broadcasts.
-    store.state.lensReadState['feed-1'] = ['rss:news.ycombinator.com:post-5'];
+    store.state.lensReadState['feed-1'] = ['acc:rss:https://news.ycombinator.com/rss:post-5'];
     await tick();
     // Post 5 drains out (collapsed); Post 3 backfills in to keep two unread shown.
     expect(visibleLabels(container)).toEqual(['Post 4 — unread', 'Post 3 — unread']);
@@ -1157,7 +1192,7 @@ describe('Lens — the draining queue (rss-connector, maxItems = unread budget)'
     const node = feedNode({ maxItems: 5, hideRead: true });
     // post-3 read, the rest unread.
     const store = makeFeedStore(node, { state: 'ok', items: fiveUnread(), fetchedAt: 1 }, [
-      'rss:news.ycombinator.com:post-3',
+      'acc:rss:https://news.ycombinator.com/rss:post-3',
     ]);
     const { container } = renderLens(store, { node });
     // Drained: the read Post 3 is collapsed, the four unread are visible.
@@ -1182,7 +1217,7 @@ describe('Lens — the draining queue (rss-connector, maxItems = unread budget)'
   test('revealing read (hideRead OFF) un-collapses the read row inline', () => {
     const node = feedNode({ maxItems: 5, hideRead: false });
     const store = makeFeedStore(node, { state: 'ok', items: fiveUnread(), fetchedAt: 1 }, [
-      'rss:news.ycombinator.com:post-3',
+      'acc:rss:https://news.ycombinator.com/rss:post-3',
     ]);
     const { container } = renderLens(store, { node });
     // With the peek on, the read row is visible (greyed, not collapsed).
@@ -1198,11 +1233,11 @@ describe('Lens — the draining queue (rss-connector, maxItems = unread budget)'
 
     // Mark everything read → caught up → the badge disappears, nothing visible.
     store.state.lensReadState['feed-1'] = [
-      'rss:news.ycombinator.com:post-1',
-      'rss:news.ycombinator.com:post-2',
-      'rss:news.ycombinator.com:post-3',
-      'rss:news.ycombinator.com:post-4',
-      'rss:news.ycombinator.com:post-5',
+      'acc:rss:https://news.ycombinator.com/rss:post-1',
+      'acc:rss:https://news.ycombinator.com/rss:post-2',
+      'acc:rss:https://news.ycombinator.com/rss:post-3',
+      'acc:rss:https://news.ycombinator.com/rss:post-4',
+      'acc:rss:https://news.ycombinator.com/rss:post-5',
     ];
     await tick();
     expect(container.querySelector('[data-testid="lens-row-badge"]')).toBeNull();
@@ -1216,9 +1251,9 @@ describe('Lens — the draining queue (rss-connector, maxItems = unread budget)'
     // would say 2 with nothing on screen. The window must span to the unread.
     const node = feedNode({ maxItems: 3, hideRead: true });
     const store = makeFeedStore(node, { state: 'ok', items: fiveUnread(), fetchedAt: 1 }, [
-      'rss:news.ycombinator.com:post-5',
-      'rss:news.ycombinator.com:post-4',
-      'rss:news.ycombinator.com:post-3',
+      'acc:rss:https://news.ycombinator.com/rss:post-5',
+      'acc:rss:https://news.ycombinator.com/rss:post-4',
+      'acc:rss:https://news.ycombinator.com/rss:post-3',
     ]);
     const { container } = renderLens(store, { node });
     expect(visibleLabels(container)).toEqual(['Post 2 — unread', 'Post 1 — unread']);
@@ -1238,11 +1273,22 @@ describe('Lens — the draining queue (rss-connector, maxItems = unread budget)'
     store.state.pinnedBySpace.work = [node];
     store.state.lenses['feed-1'] = {
       sections: {
-        'rss:a.example.com': { state: 'ok', items: [post(1), post(2)], fetchedAt: 1 },
-        'rss:b.example.com': { state: 'ok', items: [post(1), post(2)], fetchedAt: 1 },
+        'acc:rss:https://a.example.com/feed': {
+          state: 'ok',
+          items: [post(1), post(2)],
+          fetchedAt: 1,
+        },
+        'acc:rss:https://b.example.com/feed': {
+          state: 'ok',
+          items: [post(1), post(2)],
+          fetchedAt: 1,
+        },
       },
     };
-    store.state.lensReadState['feed-1'] = ['rss:a.example.com:post-2', 'rss:b.example.com:post-2'];
+    store.state.lensReadState['feed-1'] = [
+      'acc:rss:https://a.example.com/feed:post-2',
+      'acc:rss:https://b.example.com/feed:post-2',
+    ];
     const { container } = renderLens(store, { node });
     // Both sections drained → each footer offers its own "Show 1 read".
     const showButtons = [...container.querySelectorAll('[data-testid="smart-reading-controls"]')]
@@ -1254,8 +1300,8 @@ describe('Lens — the draining queue (rss-connector, maxItems = unread budget)'
     // Only section A is revealed; B stays drained.
     const revealed = (store.state as AppState & SidebarLocalState)
       .revealedReadLensSectionsByWindow?.[100]?.['feed-1'];
-    expect(revealed?.['rss:a.example.com']).toBe(true);
-    expect(revealed?.['rss:b.example.com'] ?? false).toBe(false);
+    expect(revealed?.['acc:rss:https://a.example.com/feed']).toBe(true);
+    expect(revealed?.['acc:rss:https://b.example.com/feed'] ?? false).toBe(false);
   });
 });
 
@@ -1288,7 +1334,10 @@ describe('Lens — empty-state parity (rss-connector)', () => {
     const store = makeFeedStore(
       node,
       { state: 'ok', items: [post(1), post(2)], fetchedAt: 1 },
-      ['rss:news.ycombinator.com:post-1', 'rss:news.ycombinator.com:post-2'], // every item read
+      [
+        'acc:rss:https://news.ycombinator.com/rss:post-1',
+        'acc:rss:https://news.ycombinator.com/rss:post-2',
+      ], // every item read
     );
     const { container } = renderLens(store, { node });
     expect(emptyNote(container)).toBe("You're all caught up.");
@@ -1318,8 +1367,8 @@ describe('Lens — empty-state parity (rss-connector)', () => {
 
 describe('Lens — per-section collapse (collapsible-smart-folder-sections)', () => {
   // Resolved section keys include the query for queue sections (multi-filter).
-  const GITLAB_KEY = 'gitlab:gitlab.example.com:review-requested';
-  const GITHUB_KEY = 'github:github.com:review-requested';
+  const GITLAB_KEY = 'acc:gitlab:https://gitlab.example.com:review-requested';
+  const GITHUB_KEY = 'acc:github:https://github.com:review-requested';
   const GITLAB_BODY = `[id="lens-section-body-sf-1-${GITLAB_KEY}"]`;
   const GITHUB_BODY = `[id="lens-section-body-sf-1-${GITHUB_KEY}"]`;
 

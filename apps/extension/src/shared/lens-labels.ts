@@ -4,19 +4,14 @@ export { hostOf } from './label-for';
 
 /**
  * Canonical per-section identity key shared by the SW, sidebar, and overview
- * page. Uses `new URL(baseUrl).host` (port-bearing, per D1); a malformed
- * `baseUrl` degrades to the raw string for the host segment (D3) so all three
- * surfaces produce the same key rather than throwing or returning ''.
+ * page. Keyed by the referenced account's `sourceId` (not host) so two accounts
+ * on the same host occupy distinct sections (rekey-lens-sections-by-source-id,
+ * D1): `${sourceId}:${query}` for a queue section, `${sourceId}` for a feed
+ * (rss). Pure, no I/O — a malformed/port-bearing `baseUrl` no longer affects the
+ * key (the account id carries the host identity).
  */
 export function sourceKey(cfg: ResolvedLensSource): string {
-  let host: string;
-  try {
-    host = new URL(cfg.baseUrl).host;
-  } catch {
-    host = cfg.baseUrl;
-  }
-  const base = `${cfg.source}:${host}`;
-  return cfg.query !== undefined ? `${base}:${cfg.query}` : base;
+  return cfg.query !== undefined ? `${cfg.sourceId}:${cfg.query}` : cfg.sourceId;
 }
 
 export const ICON_BY_SOURCE: Record<string, string> = {

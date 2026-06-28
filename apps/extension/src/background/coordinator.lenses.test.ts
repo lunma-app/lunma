@@ -81,9 +81,9 @@ function lensNode(overrides: Partial<LensNode> = {}): LensNode {
 }
 
 /** sourceKey for the default gitlab node. */
-const GITLAB_SK = 'gitlab:gitlab.example.com:review-requested';
+const GITLAB_SK = 'gl-ex:review-requested';
 /** sourceKey for the default rss feed node. */
-const FEED_SK = 'rss:news.example.com';
+const FEED_SK = 'rss-news';
 
 function resultEvent(
   folderId: string,
@@ -395,7 +395,7 @@ describe('sources-redesign: mixed-lens Change enrichment gates per section (D8)'
     const created = store.state.pinnedBySpace.work?.[0] as LensNode;
     expect(created.lensKind).toBe('review'); // derived from the git source
     const sections = store.state.lenses[created.id]?.sections ?? {};
-    const gitSection = sections['gitlab:gitlab.example.com:authored'];
+    const gitSection = sections['gl-ex:authored'];
     const feedSection = sections[FEED_SK];
     // The git section's item is enriched (enrichment gates on the derived 'review').
     expect(gitSection?.state).toBe('ok');
@@ -627,7 +627,7 @@ describe('deleteLens handler', () => {
 describe('refreshLens handler', () => {
   // The `authored` filter is a single list fetch (no me-resolution), so one
   // mocked fetch drives the section; its key carries the filter axis.
-  const GL_AUTHORED = 'gitlab:gitlab.example.com:authored';
+  const GL_AUTHORED = 'gl-ex:authored';
   const authoredNode = () => lensNode({ sources: [{ sourceId: 'gl-ex', queries: ['authored'] }] });
 
   test('acks ok BEFORE the fetch resolves; the outcome lands via the runtime slice', async () => {

@@ -277,10 +277,10 @@ describe('sourceKey', () => {
         lensKind: 'general',
         sourceId: 'acc-test',
       }),
-    ).toBe('gitlab:gitlab.com');
+    ).toBe('acc-test');
   });
 
-  test('github.com uses the baseUrl host (not the fetch api origin)', () => {
+  test('github.com uses the sourceId (not the baseUrl host)', () => {
     expect(
       sourceKey({
         source: 'github',
@@ -288,10 +288,10 @@ describe('sourceKey', () => {
         lensKind: 'general',
         sourceId: 'acc-test',
       }),
-    ).toBe('github:github.com');
+    ).toBe('acc-test');
   });
 
-  test('GitHub Enterprise uses the custom host', () => {
+  test('GitHub Enterprise uses the sourceId (not the custom host)', () => {
     expect(
       sourceKey({
         source: 'github',
@@ -299,10 +299,10 @@ describe('sourceKey', () => {
         lensKind: 'general',
         sourceId: 'acc-test',
       }),
-    ).toBe('github:ghe.corp.example.com');
+    ).toBe('acc-test');
   });
 
-  test('rss with a path URL omits the query', () => {
+  test('rss with a path URL keys by sourceId only', () => {
     expect(
       sourceKey({
         source: 'rss',
@@ -310,7 +310,7 @@ describe('sourceKey', () => {
         lensKind: 'general',
         sourceId: 'acc-test',
       }),
-    ).toBe('rss:feeds.example.com');
+    ).toBe('acc-test');
   });
 
   test('a queue resolved config includes the filter axis (multi-filter)', () => {
@@ -322,7 +322,7 @@ describe('sourceKey', () => {
         lensKind: 'general',
         sourceId: 'acc-test',
       }),
-    ).toBe('gitlab:gitlab.example.com:authored');
+    ).toBe('acc-test:authored');
     expect(
       sourceKey({
         source: 'gitlab',
@@ -331,7 +331,7 @@ describe('sourceKey', () => {
         lensKind: 'general',
         sourceId: 'acc-test',
       }),
-    ).toBe('gitlab:gitlab.example.com:review-requested');
+    ).toBe('acc-test:review-requested');
   });
 });
 
@@ -341,9 +341,9 @@ describe('sourceKey', () => {
 // non-default port MUST key identically in the SW and the overview page.
 
 describe('sourceKey — cross-surface consistency', () => {
-  test('self-hosted source on a non-default port includes the port', () => {
-    // This is the drifted case: old overview-vm used .hostname (no port),
-    // SW/sidebar used .host (with port). Canonical key must include the port.
+  test('self-hosted source on a non-default port keys by sourceId:query', () => {
+    // baseUrl/host/port no longer affect the key — the account id carries the
+    // host identity. Two accounts on the same host get distinct keys via sourceId.
     expect(
       sourceKey({
         source: 'gitlab',
@@ -352,7 +352,7 @@ describe('sourceKey — cross-surface consistency', () => {
         lensKind: 'general',
         sourceId: 'acc-test',
       }),
-    ).toBe('gitlab:git.example.com:8443:review-requested');
+    ).toBe('acc-test:review-requested');
   });
 
   test('malformed baseUrl produces a stable key (no throw)', () => {
@@ -363,7 +363,7 @@ describe('sourceKey — cross-surface consistency', () => {
         lensKind: 'general',
         sourceId: 'acc-test',
       }),
-    ).toBe('github:not-a-valid-url');
+    ).toBe('acc-test');
   });
 });
 
@@ -624,7 +624,7 @@ describe('reconcileLensGrants', () => {
     const store = makeStoreWithLenses([node({ id: 'sf-1' })]);
     store.state.lenses['sf-1'] = {
       sections: {
-        'gitlab:gitlab.example.com:review-requested': {
+        'acc:gitlab:https://gitlab.example.com:review-requested': {
           state: 'needs-access',
           items: [],
           fetchedAt: Date.now(),
@@ -644,7 +644,7 @@ describe('reconcileLensGrants', () => {
     const store = makeStoreWithLenses([node({ id: 'sf-1' })]);
     store.state.lenses['sf-1'] = {
       sections: {
-        'gitlab:gitlab.example.com:review-requested': {
+        'acc:gitlab:https://gitlab.example.com:review-requested': {
           state: 'ok',
           items: [{ id: 'x', title: 't', url: 'https://u' }],
           fetchedAt: Date.now(),
@@ -658,7 +658,7 @@ describe('reconcileLensGrants', () => {
     expect(events).toHaveLength(1);
     expect(events[0]?.payload).toEqual({
       folderId: 'sf-1',
-      sourceKey: 'gitlab:gitlab.example.com:review-requested',
+      sourceKey: 'acc:gitlab:https://gitlab.example.com:review-requested',
       runtime: { state: 'needs-access', items: [], fetchedAt: expect.any(Number) },
     });
   });
@@ -668,7 +668,7 @@ describe('reconcileLensGrants', () => {
     const store = makeStoreWithLenses([node({ id: 'sf-1', refreshMinutes: 30 })]);
     store.state.lenses['sf-1'] = {
       sections: {
-        'gitlab:gitlab.example.com:review-requested': {
+        'acc:gitlab:https://gitlab.example.com:review-requested': {
           state: 'ok',
           items: [],
           fetchedAt: Date.now(),
@@ -687,7 +687,7 @@ describe('reconcileLensGrants', () => {
     const store = makeStoreWithLenses([node({ id: 'sf-1' })]);
     store.state.lenses['sf-1'] = {
       sections: {
-        'gitlab:gitlab.example.com:review-requested': {
+        'acc:gitlab:https://gitlab.example.com:review-requested': {
           state: 'needs-access',
           items: [],
           fetchedAt: Date.now(),
@@ -706,7 +706,7 @@ describe('reconcileLensGrants', () => {
     const store = makeStoreWithLenses([node({ id: 'sf-1' })]);
     store.state.lenses['sf-1'] = {
       sections: {
-        'gitlab:gitlab.example.com:review-requested': {
+        'acc:gitlab:https://gitlab.example.com:review-requested': {
           state: 'ok',
           items: [],
           fetchedAt: Date.now(),
@@ -881,8 +881,8 @@ describe('scheduling', () => {
 
     const resultEvents = events.filter((e) => e.payload.runtime.state !== 'pending');
     const sourceKeys = resultEvents.map((e) => e.payload.sourceKey);
-    expect(sourceKeys).toContain('gitlab:gitlab.example.com:authored');
-    expect(sourceKeys).toContain('github:github.com:authored');
+    expect(sourceKeys).toContain('acc:gitlab:https://gitlab.example.com:authored');
+    expect(sourceKeys).toContain('acc:github:https://github.com:authored');
     expect(resultEvents.every((e) => e.payload.folderId === 'sf-multi')).toBe(true);
   });
 
@@ -914,8 +914,8 @@ describe('scheduling', () => {
     const byKey = Object.fromEntries(
       results.map((e) => [e.payload.sourceKey, e.payload.runtime.state]),
     );
-    expect(byKey['gitlab:gitlab.example.com:authored']).toBe('ok');
-    expect(byKey['github:github.com:authored']).toBe('needs-access');
+    expect(byKey['acc:gitlab:https://gitlab.example.com:authored']).toBe('ok');
+    expect(byKey['acc:github:https://github.com:authored']).toBe('needs-access');
   });
 
   test('a folder already in flight is not re-fired', async () => {

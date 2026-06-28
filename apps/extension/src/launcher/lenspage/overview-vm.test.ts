@@ -234,7 +234,7 @@ describe('collectItems + bucketByEntity', () => {
     lenses: {
       f1: {
         sections: {
-          'github:github.com:authored': {
+          'gh:authored': {
             state: 'ok',
             fetchedAt: 1,
             items: [
@@ -247,7 +247,7 @@ describe('collectItems + bucketByEntity', () => {
               },
             ],
           },
-          'rss:news.example.com': {
+          feed: {
             state: 'ok',
             fetchedAt: 1,
             items: [{ id: 'a1', title: 'An article', url: 'u', publishedAt: 1 }],
@@ -269,7 +269,7 @@ describe('collectItems + bucketByEntity', () => {
   });
 
   test('a re-fetching (pending, cleared) section falls back to the held items', () => {
-    const ghItems = appState.lenses.f1?.sections['github:github.com:authored']?.items ?? [];
+    const ghItems = appState.lenses.f1?.sections['gh:authored']?.items ?? [];
     // The github section is mid-refresh: pending, items cleared.
     const refetching = {
       ...appState,
@@ -277,7 +277,7 @@ describe('collectItems + bucketByEntity', () => {
         f1: {
           sections: {
             ...appState.lenses.f1?.sections,
-            'github:github.com:authored': { state: 'pending', fetchedAt: null, items: [] },
+            'gh:authored': { state: 'pending', fetchedAt: null, items: [] },
           },
         },
       },
@@ -288,7 +288,7 @@ describe('collectItems + bucketByEntity', () => {
 
     // With held (last-known github items) → they're shown through the refresh, so
     // the overview never blanks (lens-overview hold; mirrors the sidebar).
-    const tagged = collectItems(node, refetching, { 'github:github.com:authored': ghItems });
+    const tagged = collectItems(node, refetching, { 'gh:authored': ghItems });
     expect(tagged).toHaveLength(3);
     const b = bucketByEntity(tagged);
     expect(b.change).toHaveLength(1);

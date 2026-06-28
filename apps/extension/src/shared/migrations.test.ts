@@ -15,8 +15,8 @@ import { createInitialState } from './store.svelte';
 const realMigrations = [...migrations];
 
 describe('the real migration chain', () => {
-  test('holds exactly the v2 through v14 entries', () => {
-    expect(realMigrations).toHaveLength(13);
+  test('holds exactly the v2 through v15 entries', () => {
+    expect(realMigrations).toHaveLength(14);
     expect(realMigrations[0]?.toVersion).toBe(2);
     expect(realMigrations[1]?.toVersion).toBe(3);
     expect(realMigrations[2]?.toVersion).toBe(4);
@@ -30,7 +30,8 @@ describe('the real migration chain', () => {
     expect(realMigrations[10]?.toVersion).toBe(12);
     expect(realMigrations[11]?.toVersion).toBe(13);
     expect(realMigrations[12]?.toVersion).toBe(14);
-    expect(CURRENT_SCHEMA_VERSION).toBe(14);
+    expect(realMigrations[13]?.toVersion).toBe(15);
+    expect(CURRENT_SCHEMA_VERSION).toBe(15);
     // v2–v6 are pass-throughs (see comment in migrations.ts). v7 is the
     // smart-tab-boundary real transformation; v8 is the multi-source wrap.
     const input = { schemaVersion: 1, pinnedBySpace: { work: [{ kind: 'tab', id: 'a' }] } };
@@ -145,13 +146,15 @@ describe('v7 migration — smart-tab-boundary slot widening', () => {
     };
 
     const migrated = runMigrations(v6State, 6);
-    // Parse against V13 since the full chain now ends at v13.
-    const parsed = AppStateV13Schema.parse(migrated);
+    const parsed = AppStateV14Schema.parse(migrated);
     // v7 widened the slot; v8 namespaced the item id (`gitlab:gitlab.com:item-a`);
     // v9 inserted the per-filter axis from the node's single migrated filter;
-    // v11 renamed smartItemBindings → lensItemBindings.
+    // v11 renamed smartItemBindings → lensItemBindings; v13 minted an account for
+    // gitlab/gitlab.com; v15 re-keyed the binding onto that account's id.
+    const accId = Object.keys(parsed.sources)[0];
+    expect(accId).toBeDefined();
     expect(parsed.lensItemBindings).toEqual({
-      f1: { 'gitlab:gitlab.com:authored:item-a': { 100: { tabId: 42, allowGlob: '' } } },
+      f1: { [`${accId}:authored:item-a`]: { 100: { tabId: 42, allowGlob: '' } } },
     });
   });
 
@@ -916,6 +919,103 @@ describe('v14 migration — lens-view-filters pass-through', () => {
     const nodes = (env.pinnedBySpace as Record<string, unknown[]>).s1;
     (nodes?.[0] as Record<string, unknown>).filter = { entities: ['change'] };
     expect(AppStateV13Schema.safeParse(env).success).toBe(false);
+  });
+});
+
+describe('v15 migration — rekey lens sections by sourceId', () => {
+  const v15Migration = realMigrations.find((m) => m.toVersion === 15);
+  if (!v15Migration) throw new Error('expected v15 migration');
+  const migrate = v15Migration.migrate;
+
+  // Build a minimal envelope carrying only the slices the v15 migration reads.
+  function run(
+    sources: Record<string, { id: string; provider: string; baseUrl: string }>,
+    lensItemBindings: Record<string, Record<string, unknown>>,
+    lensReadState: Record<string, string[]>,
+  ): {
+    lensItemBindings: Record<string, Record<string, unknown>>;
+    lensReadState: Record<string, string[]>;
+  } {
+    const env = { schemaVersion: 14, sources, lensItemBindings, lensReadState };
+    return migrate(structuredClone(env)) as ReturnType<typeof run>;
+  }
+
+  const SLOT = { 100: { tabId: 1, allowGlob: '' } };
+
+  test('rewrites a single-account binding key and read-state id onto the sourceId', () => {
+    const out = run(
+      { 'acc-1': { id: 'acc-1', provider: 'github', baseUrl: 'https://github.com' } },
+      { f1: { 'github:github.com:authored:42': SLOT } },
+      { f1: ['github:github.com:authored:7'] },
+    );
+    expect(out.lensItemBindings.f1).toEqual({ 'acc-1:authored:42': SLOT });
+    expect(out.lensReadState.f1).toEqual(['acc-1:authored:7']);
+  });
+
+  test('is idempotent on re-run (first segment already an account id)', () => {
+    const sources = { 'acc-1': { id: 'acc-1', provider: 'github', baseUrl: 'https://github.com' } };
+    const once = run(
+      sources,
+      { f1: { 'github:github.com:authored:42': SLOT } },
+      { f1: ['github:github.com:authored:7'] },
+    );
+    const twice = run(sources, once.lensItemBindings, once.lensReadState);
+    expect(twice.lensItemBindings.f1).toEqual({ 'acc-1:authored:42': SLOT });
+    expect(twice.lensReadState.f1).toEqual(['acc-1:authored:7']);
+  });
+
+  test('drops an unmappable id (no matching account)', () => {
+    const out = run(
+      { 'acc-1': { id: 'acc-1', provider: 'gitlab', baseUrl: 'https://gitlab.com' } },
+      { f1: { 'github:github.com:authored:42': SLOT } },
+      { f1: ['github:github.com:authored:7'] },
+    );
+    expect(out.lensItemBindings.f1).toEqual({});
+    expect(out.lensReadState.f1).toEqual([]);
+  });
+
+  test('drops a same-origin-ambiguous id (two accounts share an identical provider:host:)', () => {
+    const out = run(
+      {
+        'acc-work': { id: 'acc-work', provider: 'github', baseUrl: 'https://github.com' },
+        'acc-personal': { id: 'acc-personal', provider: 'github', baseUrl: 'https://github.com' },
+      },
+      { f1: { 'github:github.com:authored:42': SLOT } },
+      { f1: ['github:github.com:authored:7'] },
+    );
+    expect(out.lensItemBindings.f1).toEqual({});
+    expect(out.lensReadState.f1).toEqual([]);
+  });
+
+  test('longest-prefix: a port-bearing host coexisting with a port-less sibling keeps its data', () => {
+    const out = run(
+      {
+        'acc-A': { id: 'acc-A', provider: 'gitlab', baseUrl: 'https://git.example.com' },
+        'acc-B': { id: 'acc-B', provider: 'gitlab', baseUrl: 'https://git.example.com:8443' },
+      },
+      {
+        f1: {
+          'gitlab:git.example.com:8443:authored:42': SLOT,
+          'gitlab:git.example.com:authored:7': SLOT,
+        },
+      },
+      { f1: ['gitlab:git.example.com:8443:authored:99', 'gitlab:git.example.com:authored:5'] },
+    );
+    expect(out.lensItemBindings.f1).toEqual({
+      'acc-B:authored:42': SLOT,
+      'acc-A:authored:7': SLOT,
+    });
+    expect(out.lensReadState.f1).toEqual(['acc-B:authored:99', 'acc-A:authored:5']);
+  });
+
+  test('rewrites an rss URL nativeId match-first (not a colon split)', () => {
+    const out = run(
+      { 'acc-r': { id: 'acc-r', provider: 'rss', baseUrl: 'https://feeds.x.com' } },
+      { f1: { 'rss:feeds.x.com:https://x.com/post/1': SLOT } },
+      { f1: ['rss:feeds.x.com:https://x.com/post/1'] },
+    );
+    expect(out.lensItemBindings.f1).toEqual({ 'acc-r:https://x.com/post/1': SLOT });
+    expect(out.lensReadState.f1).toEqual(['acc-r:https://x.com/post/1']);
   });
 });
 

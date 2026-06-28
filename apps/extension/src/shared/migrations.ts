@@ -347,7 +347,123 @@ export const migrations: Migration[] = [
     toVersion: 14,
     migrate: (raw: unknown): unknown => raw,
   },
+  {
+    // v15 (rekey-lens-sections-by-source-id): a REAL transformation — re-key
+    // lens sections by account `sourceId` instead of host. Rewrite both
+    // persisted `sourceKey`-embedding slices: every `lensItemBindings[folderId]`
+    // KEY and every `lensReadState[folderId][]` ID, from the legacy
+    // `${source}:${host}:${query}:${nativeId}` form (rss:
+    // `${source}:${host}:${nativeId}`) to `${sourceId}:${query}:${nativeId}`
+    // (rss: `${sourceId}:${nativeId}`). Resolution is match-first by LONGEST
+    // prefix (a host carries ports and rss nativeIds are URLs, so a blind
+    // `split(':')` cannot recover the boundary); see `rewriteNamespacedId`.
+    // Synchronous, pure, idempotent.
+    toVersion: 15,
+    migrate: (raw: unknown): unknown => {
+      if (typeof raw !== 'object' || raw === null) return raw;
+      const state = raw as Record<string, unknown>;
+      const sources = state.sources;
+      if (typeof sources !== 'object' || sources === null) return raw;
+      const sourceRecord = sources as Record<string, unknown>;
+
+      // Each account's legacy section prefix `${provider}:${host}:` (port-bearing
+      // host, mirroring the pre-v15 `sourceKey`). A malformed `baseUrl` degrades
+      // to the raw string exactly as the old key derivation did.
+      const accounts: Array<{ id: string; prefix: string }> = [];
+      for (const acc of Object.values(sourceRecord)) {
+        if (typeof acc !== 'object' || acc === null) continue;
+        const a = acc as Record<string, unknown>;
+        if (
+          typeof a.id !== 'string' ||
+          typeof a.provider !== 'string' ||
+          typeof a.baseUrl !== 'string'
+        )
+          continue;
+        accounts.push({ id: a.id, prefix: `${a.provider}:${hostFromBaseUrl(a.baseUrl)}:` });
+      }
+      const sourceIds = new Set(Object.keys(sourceRecord));
+
+      // (a) lensItemBindings — rewrite KEYS, dropping unmappable/ambiguous slots.
+      const bindings = state.lensItemBindings;
+      if (typeof bindings === 'object' && bindings !== null) {
+        const byFolder = bindings as Record<string, unknown>;
+        for (const [folderId, byId] of Object.entries(byFolder)) {
+          if (typeof byId !== 'object' || byId === null) continue;
+          const rewritten: Record<string, unknown> = {};
+          for (const [namespacedId, slot] of Object.entries(byId as Record<string, unknown>)) {
+            const next = rewriteNamespacedId(namespacedId, accounts, sourceIds);
+            if (next !== null) rewritten[next] = slot;
+          }
+          byFolder[folderId] = rewritten;
+        }
+      }
+
+      // (b) lensReadState — rewrite ID strings, dropping unmappable/ambiguous ids.
+      const readState = state.lensReadState;
+      if (typeof readState === 'object' && readState !== null) {
+        const byFolder = readState as Record<string, unknown>;
+        for (const [folderId, ids] of Object.entries(byFolder)) {
+          if (!Array.isArray(ids)) continue;
+          const rewritten: string[] = [];
+          for (const id of ids) {
+            if (typeof id !== 'string') continue;
+            const next = rewriteNamespacedId(id, accounts, sourceIds);
+            if (next !== null) rewritten.push(next);
+          }
+          byFolder[folderId] = rewritten;
+        }
+      }
+
+      return raw;
+    },
+  },
 ];
+
+/** Port-bearing host for an account `baseUrl`, degrading a malformed url to the
+ * raw string (the pre-v15 `sourceKey` did the same). */
+function hostFromBaseUrl(baseUrl: string): string {
+  try {
+    return new URL(baseUrl).host;
+  } catch {
+    return baseUrl;
+  }
+}
+
+/**
+ * Rewrite a legacy namespaced id (`${source}:${host}:${query}:${nativeId}`, rss
+ * `${source}:${host}:${nativeId}`) onto the v15 `${sourceId}:…` form by
+ * **match-first, longest-prefix** resolution against the known account prefixes.
+ * Returns `null` to DROP the id when no account matches (deleted account) or two
+ * accounts share an identical `${provider}:${host}:` prefix (the genuinely
+ * same-origin collision this migration exists to disambiguate — the legacy id
+ * cannot say which account it belonged to). Idempotent: an id whose first
+ * segment is already an account id is returned unchanged.
+ */
+function rewriteNamespacedId(
+  id: string,
+  accounts: Array<{ id: string; prefix: string }>,
+  sourceIds: Set<string>,
+): string | null {
+  // Idempotent: a v15 id's first segment is a minted account id (UUID); a legacy
+  // id's first segment is a provider enum, which never collides with an id.
+  const firstColon = id.indexOf(':');
+  const firstSegment = firstColon === -1 ? id : id.slice(0, firstColon);
+  if (sourceIds.has(firstSegment)) return id;
+
+  let best: { id: string; prefix: string } | null = null;
+  let tieAtBest = false;
+  for (const acc of accounts) {
+    if (!id.startsWith(acc.prefix)) continue;
+    if (best === null || acc.prefix.length > best.prefix.length) {
+      best = acc;
+      tieAtBest = false;
+    } else if (acc.prefix.length === best.prefix.length) {
+      tieAtBest = true;
+    }
+  }
+  if (best === null || tieAtBest) return null;
+  return `${best.id}:${id.slice(best.prefix.length)}`;
+}
 
 export function assertMigrationsTerminal(list: Migration[], currentVersion: number): void {
   if (list.length === 0) return;

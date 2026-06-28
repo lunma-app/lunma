@@ -88,10 +88,12 @@ Query results SHALL live in a broadcast-only `AppState` slice
 `lenses: { [folderId]: LensRuntime }` where `LensRuntime` is
 `{ sections: { [sourceKey: string]: LensSectionRuntime } }` and `LensSectionRuntime` is
 `{ state: 'pending' | 'ok' | 'signed-out' | 'error' | 'needs-access'; items: LensItem[]; fetchedAt: number | null }`.
-`sourceKey` is the **per-filter** section identity: `${source}:${new URL(baseUrl).host}:${query}`
-for a queue section, and `${source}:${new URL(baseUrl).host}` for an rss section (no query). It is
-derived from a **resolved single-query config** produced by expanding a `LensSource` over
-its `queries[]`, and is the stable identity key for that section within the lens.
+`sourceKey` is the **per-account, per-filter** section identity: `${sourceId}:${query}`
+for a queue section, and `${sourceId}` for an rss section (no query), where `sourceId`
+is the referenced account's id. It is derived from a **resolved single-query config**
+produced by expanding a `LensSource` over its `queries[]`, and is the stable identity
+key for that section within the lens. Keying by `sourceId` (rather than `source`/`host`)
+ensures two accounts on the same host occupy distinct sections.
 
 The slice SHALL never be persisted and SHALL be written only by the coordinator drain: a connector
 fetch completes and enqueues the internal event
@@ -103,19 +105,25 @@ the slice is empty, so each section renders pending until its first fetch.
 
 #### Scenario: Results arrive through the single-writer drain per section
 
-- **WHEN** a connector fetch completes for lens `f1`, source key `gitlab:gitlab.com:authored`
-- **THEN** the connector enqueues a `lenses.result` event carrying `{ folderId: 'f1', sourceKey: 'gitlab:gitlab.com:authored', runtime }` and the coordinator handler writes it via `setLensSectionRuntime`
+- **WHEN** a connector fetch completes for lens `f1`, account `acc-1`, source key `acc-1:authored`
+- **THEN** the connector enqueues a `lenses.result` event carrying `{ folderId: 'f1', sourceKey: 'acc-1:authored', runtime }` and the coordinator handler writes it via `setLensSectionRuntime`
 - **AND** exactly one `state-broadcast` carries the updated section
 
 #### Scenario: Two filters of one instance occupy distinct sections
 
-- **GIVEN** a lens with one instance `{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored', 'review-requested'] }`
+- **GIVEN** a lens with one instance referencing account `acc-1` `{ source: 'gitlab', baseUrl: 'https://gitlab.com', queries: ['authored', 'review-requested'] }`
 - **WHEN** both sections fetch
-- **THEN** the runtime holds two sections keyed `gitlab:gitlab.com:authored` and `gitlab:gitlab.com:review-requested`, neither overwriting the other
+- **THEN** the runtime holds two sections keyed `acc-1:authored` and `acc-1:review-requested`, neither overwriting the other
+
+#### Scenario: Two same-host accounts occupy distinct sections
+
+- **GIVEN** a lens referencing two `github.com` accounts `acc-work` and `acc-personal`, each carrying `['authored']`
+- **WHEN** both sections fetch
+- **THEN** the runtime holds two sections keyed `acc-work:authored` and `acc-personal:authored`, neither overwriting the other
 
 #### Scenario: A refresh keeps last-known items visible per section
 
-- **GIVEN** lens `f1`'s section `gitlab:gitlab.com:authored` runtime is `ok` with 5 items
+- **GIVEN** lens `f1`'s section `acc-1:authored` runtime is `ok` with 5 items
 - **WHEN** a refresh begins for that lens
 - **THEN** the section state becomes `pending` while `items` still holds the 5 items
 
@@ -170,16 +178,16 @@ shows mixed states in the sectioned render.
 
 #### Scenario: A section on an ungranted origin shows needs-access while other sections fetch
 
-- **GIVEN** a lens with sections `[gitlab:gitlab.com:authored, github:github.com:authored]` where `https://api.github.com/*` is not granted but `https://gitlab.com/*` is
+- **GIVEN** a lens with sections `[acc-gl:authored, acc-gh:authored]` where `https://api.github.com/*` (account `acc-gh`) is not granted but `https://gitlab.com/*` (account `acc-gl`) is
 - **WHEN** a poll is due
-- **THEN** the `github:github.com:authored` section resolves to `needs-access` without a network request
-- **AND** the `gitlab:gitlab.com:authored` section proceeds to fetch normally
+- **THEN** the `acc-gh:authored` section resolves to `needs-access` without a network request
+- **AND** the `acc-gl:authored` section proceeds to fetch normally
 
 #### Scenario: Granting an instance's origin refetches all its filter sections
 
-- **GIVEN** a lens with a gitlab instance carrying `['authored', 'review-requested']` (both sections `needs-access`) and a granted github section
+- **GIVEN** a lens with a gitlab instance `acc-gl` carrying `['authored', 'review-requested']` (both sections `needs-access`) and a granted github section
 - **WHEN** the user grants `https://gitlab.com/*`
-- **THEN** both gitlab filter sections refetch (they share the instance origin) and the github section is unaffected
+- **THEN** both gitlab filter sections (`acc-gl:authored`, `acc-gl:review-requested`) refetch (they share the instance origin) and the github section is unaffected
 
 ### Requirement: Creating or enabling a lens requests its host origin
 
@@ -219,10 +227,10 @@ unchanged.
 
 #### Scenario: A lens with one granted and one needs-access section renders both
 
-- **GIVEN** a lens with sections `gitlab:gitlab.com:authored` (ok, 5 items) and `github:github.com:authored` (needs-access)
+- **GIVEN** a lens with sections `acc-gl:authored` (ok, 5 items) and `acc-gh:authored` (needs-access)
 - **WHEN** the lens is expanded
-- **THEN** the `gitlab:gitlab.com:authored` section renders its 5 items normally
-- **AND** the `github:github.com:authored` section renders one muted "Lunma needs access to api.github.com" row with a "Grant access" control
+- **THEN** the `acc-gl:authored` section renders its 5 items normally
+- **AND** the `acc-gh:authored` section renders one muted "Lunma needs access to api.github.com" row with a "Grant access" control
 
 ### Requirement: The GitLab connector fetches canned queries over REST
 
@@ -539,21 +547,21 @@ that lens.
 
 ### Requirement: Lens item bindings give results pinned-tab activation
 
-`lensItemBindings` is typed as `{ [folderId: FolderId]: { [namespacedItemId: string]: { [windowId: WindowId]: { tabId: TabId; allowGlob: string } } } }` in `AppState`, persisted at schema v9 (raised from v8 by this change). Each `namespacedItemId` SHALL be of the form `${sourceKey}:${nativeId}` where `sourceKey` is the **per-filter** section key (`${source}:${host}:${query}` for queue sections, `${source}:${host}` for rss) and `nativeId` is the connector's native item id. This prevents collisions when two filters of the same instance — or two instances — produce items with the same native id.
+`lensItemBindings` is typed as `{ [folderId: FolderId]: { [namespacedItemId: string]: { [windowId: WindowId]: { tabId: TabId; allowGlob: string } } } }` in `AppState`, persisted at schema v9. Each `namespacedItemId` SHALL be of the form `${sourceKey}:${nativeId}` where `sourceKey` is the **per-account, per-filter** section key (`${sourceId}:${query}` for queue sections, `${sourceId}` for rss) and `nativeId` is the connector's native item id. This prevents collisions when two filters of the same instance — two instances — or two accounts on the same host produce items with the same native id.
 
-All open/close/bind/unbind behavior, the `dropLensBindings` demote-on-delete behavior, and the `isBound` tab-created guard are unchanged except that every slot read/write uses the per-filter namespaced id form. `openLensItem` receives a `namespacedItemId` from the sidebar; the SW uses it as the binding key directly.
+All open/close/bind/unbind behavior, the `dropLensBindings` demote-on-delete behavior, and the `isBound` tab-created guard are unchanged except that every slot read/write uses the per-account namespaced id form. `openLensItem` receives a `namespacedItemId` from the sidebar; the SW uses it as the binding key directly.
 
 #### Scenario: Opening a lens item from a multi-filter section uses the per-filter namespaced id
 
-- **GIVEN** a lens with one gitlab instance carrying filters `['authored', 'review-requested']` and an authored item with native id `42`
-- **WHEN** `openLensItem { folderId, itemId: 'gitlab:gitlab.com:authored:42', windowId: 100, spaceId }` is dispatched
-- **THEN** a tab opens at the item's URL and is bound under `lensItemBindings[folderId]['gitlab:gitlab.com:authored:42'][100]`
+- **GIVEN** a lens referencing gitlab account `acc-1` carrying filters `['authored', 'review-requested']` and an authored item with native id `42`
+- **WHEN** `openLensItem { folderId, itemId: 'acc-1:authored:42', windowId: 100, spaceId }` is dispatched
+- **THEN** a tab opens at the item's URL and is bound under `lensItemBindings[folderId]['acc-1:authored:42'][100]`
 
 #### Scenario: The same MR in two filter sections binds independently
 
-- **GIVEN** an MR with native id `42` appearing in both the `authored` and `review-requested` sections of one gitlab instance
+- **GIVEN** an MR with native id `42` appearing in both the `authored` and `review-requested` sections of gitlab account `acc-1`
 - **WHEN** the row is activated in each section
-- **THEN** `lensItemBindings[folderId]` SHALL hold separate keys `'gitlab:gitlab.com:authored:42'` and `'gitlab:gitlab.com:review-requested:42'`
+- **THEN** `lensItemBindings[folderId]` SHALL hold separate keys `'acc-1:authored:42'` and `'acc-1:review-requested:42'`
 
 ### Requirement: Lens item boundary re-arms on page load
 
@@ -979,21 +987,27 @@ and touch-reachable.
 
 ### Requirement: Source key derivation is pure and stable
 
-`sourceKey(cfg: ResolvedLensSource): string` in `background/lenses.ts` SHALL return
-`${cfg.source}:${new URL(cfg.baseUrl).host}:${cfg.query}` when `cfg.query` is present (queue
-sections), and `${cfg.source}:${new URL(cfg.baseUrl).host}` when it is absent (rss). It SHALL be
-pure and SHALL NOT perform I/O. The same derivation SHALL be used by `setLensSectionRuntime`,
+The canonical `sourceKey(cfg: ResolvedLensSource): string` function SHALL live in
+`shared/lens-labels.ts` (importable by the SW, the sidebar, and the overview page under
+the layer DAG) and SHALL return `${cfg.sourceId}:${cfg.query}` when `cfg.query` is
+present (queue sections) and `${cfg.sourceId}` when it is absent (rss). It SHALL be pure
+and SHALL NOT perform I/O. The same derivation SHALL be used by `setLensSectionRuntime`,
 `lenses.result` events, and the `lensItemBindings` namespace.
 
 #### Scenario: Source key includes the filter for a queue section
 
-- **WHEN** a gitlab authored section on `https://gitlab.example.com` produces `sourceKey`
-- **THEN** the key is `'gitlab:gitlab.example.com:authored'` and is stable across lens name changes
+- **WHEN** a gitlab authored section referencing account `acc-1` produces `sourceKey`
+- **THEN** the key is `'acc-1:authored'` and is stable across lens name changes and the account's host/name changes
 
 #### Scenario: An rss source key omits the query
 
-- **WHEN** an rss section on `https://feeds.example.com/rss` produces `sourceKey`
-- **THEN** the key is `'rss:feeds.example.com'`
+- **WHEN** an rss section referencing account `acc-feed` produces `sourceKey`
+- **THEN** the key is `'acc-feed'`
+
+#### Scenario: Two same-host accounts derive distinct keys
+
+- **WHEN** two `github.com` accounts `acc-work` and `acc-personal`, both `authored`, produce `sourceKey`
+- **THEN** the keys are `'acc-work:authored'` and `'acc-personal:authored'` (distinct, no collision)
 
 ### Requirement: Section identity is computed identically across surfaces
 
@@ -1002,12 +1016,14 @@ canonical function shared by the service worker, the sidebar, and the overview
 page. The service worker is the single writer that drains results keyed by this
 identity, so the sidebar and the overview page MUST key sections by the exact
 same function — for every source, including a self-hosted GitHub Enterprise or
-GitLab instance reachable on a non-default port, and a source whose `baseUrl` is
-malformed. No surface may maintain its own variant.
+GitLab instance, and a source whose `baseUrl` is malformed. No surface may
+maintain its own variant.
 
-The key SHALL be `` `${source}:${host}` `` for a feed-style source (no filter)
-and `` `${source}:${host}:${query}` `` for a filtered source, where `host`
-includes any non-default port carried by `baseUrl`.
+The key SHALL be `` `${sourceId}` `` for a feed-style source (no filter) and
+`` `${sourceId}:${query}` `` for a filtered source, where `sourceId` is the
+referenced account's id. Because the key is the account id (not host-derived), a
+malformed or port-bearing `baseUrl` does not affect section identity, and two
+accounts on the same host key distinctly.
 
 #### Scenario: The same source keys identically on every surface
 
@@ -1019,15 +1035,17 @@ includes any non-default port carried by `baseUrl`.
 
 - **WHEN** a source's `baseUrl` carries a non-default port (e.g. a self-hosted
   GitLab at `https://git.example.com:8443`)
-- **THEN** the overview page's `sourceKey` includes the port and matches the key
-  the service worker drained results under, so the section lines up rather than
-  resolving as a distinct or empty section
+- **THEN** every surface derives the same `sourceKey` (the account `sourceId`),
+  so the section lines up rather than resolving as a distinct or empty section
+- **AND** the section's displayed host/name (derived from the account, not the
+  key) still includes the port
 
-#### Scenario: A filtered source keys by source, host, and query
+#### Scenario: A filtered source keys by account and query
 
 - **WHEN** a source carries a `query` (a filter)
-- **THEN** its `sourceKey` is `` `${source}:${host}:${query}` ``, distinct from
-  the same source under a different filter
+- **THEN** its `sourceKey` is `` `${sourceId}:${query}` ``, distinct from the
+  same account under a different filter and from a different account under the
+  same filter
 
 ### Requirement: `hideRead` and feed menu actions apply only to feed sections
 
@@ -1053,8 +1071,8 @@ section header and therefore no per-section collapse.
 A section's collapsed state SHALL be stored as **sidebar-local, per-window, ephemeral** state on
 `SidebarLocalState`:
 `collapsedLensSectionsByWindow?: { [windowId: WindowId]: { [folderId: FolderId]: { [sourceKey: string]: boolean } } }`,
-where `sourceKey` is the section's resolved identity (`${source}:${host}:${query}` for a queue
-section, `${source}:${host}` for an rss feed). The state SHALL NEVER be persisted to storage and
+where `sourceKey` is the section's resolved identity (`${sourceId}:${query}` for a queue
+section, `${sourceId}` for an rss feed). The state SHALL NEVER be persisted to storage and
 SHALL NEVER be broadcast (it is augmented onto the store like `expandedFoldersByWindow`). The
 mutator `setLensSectionCollapsed(windowId, folderId, sourceKey, collapsed): void` SHALL write it.
 An **absent** entry means **expanded**: a section defaults to expanded, and after an SW restart or
@@ -1074,9 +1092,9 @@ section-body entrance animation SHALL be disabled under reduced motion.
 
 #### Scenario: Collapsing a section hides its body and keeps its header
 
-- **GIVEN** a two-section lens `[gitlab:gitlab.com:authored (ok, 5 items), gitlab:gitlab.com:review-requested (ok, 3 items)]`, both expanded, in window 100
+- **GIVEN** a two-section lens `[acc-1:authored (ok, 5 items), acc-1:review-requested (ok, 3 items)]`, both expanded, in window 100
 - **WHEN** the user activates the authored section header
-- **THEN** `setLensSectionCollapsed(100, folderId, 'gitlab:gitlab.com:authored', true)` is written
+- **THEN** `setLensSectionCollapsed(100, folderId, 'acc-1:authored', true)` is written
 - **AND** the authored section header (with its count) still renders while its 5 result rows are hidden
 - **AND** the review-requested section continues to render its header and 3 rows
 
@@ -1088,13 +1106,13 @@ section-body entrance animation SHALL be disabled under reduced motion.
 
 #### Scenario: Sections default to expanded after a restart
 
-- **GIVEN** a section was collapsed in window 100 before the SW restarted
-- **WHEN** the sidebar re-renders the lens after restart
-- **THEN** the section renders expanded (the ephemeral collapse state was not persisted)
+- **GIVEN** a lens whose section was collapsed in window 100
+- **WHEN** the SW restarts (the ephemeral collapse state is gone)
+- **THEN** every section of the lens renders expanded
 
 #### Scenario: A collapsed busy section still contributes to the lens badge
 
-- **GIVEN** a two-section lens whose collapsed gitlab authored section holds 4 items and whose expanded feed section holds 2 unread
+- **GIVEN** a two-section lens whose collapsed gitlab authored section (`acc-1:authored`) holds 4 items and whose expanded feed section holds 2 unread
 - **WHEN** the lens renders
 - **THEN** the lens badge reads `6` (collapse does not change the badge)
 
@@ -1285,13 +1303,13 @@ Every **feed** card SHALL lead with a hero of one fixed aspect ratio so titles a
 
 ### Requirement: Page result activation reuses existing open semantics
 
-Activating a result card on the page SHALL dispatch `openLensItem` (the same command the sidebar uses), so a tab is bound/focused per window and feed read-state (consume-on-move-on, auto-advance, mark-read) behaves identically to opening from the sidebar. The page SHALL derive each item's namespaced id (`${sourceKey}:${nativeId}`) using the existing `sourceKey` derivation. The page SHALL NOT introduce a separate activation path or mutate bindings directly.
+Activating a result card on the page SHALL dispatch `openLensItem` (the same command the sidebar uses), so a tab is bound/focused per window and feed read-state (consume-on-move-on, auto-advance, mark-read) behaves identically to opening from the sidebar. The page SHALL derive each item's namespaced id (`${sourceKey}:${nativeId}`, i.e. `${sourceId}:${query}:${nativeId}` for a queue item, `${sourceId}:${nativeId}` for a feed item) using the canonical `sourceKey` derivation. The page SHALL NOT introduce a separate activation path or mutate bindings directly.
 
 #### Scenario: Opening a queue item from the page binds a tab
 
-- **GIVEN** the page for lens `f1` with an authored gitlab item native id `42`
+- **GIVEN** the page for lens `f1` with an authored gitlab item (account `acc-1`) native id `42`
 - **WHEN** the user activates that card in window 100
-- **THEN** `openLensItem { folderId: 'f1', itemId: 'gitlab:gitlab.com:authored:42', windowId: 100, spaceId }` is dispatched and the existing bind/focus behavior applies
+- **THEN** `openLensItem { folderId: 'f1', itemId: 'acc-1:authored:42', windowId: 100, spaceId }` is dispatched and the existing bind/focus behavior applies
 
 #### Scenario: Opening a feed item from the page drains it like the sidebar
 

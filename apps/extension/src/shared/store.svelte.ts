@@ -1,4 +1,5 @@
 import { deriveLensKind } from './lens-entity';
+import { sourceKey } from './lens-labels';
 import { log } from './logger';
 import { CURRENT_SCHEMA_VERSION } from './schemas';
 import { disambiguateSpaceName, normalizeSpaceName } from './space-names';
@@ -8,6 +9,7 @@ import type {
   FolderId,
   LensFilter,
   LensKind,
+  LensQuery,
   LensSectionRuntime,
   LensSourceRef,
   LiveTab,
@@ -987,23 +989,25 @@ export class LunmaStore {
     if (runtime) {
       // Drop sections no longer in the resolved set (removed filters/refs, or a
       // ref whose account was deleted). Resolve each reference against the
-      // accounts map (connector-accounts) to derive its `${provider}:${host}`
-      // section key prefix; a dangling ref contributes no valid key.
+      // accounts map (connector-accounts) and derive its section key via the
+      // canonical `sourceKey` (keyed by `sourceId`); a dangling ref contributes
+      // no valid key.
       const validKeys = new Set<string>();
       for (const ref of config.sources) {
         const account = this.state.sources[ref.sourceId];
         if (!account) continue;
-        let host: string;
-        try {
-          host = new URL(account.baseUrl).host;
-        } catch {
-          continue;
-        }
-        const base = `${account.provider}:${host}`;
-        if (ref.queries.length === 0) {
-          validKeys.add(base);
-        } else {
-          for (const q of ref.queries) validKeys.add(`${base}:${q}`);
+        const queries: Array<LensQuery | undefined> =
+          ref.queries.length === 0 ? [undefined] : ref.queries;
+        for (const query of queries) {
+          validKeys.add(
+            sourceKey({
+              source: account.provider,
+              baseUrl: account.baseUrl,
+              lensKind: config.lensKind,
+              sourceId: ref.sourceId,
+              query,
+            }),
+          );
         }
       }
       for (const key of Object.keys(runtime.sections)) {
@@ -1777,11 +1781,13 @@ export class LunmaStore {
       return undefined;
     }
 
-    // Extract sourceKey: first two colon-delimited segments of the namespaced id.
-    const firstColon = closingNamespacedId.indexOf(':');
-    const secondColon = firstColon !== -1 ? closingNamespacedId.indexOf(':', firstColon + 1) : -1;
-    if (secondColon === -1) return undefined;
-    const sk = closingNamespacedId.slice(0, secondColon);
+    // Recover the section key by match-first against the runtime's section keys
+    // (the canonical parse, mirroring `Lens.svelte`): a feed `sourceKey` is now a
+    // single `sourceId` segment and the `nativeId` remainder is a URL full of
+    // colons, so a colon-count slice cannot recover the boundary.
+    const sections = this.state.lenses[targetFolderId]?.sections ?? {};
+    const sk = Object.keys(sections).find((k) => closingNamespacedId.startsWith(`${k}:`));
+    if (sk === undefined) return undefined;
 
     // Find the folder's space.
     let spaceId: SpaceId | undefined;
@@ -1794,7 +1800,7 @@ export class LunmaStore {
     if (!spaceId) return undefined;
 
     // Items in section order from the runtime.
-    const items = this.state.lenses[targetFolderId]?.sections[sk]?.items ?? [];
+    const items = sections[sk]?.items ?? [];
     if (items.length === 0) return undefined;
 
     const readSet = new Set(this.state.lensReadState[targetFolderId] ?? []);

@@ -1,6 +1,11 @@
 import { log } from '../logger';
 import { runMigrations } from '../migrations';
-import { type AppStateV14, AppStateV14Schema, CURRENT_SCHEMA_VERSION } from '../schemas';
+import {
+  type AppStateV14,
+  AppStateV14Schema,
+  AppStateV15Schema,
+  CURRENT_SCHEMA_VERSION,
+} from '../schemas';
 import { createInitialState } from '../store.svelte';
 import type { AppState } from '../types';
 
@@ -330,7 +335,7 @@ export async function readPersistedState(): Promise<PersistedRead> {
     return { kind: 'corrupt' };
   }
 
-  const parsed = AppStateV14Schema.safeParse(migrated);
+  const parsed = AppStateV15Schema.safeParse(migrated);
   if (!parsed.success) {
     // Per-slice salvage BEFORE the corrupt fallback (D4): recover every valid
     // Space (and any valid slice) instead of discarding the whole payload. The
