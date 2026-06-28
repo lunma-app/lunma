@@ -1,5 +1,6 @@
 <script lang="ts">
 import { onMount } from 'svelte';
+import { applyLocaleFromSettings, setLocale } from '../shared/i18n';
 import { BUILT_IN_ENGINES } from '../shared/search-engines';
 import {
   DEFAULTS,
@@ -8,6 +9,7 @@ import {
   type SettingDeclaration,
   type Settings,
   TOGGLE_SEGMENTS,
+  watchSettings,
   writeSetting,
 } from '../shared/settings';
 import { applyDensityToDocument, applyThemeToDocument } from '../shared/surface-boot';
@@ -127,12 +129,19 @@ function applyTheme(theme: Settings['theme']): void {
   applyThemeToDocument(theme);
 }
 
+// Previous `language` value, for the gated reload watch below. Seeded from the
+// stored value once the read resolves (a plain variable — the watch closure
+// reads the latest; no reactivity needed). options/main.ts already seeds the
+// locale before mount, so first paint is localized; this tracks later changes.
+let prevLanguage: Settings['language'] = DEFAULTS.language;
+
 onMount(() => {
   let cancelled = false;
   void (async () => {
     const s = await readSettings();
     if (cancelled) return;
     settings = s;
+    prevLanguage = s.language;
     applyDensity(s.density);
     applyTheme(s.theme);
   })();
@@ -140,6 +149,20 @@ onMount(() => {
     cancelled = true;
   };
 });
+
+// Gated reload: language is the one setting that needs a reload to re-localize
+// the mounted tree (Paraglide resolves messages at evaluation time). Reload ONLY
+// on a `language` delta; every other setting keeps applying live via the
+// onSelect handlers above (Options has no other live-apply watch). This is the
+// single reload owner — setLocale persists with { reload: false }.
+onMount(() =>
+  watchSettings((s) => {
+    if (s.language === prevLanguage) return;
+    prevLanguage = s.language;
+    applyLocaleFromSettings(s.language);
+    location.reload();
+  }),
+);
 
 // Deep-link by hash: scroll the matching element into view on load and on hash
 // change (a reused options tab). Drives both the sidebar archived chip
@@ -169,6 +192,14 @@ function onSelect(decl: SettingDeclaration, value: string): void {
   // Enum values are constrained to the declared options, so the cast is safe.
   const next = value as Settings[typeof decl.key];
   settings = { ...settings, [decl.key]: next };
+  if (decl.key === 'language') {
+    // Route the locale through the i18n path (handles the 'auto' sentinel) — it
+    // persists via writeSetting('language', …) and seeds the cache. The gated
+    // watchSettings below owns the reload, so pass { reload: false } (no double
+    // reload). Mirrors the density/theme special-cases.
+    setLocale(settings.language, { reload: false });
+    return;
+  }
   void writeSetting(decl.key, next);
   // Read the freshly-merged value back from `settings` so each apply call is
   // typed precisely rather than the cast `DensityMode | Tint | ThemeMode` union.

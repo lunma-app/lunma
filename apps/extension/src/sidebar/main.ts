@@ -1,4 +1,5 @@
 import { mount } from 'svelte';
+import { applyLocaleFromSettings, initLocale } from '../shared/i18n';
 import { log } from '../shared/logger';
 import { onStateBroadcast, reportSidebarFocus, requestStateSnapshot } from '../shared/messages';
 import { readSettings, type Settings, watchSettings } from '../shared/settings';
@@ -61,6 +62,9 @@ async function boot(): Promise<void> {
   // via Promise.all would cut cold-start latency, but density must be applied
   // pre-mount to prevent a layout flash — so only non-layout settings can move.
   const initialSettings = await readSettings();
+  // Seed the locale cache before mount so the first painted frame is localized
+  // (no English-then-locale flash). SW-safe; reads the same `language` setting.
+  await initLocale();
   applyDensity(initialSettings);
   applyTheme(initialSettings);
   // Seed the sidebar's live mirror of the pinned-tab boundary default so the
@@ -173,7 +177,17 @@ async function boot(): Promise<void> {
 
   // Re-apply on change (e.g. the user switches density or colour intensity in
   // the options page). Registered once per successful boot, after mount.
+  // A `language` change is the one exception: it reloads (Paraglide resolves
+  // messages at evaluation time, so a reload is the simplest correct re-render),
+  // gated on a delta so density/theme/tint/glares keep applying live as before.
+  let prevLanguage = initialSettings.language;
   watchSettings((settings) => {
+    if (settings.language !== prevLanguage) {
+      prevLanguage = settings.language;
+      applyLocaleFromSettings(settings.language);
+      location.reload();
+      return;
+    }
     applyDensity(settings);
     applyTheme(settings);
     applyTint(settings);

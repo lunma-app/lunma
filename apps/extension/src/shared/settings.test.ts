@@ -116,6 +116,7 @@ describe('writeSetting', () => {
       autoArchiveEnabled: true,
       autoArchiveIdleMinutes: 720,
       autoArchiveRetentionDays: 7,
+      language: 'auto',
     });
   });
 
@@ -140,6 +141,7 @@ describe('writeSetting', () => {
       autoArchiveEnabled: true,
       autoArchiveIdleMinutes: 720,
       autoArchiveRetentionDays: 7,
+      language: 'auto',
     });
   });
 
@@ -174,6 +176,7 @@ describe('watchSettings', () => {
       autoArchiveEnabled: true,
       autoArchiveIdleMinutes: 720,
       autoArchiveRetentionDays: 7,
+      language: 'auto',
     });
   });
 
@@ -227,6 +230,7 @@ describe('watchSettings', () => {
       autoArchiveEnabled: true,
       autoArchiveIdleMinutes: 720,
       autoArchiveRetentionDays: 7,
+      language: 'auto',
     });
   });
 });
@@ -283,6 +287,7 @@ describe('tint setting', () => {
       autoArchiveEnabled: true,
       autoArchiveIdleMinutes: 720,
       autoArchiveRetentionDays: 7,
+      language: 'auto',
     });
   });
 });
@@ -508,5 +513,36 @@ describe('dedupNewTabNavigations setting (navigation-tab-dedup)', () => {
   test('writeSetting round-trips the toggle key', async () => {
     await writeSetting('dedupNewTabNavigations', false);
     expect((await readSettings()).dedupNewTabNavigations).toBe(false);
+  });
+});
+
+describe('language setting (i18n)', () => {
+  test('defaults to auto when no value is stored', async () => {
+    const settings = await readSettings();
+    expect(settings.language).toBe('auto');
+    expect(DEFAULTS.language).toBe('auto');
+  });
+
+  test('is declared as an enum in the Appearance group with default auto', () => {
+    const decl = SETTINGS.find((d) => d.key === 'language');
+    expect(decl).toMatchObject({ type: 'enum', group: 'Appearance', default: 'auto' });
+  });
+
+  test('reads a valid stored locale', async () => {
+    chromeMock.data['lunma.settings'] = { language: 'de' };
+    expect((await readSettings()).language).toBe('de');
+  });
+
+  test('an out-of-range stored language falls back to auto (read still succeeds)', async () => {
+    chromeMock.data['lunma.settings'] = { language: 'xx', density: 'compact' };
+    const settings = await readSettings();
+    expect(settings.language).toBe('auto');
+    // The per-field `.catch('auto')` is isolated — the valid sibling still parses.
+    expect(settings.density).toBe('compact');
+  });
+
+  test('writeSetting persists a language change', async () => {
+    await writeSetting('language', 'ja');
+    expect((await readSettings()).language).toBe('ja');
   });
 });

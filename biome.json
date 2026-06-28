@@ -14,6 +14,7 @@
       "apps/*/*.{ts,js}",
       "packages/*/*.{ts,js}",
       "*.{ts,js,json}",
+      "!apps/extension/src/shared/paraglide/**",
       "!**/dist",
       "!**/build",
       "!**/.svelte-kit",

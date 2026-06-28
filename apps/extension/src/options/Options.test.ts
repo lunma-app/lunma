@@ -175,6 +175,7 @@ describe('Options', () => {
           autoArchiveEnabled: true,
           autoArchiveIdleMinutes: 720,
           autoArchiveRetentionDays: 7,
+          language: 'auto',
         },
       });
     });
@@ -205,6 +206,7 @@ describe('Options', () => {
           autoArchiveEnabled: true,
           autoArchiveIdleMinutes: 720,
           autoArchiveRetentionDays: 7,
+          language: 'auto',
         },
       });
     });
@@ -234,6 +236,7 @@ describe('Options', () => {
           autoArchiveEnabled: true,
           autoArchiveIdleMinutes: 720,
           autoArchiveRetentionDays: 7,
+          language: 'auto',
         },
       });
     });

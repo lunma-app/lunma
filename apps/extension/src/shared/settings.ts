@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { log } from './logger';
+import type { locales } from './paraglide/runtime';
 import { BUILT_IN_ENGINES, type BuiltInEngineId } from './search-engines';
 
 /**
@@ -40,8 +41,19 @@ export type DefaultSearchEngine = BuiltInEngineId | 'custom';
  * cross-Space Lunma items (smart items + pinned saved tabs from other Spaces),
  * leaving global favorites, open tabs, bookmarks, and history visible. */
 export type LauncherScope = 'global' | 'prefer-current-space' | 'current-space-only';
+/** A supported UI locale, derived from the generated Paraglide runtime's
+ * `locales` constant — the single source of truth for the locale *set*
+ * (`project.inlang/settings.json` → generated `locales` → here), so the three
+ * never drift (i18n design D8). A `shared → shared` import edge: the generated
+ * runtime imports nothing from other layers, so there is no cycle. */
+export type SupportedLocale = (typeof locales)[number];
 
 export interface Settings {
+  /** The UI locale, or `'auto'` to resolve from the browser locale on first run
+   * (i18n). `'auto'` is resolved to a concrete locale by the i18n resolver
+   * (`initLocale()`), not in `DEFAULTS`, so the choice keeps tracking the browser
+   * if the user later changes Chrome's UI language. */
+  language: SupportedLocale | 'auto';
   density: DensityMode;
   tint: Tint;
   /** Light/dark surface theme (redesign — Look & feel). Reflected onto `<html>`
@@ -210,6 +222,32 @@ export const SETTINGS: readonly SettingDeclaration[] = [
       { value: 'current-space-only', label: 'Current Space only' },
     ],
   },
+  // Language leads Appearance: the UI locale (i18n). `auto` ("System") follows
+  // the browser; the nine concrete options are labelled with their endonym (the
+  // language's own name) so a user recognises their language without reading
+  // English. The endonyms are literal strings — a language name is shown in its
+  // own language and needs no translation — so `settings.ts` carries no i18n
+  // catalog dependency and no `settings → i18n` import cycle forms (design D4).
+  {
+    key: 'language',
+    type: 'enum',
+    default: 'auto',
+    label: 'Language',
+    description: 'Which language Lunma’s interface uses — System follows your browser.',
+    group: 'Appearance',
+    options: [
+      { value: 'auto', label: 'System' },
+      { value: 'en', label: 'English' },
+      { value: 'es', label: 'Español' },
+      { value: 'pt-PT', label: 'Português' },
+      { value: 'fr', label: 'Français' },
+      { value: 'de', label: 'Deutsch' },
+      { value: 'ja', label: '日本語' },
+      { value: 'ko', label: '한국어' },
+      { value: 'zh-CN', label: '简体中文' },
+      { value: 'ru', label: 'Русский' },
+    ],
+  },
   {
     key: 'density',
     type: 'enum',
@@ -342,6 +380,7 @@ export const TOGGLE_SEGMENTS: { value: string; label: string }[] = [
 
 /** `DEFAULTS` mirrors the declared `default` of each setting in `SETTINGS`. */
 export const DEFAULTS: Settings = {
+  language: 'auto',
   defaultSearchEngine: 'google',
   customSearchUrl: '',
   customSearchKeyword: '',

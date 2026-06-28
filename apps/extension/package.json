@@ -6,9 +6,10 @@
   "description": "Lunma: spatial tab and bookmark management for Chrome (MV3 extension)",
   "type": "module",
   "scripts": {
-    "dev": "pnpm gen:icons && vite",
-    "build": "pnpm gen:icons && vite build",
+    "dev": "pnpm gen:icons && pnpm gen:i18n && vite",
+    "build": "pnpm gen:icons && pnpm gen:i18n && vite build",
     "gen:icons": "node scripts/gen-icon-loaders.mjs",
+    "gen:i18n": "paraglide-js compile --project ./project.inlang --outdir ./src/shared/paraglide --strategy custom-lunmaSettings baseLocale --no-emit-git-ignore --emit-ts-declarations",
     "gen:app-icons": "node scripts/gen-app-icons.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
@@ -32,6 +33,7 @@
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.6.1",
+    "@inlang/paraglide-js": "catalog:",
     "@playwright/test": "^1.61.0",
     "@sveltejs/vite-plugin-svelte": "catalog:",
     "@testing-library/svelte": "^5.3.1",

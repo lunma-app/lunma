@@ -1,4 +1,5 @@
 import { mount } from 'svelte';
+import { applyLocaleFromSettings, initLocale } from '../../shared/i18n';
 import { log } from '../../shared/logger';
 import { onStateBroadcast, requestStateSnapshot } from '../../shared/messages';
 import { buildEngineRegistry } from '../../shared/search-engines';
@@ -51,10 +52,16 @@ async function boot(): Promise<void> {
   // impact here (transient page), but a Promise.all with applyShowGlares would
   // be the same fix if this surface's boot latency ever needs tuning.
   const initialSettings = await readSettings();
+  // Seed the locale cache before mount so the first painted frame is localized
+  // (mirrors the sidebar boot). SW-safe; reads the same `language` setting.
+  await initLocale();
   // Apply the saved density BEFORE mount so the first painted result list is at
   // the right rhythm — no Normal→Comfort flash (mirrors the sidebar boot).
   applyDensity(initialSettings);
   const engines = buildEngineRegistry(initialSettings);
+  // Previous `language`, for the gated reload in both watchSettings callbacks
+  // below — a language change reloads (delta-gated); everything else stays live.
+  let prevLanguage = initialSettings.language;
 
   // windowId resolves against chrome.windows.* and doesn't depend on the SW.
   let windowId: number;
@@ -70,6 +77,12 @@ async function boot(): Promise<void> {
     });
     applyShowGlares(initialSettings);
     watchSettings((settings) => {
+      if (settings.language !== prevLanguage) {
+        prevLanguage = settings.language;
+        applyLocaleFromSettings(settings.language);
+        location.reload();
+        return;
+      }
       applyDensity(settings);
       applyTint(settings);
       applyShowGlares(settings);
@@ -107,8 +120,15 @@ async function boot(): Promise<void> {
   applyShowGlares(initialSettings);
 
   // Re-apply on change (e.g. the user switches density or colour intensity in
-  // the options page). Registered once per boot, after mount.
+  // the options page). Registered once per boot, after mount. A `language`
+  // change reloads (delta-gated) to re-localize; everything else stays live.
   watchSettings((settings) => {
+    if (settings.language !== prevLanguage) {
+      prevLanguage = settings.language;
+      applyLocaleFromSettings(settings.language);
+      location.reload();
+      return;
+    }
     applyDensity(settings);
     applyTint(settings);
     applyShowGlares(settings);
