@@ -12,6 +12,9 @@ on:
 
 jobs:
   claude-review:
+    # Skip automated/bot-authored PRs (e.g. release-please) — the action
+    # rejects non-human actors and there's nothing to review.
+    if: ${{ github.event.pull_request.user.type != 'Bot' }}
     # Optional: Filter by PR author
     # if: |
     #   github.event.pull_request.user.login == 'external-contributor' ||
