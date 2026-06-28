@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type {
   LauncherResult,
   OptionalResultSource,
+  OverlayLabels,
   SuggestionsQuery,
   SuggestionsResult,
 } from './launcher-contract';
@@ -181,6 +182,21 @@ export interface OpenOptionsGrantMessage {
   source: OptionalResultSource;
 }
 
+/**
+ * Overlay localization (i18n, localize-extension-ui D3 — Plan B): the vanilla
+ * `Alt+L` overlay can't import Paraglide or seed the locale synchronously, so it
+ * asks the SW for its rendered UI strings. The SW resolves the active locale and
+ * replies with an `OverlayLabels` object. Pure-read: no queue, no mutation.
+ */
+export interface OverlayLabelsRequestMessage {
+  type: 'lunma/overlay-labels-request';
+}
+
+export interface OverlayLabelsResponseMessage {
+  type: 'lunma/overlay-labels-result';
+  labels: OverlayLabels;
+}
+
 export type LunmaMessage =
   | StateBroadcastMessage
   | StateRequestMessage
@@ -194,7 +210,9 @@ export type LunmaMessage =
   | BoundaryOpenElsewhereMessage
   | SidebarFocusMessage
   | OpenNewTabLauncherMessage
-  | OpenOptionsGrantMessage;
+  | OpenOptionsGrantMessage
+  | OverlayLabelsRequestMessage
+  | OverlayLabelsResponseMessage;
 
 export function broadcastState(method: string, state: AppState): void {
   const msg: StateBroadcastMessage = { type: 'lunma/state-broadcast', method, state };
@@ -534,6 +552,32 @@ export function respondWithCurrentWindow(
     }
     sendResponse(response);
     return false;
+  };
+  chrome.runtime.onMessage.addListener(listener);
+  return () => chrome.runtime.onMessage.removeListener(listener);
+}
+
+/**
+ * SW-side: register a listener that answers 'lunma/overlay-labels-request' by
+ * awaiting `handler()` (which resolves the locale + renders the overlay strings)
+ * and replying with a 'lunma/overlay-labels-result'. Returns an unregister
+ * function. Pure-read per the chrome-event-coordination contract; the try/catch
+ * keeps the async response from hanging the overlay's request on a handler throw.
+ */
+export function respondWithOverlayLabels(handler: () => Promise<OverlayLabels>): () => void {
+  const listener = (
+    raw: unknown,
+    sender: chrome.runtime.MessageSender,
+    sendResponse: (response: OverlayLabelsResponseMessage) => void,
+  ): boolean | undefined => {
+    if (sender.id !== chrome.runtime.id) return undefined;
+    if (!raw || typeof raw !== 'object') return undefined;
+    const m = raw as Partial<LunmaMessage>;
+    if (m.type !== 'lunma/overlay-labels-request') return undefined;
+    void handler()
+      .then((labels) => sendResponse({ type: 'lunma/overlay-labels-result', labels }))
+      .catch((err: unknown) => log.error('respondWithOverlayLabels: handler threw', { err }));
+    return true; // async response — keep the channel open
   };
   chrome.runtime.onMessage.addListener(listener);
   return () => chrome.runtime.onMessage.removeListener(listener);

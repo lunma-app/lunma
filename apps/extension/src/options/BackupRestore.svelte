@@ -16,6 +16,9 @@ import SettingText from '../ui/SettingText.svelte';
 import Toast from '../ui/Toast.svelte';
 import { toggleSegments } from './labels';
 
+// Session-constant (locale is fixed until a language change reloads the surface).
+const toggleOptions = toggleSegments();
+
 let includeSettings = $state(false);
 let toast = $state<{ message: string } | null>(null);
 let importError = $state<string | null>(null);
@@ -117,7 +120,7 @@ async function cancelImport(): Promise<void> {
     <SettingText label={m.options_includeSettingsLabel()} description={m.options_includeSettingsDescription()} />
     <SegmentedControl
       name="backup-include-settings"
-      options={toggleSegments()}
+      options={toggleOptions}
       value={includeSettings ? 'on' : 'off'}
       ariaLabel={m.options_includeSettingsLabel()}
       onchange={(v) => (includeSettings = v === 'on')}
