@@ -1,4 +1,4 @@
-import { CURRENT_SCHEMA_VERSION } from './schemas';
+import { CURRENT_SCHEMA_VERSION, PinNodeSchema } from './schemas';
 
 export type Migration = {
   toVersion: number;
@@ -361,6 +361,36 @@ export function assertMigrationsTerminal(list: Migration[], currentVersion: numb
 
 assertMigrationsTerminal(migrations, CURRENT_SCHEMA_VERSION);
 
+/**
+ * Terminal normalization (harden-migration-salvage): drop any `pinnedBySpace`
+ * node that fails the current-version `PinNodeSchema`. An earlier migration can
+ * leave a structurally-invalid node — most notably a `kind: 'lens'` whose
+ * `sources` ends up empty (v13 dropping every malformed embedded entry) or
+ * absent (a pre-v8 flat smart node migrated without a `baseUrl`). Such a node
+ * would fail whole-state validation and trigger the coarse salvage fallback that
+ * resets the ENTIRE pinned tree. A lens with no resolvable source is already
+ * dead, so dropping that one node is strictly safer than poisoning the rest.
+ *
+ * Decides drop-or-keep via `safeParse` but KEEPS the original node object (never
+ * the parsed/defaulted one) so the subsequent whole-state parse stays the single
+ * place `.default()`s are materialized. Order is preserved; a Space whose every
+ * node is dropped becomes `[]` (the key is kept); a non-array Space value is left
+ * untouched for the downstream parse/salvage to handle.
+ */
+function normalizePinnedNodes(raw: unknown): unknown {
+  if (typeof raw !== 'object' || raw === null) return raw;
+  const state = raw as Record<string, unknown>;
+  const pinnedBySpace = state.pinnedBySpace;
+  if (typeof pinnedBySpace !== 'object' || pinnedBySpace === null) return raw;
+  for (const [spaceId, nodes] of Object.entries(pinnedBySpace as Record<string, unknown>)) {
+    if (!Array.isArray(nodes)) continue;
+    (pinnedBySpace as Record<string, unknown>)[spaceId] = nodes.filter(
+      (node) => PinNodeSchema.safeParse(node).success,
+    );
+  }
+  return raw;
+}
+
 export function runMigrations(raw: unknown, persistedVersion: number): unknown {
   let current = raw;
   for (const migration of migrations) {
@@ -368,5 +398,7 @@ export function runMigrations(raw: unknown, persistedVersion: number): unknown {
       current = migration.migrate(current);
     }
   }
-  return current;
+  // Runs unconditionally — also when persistedVersion === CURRENT_SCHEMA_VERSION —
+  // so a node corrupted by a prior buggy write is still normalized on read.
+  return normalizePinnedNodes(current);
 }
