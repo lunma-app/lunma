@@ -47,41 +47,25 @@ describe('LensFilterBar', () => {
     expect(onfilter).toHaveBeenCalledWith({ entities: [] });
   });
 
-  test('repo chips render when repos are present in facets', () => {
+  test('Clear button absent when no filter active', () => {
+    const { container } = renderBar({}, { ...emptyFacets(), entities: ['change', 'ticket'] });
+    expect(container.querySelector('[data-testid="filter-clear"]')).toBeNull();
+  });
+
+  test('Clear button appears when entity filter is active', () => {
     const { container } = renderBar(
-      {},
-      { ...emptyFacets(), entities: ['change'], repos: ['host.com/org/repo-a'] },
-    );
-    expect(container.querySelector('[data-testid="repo-chip"]')).not.toBeNull();
-  });
-
-  test('repo Select renders when repos exceed 5 (overflow threshold)', () => {
-    const repos = ['h/a', 'h/b', 'h/c', 'h/d', 'h/e', 'h/f'];
-    const { container } = renderBar({}, { ...emptyFacets(), entities: ['change'], repos });
-    expect(container.querySelector('[data-testid="repo-select"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="repo-chip"]')).toBeNull();
-  });
-
-  test('project chips render when projects are present in facets', () => {
-    const { container } = renderBar(
-      {},
-      { ...emptyFacets(), entities: ['ticket'], projects: ['PROJ'] },
-    );
-    expect(container.querySelector('[data-testid="project-chip"]')).not.toBeNull();
-  });
-
-  test('Clear button appears only when filter is active', () => {
-    const { container, rerender } = renderBar(
-      {},
+      { entities: ['change'] },
       { ...emptyFacets(), entities: ['change', 'ticket'] },
     );
-    expect(container.querySelector('[data-testid="filter-clear"]')).toBeNull();
+    expect(container.querySelector('[data-testid="filter-clear"]')).not.toBeNull();
+  });
 
-    void rerender({
-      filter: { entities: ['change'] },
-      facets: { ...emptyFacets(), entities: ['change', 'ticket'] },
-      onfilter: vi.fn(),
-    });
+  test('Clear button appears when a scope filter is active (repo or project set from a card)', () => {
+    // repos are set (from inside the Changes card) but no entity filter in the top bar.
+    const { container } = renderBar(
+      { repos: ['github.com/acme/api'] },
+      { ...emptyFacets(), entities: ['change', 'ticket'] },
+    );
     expect(container.querySelector('[data-testid="filter-clear"]')).not.toBeNull();
   });
 
@@ -95,7 +79,6 @@ describe('LensFilterBar', () => {
   });
 
   test('absent-but-selected entity stays as a clearable chip (D6 union)', () => {
-    // 'ticket' is not in facets.entities but is in filter.entities → still renders.
     const { container } = renderBar(
       { entities: ['ticket'] },
       { ...emptyFacets(), entities: ['change'] },
@@ -103,8 +86,12 @@ describe('LensFilterBar', () => {
     expect(container.querySelector('[data-testid="entity-chip-ticket"]')).not.toBeNull();
   });
 
-  test('absent-but-selected repo stays as a clearable chip (D6 union)', () => {
-    const { container } = renderBar({ repos: ['ghost/repo'] }, { ...emptyFacets(), repos: [] });
-    expect(container.querySelector('[data-testid="repo-chip"]')).not.toBeNull();
+  test('does not render repo or project chips (scope is in entity cards)', () => {
+    const { container } = renderBar(
+      {},
+      { ...emptyFacets(), entities: ['change', 'ticket'], repos: ['host/repo'], projects: ['P'] },
+    );
+    expect(container.querySelector('[data-testid="repo-chip"]')).toBeNull();
+    expect(container.querySelector('[data-testid="project-chip"]')).toBeNull();
   });
 });

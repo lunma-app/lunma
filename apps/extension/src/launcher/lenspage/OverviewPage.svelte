@@ -1,10 +1,13 @@
 <script lang="ts">
 import { applyLensFilter } from '../../shared/lens-filter';
 import type { LensEntity, LensFilter } from '../../shared/types';
+import Chip from '../../ui/Chip.svelte';
 import Diffstat from '../../ui/Diffstat.svelte';
 import Icon from '../../ui/Icon.svelte';
 import Pill from '../../ui/Pill.svelte';
 import ReviewerRail from '../../ui/ReviewerRail.svelte';
+import type { SelectOption } from '../../ui/Select.svelte';
+import Select from '../../ui/Select.svelte';
 import LensFilterBar from './LensFilterBar.svelte';
 import {
   bucketByEntity,
@@ -57,6 +60,45 @@ const { node, tagged, facets, lensSub, readSet, openItem, toggleRead, setFilter 
 
 const lensLetter = $derived((node.name.trim()[0] ?? '·').toUpperCase());
 const filter = $derived(node.filter ?? {});
+
+// Scope facets: union of present + selected (D6) — per entity card.
+const CHIP_THRESHOLD = 5;
+const visRepos = $derived([...new Set([...facets.repos, ...(filter.repos ?? [])])]);
+const visProjects = $derived([...new Set([...facets.projects, ...(filter.projects ?? [])])]);
+
+const repoSelectOptions = $derived<SelectOption[]>([
+  { value: 'all', label: 'All repos' },
+  ...visRepos.map((r) => ({ value: r, label: r })),
+]);
+const repoSelectValue = $derived(filter.repos?.length === 1 ? (filter.repos[0] ?? 'all') : 'all');
+
+const projectSelectOptions = $derived<SelectOption[]>([
+  { value: 'all', label: 'All projects' },
+  ...visProjects.map((p) => ({ value: p, label: p })),
+]);
+const projectSelectValue = $derived(
+  filter.projects?.length === 1 ? (filter.projects[0] ?? 'all') : 'all',
+);
+
+function toggleRepo(r: string): void {
+  const current = filter.repos ?? [];
+  const next = current.includes(r) ? current.filter((x) => x !== r) : [...current, r];
+  setFilter({ ...filter, repos: next });
+}
+
+function toggleProject(p: string): void {
+  const current = filter.projects ?? [];
+  const next = current.includes(p) ? current.filter((x) => x !== p) : [...current, p];
+  setFilter({ ...filter, projects: next });
+}
+
+function onRepoSelectChange(value: string): void {
+  setFilter({ ...filter, repos: value === 'all' ? [] : [value] });
+}
+
+function onProjectSelectChange(value: string): void {
+  setFilter({ ...filter, projects: value === 'all' ? [] : [value] });
+}
 
 // Apply the persisted lens filter before bucketing so both the count and the
 // entity sections reflect exactly what the filter allows.
@@ -142,6 +184,28 @@ const empty = $derived(
       </button>
       {#if open}
         <div class="sec-body">
+          {#if visRepos.length > 0}
+            <div class="scope-filter" data-testid="change-scope-filter">
+              {#if visRepos.length <= CHIP_THRESHOLD}
+                {#each visRepos as repo (repo)}
+                  <Chip
+                    label={repo}
+                    onToggle={() => toggleRepo(repo)}
+                    selected={(filter.repos ?? []).includes(repo)}
+                    testid="repo-chip"
+                  />
+                {/each}
+              {:else}
+                <Select
+                  options={repoSelectOptions}
+                  value={repoSelectValue}
+                  onchange={onRepoSelectChange}
+                  ariaLabel="Filter by repo"
+                  testid="repo-select"
+                />
+              {/if}
+            </div>
+          {/if}
           {#each changeGroups as group (group.relation)}
             <div class="group">
               <div class="group-head">
@@ -191,6 +255,28 @@ const empty = $derived(
       </button>
       {#if open}
         <div class="sec-body">
+          {#if visProjects.length > 0}
+            <div class="scope-filter" data-testid="issue-scope-filter">
+              {#if visProjects.length <= CHIP_THRESHOLD}
+                {#each visProjects as project (project)}
+                  <Chip
+                    label={project}
+                    onToggle={() => toggleProject(project)}
+                    selected={(filter.projects ?? []).includes(project)}
+                    testid="project-chip"
+                  />
+                {/each}
+              {:else}
+                <Select
+                  options={projectSelectOptions}
+                  value={projectSelectValue}
+                  onchange={onProjectSelectChange}
+                  ariaLabel="Filter by project"
+                  testid="project-select"
+                />
+              {/if}
+            </div>
+          {/if}
           {#each issueGroups as group (group.category)}
             {@const st = statusVM(group.category)}
             <div class="group">
@@ -435,6 +521,14 @@ const empty = $derived(
     display: flex;
     flex-direction: column;
     gap: 13px;
+  }
+
+  /* ── Scope filter (inside entity cards) ──────────────────────────────────── */
+  .scope-filter {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1);
   }
 
   /* ── Filter chips / segmented control ─────────────────────────────────────── */
