@@ -59,7 +59,7 @@ function lastCommand(): { kind: string; payload: Record<string, unknown> } | und
 }
 
 const WORK: Space = { id: 'work', name: 'Work', color: 'blue', icon: 'briefcase' };
-const GH_SK = 'github:github.com:authored';
+const GH_SK = 'acc:github:https://github.com:authored';
 
 function ghNode(): LensNode {
   return {

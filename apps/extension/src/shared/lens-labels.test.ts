@@ -11,45 +11,35 @@ const cfg = (over: Partial<ResolvedLensSource> = {}): ResolvedLensSource => ({
 });
 
 describe('sourceKey', () => {
-  test('cloud source (no port, no query)', () => {
-    expect(sourceKey(cfg())).toBe('github:github.com');
+  test('feed source (no query) keys by sourceId alone', () => {
+    expect(sourceKey(cfg({ sourceId: 'acc-feed' }))).toBe('acc-feed');
   });
 
-  test('cloud source with query', () => {
-    expect(sourceKey(cfg({ query: 'authored' }))).toBe('github:github.com:authored');
-    expect(sourceKey(cfg({ query: 'review-requested' }))).toBe(
-      'github:github.com:review-requested',
-    );
+  test('queue source keys by sourceId and query', () => {
+    expect(sourceKey(cfg({ query: 'authored' }))).toBe('acc-1:authored');
+    expect(sourceKey(cfg({ query: 'review-requested' }))).toBe('acc-1:review-requested');
   });
 
-  test('self-hosted on a non-default port includes the port', () => {
+  test('key is host-independent (port/baseUrl do not affect it)', () => {
     const selfHosted = cfg({
       source: 'gitlab',
       baseUrl: 'https://git.example.com:8443',
+      sourceId: 'acc-self',
       query: 'review-requested',
     });
-    expect(sourceKey(selfHosted)).toBe('gitlab:git.example.com:8443:review-requested');
-  });
-
-  test('self-hosted on non-default port without query', () => {
-    expect(sourceKey(cfg({ source: 'gitlab', baseUrl: 'https://git.example.com:8443' }))).toBe(
-      'gitlab:git.example.com:8443',
+    expect(sourceKey(selfHosted)).toBe('acc-self:review-requested');
+    // A malformed baseUrl no longer affects the key — the account id carries identity.
+    expect(sourceKey(cfg({ baseUrl: 'not-a-url', sourceId: 'acc-x', query: 'authored' }))).toBe(
+      'acc-x:authored',
     );
   });
 
-  test('malformed baseUrl degrades to the raw string as host segment', () => {
-    expect(sourceKey(cfg({ baseUrl: 'not-a-url' }))).toBe('github:not-a-url');
-    expect(sourceKey(cfg({ baseUrl: 'not-a-url', query: 'authored' }))).toBe(
-      'github:not-a-url:authored',
-    );
-  });
-
-  test('parity: cloud source key matches across github/gitlab/jira/rss', () => {
-    const providers = ['github', 'gitlab', 'jira', 'rss'] as const;
-    for (const source of providers) {
-      const k = sourceKey(cfg({ source, baseUrl: `https://${source}.com` }));
-      expect(k).toBe(`${source}:${source}.com`);
-    }
+  test('two same-host accounts derive distinct keys (no collision)', () => {
+    const work = cfg({ sourceId: 'acc-work', query: 'authored' });
+    const personal = cfg({ sourceId: 'acc-personal', query: 'authored' });
+    expect(sourceKey(work)).toBe('acc-work:authored');
+    expect(sourceKey(personal)).toBe('acc-personal:authored');
+    expect(sourceKey(work)).not.toBe(sourceKey(personal));
   });
 });
 

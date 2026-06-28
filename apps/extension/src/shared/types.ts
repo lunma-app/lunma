@@ -454,8 +454,8 @@ export interface LensSectionRuntime {
 
 /**
  * A lens's ephemeral runtime (multi-source-smart-folders): a map of per-section
- * runtimes keyed by `sourceKey` (`${source}:${host}:${query}` for queue
- * sections, `${source}:${host}` for rss). Lives only in the broadcast
+ * runtimes keyed by `sourceKey` (`${sourceId}:${query}` for queue
+ * sections, `${sourceId}` for rss). Lives only in the broadcast
  * `AppState.lenses` slice — stripped in `persist()` like `liveTabsById`,
  * rebuilt by connector polls after a SW restart.
  */
@@ -684,7 +684,7 @@ export interface SidebarLocalState {
   /**
    * Per-window per-section collapse state for multi-source lenses
    * (collapsible-smart-folder-sections). Keyed by `folderId` then by the
-   * section's `sourceKey` (`${source}:${host}`). Like `expandedFoldersByWindow`
+   * section's `sourceKey` (`${sourceId}:${query}`, rss `${sourceId}`). Like `expandedFoldersByWindow`
    * it is sidebar-local, per-window, NEVER persisted and NEVER broadcast — the
    * same folder's section can be collapsed in one window and expanded in
    * another. An ABSENT leaf means **expanded**; `true` means collapsed, so a

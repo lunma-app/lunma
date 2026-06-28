@@ -31,7 +31,7 @@ import type { AppState, BackupEnvelope, SpaceColor } from './types';
 // `sources` from embedded `LensSource[]` to `LensSourceRef[]` references — a REAL
 // transformation that extracts the embedded `(provider, baseUrl)` pairs into
 // first-class accounts. Each bump is deliberate: it makes a downgrade detectable.
-export const CURRENT_SCHEMA_VERSION = 14;
+export const CURRENT_SCHEMA_VERSION = 15;
 
 const SpaceInstanceSchema = z.strictObject({
   spaceId: z.string(),
@@ -698,9 +698,17 @@ export const AppStateV14Schema = z.strictObject({
     .default({}),
 });
 
+/**
+ * v15 (rekey-lens-sections-by-source-id) re-keys lens sections by account
+ * `sourceId` and rewrites the persisted `lensItemBindings` map **keys** and
+ * `lensReadState` id **strings**. Both are untyped `Record`/`string[]` shapes,
+ * so no value shape changes — `AppStateV15Schema` is a structural alias of v14.
+ */
+export const AppStateV15Schema = AppStateV14Schema;
+
 export const EnvelopeSchema = z.strictObject({
   schemaVersion: z.number(),
-  state: AppStateV14Schema,
+  state: AppStateV15Schema,
 });
 
 export type AppStateV6 = z.infer<typeof AppStateV6Schema>;
@@ -711,12 +719,13 @@ export type AppStateV11 = z.infer<typeof AppStateV11Schema>;
 export type AppStateV12 = z.infer<typeof AppStateV12Schema>;
 export type AppStateV13 = z.infer<typeof AppStateV13Schema>;
 export type AppStateV14 = z.infer<typeof AppStateV14Schema>;
+export type AppStateV15 = z.infer<typeof AppStateV15Schema>;
 export type Envelope = z.infer<typeof EnvelopeSchema>;
 
 type AssertEqual<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
-const _schemaMatchesAppState: AssertEqual<AppStateV14, AppState> = true;
+const _schemaMatchesAppState: AssertEqual<AppStateV15, AppState> = true;
 void _schemaMatchesAppState;
 
 // ── Data-backup: BackupEnvelopeSchema ────────────────────────────────────────

@@ -156,7 +156,7 @@ describe('updateLens', () => {
         sources: [{ sourceId: 'acc-gl-ex', queries: ['assigned'] }],
       }),
     );
-    store.setLensSectionRuntime('sf-1', 'gitlab:gitlab.example.com:assigned', {
+    store.setLensSectionRuntime('sf-1', 'acc-gl-ex:assigned', {
       state: 'ok',
       items: items('A'),
       fetchedAt: 123,
@@ -171,14 +171,12 @@ describe('updateLens', () => {
     });
     // The removed filter's section is dropped; the new one is added by the
     // coordinator's refetch, not the store.
-    expect(
-      store.state.lenses['sf-1']?.sections['gitlab:gitlab.example.com:assigned'],
-    ).toBeUndefined();
+    expect(store.state.lenses['sf-1']?.sections['acc-gl-ex:assigned']).toBeUndefined();
   });
 
   test('a baseUrl change prunes the old section; a name-only change keeps it intact', () => {
     store.addLens('work', lensNode());
-    store.setLensSectionRuntime('sf-1', 'gitlab:gitlab.example.com:review-requested', {
+    store.setLensSectionRuntime('sf-1', 'acc-gl-ex:review-requested', {
       state: 'ok',
       items: [],
       fetchedAt: 123,
@@ -192,9 +190,7 @@ describe('updateLens', () => {
       maxItems: 20,
       refreshMinutes: 10,
     });
-    expect(
-      store.state.lenses['sf-1']?.sections['gitlab:gitlab.example.com:review-requested']?.fetchedAt,
-    ).toBe(123);
+    expect(store.state.lenses['sf-1']?.sections['acc-gl-ex:review-requested']?.fetchedAt).toBe(123);
     // baseUrl change → the old section key no longer resolves → pruned.
     store.updateLens('work', 'sf-1', {
       lensKind: 'general',
@@ -204,14 +200,12 @@ describe('updateLens', () => {
       maxItems: 20,
       refreshMinutes: 10,
     });
-    expect(
-      store.state.lenses['sf-1']?.sections['gitlab:gitlab.example.com:review-requested'],
-    ).toBeUndefined();
+    expect(store.state.lenses['sf-1']?.sections['acc-gl-ex:review-requested']).toBeUndefined();
   });
 
   test('a maxItems change invalidates the remaining sections fetchedAt (rss-connector design D5)', () => {
     store.addLens('work', lensNode());
-    store.setLensSectionRuntime('sf-1', 'gitlab:gitlab.example.com:review-requested', {
+    store.setLensSectionRuntime('sf-1', 'acc-gl-ex:review-requested', {
       state: 'ok',
       items: items('A'),
       fetchedAt: 123,
@@ -226,7 +220,7 @@ describe('updateLens', () => {
     });
     expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({ maxItems: 50 });
     expect(
-      store.state.lenses['sf-1']?.sections['gitlab:gitlab.example.com:review-requested']?.fetchedAt,
+      store.state.lenses['sf-1']?.sections['acc-gl-ex:review-requested']?.fetchedAt,
     ).toBeNull();
   });
 
@@ -237,7 +231,7 @@ describe('updateLens', () => {
         sources: [{ sourceId: 'acc-gl-forge', queries: ['review-requested'] }],
       }),
     );
-    store.setLensSectionRuntime('sf-1', 'gitlab:forge.example.com:review-requested', {
+    store.setLensSectionRuntime('sf-1', 'acc-gl-forge:review-requested', {
       state: 'ok',
       items: items('A'),
       fetchedAt: 123,
@@ -253,9 +247,7 @@ describe('updateLens', () => {
     expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({
       sources: [{ sourceId: 'acc-gh-forge' }],
     });
-    expect(
-      store.state.lenses['sf-1']?.sections['gitlab:forge.example.com:review-requested'],
-    ).toBeUndefined();
+    expect(store.state.lenses['sf-1']?.sections['acc-gl-forge:review-requested']).toBeUndefined();
   });
 
   test('preserves hideRead (owned by setLensHideRead, not the editor)', () => {
@@ -335,7 +327,7 @@ describe('feed read-state (rss-connector design D3)', () => {
   });
 
   test('pruneLensReadState drops read ids absent from the live window (18 → 12 live → 6 dropped)', () => {
-    const sk = 'rss:a.example.com';
+    const sk = 'acc-rss-news';
     const all = Array.from({ length: 18 }, (_, i) => `${sk}:item-${i}`);
     for (const id of all) store.markLensItemRead('feed-1', id);
     expect(store.state.lensReadState['feed-1']).toHaveLength(18);
@@ -346,15 +338,15 @@ describe('feed read-state (rss-connector design D3)', () => {
   });
 
   test('pruneLensReadState removes the folder entry once empty', () => {
-    const sk = 'rss:a.example.com';
+    const sk = 'acc-rss-news';
     store.markLensItemRead('feed-1', `${sk}:a`);
     store.pruneLensReadState('feed-1', sk, [`${sk}:x`, `${sk}:y`]); // none survive
     expect(store.state.lensReadState['feed-1']).toBeUndefined();
   });
 
   test('pruneLensReadState leaves OTHER sections read ids intact (multi-section / OPML)', () => {
-    const skA = 'rss:a.example.com';
-    const skB = 'rss:b.example.com';
+    const skA = 'acc-rss-news';
+    const skB = 'acc-rss-feed';
     store.markLensItemRead('feed-1', `${skA}:post-1`);
     store.markLensItemRead('feed-1', `${skB}:post-1`);
     // Section B refetches; its window omits its own read id, but MUST NOT touch A.
@@ -375,7 +367,7 @@ describe('feed read-state (rss-connector design D3)', () => {
 describe('deleteLens', () => {
   test('removes the node AND drops its runtime entry', () => {
     store.addLens('work', lensNode());
-    store.setLensSectionRuntime('sf-1', 'gitlab:gitlab.example.com', {
+    store.setLensSectionRuntime('sf-1', 'acc-gl-ex', {
       state: 'ok',
       items: items('A'),
       fetchedAt: 1,
@@ -412,7 +404,7 @@ describe('deleteLens', () => {
 });
 
 describe('setLensSectionRuntime', () => {
-  const KEY = 'gitlab:gitlab.example.com';
+  const KEY = 'acc-gl-ex';
 
   test('an ok runtime replaces wholesale', () => {
     store.setLensSectionRuntime('sf-1', KEY, {
@@ -607,7 +599,9 @@ function seedFeedSection(folderId: string, sk: string, itemIds: string[]): void 
 }
 
 describe('nextUnreadFeedItemAfterClose', () => {
-  const SK = 'rss:news.example.com';
+  // A feed `sourceKey` is now a single `sourceId` segment (no host) — this
+  // suite also exercises that the next-unread parse recovers it match-first.
+  const SK = 'acc-rss-feed';
   const W = 1;
 
   beforeEach(() => {
@@ -667,7 +661,7 @@ describe('nextUnreadFeedItemAfterClose', () => {
       ...lensNode({ id: 'sf-gl' }),
       sources: [{ sourceId: 'acc-gl-ex', queries: ['authored'] }],
     });
-    store.bindLensItem('sf-gl', 'gitlab:gitlab.example.com:mr-1', W, 20, '');
+    store.bindLensItem('sf-gl', 'acc-gl-ex:authored:mr-1', W, 20, '');
     expect(store.nextUnreadFeedItemAfterClose(20, W)).toBeUndefined();
   });
 
@@ -678,5 +672,74 @@ describe('nextUnreadFeedItemAfterClose', () => {
     feedSection.items = [{ id: 'a', title: 'a', url: 'https://news.example.com/a' }];
     store.bindLensItem('sf-feed', `${SK}:a`, W, 10, '');
     expect(store.nextUnreadFeedItemAfterClose(10, W)).toBeUndefined();
+  });
+});
+
+describe('two same-host accounts coexist (rekey-lens-sections-by-source-id)', () => {
+  beforeEach(() => {
+    store.addSource({ id: 'acc-work', provider: 'github', baseUrl: 'https://github.com' });
+    store.addSource({ id: 'acc-personal', provider: 'github', baseUrl: 'https://github.com' });
+    store.addLens(
+      'work',
+      lensNode({
+        id: 'gh-lens',
+        sources: [
+          { sourceId: 'acc-work', queries: ['authored'] },
+          { sourceId: 'acc-personal', queries: ['authored'] },
+        ],
+      }),
+    );
+  });
+
+  test('distinct sourceId section runtimes do not overwrite each other', () => {
+    store.setLensSectionRuntime('gh-lens', 'acc-work:authored', {
+      state: 'ok',
+      items: items('Work MR'),
+      fetchedAt: 1,
+    });
+    store.setLensSectionRuntime('gh-lens', 'acc-personal:authored', {
+      state: 'ok',
+      items: items('Personal MR'),
+      fetchedAt: 2,
+    });
+    const sections = store.state.lenses['gh-lens']?.sections ?? {};
+    expect(Object.keys(sections).sort()).toEqual(['acc-personal:authored', 'acc-work:authored']);
+    expect(sections['acc-work:authored']?.items[0]?.title).toBe('Work MR');
+    expect(sections['acc-personal:authored']?.items[0]?.title).toBe('Personal MR');
+  });
+
+  test('updateLens keeps both same-host sections (neither pruned)', () => {
+    store.setLensSectionRuntime('gh-lens', 'acc-work:authored', {
+      state: 'ok',
+      items: items('Work MR'),
+      fetchedAt: 1,
+    });
+    store.setLensSectionRuntime('gh-lens', 'acc-personal:authored', {
+      state: 'ok',
+      items: items('Personal MR'),
+      fetchedAt: 2,
+    });
+    store.updateLens('work', 'gh-lens', {
+      lensKind: 'general',
+      icon: 'folder-git-2',
+      name: 'Renamed',
+      sources: [
+        { sourceId: 'acc-work', queries: ['authored'] },
+        { sourceId: 'acc-personal', queries: ['authored'] },
+      ],
+      maxItems: 20,
+      refreshMinutes: 10,
+    });
+    const sections = store.state.lenses['gh-lens']?.sections ?? {};
+    expect(Object.keys(sections).sort()).toEqual(['acc-personal:authored', 'acc-work:authored']);
+  });
+
+  test('the two accounts keep distinct read sets', () => {
+    store.markLensItemRead('gh-lens', 'acc-work:authored:1');
+    store.markLensItemRead('gh-lens', 'acc-personal:authored:1');
+    expect(store.state.lensReadState['gh-lens']).toEqual([
+      'acc-work:authored:1',
+      'acc-personal:authored:1',
+    ]);
   });
 });

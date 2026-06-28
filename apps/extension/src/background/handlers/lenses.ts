@@ -257,8 +257,9 @@ export function lensHandlers(
       }
       // Open-if-dormant: resolve the item from the SW's own runtime slice.
       // itemId is namespaced "${sourceKey}:${nativeId}" where sourceKey is the
-      // per-filter section key (3 segments for queue, 2 for rss) — find the
-      // section whose key prefixes itemId and holds the trailing native id.
+      // per-account, per-filter section key (`${sourceId}:${query}` for queue,
+      // `${sourceId}` for rss) — find the section whose key prefixes itemId and
+      // holds the trailing native id.
       // (Valid section keys never prefix each other, so the match is unambiguous;
       // item.url is RSS-feed-controlled and scheme-validated below before create.)
       const findItem = (): LensItem | undefined => {
@@ -390,18 +391,11 @@ export function lensHandlers(
       // mark-all-read applies to feed sources exclusively).
       const sections = ctx.store.state.lenses[folderId]?.sections ?? {};
       const namespacedIds: string[] = [];
-      for (const ref of node.sources) {
-        // Resolve the reference against the accounts map (connector-accounts);
-        // only rss accounts have read-state. A dangling ref is skipped.
-        const account = ctx.store.state.sources[ref.sourceId];
-        if (account?.provider !== 'rss') continue;
-        let host: string;
-        try {
-          host = new URL(account.baseUrl).host;
-        } catch {
-          continue;
-        }
-        const sk = `${account.provider}:${host}`;
+      // Only rss sections have read-state (mark-all-read is feed-only). Derive
+      // each section key via the canonical `sourceKey` over the resolved configs.
+      for (const cfg of resolvedConfigs(node, ctx.store.state.sources)) {
+        if (cfg.source !== 'rss') continue;
+        const sk = sourceKey(cfg);
         for (const item of sections[sk]?.items ?? []) {
           namespacedIds.push(`${sk}:${item.id}`);
         }

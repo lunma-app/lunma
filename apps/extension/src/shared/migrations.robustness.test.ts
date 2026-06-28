@@ -325,7 +325,7 @@ describe('crash-proofing — the full chain never throws on hostile input', () =
 
   for (let i = 0; i < hostile.length; i++) {
     test(`hostile input #${i} migrates from every start version without throwing`, () => {
-      for (let v = 0; v <= 14; v++) {
+      for (let v = 0; v <= 15; v++) {
         expect(() => runMigrations(structuredClone(hostile[i]), v)).not.toThrow();
       }
     });
