@@ -446,6 +446,7 @@ const LensFilterSchema = z.strictObject({
   entities: z.array(z.enum(['change', 'ticket', 'article', 'generic'])).optional(),
   repos: z.array(z.string()).optional(),
   projects: z.array(z.string()).optional(),
+  feeds: z.array(z.string()).optional(),
 });
 
 // A pinned-tab placement node — mirrors `PinNode` in `types.ts` (all three
