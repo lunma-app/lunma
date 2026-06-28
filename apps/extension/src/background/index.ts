@@ -323,7 +323,7 @@ chrome.runtime.onMessage.addListener((raw: unknown, sender: chrome.runtime.Messa
 // each time (cheap) so a language change is reflected on the overlay's next open.
 // Returns `true` to keep the message channel open for the async `sendResponse`.
 chrome.runtime.onMessage.addListener(
-  (raw: unknown, sender: chrome.runtime.MessageSender, sendResponse): boolean | void => {
+  (raw: unknown, sender: chrome.runtime.MessageSender, sendResponse): boolean | undefined => {
     if (sender.id !== chrome.runtime.id) return;
     if (!raw || typeof raw !== 'object') return;
     if ((raw as { type?: unknown }).type !== 'lunma/overlay-labels-request') return;
