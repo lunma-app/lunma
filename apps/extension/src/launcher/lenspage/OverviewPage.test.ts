@@ -96,6 +96,7 @@ function renderOverview(
   openItem = vi.fn(),
   toggleRead = vi.fn(),
   setFilter = vi.fn(),
+  facets = { entities: [] as LensEntity[], repos: [] as string[], projects: [] as string[] },
 ) {
   const taggedItems = [
     ...byEntity.change,
@@ -111,7 +112,7 @@ function renderOverview(
       props: {
         node: NODE,
         tagged: taggedItems,
-        facets: { entities: [], repos: [], projects: [] },
+        facets,
         lensSub: 'GitHub & Jira',
         readSet: new Set<string>(),
         openItem,
@@ -238,5 +239,47 @@ describe('OverviewPage', () => {
   test('empty buckets → a calm empty note', () => {
     const { getByTestId } = renderOverview(empty());
     expect(getByTestId('overview-empty')).toBeTruthy();
+  });
+
+  test('repo chips render inside the Changes card when facets.repos is non-empty', () => {
+    const { container } = renderOverview({ ...empty(), change: [PR] }, vi.fn(), vi.fn(), vi.fn(), {
+      entities: ['change'],
+      repos: ['github.com/acme/api'],
+      projects: [],
+    });
+    const scopeFilter = container.querySelector('[data-testid="change-scope-filter"]');
+    expect(scopeFilter).not.toBeNull();
+    expect(container.querySelector('[data-testid="repo-chip"]')).not.toBeNull();
+  });
+
+  test('project chips render inside the Issues card when facets.projects is non-empty', () => {
+    const { container } = renderOverview(
+      { ...empty(), ticket: [ISSUE] },
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      { entities: ['ticket'], repos: [], projects: ['Payments'] },
+    );
+    const scopeFilter = container.querySelector('[data-testid="issue-scope-filter"]');
+    expect(scopeFilter).not.toBeNull();
+    expect(container.querySelector('[data-testid="project-chip"]')).not.toBeNull();
+  });
+
+  test('scope filters do not appear in the other entity card', () => {
+    const { container } = renderOverview(
+      { ...empty(), change: [PR], ticket: [ISSUE] },
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      { entities: ['change', 'ticket'], repos: ['github.com/acme/api'], projects: ['Payments'] },
+    );
+    // repo chip only inside Changes card
+    const changeCard = container.querySelector('[data-entity="change"]');
+    const ticketCard = container.querySelector('[data-entity="ticket"]');
+    expect(changeCard?.querySelector('[data-testid="repo-chip"]')).not.toBeNull();
+    expect(ticketCard?.querySelector('[data-testid="repo-chip"]')).toBeNull();
+    // project chip only inside Issues card
+    expect(ticketCard?.querySelector('[data-testid="project-chip"]')).not.toBeNull();
+    expect(changeCard?.querySelector('[data-testid="project-chip"]')).toBeNull();
   });
 });
