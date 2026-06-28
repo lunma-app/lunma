@@ -41,6 +41,10 @@ lunma/                              # pnpm workspace root (private)
 │  │  │  │  └─ shared/              # SearchEngine, scoring, providers, result/query types
 │  │  │  ├─ content/               # second declarative content script (tab-boundary.ts)
 │  │  │  └─ options/               # Options.svelte (orchestrator) · BackupRestore · ConnectionsCard (Accounts + Feeds, one manager) · RecentlyArchived · ResultSourcesCard · ShortcutGuidanceCard · main.ts
+│  │  ├─ catalog/                   # DEV-ONLY component catalog (ships nothing in the MV3 bundle) — a ui+shared-composing surface
+│  │  │  ├─ Catalog.svelte · main.ts · index.html · catalog.css   # immersive shell: nav + aurora/glass stage + hue/intensity/reduced-motion toolbar
+│  │  │  ├─ lib/                    # story.ts (StoryMeta · defineStory) · registry.ts (import.meta.glob auto-discovery + ?raw source) · controls.ts (live-controls schema) · Story.svelte (per-story layout: controls · API table · examples · source) · Variant.svelte · mock.ts
+│  │  │  └─ stories/ui/             # one <Name>.stories.svelte per src/ui primitive (auto-discovered; composites carry extra realistic cells)
 │  │  ├─ project.inlang/            # inlang project: baseLocale + locales + message-format plugin (single source of the locale set)
 │  │  ├─ messages/                  # Paraglide message catalogs {locale}.json (en = source of truth); outside src/, read-at-runtime
 │  │  ├─ public/manifest.json       # MV3 manifest — crxjs derives build entries from it (+ vite rollupOptions.input for lenspage)
@@ -48,7 +52,8 @@ lunma/                              # pnpm workspace root (private)
 │  │  ├─ e2e/                       # Playwright specs + fixtures (playwright.config.ts in apps/extension)
 │  │  │                             # unit tests are co-located: src/**/*.test.ts (no top-level tests/)
 │  │  ├─ vite.config.ts · svelte.config.js · tsconfig.json · stylelint.config.js · vitest.setup.ts
-│  │  └─ package.json               # @lunma/extension (build/test/lint/verify scripts)
+│  │  ├─ vite.catalog.config.ts · tsconfig.catalog.json   # sibling configs for the dev-only catalog (no crxjs; @→src alias; scoped typecheck)
+│  │  └─ package.json               # @lunma/extension (build/test/lint/verify · catalog · verify:catalog scripts)
 │  └─ site/                         # the marketing site — @lunma/site (SvelteKit + adapter-static → lunma.app)
 │     ├─ src/
 │     │  ├─ routes/                 # +layout.svelte (imports @lunma/tokens) · +layout.ts (prerender) · +page.svelte
@@ -873,6 +878,7 @@ import-graph tool is needed.
 | `launcher` — overlay + newtab surface | `ui`, `shared` (+ launcher-internal) | `background`, another surface |
 | `launcher/shared` — the launcher search engine (SW-imported), shared-grade | `shared` (+ intra-`launcher/shared`) | `ui`, any surface |
 | `content` — vanilla content scripts | `shared` | every other layer |
+| `catalog` (`apps/extension/catalog/**`, outside `src/` — the dev-only component catalog) | `ui`, `shared` (via the `@`→`src` alias) | `background`, `content`, another surface (`sidebar`/`launcher`/`options`), `apps/site` |
 
 ### The launcher-engine service edge
 
@@ -906,6 +912,31 @@ feature-side parts stay a review-time convention. The gate also runs
 `svelte-check` (`pnpm check`) for `.svelte` type coverage that `tsc --noEmit`
 cannot observe: template bindings and component prop contracts. See the
 `architecture-integrity` capability spec for the normative requirements.
+
+### The dev-only component catalog
+
+`apps/extension/catalog/` is a dev surface — a browsable matrix of every `src/ui`
+primitive rendered against the live aurora/glass backdrop with Space-hue,
+colour-intensity, reduced-motion, and light/dark theme toggles (the theme toggle
+reuses the shared `applyThemeToDocument` helper). It runs on its own dev port
+(`6006`) and its source-view panel is highlighted by `shiki` (the one dev-only
+dependency the catalog adds; it ships nothing in the MV3 bundle). It is **governed by the same import
+gate** as the in-`src` surfaces (a dedicated `apps/extension/catalog/**` Biome
+`noRestrictedImports` override): it may compose `ui` + `shared` (via the
+`@`→`src` alias) but not `background`, `content`, another feature surface, or
+`apps/site`. It **ships nothing in the MV3 bundle** — a sibling
+`vite.catalog.config.ts` (`root: catalog/`, no `@crxjs/vite-plugin`) builds it,
+never referenced by `manifest.json` or `vite.config.ts`'s rollup input — and is
+held to a parallel `verify:catalog` gate (typecheck against
+`tsconfig.catalog.json`, Biome, svelte-check, stylelint) folded into `verify`.
+Stories are auto-discovered via `import.meta.glob`, and a vitest guard
+(`src/ui/stories-coverage.test.ts`) fails `verify` if a primitive lacks its
+story. Each story renders through a catalog-owned `lib/Story.svelte` layout: a
+**live preview** bound to editable **controls** (a hand-authored `meta.controls`
+schema, since Svelte 5 has no runtime prop metadata), an **API table** derived
+from that schema, the curated **examples** matrix, and a collapsible **source
+view** (the story's own `?raw` source). See the `component-catalog` capability
+spec for the normative requirements.
 
 ### Workspace package boundaries
 

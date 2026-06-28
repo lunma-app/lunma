@@ -6,6 +6,7 @@ apps/site/build/
 # Brand fonts are sourced once from packages/tokens/fonts and copied into each
 # app's served root at build — never committed a second time.
 apps/extension/public/fonts/
+apps/extension/catalog/public/fonts/
 apps/site/static/fonts/
 
 .devbox/

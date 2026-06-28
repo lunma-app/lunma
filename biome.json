@@ -8,6 +8,7 @@
   "files": {
     "includes": [
       "apps/extension/src/**/*.{ts,js,svelte}",
+      "apps/extension/catalog/**/*.{ts,js,svelte}",
       "apps/extension/e2e/**/*.{ts,js}",
       "apps/extension/*.{ts,js}",
       "apps/site/src/**/*.{ts,js,svelte}",
@@ -396,6 +397,45 @@
                       "**/launcher/**",
                       "**/options",
                       "**/options/**"
+                    ]
+                  },
+                  {
+                    "group": [
+                      "@lunma/site",
+                      "@lunma/site/**",
+                      "**/apps/site/**"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/extension/catalog/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/background",
+                      "**/background/**",
+                      "**/sidebar",
+                      "**/sidebar/**",
+                      "**/launcher",
+                      "**/launcher/**",
+                      "**/options",
+                      "**/options/**",
+                      "**/content",
+                      "**/content/**"
                     ]
                   },
                   {

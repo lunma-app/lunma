@@ -1,0 +1,73 @@
+/* Catalog-global styles. The catalog is a dev surface, so this stylesheet only
+ * owns the page frame + the reduced-motion freeze; everything inside the stage
+ * is a primitive styled from @lunma/tokens. */
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+/* Default dark; the theme toggle sets `color-scheme` inline on <html> (via
+ * applyThemeToDocument), which overrides this. */
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--atm-bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  height: 100%;
+}
+
+/* Reduced-motion freeze (component-catalog R1). `Aurora.svelte` derives its
+ * reduced state from `matchMedia`, so a prop cannot force it — the toolbar
+ * instead sets `data-force-motion="reduced"` on the scope and we replicate the
+ * freeze here. The aurora blobs animate via Svelte-scoped `.aurora .blob`
+ * keyframes; from this plain (already-global) stylesheet we re-state the freeze
+ * and neutralise primitive transitions. ONE-WAY: this can force reduced-motion
+ * ON but cannot defeat an OS `prefers-reduced-motion: reduce` (Aurora hard-codes
+ * that media query), so the toggle never turns the full animation back on. */
+[data-force-motion='reduced'] .aurora .blob {
+  animation: none;
+}
+
+[data-force-motion='reduced'],
+[data-force-motion='reduced'] * {
+  transition-duration: 0.001ms !important;
+  animation-duration: 0.001ms !important;
+}
+
+/* Shiki source view. Rules live here (not in Story.svelte) because `{@html}`
+ * output isn't reached by Svelte's scoped-style attribute. `defaultColor: false`
+ * emits per-token `--shiki-light`/`--shiki-dark` custom properties; pick the pair
+ * by the catalog theme (dark is the default; `[data-theme='light']` flips it), so
+ * the source view tracks the light/dark toggle with no re-highlight. */
+.shiki {
+  margin: 0;
+  padding: var(--space-4);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border-soft);
+  overflow: auto;
+  max-height: 28rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  color: var(--shiki-dark);
+  background-color: var(--shiki-dark-bg);
+}
+.shiki span {
+  color: var(--shiki-dark);
+}
+[data-theme='light'] .shiki {
+  color: var(--shiki-light);
+  background-color: var(--shiki-light-bg);
+}
+[data-theme='light'] .shiki span {
+  color: var(--shiki-light);
+}

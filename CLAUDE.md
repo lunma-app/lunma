@@ -49,7 +49,10 @@ workspace root runs `pnpm -r verify`, fanning out to every package:
   cross-app guard), `svelte-check` (`.svelte` type coverage `tsc --noEmit`
   cannot see — template bindings, component prop contracts), `lint:styles`
   (`stylelint 'src/**/*.{svelte,css}'`, the token/primitive contract for
-  `apps/extension/src/ui`), `vitest run`.
+  `apps/extension/src/ui`), `verify:catalog` (the dev-only component catalog's
+  parallel gate — `typecheck:catalog` against `tsconfig.catalog.json`,
+  `lint:catalog`, `check:catalog`, `lint:styles:catalog`), `vitest run` (which
+  includes the `src/ui/stories-coverage.test.ts` story-parity guard).
 - **`apps/site`** (`pnpm --filter @lunma/site verify`): `biome check src`,
   `svelte-check`, the automated WCAG-AA contrast test (`vitest run`), and the
   static prerender `build`.
@@ -90,7 +93,12 @@ enforced).
   adding a feature component either composes existing primitives or ships the new
   ones it needs, in the same change. The marketing site (`apps/site`) composes
   the shared `@lunma/tokens` tokens/recipes directly — it does not reach into the
-  extension's `ui/` primitives.
+  extension's `ui/` primitives. **Every `apps/extension/src/ui` primitive carries
+  a catalog story:** any change that adds or modifies a `src/ui/*.svelte` primitive
+  MUST add or update its `apps/extension/catalog/stories/ui/<Name>.stories.svelte`
+  in the same change (one story file per primitive name). The
+  `src/ui/stories-coverage.test.ts` guard fails `pnpm verify` on a story-less
+  primitive; a `PostToolUse` hook nudges in-session.
 
 ## Policy on deviations and drift (binding, every task/commit)
 

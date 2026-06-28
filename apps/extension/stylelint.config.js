@@ -31,6 +31,14 @@ export default {
       customSyntax: postcssHtml,
     },
     {
+      // Dev-only catalog SFCs: feature-grade (parse-only), like the src/**/*.svelte
+      // override above. No primitive token rules — the catalog composes primitives;
+      // its own chrome CSS is reviewed, not linted. This override only lets stylelint
+      // parse <style> blocks under catalog/.
+      files: ['catalog/**/*.svelte'],
+      customSyntax: postcssHtml,
+    },
+    {
       // PRIMITIVES: the token contract is enforced here.
       files: ['src/ui/**/*.svelte'],
       customSyntax: postcssHtml,

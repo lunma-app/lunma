@@ -20,8 +20,15 @@
     "test:run": "vitest run",
     "test:e2e": "pnpm build && playwright test",
     "lint:styles": "stylelint 'src/**/*.{svelte,css}'",
+    "catalog": "vite --config vite.catalog.config.ts",
+    "catalog:build": "vite build --config vite.catalog.config.ts",
+    "typecheck:catalog": "tsc --noEmit -p tsconfig.catalog.json",
+    "lint:catalog": "biome check catalog",
+    "check:catalog": "svelte-check --tsconfig ./tsconfig.catalog.json",
+    "lint:styles:catalog": "stylelint 'catalog/**/*.{svelte,css}'",
+    "verify:catalog": "pnpm typecheck:catalog && pnpm lint:catalog && pnpm check:catalog && pnpm lint:styles:catalog",
     "pack": "pnpm build && cd dist && zip -r ../extension.zip .",
-    "verify": "pnpm typecheck && pnpm lint && pnpm check && pnpm lint:styles && pnpm test:run"
+    "verify": "pnpm typecheck && pnpm lint && pnpm check && pnpm lint:styles && pnpm verify:catalog && pnpm test:run"
   },
   "dependencies": {
     "@leeoniya/ufuzzy": "1.0.19",
@@ -44,6 +51,7 @@
     "culori": "catalog:",
     "jsdom": "catalog:",
     "postcss-html": "^1.8.1",
+    "shiki": "^4.3.0",
     "stylelint": "^17.13.0",
     "stylelint-declaration-strict-value": "^1.11.1",
     "svelte": "catalog:",
