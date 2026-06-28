@@ -59,9 +59,15 @@ literal text node, EXCEPT where allow-listed: whitespace/punctuation-only nodes,
 string "Lunma", text inside `code`/`pre`/`<style>`, legitimately-fixed attributes (class
 names, `data-testid`, non-visible `aria` identifiers), and an explicit inline
 `i18n-exempt` escape hatch (`<!-- i18n-exempt: reason -->` / `// i18n-exempt`). The guard
-SHALL report the offending `file:line` and text. Additionally, the inlang missing-key /
-unused-message lint SHALL be wired into `verify`, failing on an `m.*` reference with no
-catalog key.
+SHALL report the offending `file:line` and text. The guard SHALL cover template text
+nodes AND user-facing attribute / component-prop literals (`placeholder`, `title`,
+`aria-label`/`ariaLabel`, `alt`, `heading`, `label`, `description`, `subtitle`); literal
+strings in `<script>` logic (e.g. option-list labels, toast text) are outside its scope
+and remain a review concern.
+
+A `m.*` reference with no catalog key SHALL fail `verify` — enforced by the TypeScript
+compiler, not a separate lint: Paraglide generates a typed `m` namespace, so a missing key
+is a compile error (`tsc`, already in `verify`), which is stronger than a runtime lint.
 
 #### Scenario: A hardcoded surface literal fails verify
 
@@ -78,4 +84,4 @@ catalog key.
 #### Scenario: A message reference with no catalog key fails verify
 
 - **WHEN** a surface calls `m.someKey()` that is absent from `messages/en.json`
-- **THEN** the inlang missing-key lint wired into `verify` SHALL fail
+- **THEN** `tsc` (in `verify`) SHALL fail — the generated `m` namespace is typed, so the missing property is a compile error

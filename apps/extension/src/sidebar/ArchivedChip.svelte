@@ -1,4 +1,5 @@
 <script lang="ts">
+import { m } from '../shared/paraglide/messages';
 import type { SpaceId } from '../shared/types';
 import Icon from '../ui/Icon.svelte';
 import { useStore } from './store-context.svelte';
@@ -23,8 +24,8 @@ const count = $derived(store.state.archivedTabs.filter((e) => e.spaceId === spac
     type="button"
     class="archived-chip"
     data-testid="archived-chip"
-    title="Recently archived — open in Settings"
-    aria-label={`Recently archived (${count})`}
+    title={m.sidebar_archivedTooltip()}
+    aria-label={m.sidebar_archivedLabel({ count })}
     onclick={onOpen}
   >
     <Icon name="archive" size={13} />

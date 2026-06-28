@@ -2,6 +2,7 @@
 import '../ui/drop-line.css';
 import { dispatch } from '../shared/bus';
 import { log } from '../shared/logger';
+import { m } from '../shared/paraglide/messages';
 import { colourToOklch, colourToOn } from '../shared/space-hue';
 import type { Space, WindowId } from '../shared/types';
 import Icon from '../ui/Icon.svelte';
@@ -191,7 +192,7 @@ function openOptions(): void {
   {#each spaces as space, i (space.id)}
     {@const ok = colourToOklch(space.color)}
     {@const isActive = space.id === activeSpaceId}
-    <Tooltip label={isActive ? `${space.name} · click to edit` : space.name}>
+    <Tooltip label={isActive ? m.sidebar_spaceTooltipEdit({ name: space.name }) : space.name}>
       {#snippet children(triggerProps)}
         <button
           type="button"
@@ -203,7 +204,7 @@ function openOptions(): void {
           data-name={space.name}
           data-active={isActive ? 'true' : 'false'}
           aria-current={isActive ? 'true' : undefined}
-          aria-label={isActive ? `Edit ${space.name}` : `Activate ${space.name}`}
+          aria-label={isActive ? `Edit ${space.name}` : m.sidebar_spaceTooltipActivate({ name: space.name })}
           style:--space-h={String(ok.h)}
           style:--space-chroma={String(ok.c)}
           style:--space-l={String(ok.l)}
@@ -234,14 +235,14 @@ function openOptions(): void {
       {/snippet}
     </Tooltip>
   {/each}
-  <Tooltip label="New Space">
+  <Tooltip label={m.sidebar_addSpace()}>
     {#snippet children(triggerProps)}
       <button
         type="button"
         {...triggerProps}
         class="chip chip-add"
         data-testid="add-space"
-        aria-label="New Space"
+        aria-label={m.sidebar_addSpace()}
         onclick={openCreate}
       >
         <Icon name="plus" size={14} />
@@ -255,8 +256,8 @@ function openOptions(): void {
   <span class="bar-actions">
     <IconButton
       icon="settings"
-      title="Open Lunma options"
-      ariaLabel="Open options"
+      title={m.sidebar_openOptions()}
+      ariaLabel={m.sidebar_openOptionsAria()}
       testid="open-options"
       onclick={openOptions}
     />

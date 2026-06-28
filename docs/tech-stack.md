@@ -104,6 +104,8 @@ The alternatives — `svelte-i18n` (heavier runtime store, weaker types) and `ty
 
 The one non-obvious piece is locale *resolution*. Paraglide's default strategies (`url`/`cookie`/`localStorage`) touch `window`/`document`/`localStorage`, which throw in the MV3 service worker. So `src/shared/i18n.ts` registers a custom strategy `custom-lunmaSettings` (strategy array `['custom-lunmaSettings', 'baseLocale']` only) backed by the Settings store: a synchronous in-memory `cached` locale that `initLocale()` seeds from `chrome.storage.sync` before first paint, resolving the `'auto'` default from `chrome.i18n.getUILanguage()` / `navigator.language` (both SW-safe). See [architecture](architecture.md) for the resolver and `_locales` details.
 
+Enforcement adds **no tooling** — Biome has no `no-literal-string` rule and the repo stays Biome-only. A Vitest guard (`src/i18n-no-literal.test.ts`) rides `pnpm verify` and fails on a hardcoded user-facing literal in a migrated surface (template text + user-facing attribute/component-prop literals); missing message keys are caught by `tsc` via the typed `m` namespace.
+
 ## What to avoid
 
 - **React** — 40KB+ runtime cost on the overlay, for a component model Svelte already provides.

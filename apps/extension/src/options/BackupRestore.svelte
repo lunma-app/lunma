@@ -4,8 +4,9 @@ import { buildBackup } from '../shared/backup';
 import { bus } from '../shared/bus';
 import { readPersistedState } from '../shared/chrome/storage';
 import { log } from '../shared/logger';
+import { m } from '../shared/paraglide/messages';
 import { BackupEnvelopeSchema } from '../shared/schemas';
-import { readSettings, TOGGLE_SEGMENTS } from '../shared/settings';
+import { readSettings } from '../shared/settings';
 import type { AppState } from '../shared/types';
 import Button from '../ui/Button.svelte';
 import InlineError from '../ui/InlineError.svelte';
@@ -13,6 +14,7 @@ import SegmentedControl from '../ui/SegmentedControl.svelte';
 import SettingsCard from '../ui/SettingsCard.svelte';
 import SettingText from '../ui/SettingText.svelte';
 import Toast from '../ui/Toast.svelte';
+import { toggleSegments } from './labels';
 
 let includeSettings = $state(false);
 let toast = $state<{ message: string } | null>(null);
@@ -46,7 +48,7 @@ async function handleExport(): Promise<void> {
     a.click();
     URL.revokeObjectURL(url);
 
-    toast = { message: 'Backup exported' };
+    toast = { message: m.options_backupExported() };
   } catch (err) {
     log.error('BackupRestore: export failed', { err });
     importError = err instanceof Error ? err.message : 'Export failed.';
@@ -73,7 +75,7 @@ async function onFileChange(e: Event): Promise<void> {
     await tick();
     confirmRowEl?.querySelector<HTMLButtonElement>('[data-variant="primary"]')?.focus();
   } catch {
-    importError = 'Could not read the backup file.';
+    importError = m.options_importReadError();
     confirmingImport = false;
   }
 }
@@ -85,18 +87,15 @@ async function confirmImport(): Promise<void> {
   importError = null;
   const parsed = BackupEnvelopeSchema.safeParse(data);
   if (!parsed.success) {
-    importError = 'Invalid backup file — it may be corrupt or from an incompatible version.';
+    importError = m.options_importInvalidError();
     return;
   }
   try {
     await bus.send({ kind: 'importState', payload: { backup: parsed.data } });
-    toast = { message: 'Backup restored' };
+    toast = { message: m.options_backupRestored() };
   } catch (err) {
     log.error('BackupRestore: import failed', { err });
-    importError =
-      err instanceof Error
-        ? err.message
-        : 'Import failed — the file may be corrupt or from an incompatible version.';
+    importError = err instanceof Error ? err.message : m.options_importFailedError();
   }
 }
 
@@ -110,32 +109,32 @@ async function cancelImport(): Promise<void> {
 </script>
 
 <SettingsCard
-  heading="Backup & restore"
-  description="Move your Spaces to another machine, or keep a copy."
+  heading={m.options_backupHeading()}
+  description={m.options_backupDescription()}
   flush
 >
   <div class="setting">
-    <SettingText label="Include settings" description="Carry your preferences to the new machine." />
+    <SettingText label={m.options_includeSettingsLabel()} description={m.options_includeSettingsDescription()} />
     <SegmentedControl
       name="backup-include-settings"
-      options={TOGGLE_SEGMENTS}
+      options={toggleSegments()}
       value={includeSettings ? 'on' : 'off'}
-      ariaLabel="Include settings"
+      ariaLabel={m.options_includeSettingsLabel()}
       onchange={(v) => (includeSettings = v === 'on')}
     />
   </div>
 
   <div class="actions" bind:this={actionsEl}>
-    <Button variant="secondary" onclick={() => void handleExport()}>Export backup</Button>
+    <Button variant="secondary" onclick={() => void handleExport()}>{m.options_exportBackup()}</Button>
     {#if confirmingImport}
       <div class="import-confirm" data-testid="import-confirm" bind:this={confirmRowEl}>
-        <span class="confirm-text">Replace your data? This cannot be undone.</span>
-        <Button variant="ghost" onclick={() => void cancelImport()}>Cancel</Button>
-        <Button variant="primary" onclick={() => void confirmImport()}>Restore</Button>
+        <span class="confirm-text">{m.options_importConfirm()}</span>
+        <Button variant="ghost" onclick={() => void cancelImport()}>{m.options_importCancel()}</Button>
+        <Button variant="primary" onclick={() => void confirmImport()}>{m.options_importRestore()}</Button>
       </div>
     {:else}
       <Button variant="ghost" testid="import-trigger" onclick={handleImportClick}>
-        Import backup
+        {m.options_importBackup()}
       </Button>
     {/if}
   </div>

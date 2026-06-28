@@ -7,6 +7,7 @@ import { setAccountToken } from '../shared/connectors';
 import { entityForItem, type LensEntity } from '../shared/lens-entity';
 import { applyLensFilter } from '../shared/lens-filter';
 import { sourceKey } from '../shared/lens-labels';
+import { m } from '../shared/paraglide/messages';
 import { requestHostPermissions } from '../shared/permissions';
 import type {
   AppState,
@@ -326,12 +327,12 @@ function sectionEmptyNote(
       : renderItems;
   if (visibleItems.length > 0) return undefined;
   if (cfg.source === 'rss') {
-    if (secItems.length === 0) return 'No entries yet.';
+    if (secItems.length === 0) return m.sidebar_lensNoEntriesYet();
     const unreadCount = secItems.filter((i) => !readSet.has(`${sk}:${i.id}`)).length;
-    if (unreadCount === 0) return "You're all caught up.";
+    if (unreadCount === 0) return m.sidebar_lensAllCaughtUp();
     return undefined;
   }
-  return secItems.length === 0 ? 'Nothing here right now.' : undefined;
+  return secItems.length === 0 ? m.sidebar_lensNothingHere() : undefined;
 }
 
 /** Badge: sum per-RESOLVED-SECTION attention counts (an item in two filter
@@ -453,25 +454,38 @@ function onEditorDone(): void {
 let confirmingDelete = $state(false);
 
 const menuItems = $derived<MenuItem[]>([
-  { id: 'refresh', label: 'Refresh now', icon: 'rotate-cw', onSelect: refreshNow },
+  { id: 'refresh', label: m.sidebar_lensRefresh(), icon: 'rotate-cw', onSelect: refreshNow },
   {
     id: 'edit',
-    label: 'Edit…',
+    label: m.sidebar_lensEdit(),
     icon: 'pencil',
     onSelect: () => {
       confirmingDelete = false;
       sheetOpen = true;
     },
   },
-  { id: 'open-page', label: 'Open as page', icon: 'external-link', onSelect: openPage },
-  { id: 'open-all', label: 'Open all in a tab', icon: 'arrow-up-right', onSelect: openAll },
+  { id: 'open-page', label: m.sidebar_lensOpenAsPage(), icon: 'external-link', onSelect: openPage },
+  { id: 'open-all', label: m.sidebar_lensOpenAll(), icon: 'arrow-up-right', onSelect: openAll },
   ...(hasFeedSections
-    ? [{ id: 'mark-all-read', label: 'Mark all read', icon: 'check-check', onSelect: markAllRead }]
+    ? [
+        {
+          id: 'mark-all-read',
+          label: m.sidebar_lensMarkAllRead(),
+          icon: 'check-check',
+          onSelect: markAllRead,
+        },
+      ]
     : []),
-  { id: 'move-up', label: 'Move up', icon: 'arrow-up', disabled: !canMoveUp, onSelect: onMoveUp },
+  {
+    id: 'move-up',
+    label: m.sidebar_lensMoveUp(),
+    icon: 'arrow-up',
+    disabled: !canMoveUp,
+    onSelect: onMoveUp,
+  },
   {
     id: 'move-down',
-    label: 'Move down',
+    label: m.sidebar_lensMoveDown(),
     icon: 'arrow-down',
     disabled: !canMoveDown,
     onSelect: onMoveDown,
@@ -479,7 +493,7 @@ const menuItems = $derived<MenuItem[]>([
   confirmingDelete
     ? {
         id: 'delete',
-        label: 'Delete — confirm',
+        label: m.sidebar_lensDeleteConfirm(),
         icon: 'trash-2',
         danger: true,
         onSelect: () => {
@@ -489,7 +503,7 @@ const menuItems = $derived<MenuItem[]>([
       }
     : {
         id: 'delete',
-        label: 'Delete',
+        label: m.sidebar_lensDelete(),
         icon: 'trash-2',
         danger: true,
         keepOpen: true,
@@ -524,7 +538,7 @@ export function onContextMenu(_e: MouseEvent): void {
      (the legacy `onclose` behaviour). -->
 <BitsContextMenu
   items={menuItems}
-  label="Smart folder actions"
+  label={m.sidebar_smartFolderActions()}
   testid="smart-folder-menu"
   onOpenChange={(open) => {
     if (!open) confirmingDelete = false;
@@ -542,8 +556,8 @@ export function onContextMenu(_e: MouseEvent): void {
         {onToggle}
         onOpenPage={openPage}
         openPageLabel={badge === undefined
-          ? `Open ${node.name}`
-          : `Open ${node.name}, ${badge} ${hasFeedSections ? 'unread' : 'items'}`}
+          ? m.sidebar_lensOpenPageLabel({ name: node.name })
+          : m.sidebar_lensOpenPageLabelBadge({ name: node.name, badge, kind: hasFeedSections ? 'unread' : 'items' })}
         {badge}
         {busy}
       />
@@ -606,7 +620,7 @@ export function onContextMenu(_e: MouseEvent): void {
             data-testid="smart-signin-row"
             onclick={() => dispatch({ kind: 'openUrl', payload: { url: cfg.baseUrl, windowId } })}
           >
-            Sign in to {secHost}
+            {m.sidebar_lensSignInTo({ host: secHost })}
           </button>
           {#if tokenRevealOpen[sourceKey(cfg)]}
             <div class="reconnect-field" data-testid="smart-reconnect-field">
@@ -627,21 +641,21 @@ export function onContextMenu(_e: MouseEvent): void {
                 tokenRevealOpen = { ...tokenRevealOpen, [sourceKey(cfg)]: true };
               }}
             >
-              Add a token
+              {m.sidebar_lensAddToken()}
             </Button>
           {/if}
         {:else}
           <!-- pat-only (github) or a bad token: inline reconnect that writes the
                per-source token and refetches — no navigation to Options. -->
           <div class="reconnect-field" data-testid="smart-reconnect-field">
-            <p class="reconnect-copy">Reconnect {secHost}</p>
+            <p class="reconnect-copy">{m.sidebar_lensReconnect({ host: secHost })}</p>
             <AccountConnectField
               host={secHost}
               requirement={tokenRequirement(cfg.source) === 'optional' ? 'optional' : 'required'}
               hasToken={false}
               helpUrl={tokenHelpUrl(cfg.source, cfg.baseUrl)}
               error={reconnectAttempted[sourceKey(cfg)]
-                ? "That token didn't work — check it can read pull requests."
+                ? m.sidebar_lensTokenError()
                 : undefined}
               onConnect={(t) => reconnect(cfg, t)}
             />
@@ -651,8 +665,8 @@ export function onContextMenu(_e: MouseEvent): void {
         {@const secHost = (() => { try { return new URL(cfg.baseUrl).host; } catch { return cfg.baseUrl; } })()}
         <div class="needs-access" data-testid="smart-needs-access">
           <Icon name="key-round" size={16} />
-          <span class="needs-access-copy">Lunma needs access to {secHost}</span>
-          <Button variant="primary" onclick={() => void requestHostPermissions(requiredOriginsForConfig(cfg))}>Grant access</Button>
+          <span class="needs-access-copy">{m.sidebar_lensNeedsAccess({ host: secHost })}</span>
+          <Button variant="primary" onclick={() => void requestHostPermissions(requiredOriginsForConfig(cfg))}>{m.sidebar_lensGrantAccess()}</Button>
         </div>
       {:else}
         {#each renderItems as item (item.id)}
@@ -667,7 +681,7 @@ export function onContextMenu(_e: MouseEvent): void {
 
           {#snippet closeSlot()}
             {#if bound || isSectionFeed}
-              {@const dismiss = bound ? 'Close tab' : 'Mark read'}
+              {@const dismiss = bound ? m.sidebar_lensClose() : m.sidebar_lensDismiss()}
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <span class="close-slot" onpointerdown={(e) => e.stopPropagation()}>
                 <IconButton
@@ -748,15 +762,15 @@ export function onContextMenu(_e: MouseEvent): void {
             type="button"
             data-testid="smart-filtered-note"
             onclick={openPage}
-            title="Lens is filtered — open overview to change filter"
+            title={m.sidebar_lensFiltered()}
           >
             <Icon name="filter" size={11} />
-            <span>Filtered</span>
+            <span>{m.sidebar_lensFilteredBadge()}</span>
           </button>
         {/if}
         {#if secState === 'error'}
           {@const secHost = (() => { try { return new URL(cfg.baseUrl).host; } catch { return cfg.baseUrl; } })()}
-          <div class="note-row" data-testid="smart-error-note">Couldn't reach {secHost}</div>
+          <div class="note-row" data-testid="smart-error-note">{m.sidebar_lensCouldNotReach({ host: secHost })}</div>
         {/if}
 
         {#if isSectionFeed}
@@ -770,7 +784,7 @@ export function onContextMenu(_e: MouseEvent): void {
                 onclick={() => toggleSectionRead(sourceKey(cfg))}
                 title={hidesRead ? 'Show recently read' : 'Hide read again'}
               >
-                {hidesRead ? `Show ${readCount} read` : `Hide ${readCount} read`}
+                {hidesRead ? m.sidebar_lensShowRead({ count: readCount }) : m.sidebar_lensHideRead({ count: readCount })}
               </Button>
             {/if}
             <span class="controls-spacer"></span>
@@ -778,9 +792,9 @@ export function onContextMenu(_e: MouseEvent): void {
               variant="ghost"
               size="sm"
               onclick={openAll}
-              title="Open the feed's website in a new tab"
+              title={m.sidebar_lensOpenFeedSite()}
             >
-              <span class="open-all-label">Open all</span>
+              <span class="open-all-label">{m.sidebar_lensOpenAllFeed()}</span>
               <Icon name="arrow-up-right" size={12} />
             </Button>
           </div>
@@ -793,7 +807,7 @@ export function onContextMenu(_e: MouseEvent): void {
     {#each danglingRefs as ref (ref.sourceId)}
       <div class="removed-row" data-testid="smart-account-removed">
         <Icon name="unplug" size={16} />
-        <span class="removed-copy">Account removed — reconnect or pick another</span>
+        <span class="removed-copy">{m.sidebar_lensAccountRemoved()}</span>
       </div>
     {/each}
   </div>
@@ -807,7 +821,7 @@ export function onContextMenu(_e: MouseEvent): void {
 <BottomSheet
   open={sheetOpen}
   portalTo=".sidebar"
-  title="Edit lens"
+  title={m.sidebar_editLensSheet()}
   onClose={() => {
     sheetOpen = false;
   }}

@@ -1,5 +1,6 @@
 <script lang="ts">
 import { onMount } from 'svelte';
+import { m } from '../shared/paraglide/messages';
 import {
   hasApiPermission,
   type OptionalApiPermission,
@@ -26,15 +27,15 @@ const RESULT_SOURCES: Array<{
 }> = [
   {
     name: 'history',
-    label: 'Browsing history',
-    desc: 'Show matching pages from your browsing history in the launcher.',
-    cta: 'Enable history results',
+    label: m.options_historyLabel(),
+    desc: m.options_historyDescription(),
+    cta: m.options_enableHistory(),
   },
   {
     name: 'bookmarks',
-    label: 'Bookmarks',
-    desc: 'Show matching bookmarks in the launcher.',
-    cta: 'Enable bookmark results',
+    label: m.options_bookmarksLabel(),
+    desc: m.options_bookmarksDescription(),
+    cta: m.options_enableBookmarks(),
   },
 ];
 
@@ -62,7 +63,7 @@ async function enableResultSource(name: OptionalApiPermission): Promise<void> {
   await refreshResultSources();
   if (granted) {
     const label = RESULT_SOURCES.find((s) => s.name === name)?.label ?? name;
-    toast = { message: `${label} enabled` };
+    toast = { message: m.options_sourceEnabledToast({ label }) };
   }
 }
 
@@ -77,14 +78,13 @@ onMount(() => onPermissionsChange(() => void refreshResultSources()));
 </script>
 
 <SettingsCard
-  heading="Result sources"
-  description="Let the launcher also search your browser history and bookmarks. Each is granted in your browser, only when you turn it on."
+  heading={m.options_resultSourcesHeading()}
+  description={m.options_resultSourcesDescription()}
   id="result-sources"
   testid="result-sources-section"
 >
   <p class="result-source-intro">
-    The launcher can also surface your browsing history and bookmarks. These are optional —
-    enable each when you want it, and revoke access anytime from your browser's extension settings.
+    {m.options_resultSourcesIntro()}
   </p>
 
   {#each RESULT_SOURCES as source (source.name)}
@@ -98,7 +98,7 @@ onMount(() => onPermissionsChange(() => void refreshResultSources()));
           class="result-source-indicator"
           data-testid={`result-source-${source.name}-granted`}
         >
-          Enabled
+          {m.options_sourceEnabled()}
         </span>
       {:else}
         <Button variant="primary" onclick={() => void enableResultSource(source.name)}>

@@ -1,5 +1,6 @@
 import { persist } from '../shared/chrome/storage';
 import { reconcileAccountSecrets } from '../shared/connectors';
+import { initLocale } from '../shared/i18n';
 import { log } from '../shared/logger';
 import {
   type BoundaryOpenElsewhereMessage,
@@ -33,6 +34,7 @@ import {
 } from './lenses';
 import { openOptionsAtResultSources } from './open-options-grant';
 import { backfillOverlayIntoOpenTabs, injectOverlay } from './overlay-injection';
+import { buildOverlayLabels } from './overlay-labels';
 import { resolvePinActiveTab } from './pin-active-tab';
 import { seedExistingTabs } from './seed-existing-tabs';
 import { seedExistingWindows } from './seed-existing-windows';
@@ -314,6 +316,24 @@ chrome.runtime.onMessage.addListener((raw: unknown, sender: chrome.runtime.Messa
   if (m.type !== 'lunma/open-options-grant') return;
   void openOptionsAtResultSources();
 });
+
+// Overlay localization (localize-extension-ui D3 — Plan B): the vanilla `Alt+L`
+// overlay can't import Paraglide or seed the locale synchronously, so it asks the
+// SW for its rendered UI strings. `initLocale()` re-reads the `language` setting
+// each time (cheap) so a language change is reflected on the overlay's next open.
+// Returns `true` to keep the message channel open for the async `sendResponse`.
+chrome.runtime.onMessage.addListener(
+  (raw: unknown, sender: chrome.runtime.MessageSender, sendResponse): boolean | void => {
+    if (sender.id !== chrome.runtime.id) return;
+    if (!raw || typeof raw !== 'object') return;
+    if ((raw as { type?: unknown }).type !== 'lunma/overlay-labels-request') return;
+    void (async () => {
+      await initLocale();
+      sendResponse({ labels: buildOverlayLabels() });
+    })();
+    return true;
+  },
+);
 
 // Sync the auto-archive sweep alarm to the current settings (auto-archive):
 // register it (at the threshold-derived period) only while the master switch is

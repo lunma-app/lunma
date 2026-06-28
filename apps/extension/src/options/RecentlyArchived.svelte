@@ -4,6 +4,7 @@ import { bus } from '../shared/bus';
 import { readPersistedState, STATE_STORAGE_KEY } from '../shared/chrome/storage';
 import { labelFor } from '../shared/label-for';
 import { log } from '../shared/logger';
+import { m } from '../shared/paraglide/messages';
 import { DEFAULTS, readSettings, watchSettings } from '../shared/settings';
 import type { ArchivedTab } from '../shared/types';
 import Button from '../ui/Button.svelte';
@@ -181,8 +182,8 @@ function confirmClearAll(): void {
 </script>
 
 <SettingsCard
-  heading="Recently archived"
-  description="Tabs archived automatically land here — reopen one, or let it expire on the schedule above."
+  heading={m.options_recentlyArchivedHeading()}
+  description={m.options_recentlyArchivedDescription()}
   id="recently-archived"
   testid="recently-archived"
 >
@@ -191,13 +192,13 @@ function confirmClearAll(): void {
       <span class="clear-actions" bind:this={clearActionsEl}>
         {#if confirmingClearAll}
           <div class="import-confirm" data-testid="import-confirm">
-            <span class="confirm-text">Delete all archived records? This cannot be undone.</span>
-            <Button variant="ghost" onclick={() => void cancelClearConfirm()}>Cancel</Button>
-            <Button variant="primary" onclick={confirmClearAll}>Delete</Button>
+            <span class="confirm-text">{m.options_clearArchivedConfirm()}</span>
+            <Button variant="ghost" onclick={() => void cancelClearConfirm()}>{m.options_clearArchivedCancel()}</Button>
+            <Button variant="primary" onclick={confirmClearAll}>{m.options_clearArchivedDelete()}</Button>
           </div>
         {:else}
           <Button variant="ghost" testid="clear-all-trigger" onclick={() => void openClearConfirm()}>
-            Clear all
+            {m.options_clearArchived()}
           </Button>
         {/if}
       </span>
@@ -206,7 +207,7 @@ function confirmClearAll(): void {
 
   {#if items.length === 0}
     <p class="empty" data-testid="archived-empty">
-      Nothing archived yet — idle temporary tabs land here so you can bring them back.
+      {m.options_archivedEmpty()}
     </p>
   {:else}
     <div class="rows">
@@ -221,14 +222,14 @@ function confirmClearAll(): void {
             <span class="row-actions">
               <IconButton
                 icon="rotate-ccw"
-                ariaLabel={`Restore ${item.title}`}
-                title="Restore"
+                ariaLabel={m.options_restoreArchivedLabel({ title: item.title })}
+                title={m.options_restoreArchivedTitle()}
                 onclick={() => restore(item.archivedAt, item.tabId)}
               />
               <IconButton
                 icon="trash-2"
-                ariaLabel={`Delete ${item.title}`}
-                title="Delete"
+                ariaLabel={m.options_deleteArchivedLabel({ title: item.title })}
+                title={m.options_deleteArchivedTitle()}
                 onclick={() => deleteOne(item.archivedAt, item.tabId)}
               />
             </span>

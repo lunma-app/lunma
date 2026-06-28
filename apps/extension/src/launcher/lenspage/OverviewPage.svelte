@@ -1,5 +1,6 @@
 <script lang="ts">
 import { applyLensFilter } from '../../shared/lens-filter';
+import { m } from '../../shared/paraglide/messages';
 import type { LensEntity, LensFilter } from '../../shared/types';
 import Chip from '../../ui/Chip.svelte';
 import Diffstat from '../../ui/Diffstat.svelte';
@@ -69,13 +70,13 @@ const visProjects = $derived([...new Set([...facets.projects, ...(filter.project
 const visFeeds = $derived([...new Set([...facets.feeds, ...(filter.feeds ?? [])])]);
 
 const repoSelectOptions = $derived<SelectOption[]>([
-  { value: 'all', label: 'All repos' },
+  { value: 'all', label: m.launcher_lensAllRepos() },
   ...visRepos.map((r) => ({ value: r, label: r })),
 ]);
 const repoSelectValue = $derived(filter.repos?.length === 1 ? (filter.repos[0] ?? 'all') : 'all');
 
 const projectSelectOptions = $derived<SelectOption[]>([
-  { value: 'all', label: 'All projects' },
+  { value: 'all', label: m.launcher_lensAllProjects() },
   ...visProjects.map((p) => ({ value: p, label: p })),
 ]);
 const projectSelectValue = $derived(
@@ -83,7 +84,7 @@ const projectSelectValue = $derived(
 );
 
 const feedSelectOptions = $derived<SelectOption[]>([
-  { value: 'all', label: 'All feeds' },
+  { value: 'all', label: m.launcher_lensAllFeeds() },
   ...visFeeds.map((f) => ({ value: f, label: f })),
 ]);
 const feedSelectValue = $derived(filter.feeds?.length === 1 ? (filter.feeds[0] ?? 'all') : 'all');
@@ -206,9 +207,9 @@ const empty = $derived(
       <button class="sec-head" type="button" aria-expanded={open} onclick={() => toggle('change')}>
         <span class="chev" class:open aria-hidden="true"><Icon name="chevron-right" size={11} /></span>
         <span class="sec-dot" style:--dot-h="252" aria-hidden="true"></span>
-        <span class="sec-title">Changes</span>
+        <span class="sec-title">{m.entity_changes()}</span>
         <span class="count" data-testid="section-count">{changes.length}</span>
-        <span class="sec-trail">incl. CI</span>
+        <span class="sec-trail">{m.launcher_lensInclCi()}</span>
       </button>
       {#if open}
         <div class="sec-body">
@@ -228,7 +229,7 @@ const empty = $derived(
                   options={repoSelectOptions}
                   value={repoSelectValue}
                   onchange={onRepoSelectChange}
-                  ariaLabel="Filter by repo"
+                  ariaLabel={m.launcher_lensFilterByRepo()}
                   testid="repo-select"
                 />
               {/if}
@@ -278,7 +279,7 @@ const empty = $derived(
       <button class="sec-head" type="button" aria-expanded={open} onclick={() => toggle('ticket')}>
         <span class="chev" class:open aria-hidden="true"><Icon name="chevron-right" size={11} /></span>
         <span class="sec-dot" style:--dot-h="295" aria-hidden="true"></span>
-        <span class="sec-title">Issues</span>
+        <span class="sec-title">{m.entity_issues()}</span>
         <span class="count" data-testid="section-count">{tickets.length}</span>
       </button>
       {#if open}
@@ -299,7 +300,7 @@ const empty = $derived(
                   options={projectSelectOptions}
                   value={projectSelectValue}
                   onchange={onProjectSelectChange}
-                  ariaLabel="Filter by project"
+                  ariaLabel={m.launcher_lensFilterByProject()}
                   testid="project-select"
                 />
               {/if}
@@ -340,8 +341,9 @@ const empty = $derived(
       <button class="sec-head" type="button" aria-expanded={open} onclick={() => toggle('article')}>
         <span class="chev" class:open aria-hidden="true"><Icon name="chevron-right" size={11} /></span>
         <span class="sec-dot" style:--dot-h="150" aria-hidden="true"></span>
-        <span class="sec-title">Articles</span>
+        <span class="sec-title">{m.entity_articles()}</span>
         <span class="count" data-testid="section-count">{visArticles.length}</span>
+        <!-- i18n-exempt: RSS is a protocol name, not translated -->
         <span class="sec-trail">RSS</span>
       </button>
       {#if open}
@@ -369,10 +371,10 @@ const empty = $derived(
           {/if}
           <div class="filter-row article-controls">
             <span class="controls-right">
-              <button class="chip-btn" class:on={unreadOnly} type="button" onclick={toggleUnreadFilter}>Unread · {unreadCount}</button>
-              <span class="seg" role="group" aria-label="Article layout">
-                <button class="seg-btn" class:on={articleView === 'grid'} type="button" onclick={() => (articleView = 'grid')}>Grid</button>
-                <button class="seg-btn" class:on={articleView === 'list'} type="button" onclick={() => (articleView = 'list')}>List</button>
+              <button class="chip-btn" class:on={unreadOnly} type="button" onclick={toggleUnreadFilter}>{m.launcher_lensUnread({ count: unreadCount })}</button>
+              <span class="seg" role="group" aria-label={m.launcher_lensArticleLayout()}>
+                <button class="seg-btn" class:on={articleView === 'grid'} type="button" onclick={() => (articleView = 'grid')}>{m.launcher_lensGrid()}</button>
+                <button class="seg-btn" class:on={articleView === 'list'} type="button" onclick={() => (articleView = 'list')}>{m.launcher_lensList()}</button>
               </span>
             </span>
           </div>
@@ -434,7 +436,7 @@ const empty = $derived(
       <button class="sec-head" type="button" aria-expanded={open} onclick={() => toggle('generic')}>
         <span class="chev" class:open aria-hidden="true"><Icon name="chevron-right" size={11} /></span>
         <span class="sec-dot" style:--dot-h="0" aria-hidden="true"></span>
-        <span class="sec-title">Other</span>
+        <span class="sec-title">{m.entity_other()}</span>
         <span class="count" data-testid="section-count">{generic.length}</span>
       </button>
       {#if open}
@@ -455,7 +457,7 @@ const empty = $derived(
   {/if}
 
   {#if empty}
-    <p class="empty" data-testid="overview-empty">This lens has nothing waiting right now.</p>
+    <p class="empty" data-testid="overview-empty">{m.launcher_lensEmpty()}</p>
   {/if}
 </div>
 

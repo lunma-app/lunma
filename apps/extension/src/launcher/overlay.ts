@@ -1,5 +1,9 @@
 import type { SidebarCommand } from '../shared/bus';
-import type { LauncherResult, OptionalResultSource } from '../shared/launcher-contract';
+import type {
+  LauncherResult,
+  OptionalResultSource,
+  OverlayLabels,
+} from '../shared/launcher-contract';
 import { sourceBadgeLabel } from '../shared/launcher-contract';
 import { modifierLabel } from '../shared/platform';
 import type { SearchEngine } from '../shared/search-engines';
@@ -181,6 +185,66 @@ export function shouldDismissOnFocusOut(
   let density: Density = 'normal';
   let densityRequested = false;
 
+  // i18n (localize-extension-ui D3 — Plan B): the overlay can't import Paraglide
+  // (byte budget) or seed the locale synchronously, so the SW renders its strings
+  // and ships them on request. `labels` starts as the English fallback (so the
+  // first paint is never blank and a missing SW degrades to English), then is
+  // replaced by the localized set on `ensureLabels()`'s response.
+  const FALLBACK_LABELS: OverlayLabels = {
+    dialogLabel: 'Lunma launcher',
+    placeholder: 'Search tabs, bookmarks…',
+    searchAriaLabel: 'Search tabs, bookmarks, and history',
+    tabHintSearch: 'Tab to search',
+    tabHintCycle: 'Tab to cycle',
+    tabHintSwitch: 'Tab to switch',
+    exitEngine: 'Exit {engine} search',
+    noMatches: 'No matches',
+    alreadyOpen: 'already open',
+    switchAction: 'Switch',
+    newTab: 'New tab',
+    open: 'Open',
+    enableHistory: 'Enable history results',
+    enableBookmarks: 'Enable bookmark results',
+  };
+  let labels: OverlayLabels = FALLBACK_LABELS;
+  let cardEl: HTMLElement | null = null;
+  let labelsRequested = false;
+
+  /** Apply the localized strings to the already-built static elements + re-render
+   * the dynamic UI (the dynamic sites read `labels` at render time). */
+  function applyLabels(): void {
+    if (cardEl) cardEl.setAttribute('aria-label', labels.dialogLabel);
+    if (input) {
+      input.placeholder = labels.placeholder;
+      input.setAttribute('aria-label', labels.searchAriaLabel);
+    }
+    if (isOpen) {
+      render();
+      renderEngineUi();
+    }
+  }
+
+  /**
+   * Fetch the overlay's localized strings from the SW once per page (lazily, on
+   * first open — NOT at injection, to avoid waking the SW on every navigation).
+   * Best-effort: on any failure the English `FALLBACK_LABELS` stand.
+   */
+  function ensureLabels(): void {
+    if (labelsRequested) return;
+    labelsRequested = true;
+    if (typeof chrome === 'undefined' || typeof chrome.runtime?.sendMessage !== 'function') return;
+    chrome.runtime
+      .sendMessage({ type: 'lunma/overlay-labels-request' })
+      .then((res: unknown) => {
+        const next = (res as { labels?: OverlayLabels } | undefined)?.labels;
+        if (next && typeof next.placeholder === 'string') {
+          labels = next;
+          applyLabels();
+        }
+      })
+      .catch(() => undefined);
+  }
+
   function coerceDensity(value: unknown): Density {
     return value === 'compact' || value === 'comfort' ? value : 'normal';
   }
@@ -272,8 +336,9 @@ export function shouldDismissOnFocusOut(
 
     scrim = el('div', 'scrim');
     const card = el('div', 'card');
+    cardEl = card;
     card.setAttribute('role', 'dialog');
-    card.setAttribute('aria-label', 'Lunma launcher');
+    card.setAttribute('aria-label', labels.dialogLabel);
 
     const inputRow = el('div', 'input-row');
     const leading = el('span', 'leading');
@@ -305,8 +370,8 @@ export function shouldDismissOnFocusOut(
     input = document.createElement('input');
     input.className = 'input';
     input.type = 'text';
-    input.placeholder = 'Search tabs, bookmarks…';
-    input.setAttribute('aria-label', 'Search tabs, bookmarks, and history');
+    input.placeholder = labels.placeholder;
+    input.setAttribute('aria-label', labels.searchAriaLabel);
     input.autocomplete = 'off';
     // Combobox semantics matching the Svelte new-tab surface: the input owns the
     // listbox and exposes the active option to assistive tech (overlay-aria-parity).
@@ -397,6 +462,9 @@ export function shouldDismissOnFocusOut(
     // correct on first paint (the read resolving later reflows at most once).
     ensureDensity();
     applyDensity();
+    // Fetch the SW-rendered localized strings (once per page; English until they
+    // arrive). Re-applied to the DOM + a re-render when the response lands.
+    ensureLabels();
     // Capture the Tab-to-search registry the SW pushed (command path). The
     // keydown path opens with none and learns it from the current-window
     // response — until then Tab is inert.
@@ -588,11 +656,14 @@ export function shouldDismissOnFocusOut(
   function hintModel(): { verb: string; list: SearchEngine[] } | null {
     if (activeEngine) {
       if (cycle.length <= 1) return null;
-      return { verb: 'Tab to switch', list: cycle };
+      return { verb: labels.tabHintSwitch, list: cycle };
     }
     const { candidates } = resolveEngine(input?.value ?? '', engines);
     if (candidates.length === 0) return null;
-    return { verb: candidates.length === 1 ? 'Tab to search' : 'Tab to cycle', list: candidates };
+    return {
+      verb: candidates.length === 1 ? labels.tabHintSearch : labels.tabHintCycle,
+      list: candidates,
+    };
   }
 
   /** Sync the engine chip (favicon + label + visibility) and the Tab hint
@@ -602,7 +673,10 @@ export function shouldDismissOnFocusOut(
       if (activeEngine) {
         chipIconEl.src = engineIcon(activeEngine);
         chipLabelEl.textContent = activeEngine.name;
-        chipRemoveEl.setAttribute('aria-label', `Exit ${activeEngine.name} search`);
+        chipRemoveEl.setAttribute(
+          'aria-label',
+          labels.exitEngine.replace('{engine}', activeEngine.name),
+        );
         chipEl.style.display = '';
       } else {
         chipEl.style.display = 'none';
@@ -802,7 +876,7 @@ export function shouldDismissOnFocusOut(
       input?.removeAttribute('aria-activedescendant');
       if (input && input.value.trim() !== '') {
         const empty = el('p', 'empty');
-        empty.textContent = 'No matches';
+        empty.textContent = labels.noMatches;
         listEl.append(empty);
       }
       updateActionHint();
@@ -838,7 +912,7 @@ export function shouldDismissOnFocusOut(
       titleBlock.append(title);
       if (open) {
         const openLabel = el('span', 'already-open');
-        openLabel.textContent = 'already open';
+        openLabel.textContent = labels.alreadyOpen;
         titleBlock.append(openLabel);
       }
       // The trailing meta cluster: an optional cross-Space chip, then the source
@@ -907,20 +981,20 @@ export function shouldDismissOnFocusOut(
       actionHintEl?.append(k, v);
     };
     if (isResultAlreadyOpen(focused)) {
-      add('↵', 'Switch');
+      add('↵', labels.switchAction);
       actionHintEl.append(el('span', 'action-sep'));
-      add('⇧↵', 'New tab');
+      add('⇧↵', labels.newTab);
     } else {
-      add('↵', 'Open');
+      add('↵', labels.open);
     }
     actionHintEl.style.display = '';
   }
 
-  /** "Enable history results" / "Enable bookmark results". */
-  const ENABLE_LABEL: Record<OptionalResultSource, string> = {
-    history: 'Enable history results',
-    bookmarks: 'Enable bookmark results',
-  };
+  /** "Enable history results" / "Enable bookmark results" (localized via `labels`,
+   * read at render time so a label refresh applies). */
+  function enableLabel(source: OptionalResultSource): string {
+    return source === 'history' ? labels.enableHistory : labels.enableBookmarks;
+  }
 
   /**
    * Rebuild the "Enable ⟨source⟩ results" strip (least-privilege-permissions D5):
@@ -939,7 +1013,7 @@ export function shouldDismissOnFocusOut(
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'enable-source';
-      btn.textContent = ENABLE_LABEL[src];
+      btn.textContent = enableLabel(src);
       btn.addEventListener('click', () => openOptionsForGrant(src));
       enableEl.append(btn);
     }

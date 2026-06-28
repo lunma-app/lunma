@@ -738,6 +738,44 @@ descriptions as `__MSG_*__` placeholders, resolved from
 `short_name` ("Lunma") stay literal. A parity test (`src/i18n-parity.test.ts`)
 guards both the Paraglide and `_locales` catalogs for key-completeness.
 
+**Rendering contract (surfaces).** Every user-facing string in the sidebar,
+launcher (new-tab + lens pages), and options surfaces renders through a Paraglide
+message function `m.*()` (imported from `shared/paraglide/messages`), never a
+literal. Locale *state* still comes only from `shared/i18n.ts`; message
+*rendering* uses `m.*` directly — the state-vs-rendering split. Messages are
+keyed flat and surface-namespaced (`sidebar_*`, `launcher_*`, `options_*`, plus
+shared `common_*` / `entity_*`); ICU plurals use the inlang **variant** form (an
+array with `declarations`/`selectors`/`match`, per-locale CLDR categories), not
+inline `{count, plural, …}` (which the message-format plugin does not parse).
+
+**Settings labels without a `settings → i18n` edge.** The settings control
+labels/descriptions are localized through `options/labels.ts`
+(`settingLabel`/`settingDescription`/`groupLabel`/`groupIntro` → `m.*`), consumed
+by `Options.svelte`. This indirection lives in `options/` on purpose:
+`shared/settings.ts` imports no catalog, so the `settings ↔ i18n` cycle the
+foundation banned never forms (`biome check`'s `noImportCycles` is the backstop).
+The `language` setting's endonym option labels stay literal.
+
+**Overlay localization (Plan B).** The `Alt+L` launcher overlay (`overlay.ts`) is
+a vanilla content script under a <15KB budget with no synchronous locale access,
+so it does NOT import Paraglide. Instead it requests its strings from the SW
+(`lunma/overlay-labels-request` → `OverlayLabels`, in `launcher-contract.ts`); the
+SW resolves the locale (`initLocale()`) and renders the strings via
+`background/overlay-labels.ts`'s `m.launcher_overlay_*`. The overlay keeps
+English-literal fallbacks (never blanks) and fills the one `{engine}` template
+with a string-replace. The overlay budget guard stays green (no Paraglide import).
+
+**Enforcement (`src/i18n-no-literal.test.ts`).** A Vitest guard rides `verify`:
+it parses every shipping surface `.svelte` template (Svelte compiler AST) and
+fails on a user-visible literal — text nodes AND user-facing attribute /
+component-prop literals (`placeholder`/`title`/`aria-label`/`ariaLabel`/`alt`/
+`heading`/`label`/`description`/`subtitle`) — outside an allowlist
+(whitespace/symbol-only, brand "Lunma", `code`/`pre`) and an inline
+`<!-- i18n-exempt: reason -->` hatch (exempts an element's subtree). Missing-key
+enforcement is `tsc`'s job: the generated `m` namespace is typed, so
+`m.bogusKey()` is a compile error. Out of guard scope (review-only): literal
+strings in `<script>` logic (option labels, toasts).
+
 ## Storage schema and migrations
 
 State is persisted to `chrome.storage.local` under the key `lunma.state` as a

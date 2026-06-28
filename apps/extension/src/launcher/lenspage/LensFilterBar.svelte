@@ -1,4 +1,5 @@
 <script lang="ts">
+import { m } from '../../shared/paraglide/messages';
 import type { LensEntity, LensFilter } from '../../shared/types';
 import Chip from '../../ui/Chip.svelte';
 import IconButton from '../../ui/IconButton.svelte';
@@ -62,8 +63,8 @@ function clear(): void {
       <IconButton
         icon="x"
         onclick={clear}
-        title="Clear filter"
-        ariaLabel="Clear filter"
+        title={m.launcher_lensClearFilter()}
+        ariaLabel={m.launcher_lensClearFilter()}
         testid="filter-clear"
       />
     {/if}

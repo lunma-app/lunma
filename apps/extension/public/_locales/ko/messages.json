@@ -1,18 +1,18 @@
 {
   "extDescription": {
-    "message": "Vertical tabs and per-project Spaces for Chrome, with smart folders and a quick launcher.",
+    "message": "Chrome용 세로 탭과 프로젝트별 스페이스 — 스마트 폴더와 빠른 런처 포함.",
     "description": "Chrome Web Store / extension listing description."
   },
   "actionDefaultTitle": {
-    "message": "Open Lunma sidebar",
+    "message": "Lunma 사이드바 열기",
     "description": "Tooltip on the toolbar action button."
   },
   "commandPinActiveTab": {
-    "message": "Pin the active tab to the current Space",
+    "message": "현재 탭을 현재 스페이스에 고정",
     "description": "Keyboard-shortcut description for the pin-active-tab command."
   },
   "commandToggleLauncher": {
-    "message": "Toggle the Lunma launcher overlay",
+    "message": "Lunma 런처 오버레이 전환",
     "description": "Keyboard-shortcut description for the toggle-launcher command."
   }
 }

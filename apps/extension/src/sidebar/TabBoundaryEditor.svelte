@@ -1,6 +1,7 @@
 <script lang="ts">
 import { bus } from '../shared/bus';
 import { log } from '../shared/logger';
+import { m } from '../shared/paraglide/messages';
 import type { PinnedTabBoundaryDefault } from '../shared/settings';
 import type { SavedTabId, TabBoundary } from '../shared/types';
 import { pageGlob } from '../shared/url-boundary';
@@ -30,9 +31,9 @@ const allow = $derived(boundary?.mode === 'locked' ? boundary.allow : []);
 // Labels are user-facing ('Default'/'Off'/'On'); the underlying values stay the
 // boundary modes ('inherit'/'off'/'locked').
 const OPTIONS = [
-  { value: 'inherit', label: 'Default' },
-  { value: 'off', label: 'Off' },
-  { value: 'locked', label: 'On' },
+  { value: 'inherit', label: m.sidebar_boundaryModeDefault() },
+  { value: 'off', label: m.sidebar_boundaryModeOff() },
+  { value: 'locked', label: m.sidebar_boundaryModeOn() },
 ];
 
 // A host glob: an exact host, or a leading `*.` wildcard. Kept permissive but
@@ -127,7 +128,7 @@ function openOptions(): void {
     name={`boundary-mode-${savedTabId}`}
     options={OPTIONS}
     value={mode}
-    ariaLabel="Lock to its site"
+    ariaLabel={m.sidebar_lockToSiteTitle()}
     onchange={selectMode}
     block
   />
@@ -140,13 +141,13 @@ function openOptions(): void {
       data-testid="boundary-options-link"
       onclick={openOptions}
     >
-      Change the default in Settings
+      {m.sidebar_boundaryChangeDefault()}
     </button>
   {:else if mode === 'off'}
-    <p class="caption">This tab navigates freely.</p>
+    <p class="caption">{m.sidebar_boundaryFree()}</p>
   {:else}
-    <p class="caption">Links off this page open in a new tab.</p>
-    <span class="list-label">Pages this tab stays on</span>
+    <p class="caption">{m.sidebar_boundaryPageHelp()}</p>
+    <span class="list-label">{m.sidebar_boundaryPagesLabel()}</span>
     {#if allow.length > 0}
       <div class="chips" data-testid="boundary-allow-list">
         {#each allow as pattern (pattern)}
@@ -156,14 +157,14 @@ function openOptions(): void {
     {/if}
     <div class="add-row">
       <TextInput
-        ariaLabel="Add a URL pattern"
-        placeholder="https://example.com/inbox*"
+        ariaLabel={m.sidebar_boundaryAddPattern()}
+        placeholder={m.sidebar_boundaryUrlPlaceholder()}
         bind:value={draft}
         invalid={showInvalid}
         onenter={addPattern}
         testid="boundary-pattern-input"
       />
-      <Button variant="secondary" disabled={!canAdd} onclick={addPattern}>Add</Button>
+      <Button variant="secondary" disabled={!canAdd} onclick={addPattern}>{m.common_add()}</Button>
     </div>
   {/if}
 </div>

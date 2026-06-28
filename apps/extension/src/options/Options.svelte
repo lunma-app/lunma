@@ -1,6 +1,7 @@
 <script lang="ts">
 import { onMount } from 'svelte';
 import { applyLocaleFromSettings, setLocale } from '../shared/i18n';
+import { m } from '../shared/paraglide/messages';
 import { BUILT_IN_ENGINES } from '../shared/search-engines';
 import {
   DEFAULTS,
@@ -8,7 +9,6 @@ import {
   SETTINGS,
   type SettingDeclaration,
   type Settings,
-  TOGGLE_SEGMENTS,
   watchSettings,
   writeSetting,
 } from '../shared/settings';
@@ -20,6 +20,14 @@ import SettingText from '../ui/SettingText.svelte';
 import TextInput from '../ui/TextInput.svelte';
 import BackupRestore from './BackupRestore.svelte';
 import ConnectionsCard from './ConnectionsCard.svelte';
+import {
+  groupIntro,
+  groupLabel,
+  optionLabel,
+  settingDescription,
+  settingLabel,
+  toggleSegments,
+} from './labels';
 import RecentlyArchived from './RecentlyArchived.svelte';
 import ResultSourcesCard from './ResultSourcesCard.svelte';
 import ShortcutGuidanceCard from './ShortcutGuidanceCard.svelte';
@@ -53,13 +61,8 @@ const groupMap = $derived.by(() => {
 // One-line intro shown under each section heading, so every card opens with a
 // plain-language "what this is" before its controls. The Auto-archive note also
 // reassures that pinned tabs are never touched.
-const GROUP_INTRO: Record<string, string> = {
-  'Search & launcher': 'How the launcher finds, ranks, and opens what you type.',
-  Appearance: 'Theme, colour, motion, and density — across every Lunma surface.',
-  Tabs: 'How tabs open, dedupe, and stay on their site.',
-  'Auto-archive':
-    'Tidy idle tabs away on their own — only temporary tabs, never your pinned ones — and restore them whenever you need.',
-};
+// Group headings + intros are localized via `labels.ts` (groupLabel/groupIntro),
+// keeping this surface's i18n in one indirection and `settings.ts` catalog-free.
 
 // Sections render in an explicit order so each management card sits with the
 // settings it relates to (Result sources under Search & launcher; Recently
@@ -102,6 +105,17 @@ function isStacked(decl: SettingDeclaration): boolean {
     decl.type === 'number' ||
     (decl.type === 'enum' && decl.options.length > SEGMENTED_MAX)
   );
+}
+
+// Localize an enum setting's option labels (Compact / Dark / All Spaces / …) via
+// the `labels.ts` indirection, keeping `settings.ts` catalog-free. Engine names
+// and the `language` endonyms fall back to their declared literal.
+function localizedOptions(decl: SettingDeclaration): { value: string; label: string }[] {
+  if (decl.type !== 'enum') return [];
+  return decl.options.map((o) => ({
+    value: o.value,
+    label: optionLabel(decl.key, o.value, o.label),
+  }));
 }
 
 // The custom-engine fields (the search-URL template + its Tab keyword) are only
@@ -250,7 +264,7 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
   <header class="topbar">
     <div class="topbar-inner">
       <span class="wordmark">Lunma</span>
-      <span class="subtitle">Options</span>
+      <span class="subtitle">{m.options_pageSubtitle()}</span>
     </div>
   </header>
 
@@ -290,9 +304,9 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
          extension), so this is a plain outbound link opening in a new tab. -->
     <footer class="footer">
       <a href={PRIVACY_URL} target="_blank" rel="noopener" data-testid="options-privacy-link">
-        Privacy policy
+        {m.options_privacyLink()}
       </a>
-      <span class="version">v{version}</span>
+      <span class="version">{m.options_version({ version })}</span>
     </footer>
   </main>
 </div>
@@ -300,8 +314,8 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
 <!-- One registry group → one solid section card with full-bleed setting rows. -->
 {#snippet groupCard(group: string, decls: SettingDeclaration[])}
   <SettingsCard
-    heading={group}
-    description={GROUP_INTRO[group]}
+    heading={groupLabel(group)}
+    description={groupIntro(group)}
     id={groupSlug(group)}
     headingTestid="group-heading"
     flush
@@ -309,26 +323,26 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
     {#each decls as decl (decl.key)}
       {#if isVisible(decl)}
         <div class="setting" class:stacked={isStacked(decl)}>
-          <SettingText label={decl.label} description={decl.description} />
+          <SettingText label={settingLabel(decl.key)} description={settingDescription(decl.key)} />
           {#if decl.type === 'enum' && decl.options.length > SEGMENTED_MAX}
             <Select
-              options={decl.options}
+              options={localizedOptions(decl)}
               value={String(settings[decl.key])}
-              ariaLabel={decl.label}
+              ariaLabel={settingLabel(decl.key)}
               onchange={(value) => onSelect(decl, value)}
             />
           {:else if decl.type === 'enum'}
             <SegmentedControl
               name={decl.key}
-              options={decl.options}
+              options={localizedOptions(decl)}
               value={String(settings[decl.key])}
-              ariaLabel={decl.label}
+              ariaLabel={settingLabel(decl.key)}
               onchange={(value) => onSelect(decl, value)}
             />
           {:else if decl.type === 'text'}
             <div class="text-field">
               <TextInput
-                ariaLabel={decl.label}
+                ariaLabel={settingLabel(decl.key)}
                 value={String(settings[decl.key])}
                 placeholder={decl.placeholder}
                 invalid={decl.key === 'customSearchUrl' && customUrlInvalid}
@@ -346,7 +360,7 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
                   data-testid="custom-url-hint"
                   aria-live="polite"
                 >
-                  Include <code>%s</code> where the query goes.
+                  {m.options_customUrlHint()}
                 </p>
               {/if}
               {#if decl.key === 'customSearchKeyword'}
@@ -360,23 +374,22 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
                   data-testid="custom-keyword-hint"
                   aria-live="polite"
                 >
-                  <code>{settings.customSearchKeyword.trim()}</code> is a built-in keyword — the
-                  built-in wins.
+                  {m.options_customKeywordCollision({ keyword: settings.customSearchKeyword.trim() })}
                 </p>
               {/if}
             </div>
           {:else if decl.type === 'toggle'}
             <SegmentedControl
               name={decl.key}
-              options={TOGGLE_SEGMENTS}
+              options={toggleSegments()}
               value={settings[decl.key] ? 'on' : 'off'}
-              ariaLabel={decl.label}
+              ariaLabel={settingLabel(decl.key)}
               onchange={(value) => onToggle(decl, value === 'on')}
             />
           {:else if decl.type === 'number'}
             <div class="text-field">
               <TextInput
-                ariaLabel={decl.label}
+                ariaLabel={settingLabel(decl.key)}
                 inputmode="numeric"
                 value={String(settings[decl.key])}
                 placeholder={decl.placeholder}
@@ -561,9 +574,6 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
   }
   .field-hint.visible {
     opacity: 1;
-  }
-  .field-hint code {
-    font-family: var(--font-mono);
   }
   @media (prefers-reduced-motion: reduce) {
     .field-hint {

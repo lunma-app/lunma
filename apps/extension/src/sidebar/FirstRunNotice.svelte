@@ -1,4 +1,5 @@
 <script lang="ts">
+import { m } from '../shared/paraglide/messages';
 import Button from '../ui/Button.svelte';
 import Icon from '../ui/Icon.svelte';
 
@@ -50,13 +51,12 @@ const threshold = $derived(formatIdleThreshold(autoArchiveIdleMinutes));
     </span>
     <div class="notice-main">
       <p class="notice-text">
-        <span class="notice-lead">Auto-archive is on.</span>
-        Temporary tabs left idle for {threshold} are archived automatically so your
-        workspace stays tidy — restorable for 7 days.
+        <span class="notice-lead">{m.sidebar_autoArchiveIsOn()}</span>
+        {m.sidebar_autoArchiveExplain({ threshold })}
       </p>
       <div class="notice-actions">
-        <Button variant="secondary" onclick={onDismiss}>Got it</Button>
-        <Button variant="ghost" onclick={onManage}>Manage in settings</Button>
+        <Button variant="secondary" onclick={onDismiss}>{m.sidebar_autoArchiveDismiss()}</Button>
+        <Button variant="ghost" onclick={onManage}>{m.sidebar_autoArchiveManage()}</Button>
       </div>
     </div>
   </div>

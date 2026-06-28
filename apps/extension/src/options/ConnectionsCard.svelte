@@ -14,6 +14,7 @@ import { readAccountTokens, setAccountToken } from '../shared/connectors';
 import { entityForSource, type LensEntity } from '../shared/lens-entity';
 import { log } from '../shared/logger';
 import { buildOpml, type LensNode } from '../shared/opml';
+import { m } from '../shared/paraglide/messages';
 import type { AppState, LensProvider, PinNode, SourceAccount, SpaceId } from '../shared/types';
 import AccountConnectField from '../ui/AccountConnectField.svelte';
 import BitsMenu, { type MenuItem } from '../ui/BitsMenu.svelte';
@@ -61,10 +62,10 @@ const PROVIDER_ABBREV: Record<LensProvider, string> = {
 /** The overview entity an account/feed feeds (sources-redesign): what its lenses
  * render it as. Drives the "powers …" reach phrase. */
 const ENTITY_LABEL: Record<LensEntity, string> = {
-  change: 'Changes',
-  ticket: 'Issues',
-  article: 'Articles',
-  generic: 'Other',
+  change: m.entity_changes(),
+  ticket: m.entity_issues(),
+  article: m.entity_articles(),
+  generic: m.entity_other(),
 };
 function poweredEntity(provider: LensProvider): string {
   return ENTITY_LABEL[entityForSource(provider)];
@@ -117,7 +118,7 @@ function reachOf(id: string): number {
 }
 function reachPhrase(id: string): string {
   const n = reachOf(id);
-  return n === 0 ? 'Not used yet' : n === 1 ? 'Used in 1 lens' : `Used in ${n} lenses`;
+  return n === 0 ? m.options_reachNotUsed() : m.options_reachUsed({ count: n });
 }
 
 function statusOf(account: SourceAccount): AuthStatus {
@@ -140,15 +141,15 @@ function healthOf(status: AuthStatus): Health {
 function authMethodLabel(status: AuthStatus): string {
   switch (status) {
     case 'connected':
-      return 'Personal token';
+      return m.options_authMethodPersonalToken();
     case 'browser-session':
-      return 'Browser session';
+      return m.options_authMethodBrowserSession();
     case 'needs-token':
-      return 'Token needed';
+      return m.options_authMethodTokenNeeded();
     case 'signed-out':
-      return 'Sign-in needed';
+      return m.options_authMethodSignInNeeded();
     case 'public':
-      return 'Public';
+      return m.options_authMethodPublic();
   }
 }
 
@@ -220,7 +221,7 @@ async function removeSource(id: string): Promise<void> {
 async function copyUrl(account: SourceAccount): Promise<void> {
   try {
     await navigator.clipboard?.writeText(account.baseUrl);
-    toast = { message: 'Feed URL copied' };
+    toast = { message: m.options_feedUrlCopied() };
   } catch (err) {
     log.error('ConnectionsCard: copy URL failed', { err });
   }
@@ -230,14 +231,21 @@ function accountMenuItems(account: SourceAccount): MenuItem[] {
   return [
     {
       id: 'replace',
-      label: tokenIds.has(account.id) ? 'Replace token' : 'Add token',
+      label: tokenIds.has(account.id)
+        ? m.options_accountReplaceToken()
+        : m.options_accountAddToken(),
       icon: 'key-round',
       onSelect: () => setEditor(account, 'replace'),
     },
-    { id: 'rename', label: 'Rename', icon: 'pencil', onSelect: () => setEditor(account, 'rename') },
+    {
+      id: 'rename',
+      label: m.options_accountRename(),
+      icon: 'pencil',
+      onSelect: () => setEditor(account, 'rename'),
+    },
     {
       id: 'disconnect',
-      label: 'Disconnect',
+      label: m.options_accountDisconnect(),
       icon: 'unplug',
       danger: true,
       onSelect: () => setEditor(account, 'disconnect'),
@@ -246,11 +254,21 @@ function accountMenuItems(account: SourceAccount): MenuItem[] {
 }
 function feedMenuItems(feed: SourceAccount): MenuItem[] {
   return [
-    { id: 'rename', label: 'Rename', icon: 'pencil', onSelect: () => setEditor(feed, 'rename') },
-    { id: 'copy', label: 'Copy URL', icon: 'link', onSelect: () => void copyUrl(feed) },
+    {
+      id: 'rename',
+      label: m.options_feedRename(),
+      icon: 'pencil',
+      onSelect: () => setEditor(feed, 'rename'),
+    },
+    {
+      id: 'copy',
+      label: m.options_feedCopyUrl(),
+      icon: 'link',
+      onSelect: () => void copyUrl(feed),
+    },
     {
       id: 'remove',
-      label: 'Remove',
+      label: m.options_feedRemove(),
       icon: 'trash-2',
       danger: true,
       onSelect: () => setEditor(feed, 'remove' as EditorMode),
@@ -269,7 +287,7 @@ function handleExport(): void {
     a.download = `lunma-feeds-${date}.opml`;
     a.click();
     URL.revokeObjectURL(url);
-    toast = { message: 'Feeds exported' };
+    toast = { message: m.options_feedsExported() };
   } catch (err) {
     log.error('ConnectionsCard: export failed', { err });
     exportError = err instanceof Error ? err.message : 'Export failed.';
@@ -278,10 +296,10 @@ function handleExport(): void {
 </script>
 
 <SettingsCard
-  heading="Connections"
+  heading={m.options_connectionsHeading()}
   id="connectors"
   testid="connections-section"
-  description="Connect a service once, then reuse it in any lens. GitLab and Jira ride your browser's sign-in by default; GitHub needs a token. RSS feeds are public URLs — no auth."
+  description={m.options_connectionsDescription()}
   actions={connectAction}
   flush
 >
@@ -294,11 +312,11 @@ function handleExport(): void {
   <!-- Accounts group -->
   <div class="group" data-testid="accounts-group">
     <div class="group-head">
-      <h3 class="group-title">Accounts</h3>
-      <span class="group-meta">sign-in identities, reused everywhere</span>
+      <h3 class="group-title">{m.options_accountsGroupTitle()}</h3>
+      <span class="group-meta">{m.options_accountsMetaDescription()}</span>
     </div>
     {#if accounts.length === 0}
-      <p class="group-empty">No accounts yet.</p>
+      <p class="group-empty">{m.options_noAccounts()}</p>
     {/if}
     {#each accounts as account (account.id)}
       {@const status = statusOf(account)}
@@ -315,7 +333,10 @@ function handleExport(): void {
               </span>
             </span>
             <span class="row-sub" data-testid="account-reach">
-              {reachPhrase(account.id)} · powers {poweredEntity(account.provider)}
+              {m.options_accountReachLine({
+                reach: reachPhrase(account.id),
+                entity: poweredEntity(account.provider),
+              })}
             </span>
           </div>
           <span class="row-menu">
@@ -332,15 +353,15 @@ function handleExport(): void {
   <!-- Feeds group -->
   <div class="group" data-testid="feeds-group">
     <div class="group-head">
-      <h3 class="group-title">Feeds</h3>
+      <h3 class="group-title">{m.options_feedsGroupTitle()}</h3>
       {#if rssNodes.length > 0}
         <button type="button" class="group-action" data-testid="export-opml" onclick={handleExport}>
-          Export OPML
+          {m.options_exportOpml()}
         </button>
       {/if}
     </div>
     {#if feeds.length === 0}
-      <p class="group-empty">No feeds yet.</p>
+      <p class="group-empty">{m.options_noFeeds()}</p>
     {/if}
     {#each feeds as feed (feed.id)}
       <div class="conn-row" data-testid="feed-row" data-account-id={feed.id}>
@@ -351,7 +372,11 @@ function handleExport(): void {
               <span class="row-name">{accountLabel(feed)}</span>
             </span>
             <span class="row-sub" data-testid="feed-meta">
-              {feedUrl(feed)} · {reachPhrase(feed.id)} · powers Articles
+              {m.options_feedReachLine({
+                feedUrl: feedUrl(feed),
+                reach: reachPhrase(feed.id),
+                entity: m.entity_articles(),
+              })}
             </span>
           </div>
           <span class="row-menu">
@@ -386,7 +411,7 @@ function handleExport(): void {
     data-testid="connect-open"
     onclick={() => (showPicker = !showPicker)}
   >
-    {showPicker ? 'Close' : '+ Connect'}
+    {showPicker ? m.options_connectToggleClose() : m.options_connectToggleConnect()}
   </button>
 {/snippet}
 
@@ -409,26 +434,25 @@ function handleExport(): void {
     <div class="row-editor" data-testid="rename-editor">
       <TextInput
         ariaLabel={`New name for ${hostLabel(account.baseUrl)}`}
-        placeholder="Name"
+        placeholder={m.common_name()}
         bind:value={renameDraft}
         testid="rename-input"
         onenter={() => void commitRename(account)}
       />
-      <Button variant="primary" size="sm" onclick={() => void commitRename(account)}>Save</Button>
-      <Button size="sm" onclick={closeEditor}>Cancel</Button>
+      <Button variant="primary" size="sm" onclick={() => void commitRename(account)}
+        >{m.common_save()}</Button
+      >
+      <Button size="sm" onclick={closeEditor}>{m.common_cancel()}</Button>
     </div>
   {:else}
     <div class="row-editor" data-testid="remove-confirm">
       {#if reach > 0}
-        <span class="warn-text">
-          Still {reach === 1 ? 'used in 1 lens' : `used in ${reach} lenses`} — those sections will
-          show "account removed".
-        </span>
+        <span class="warn-text">{m.options_removeConfirmWarn({ count: reach })}</span>
       {/if}
       <Button variant="primary" size="sm" testid="remove-confirm-button" onclick={() => void removeSource(account.id)}>
-        {isFeedProvider(account.provider) ? 'Remove' : 'Disconnect'}
+        {isFeedProvider(account.provider) ? m.options_feedRemove() : m.options_accountDisconnect()}
       </Button>
-      <Button size="sm" onclick={closeEditor}>Cancel</Button>
+      <Button size="sm" onclick={closeEditor}>{m.common_cancel()}</Button>
     </div>
   {/if}
 {/snippet}

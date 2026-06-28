@@ -1,5 +1,6 @@
 <script lang="ts">
 import { onMount } from 'svelte';
+import { m } from '../shared/paraglide/messages';
 import { getExtensionsShortcutsUrl, modifierLabel } from '../shared/platform';
 import Button from '../ui/Button.svelte';
 import Icon from '../ui/Icon.svelte';
@@ -44,14 +45,13 @@ onMount(() => {
       <Icon name="keyboard" size={18} />
     </span>
     <div class="shortcut-text">
-      <span class="shortcut-title" data-testid="shortcut-title">Set the launcher shortcut</span>
+      <span class="shortcut-title" data-testid="shortcut-title">{m.options_shortcutTitle()}</span>
       <span class="shortcut-desc">
-        {modifierLabel}L isn’t currently bound. Your browser has to set the keyboard shortcut —
-        open its shortcuts page to bind it.
+        {m.options_shortcutDescription({ modifier: modifierLabel })}
       </span>
       <div class="shortcut-action">
         <Button variant="primary" testid="shortcut-open" onclick={openShortcutsPage}>
-          Open keyboard shortcuts
+          {m.options_openShortcuts()}
         </Button>
       </div>
     </div>
