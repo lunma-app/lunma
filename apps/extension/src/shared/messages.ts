@@ -6,7 +6,7 @@ import type {
   SuggestionsResult,
 } from './launcher-contract';
 import { log } from './logger';
-import { AppStateV13Schema } from './schemas';
+import { AppStateV14Schema } from './schemas';
 import type { AppState, WindowId } from './types';
 
 export interface StateBroadcastMessage {
@@ -249,7 +249,7 @@ export function onStateBroadcast(handler: (msg: StateBroadcastMessage) => void):
     const m = raw as Partial<LunmaMessage>;
     if (m.type !== 'lunma/state-broadcast') return;
     const candidate = m as Record<string, unknown>;
-    const stateResult = AppStateV13Schema.safeParse(candidate.state);
+    const stateResult = AppStateV14Schema.safeParse(candidate.state);
     if (!stateResult.success) return;
     const state = stateResult.data;
     handler({ type: 'lunma/state-broadcast', method: String(candidate.method ?? ''), state });
@@ -279,7 +279,7 @@ export async function requestStateSnapshot(): Promise<AppState> {
   if (msg.type !== 'lunma/state-snapshot' || !msg.state) {
     throw new Error('requestStateSnapshot: malformed response');
   }
-  const parsed = AppStateV13Schema.safeParse(msg.state);
+  const parsed = AppStateV14Schema.safeParse(msg.state);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
     throw new Error(
