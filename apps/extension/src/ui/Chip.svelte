@@ -6,8 +6,18 @@ interface Props {
   label: string;
   /** Background tone. `neutral` (default) reads as `--surface-2`; `accent` tints
    * toward the active Space accent (`--accent-soft`) — used by the Tab-to-search
-   * engine chip for Space cohesion (launcher-tab-to-search). */
+   * engine chip for Space cohesion (launcher-tab-to-search). Ignored when `hue`
+   * is set (the hue-tinted token wins). */
   tone?: 'neutral' | 'accent' | undefined;
+  /** Accent hue in OKLCH degrees (e.g. 150 = green, 25 = red) for a hue-tinted
+   * **status/verdict token**. When set, the chip renders the theme-aware
+   * `--accent-text-l` / `--accent-fill-a` recipe (legible in dark AND light) at
+   * the `size` geometry, overriding the neutral chip box. Only meaningful on the
+   * static chip (not the toggle pill). Omit → a normal chip. */
+  hue?: number | undefined;
+  /** Token size — only meaningful with `hue`. `sm` (default) is the
+   * status/priority token; `md` is the larger Change verdict token. */
+  size?: 'sm' | 'md' | undefined;
   /** Optional leading icon URL (e.g. an engine favicon) rendered before the
    * label as a small square image (launcher-tab-to-search). */
   iconUrl?: string | undefined;
@@ -35,6 +45,8 @@ interface Props {
 const {
   label,
   tone = 'neutral',
+  hue,
+  size = 'sm',
   iconUrl,
   onRemove,
   removeLabel,
@@ -64,7 +76,14 @@ const {
     <span class="chip-label">{label}</span>
   </button>
 {:else}
-  <span class="chip" data-tone={tone} data-testid={testid}>
+  <span
+    class="chip"
+    class:hue={hue !== undefined}
+    data-tone={tone}
+    data-size={size}
+    data-testid={testid}
+    style:--chip-h={hue !== undefined ? String(hue) : undefined}
+  >
     {#if iconUrl}
       <img class="chip-icon" src={iconUrl} alt="" width="14" height="14" />
     {/if}
@@ -110,6 +129,28 @@ const {
   }
   .chip[data-tone='accent']:hover {
     background: oklch(from var(--accent) l c h / 0.28);
+  }
+
+  /* Hue-tinted status/verdict token. Overrides the neutral chip box: theme-aware
+   * accent recipe (`--accent-text-l` / `--accent-fill-a`, legible dark + light),
+   * size-driven padding/font, and no fixed height. Placed after the tone rules so
+   * it wins on equal specificity. */
+  .chip.hue {
+    height: auto;
+    color: oklch(var(--accent-text-l) 0.1 var(--chip-h));
+    background: oklch(0.55 0.13 var(--chip-h) / var(--accent-fill-a));
+  }
+  .chip.hue:hover {
+    /* Static token — no hover shift. */
+    background: oklch(0.55 0.13 var(--chip-h) / var(--accent-fill-a));
+  }
+  .chip.hue[data-size='sm'] {
+    padding: 2px 9px;
+    font: var(--weight-medium) var(--text-2xs) / 1.3 var(--font-sans);
+  }
+  .chip.hue[data-size='md'] {
+    padding: 3px 11px;
+    font: var(--weight-semibold) var(--text-xs) / 1.3 var(--font-sans);
   }
 
   /* Toggle pill (multi-filter-smart-connectors): a selectable filter chip. The

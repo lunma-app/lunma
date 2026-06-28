@@ -6,10 +6,10 @@ import { hostOf, labelFor } from '../shared/label-for';
 import { log } from '../shared/logger';
 import { m } from '../shared/paraglide/messages';
 import type { SavedTabId, TabBoundary, WindowId } from '../shared/types';
-import BitsContextMenu from '../ui/BitsContextMenu.svelte';
 import BottomSheet from '../ui/BottomSheet.svelte';
 import FaviconTile from '../ui/FaviconTile.svelte';
 import { faviconCacheKey, faviconFor, faviconUrl } from '../ui/favicon';
+import Menu from '../ui/Menu.svelte';
 import type { MenuItem } from '../ui/menu-types';
 import { type DropResult, drag } from './drag.svelte';
 import EmptyState from './EmptyState.svelte';
@@ -540,7 +540,7 @@ function onMenuOpenChange(open: boolean): void {
              (`bind:this={tileWrapEls[i]}` + `data-favicon-index` + `onpointerdown`
              preserved), so bits-ui captures right-click without changing the row's
              element identity. The `favicon-tile` testid stays inside the wrap. -->
-        <BitsContextMenu
+        <Menu trigger="context"
           items={contextItemsFor(fav)}
           label={m.sidebar_favoriteActions()}
           testid="favicon-menu"
@@ -573,7 +573,7 @@ function onMenuOpenChange(open: boolean): void {
               />
             </div>
           {/snippet}
-        </BitsContextMenu>
+        </Menu>
       {/each}
     </div>
   {:else}

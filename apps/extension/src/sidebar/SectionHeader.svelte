@@ -1,15 +1,15 @@
 <script lang="ts">
 import type { Snippet } from 'svelte';
-import BitsMenu from '../ui/BitsMenu.svelte';
 import BottomSheet from '../ui/BottomSheet.svelte';
 import Icon from '../ui/Icon.svelte';
+import Menu from '../ui/Menu.svelte';
 import type { MenuItem } from '../ui/menu-types';
 
 interface Props {
   icon: string;
   label: string;
   /** Optional overflow actions on the trailing edge. The kebab is a quiet,
-   * hover-revealed `BitsMenu` (bits-ui DropdownMenu) — the same primitive the
+   * hover-revealed `Menu` (bits-ui DropdownMenu) — the same primitive the
    * tab / folder rows now compose — so the header reads identically to those
    * menus. When omitted or empty (e.g. the Temporary header) the trailing edge
    * renders nothing. The header shows NO count — the list below carries it. */
@@ -27,7 +27,7 @@ interface Props {
    * own confirm (`onDone`) likewise clears it on the consumer side. */
   onPanelBack?: (() => void) | undefined;
   /** Bindable kebab-open state, kept for the existing consumer contract — a host
-   * may observe the menu opening/closing. Now reflects the `BitsMenu` (bits-ui)
+   * may observe the menu opening/closing. Now reflects the `Menu` (bits-ui)
    * open state rather than the old row-morph. */
   open?: boolean | undefined;
 }
@@ -53,7 +53,7 @@ const sheetOpen = $derived(!!panel);
     <span class="label">{label}</span>
     {#if hasMenu && menu}
       <span class="trailing">
-        <BitsMenu items={menu} label={`${label} actions`} bind:open />
+        <Menu trigger="kebab" items={menu} label={`${label} actions`} bind:open />
       </span>
     {/if}
   </div>

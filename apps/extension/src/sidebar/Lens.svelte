@@ -22,7 +22,6 @@ import type {
   WindowId,
 } from '../shared/types';
 import AccountConnectField from '../ui/AccountConnectField.svelte';
-import BitsContextMenu from '../ui/BitsContextMenu.svelte';
 import BottomSheet from '../ui/BottomSheet.svelte';
 import Button from '../ui/Button.svelte';
 import Favicon from '../ui/Favicon.svelte';
@@ -30,6 +29,7 @@ import { faviconFor } from '../ui/favicon';
 import Icon from '../ui/Icon.svelte';
 import IconButton from '../ui/IconButton.svelte';
 import LensRow from '../ui/LensRow.svelte';
+import Menu from '../ui/Menu.svelte';
 import type { MenuItem } from '../ui/menu-types';
 import Tooltip from '../ui/Tooltip.svelte';
 import LensEditor from './LensEditor.svelte';
@@ -514,12 +514,12 @@ const menuItems = $derived<MenuItem[]>([
 ]);
 
 // A pending two-step Delete is disarmed when the right-click menu closes, via
-// `BitsContextMenu`'s `onOpenChange` below (the lens row carries no kebab).
+// `Menu`'s `onOpenChange` below (the lens row carries no kebab).
 
 /**
  * Retained for the host (PinnedTabs forwards the lens row's `contextmenu`, and the
  * test harness binds it) so its forwarding wiring keeps type-checking. The
- * right-click menu is now owned by `BitsContextMenu` wrapping the folder row
+ * right-click menu is now owned by `Menu` wrapping the folder row
  * below — bits-ui captures the `contextmenu` on the row itself, anchors at the
  * cursor, and handles keyboard invocation (menu key / Shift+F10) + dismissal — so
  * this no longer opens anything itself.
@@ -536,7 +536,7 @@ export function onContextMenu(_e: MouseEvent): void {
      `contextmenu`/ARIA handlers and never disturbs that measured element's
      identity. `onOpenChange` resets a pending Delete confirm when the menu closes
      (the legacy `onclose` behaviour). -->
-<BitsContextMenu
+<Menu trigger="context"
   items={menuItems}
   label={m.sidebar_smartFolderActions()}
   testid="smart-folder-menu"
@@ -567,7 +567,7 @@ export function onContextMenu(_e: MouseEvent): void {
       />
     </div>
   {/snippet}
-</BitsContextMenu>
+</Menu>
 
 {#if expanded}
   <!-- svelte-ignore a11y_no_static_element_interactions -->

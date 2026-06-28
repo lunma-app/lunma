@@ -3,13 +3,13 @@ import type { Snippet } from 'svelte';
 import type { IconName } from '../shared/icon-names';
 import { colourToHue } from '../shared/space-hue';
 import type { SpaceColor } from '../shared/types';
-import BitsMenu from './BitsMenu.svelte';
 import BottomSheet from './BottomSheet.svelte';
 import Button from './Button.svelte';
 import ColorSwatch from './ColorSwatch.svelte';
 import EditableLabel from './EditableLabel.svelte';
 import Icon from './Icon.svelte';
 import IconPicker from './IconPicker.svelte';
+import Menu from './Menu.svelte';
 import type { MenuItem } from './menu-types';
 import TextInput from './TextInput.svelte';
 
@@ -112,7 +112,7 @@ let {
   panelTitle,
   onPanelBack,
   // Read-only mirror of the kebab open state — bindable so existing hosts keep
-  // their binding; driven by BitsMenu's `onOpenChange`.
+  // their binding; driven by Menu's `onOpenChange`.
   menuOpen = $bindable(false),
   portalTo,
 }: Props = $props();
@@ -238,7 +238,7 @@ function onMenuOpenChange(open: boolean): void {
       <span class="badge" data-testid="folder-row-badge">{badge}</span>
     {/if}
     <span class="kebab">
-      <BitsMenu
+      <Menu trigger="kebab"
         items={menuItems ?? builtinMenuItems}
         label="Folder actions"
         onOpenChange={onMenuOpenChange}

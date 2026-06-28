@@ -58,7 +58,7 @@ function pointer(type: string, clientX: number, clientY: number): MouseEvent {
 
 /**
  * Open a tab row's right-click menu. Tab rows now wrap their body in
- * `BitsContextMenu`, which OWNS the right-click: bits-ui attaches the
+ * `Menu`, which OWNS the right-click: bits-ui attaches the
  * `contextmenu` handler to the inner trigger region (the `.drag-handle` wrapper
  * inside the measured `.row-wrap` / `.child-wrap`), portals the popover to
  * `document.body`, and opens ASYNC. So we fire `contextmenu` on the trigger
@@ -84,7 +84,7 @@ async function openRowContextMenu(rowOrChildWrap: Element): Promise<HTMLButtonEl
   return [...document.querySelectorAll('[data-testid="pinned-menu-item"]')] as HTMLButtonElement[];
 }
 
-/** Open a FolderRow's kebab (now a `BitsMenu`): trigger `menu-trigger`, items
+/** Open a FolderRow's kebab (now a `Menu`): trigger `menu-trigger`, items
  * `menu-item` portaled to `document.body`, opened ASYNC. */
 async function openFolderMenu(folderRow: Element): Promise<HTMLButtonElement[]> {
   const trigger = folderRow.querySelector('[data-testid="menu-trigger"]') as HTMLButtonElement;
@@ -600,14 +600,14 @@ describe('PinnedTabs folders', () => {
     const { container } = render(PinnedTabsHarness, {
       props: { store, windowId: 100, spaceId: 'work' },
     });
-    // The folder's actions are a bits-ui kebab `BitsMenu` — NOT a row that
+    // The folder's actions are a bits-ui kebab `Menu` — NOT a row that
     // composes a TabRow header (which would render a duplicate row: folder name +
     // globe favicon floated right).
     const folderRow = container.querySelector('[data-testid="folder-row"]') as HTMLElement;
     expect(folderRow.querySelector('[data-testid="tab-row"]')).toBeNull();
     expect(folderRow.querySelector('[data-testid="tab-row-menu-trigger"]')).toBeNull();
 
-    // Open the kebab (BitsMenu, portaled) and pick Edit.
+    // Open the kebab (Menu, portaled) and pick Edit.
     const items = await openFolderMenu(folderRow);
     await fireEvent.click(byMenuId(items, 'edit') as HTMLButtonElement);
 
@@ -645,7 +645,7 @@ describe('PinnedTabs folders', () => {
       props: { store, windowId: 100, spaceId: 'work' },
     });
     const folderRow = container.querySelector('[data-testid="folder-row"]') as HTMLElement;
-    // The folder trailing is a bits-ui kebab (BitsMenu, testid `menu-trigger`) —
+    // The folder trailing is a bits-ui kebab (Menu, testid `menu-trigger`) —
     // it must NOT compose a TabRow (which would paint a second name + globe
     // favicon on the right).
     expect(folderRow.querySelector('[data-testid="menu-trigger"]')).not.toBeNull();

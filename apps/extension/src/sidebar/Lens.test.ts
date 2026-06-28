@@ -449,13 +449,13 @@ describe('Lens — binding-held rows (open work holds its row)', () => {
 
 describe('Lens — menu (Refresh now · Edit… · Move · Delete)', () => {
   // The lens row carries NO kebab — its actions live solely in the right-click
-  // `BitsContextMenu` (items `smart-folder-menu-item`, panel `smart-folder-menu`),
+  // `Menu` (items `smart-folder-menu-item`, panel `smart-folder-menu`),
   // opened by a native `contextmenu` on the lens row (the bits-ui trigger). Items
   // portal to <body> + open ASYNC, so they're queried off `document` and awaited.
   const menuItem = (id: string): HTMLButtonElement =>
     document.querySelector(`[data-menu-id="${id}"]`) as HTMLButtonElement;
 
-  /** Right-click the folder row to open the lens BitsContextMenu, then wait for
+  /** Right-click the folder row to open the lens Menu, then wait for
    * its portaled items. The `contextmenu` bubbles to the bits-ui trigger wrapper. */
   async function openContextMenu(container: HTMLElement): Promise<void> {
     await fireEvent(
@@ -587,7 +587,7 @@ describe('Lens — menu (Refresh now · Edit… · Move · Delete)', () => {
     const store = makeStore({ state: 'ok', items: [], fetchedAt: 1 });
     const { container } = renderLens(store);
 
-    // Arm via the right-click BitsContextMenu.
+    // Arm via the right-click Menu.
     await openContextMenu(container);
     const delItem = () =>
       document.querySelector(
@@ -605,7 +605,7 @@ describe('Lens — menu (Refresh now · Edit… · Move · Delete)', () => {
     );
 
     // Reopening lands on the unarmed "Delete", never the stale "Delete — confirm"
-    // (BitsContextMenu's onOpenChange resets the pending confirm on close).
+    // (Menu's onOpenChange resets the pending confirm on close).
     await openContextMenu(container);
     const reopened = delItem() as HTMLButtonElement;
     expect(reopened).not.toBeNull();

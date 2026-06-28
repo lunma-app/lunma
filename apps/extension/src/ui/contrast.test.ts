@@ -482,6 +482,80 @@ describe('new-tab hearth bloom — muted caption over the peak (WCAG AA per tint
 });
 
 /**
+ * The hue-tinted status/verdict token (`Chip` with `hue`). The recipe
+ * (`src/ui/Chip.svelte` `.chip.hue`) is theme-aware: label
+ * `oklch(var(--accent-text-l) 0.1 H)` over a
+ * fill `oklch(0.55 0.13 H / var(--accent-fill-a))` composited on the surface
+ * beneath. `--accent-text-l` / `--accent-fill-a` flip between dark and light
+ * (tokens.css `:root` vs `[data-theme='light']`), so the token must stay legible
+ * in BOTH themes across the hue wheel — gated here (it was previously ungated).
+ */
+describe('hue status/verdict token (`Chip` hue) — WCAG AA across the hue wheel × themes', () => {
+  const css = readFileSync(TOKENS_PATH, 'utf-8');
+
+  interface Rgba {
+    r: number;
+    g: number;
+    b: number;
+    a: number;
+  }
+  function toRgba(expr: string): Rgba {
+    const c = parse(expr);
+    if (!c) throw new Error(`culori failed to parse '${expr}'`);
+    const r = rgb(c);
+    const clamp = (n: number): number => Math.min(1, Math.max(0, n));
+    return { r: clamp(r.r), g: clamp(r.g), b: clamp(r.b), a: c.alpha ?? 1 };
+  }
+  function over(fg: Rgba, bg: Rgba): Rgba {
+    const a = fg.a;
+    return {
+      r: fg.r * a + bg.r * (1 - a),
+      g: fg.g * a + bg.g * (1 - a),
+      b: fg.b * a + bg.b * (1 - a),
+      a: 1,
+    };
+  }
+  function col(c: Rgba): { mode: 'rgb'; r: number; g: number; b: number } {
+    return { mode: 'rgb', r: c.r, g: c.g, b: c.b };
+  }
+
+  /** Read `--name` from the `:root` block (dark) or the `[data-theme='light']`
+   * block (light) so the test's source of truth IS the stylesheet. */
+  function themeToken(theme: 'dark' | 'light', name: string): string {
+    const block =
+      theme === 'dark'
+        ? css.match(/:root\s*\{([\s\S]*?)\}/)?.[1]
+        : css.match(/\[data-theme='light'\]\s*\{([\s\S]*?)\}/)?.[1];
+    if (!block) throw new Error(`no ${theme} block in tokens.css`);
+    const stripped = block.replace(/\/\*[\s\S]*?\*\//g, '');
+    const decl = [...stripped.matchAll(new RegExp(`${name}\\s*:\\s*([^;]+);`, 'g'))].pop();
+    if (!decl?.[1]) throw new Error(`tokens.css ${theme} missing ${name}`);
+    return decl[1].trim();
+  }
+
+  // Representative hues spanning the wheel (priority/verdict tokens use these).
+  const HUES = [25, 55, 98, 150, 210, 252, 295, 350];
+
+  for (const theme of ['dark', 'light'] as const) {
+    describe(theme, () => {
+      const textL = themeToken(theme, '--accent-text-l');
+      const fillA = themeToken(theme, '--accent-fill-a');
+      // The token sits on a card/list surface; test the realistic ones.
+      for (const surfaceName of ['--surface', '--surface-2']) {
+        const surface = toRgba(resolveOklch(themeToken(theme, surfaceName)));
+        for (const h of HUES) {
+          test(`hue ${h} label on ${surfaceName} meets AA Normal (4.5:1)`, () => {
+            const fill = over(toRgba(`oklch(0.55 0.13 ${h} / ${fillA})`), surface);
+            const label = toRgba(`oklch(${textL} 0.1 ${h})`);
+            expect(wcagContrast(col(label), col(fill))).toBeGreaterThanOrEqual(4.5);
+          });
+        }
+      }
+    });
+  }
+});
+
+/**
  * The reading nook's read-row title (rss-connector design D8) — a READ feed row
  * recedes to `--text-muted` (NOT `--text-faint`, which is reserved for the error
  * note), and it MUST stay legible over the sidebar's Space wash at every tint.

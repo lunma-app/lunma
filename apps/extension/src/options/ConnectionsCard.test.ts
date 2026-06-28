@@ -7,7 +7,7 @@ import ConnectionsCard from './ConnectionsCard.svelte';
 // ConnectionsCard (sources-redesign, D1): the merged Connections manager. The
 // bus + connectors + persisted-state reads are mocked so the card renders a
 // deterministic source set and the lifecycle commands resolve instantly. The
-// per-row ⋯ uses the bits-ui `BitsMenu` primitive (testids `menu-trigger` /
+// per-row ⋯ uses the bits-ui `Menu` primitive (testids `menu-trigger` /
 // `menu-item`): the trigger lives in the row, but its items PORTAL to
 // <document.body> and open ASYNC, so item assertions query `document` and wait.
 // A chosen action opens an inline editor below the row.

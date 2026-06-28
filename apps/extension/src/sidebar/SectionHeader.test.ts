@@ -4,7 +4,7 @@ import SectionHeaderHarness from './SectionHeader.test.harness.svelte';
 
 afterEach(() => cleanup());
 
-// BitsMenu (bits-ui DropdownMenu) opens on pointerdown+pointerup; in jsdom a
+// Menu (bits-ui DropdownMenu) opens on pointerdown+pointerup; in jsdom a
 // click resolves the open. Its items portal to <body>, so they are queried off
 // `document`, not the render container.
 async function openKebab(container: Element): Promise<void> {
@@ -31,7 +31,7 @@ describe('SectionHeader', () => {
     expect(container.querySelector('[data-testid="section-count"]')).toBeNull();
   });
 
-  test('renders the BitsMenu kebab on the trailing edge when menu items are passed', () => {
+  test('renders the Menu kebab on the trailing edge when menu items are passed', () => {
     const { container } = render(SectionHeaderHarness, {
       props: {
         icon: 'pin' as const,
@@ -39,7 +39,7 @@ describe('SectionHeader', () => {
         menu: [{ id: 'new-folder', label: 'New folder', onSelect: vi.fn() }],
       },
     });
-    // The header now composes the bits-ui kebab (BitsMenu, testid `menu-trigger`),
+    // The header now composes the bits-ui kebab (Menu, testid `menu-trigger`),
     // the same primitive the tab + folder rows compose — so it reads identically.
     expect(container.querySelector('[data-testid="menu-trigger"]')).not.toBeNull();
   });
