@@ -41,17 +41,28 @@ function typeLabelFor(prop: string): string {
   return def.typeLabel ?? def.type;
 }
 
+// A number control only commits valid numbers — an in-progress value (`-`,
+// `1.`, `1e`) parses to NaN, which would poison the live preview; hold the last
+// good value instead.
+function updateNumber(prop: string, v: string): void {
+  const n = v === '' ? 0 : Number(v);
+  if (!Number.isNaN(n)) args[prop] = n;
+}
+
 // Shiki highlights the story's own source as Svelte. Dev-only (the catalog ships
-// nothing in the MV3 bundle); the grammar + themes are lazily loaded on first use.
+// nothing in the MV3 bundle). Highlighting is heavy and the Source panel is
+// collapsed by default, so defer the first `codeToHtml` until the panel opens.
 // Dual-theme (`defaultColor: false`) emits `--shiki-light`/`--shiki-dark` custom
-// properties per token; catalog.css picks one based on the catalog's theme, so the
+// properties per token; catalog.css picks one by the catalog's theme, so the
 // source view follows the light/dark toggle without re-highlighting.
-// svelte-ignore state_referenced_locally
-const highlighted = codeToHtml(source, {
-  lang: 'svelte',
-  themes: { light: 'vitesse-light', dark: 'vitesse-dark' },
-  defaultColor: false,
-});
+let highlighted = $state<Promise<string>>();
+function highlightSource(): void {
+  highlighted ??= codeToHtml(source, {
+    lang: 'svelte',
+    themes: { light: 'vitesse-light', dark: 'vitesse-dark' },
+    defaultColor: false,
+  });
+}
 </script>
 
 <div class="story">
@@ -85,7 +96,7 @@ const highlighted = codeToHtml(source, {
                     ariaLabel={prop}
                     value={String(args[prop])}
                     inputmode="numeric"
-                    oninput={(v) => (args[prop] = v === '' ? 0 : Number(v))}
+                    oninput={(v) => updateNumber(prop, v)}
                   />
                 {:else}
                   <TextInput
@@ -131,14 +142,16 @@ const highlighted = codeToHtml(source, {
   {/if}
 
   <section class="block">
-    <details class="source">
+    <details class="source" ontoggle={highlightSource}>
       <summary>Source</summary>
-      {#await highlighted then html}
-        <!-- Shiki output is escaped HTML over our own story source (not user input). -->
-        <div class="shiki-wrap">{@html html}</div>
-      {:catch}
-        <pre class="source-fallback"><code>{source}</code></pre>
-      {/await}
+      {#if highlighted}
+        {#await highlighted then html}
+          <!-- Shiki output is escaped HTML over our own story source (not user input). -->
+          <div class="shiki-wrap">{@html html}</div>
+        {:catch}
+          <pre class="source-fallback"><code>{source}</code></pre>
+        {/await}
+      {/if}
     </details>
   </section>
 </div>

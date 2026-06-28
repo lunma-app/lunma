@@ -77,6 +77,27 @@ function triggerPointerDown(props: Record<string, unknown>, event: PointerEvent)
 }
 </script>
 
+<!-- Shared header + item body, rendered identically by both triggers. -->
+{#snippet header()}
+  {#if headerTitle !== undefined}
+    <div class="lunma-menu-header">
+      {#if headerKind !== undefined}<div class="lunma-menu-kind">{headerKind}</div>{/if}
+      <div class="lunma-menu-title">{headerTitle}</div>
+    </div>
+  {/if}
+{/snippet}
+
+{#snippet itemBody(item: MenuItem)}
+  {#if item.icon}
+    <span class="leading" aria-hidden="true"><Icon name={item.icon} size={14} /></span>
+  {/if}
+  <span class="label">{item.label}</span>
+  {#if item.submenu}
+    <!-- Signals the item drills into a sub-panel (menu-types `submenu`). -->
+    <span class="trailing-chevron" aria-hidden="true"><Icon name="chevron-right" size={14} /></span>
+  {/if}
+{/snippet}
+
 {#if trigger === 'kebab'}
   <DropdownMenu.Root bind:open onOpenChange={handleOpenChange}>
     <DropdownMenu.Trigger>
@@ -103,12 +124,7 @@ function triggerPointerDown(props: Record<string, unknown>, event: PointerEvent)
         collisionPadding={8}
         aria-label={ariaLabel}
       >
-        {#if headerTitle !== undefined}
-          <div class="lunma-menu-header">
-            {#if headerKind !== undefined}<div class="lunma-menu-kind">{headerKind}</div>{/if}
-            <div class="lunma-menu-title">{headerTitle}</div>
-          </div>
-        {/if}
+        {@render header()}
         {#each items as item (item.id)}
           <DropdownMenu.Item
             class={`lunma-menu-item${item.danger ? ' danger' : ''}${item.disabled ? ' disabled' : ''}`}
@@ -117,11 +133,14 @@ function triggerPointerDown(props: Record<string, unknown>, event: PointerEvent)
             onSelect={() => item.onSelect()}
           >
             {#snippet child({ props })}
-              <button {...props} type="button" data-menu-id={item.id} data-testid="menu-item">
-                {#if item.icon}
-                  <span class="leading" aria-hidden="true"><Icon name={item.icon} size={14} /></span>
-                {/if}
-                <span class="label">{item.label}</span>
+              <button
+                {...props}
+                type="button"
+                data-menu-id={item.id}
+                data-testid="menu-item"
+                aria-haspopup={item.submenu ? 'true' : undefined}
+              >
+                {@render itemBody(item)}
               </button>
             {/snippet}
           </DropdownMenu.Item>
@@ -144,12 +163,7 @@ function triggerPointerDown(props: Record<string, unknown>, event: PointerEvent)
         aria-label={ariaLabel}
         data-testid={testid}
       >
-        {#if headerTitle !== undefined}
-          <div class="lunma-menu-header">
-            {#if headerKind !== undefined}<div class="lunma-menu-kind">{headerKind}</div>{/if}
-            <div class="lunma-menu-title">{headerTitle}</div>
-          </div>
-        {/if}
+        {@render header()}
         {#each items as item (item.id)}
           <ContextMenu.Item
             class={`lunma-menu-item${item.danger ? ' danger' : ''}${item.disabled ? ' disabled' : ''}`}
@@ -158,11 +172,14 @@ function triggerPointerDown(props: Record<string, unknown>, event: PointerEvent)
             onSelect={() => item.onSelect()}
           >
             {#snippet child({ props })}
-              <button {...props} type="button" data-menu-id={item.id} data-testid={`${testid}-item`}>
-                {#if item.icon}
-                  <span class="leading" aria-hidden="true"><Icon name={item.icon} size={14} /></span>
-                {/if}
-                <span class="label">{item.label}</span>
+              <button
+                {...props}
+                type="button"
+                data-menu-id={item.id}
+                data-testid={`${testid}-item`}
+                aria-haspopup={item.submenu ? 'true' : undefined}
+              >
+                {@render itemBody(item)}
               </button>
             {/snippet}
           </ContextMenu.Item>
@@ -291,6 +308,13 @@ function triggerPointerDown(props: Record<string, unknown>, event: PointerEvent)
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  :global(.lunma-menu-item .trailing-chevron) {
+    flex: 0 0 auto;
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-faint);
   }
 
   :global(.lunma-menu-item.danger) {

@@ -4,24 +4,15 @@
 // lorem. Types come from `@/shared` (the same contract the surfaces consume),
 // keeping the catalog's import edges to `ui` + `shared` only.
 import type { LauncherResult } from '@/shared/launcher-contract';
+
+// The canonical Space palette — re-exported from the shared schema so the
+// catalog's swatches/identity matrices never drift from what the surfaces render.
+export { SPACE_COLORS } from '@/shared/schemas';
+
 import type { SourceAccount, Space, SpaceColor } from '@/shared/types';
 
 /** A do-nothing handler for the many required `on*` callbacks in a static catalog. */
 export const noop = (): void => undefined;
-
-/** The ten canonical Space colours, in palette order — for swatch/identity matrices. */
-export const SPACE_COLORS: readonly SpaceColor[] = [
-  'red',
-  'orange',
-  'yellow',
-  'green',
-  'teal',
-  'cyan',
-  'blue',
-  'purple',
-  'pink',
-  'gray',
-];
 
 /** A small set of Spaces with distinct hues/icons for hue-driven stories. */
 export const SPACES: readonly Space[] = [
