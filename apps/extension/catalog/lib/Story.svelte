@@ -35,12 +35,6 @@ function selectOptions(options: readonly string[]): SelectOption[] {
   return options.map((value) => ({ value, label: value }));
 }
 
-function typeLabelFor(prop: string): string {
-  const def = meta.controls?.[prop];
-  if (!def) return '';
-  return def.typeLabel ?? def.type;
-}
-
 // A number control only commits valid numbers — an in-progress value (`-`,
 // `1.`, `1e`) parses to NaN, which would poison the live preview; hold the last
 // good value instead.
@@ -124,7 +118,7 @@ function highlightSource(): void {
           {#each controlEntries as [prop, def] (prop)}
             <tr>
               <td><code>{prop}</code></td>
-              <td><code>{typeLabelFor(prop)}</code></td>
+              <td><code>{def.typeLabel ?? def.type}</code></td>
               <td><code>{JSON.stringify(def.default)}</code></td>
               <td>{def.description ?? ''}</td>
             </tr>
