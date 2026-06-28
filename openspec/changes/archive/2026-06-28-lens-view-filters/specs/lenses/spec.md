@@ -170,24 +170,6 @@ Source facets for multi-source lenses are retained as existing behaviour pending
 future `LensFilter.sources` axis; no persisted data migration is required because the
 old filter was never persisted.
 
-### Requirement: The review lens renders a Review Queue page
-
-**Reason**: The shipped lens page is a single unified, entity-sectioned overview for
-**every** lens kind — there is no longer a separate "Review Queue" archetype distinct
-from a generic grid (the `GeneralLens`/Review-Queue page split was removed; only
-`LensPage` + `OverviewPage` exist). A `review` lens and a `general` lens render the
-same overview; what differs is which entity sections populate.
-
-**Migration**: Review lenses now render the unified overview described by the
-MODIFIED "The page renders all resolved sections" and "The page item is a card with
-optional content slots" requirements. The Change-entity triage signals previously
-specced here (CI light / draft glyph, full title, `host/owner/repo · @author`,
-`ReviewerRail`, `Diffstat`, warming age, linked-ticket chip, and the
-query-derived relationship lanes) now render in the **Changes section's change rows**
-of that overview. Source/repo filtering is covered by the new filter requirements.
-Change-entity normalisation ("A review lens normalises its sources into Change
-entities" and the github-pr / gitlab-mr adapter requirements) is unchanged.
-
 ## MODIFIED Requirements
 
 ### Requirement: The page renders all resolved sections

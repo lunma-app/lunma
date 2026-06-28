@@ -231,11 +231,11 @@ inline grant affordance.
 - **WHEN** the user confirms a new lens with a github instance and a gitlab instance
 - **THEN** the editor SHALL call `requestHostPermissions(['https://api.github.com/*', 'https://gitlab.com/*'])` from the confirm handler
 
-#### Scenario: Adding a second filter to a granted instance requests no new origin
+#### Scenario: Adding a source on an already-granted host requests no new origin
 
-- **GIVEN** an existing lens whose gitlab instance (origin already granted) carries `['authored']`
-- **WHEN** the user adds the `review-requested` filter and confirms
-- **THEN** the union origin set is unchanged, so no new host-permission dialog is shown and the new section polls immediately
+- **GIVEN** an existing lens with a gitlab instance whose origin is already granted
+- **WHEN** the user adds a second gitlab account on the **same** host and confirms
+- **THEN** the union origin set is unchanged (origins are host-scoped and query-independent), so no new host-permission dialog is shown and the new sections poll immediately
 
 #### Scenario: Denying union host still saves the lens with sections in needs-access
 
@@ -774,13 +774,25 @@ toast, or a notification.
 
 The `LensEditor.svelte` SHALL be **connection-first**: it SHALL render, top to bottom, a **Name** field; a **connections** picker (the lens's sources, as account assembly — not a URL form, and **not** gated by any kind selector); a derived **"this lens will show …"** preview naming the canonical entities the chosen connections produce (Changes / Articles / a generic label); the lens settings (**Show** max-items and **Refresh** cadence); and a single primary action — **Create** / **Save** — with **Cancel** and the validation hint. There SHALL be **no Kind picker** (the kind-driven provider filter that previously restricted a review lens to github/gitlab is removed with it). The connections picker SHALL be height-bounded and scroll independently while Name stays pinned above and the settings + action stay pinned below.
 
-The connections picker SHALL present **all** of the user's connected sources (accounts and feeds, no provider filtering) as **pickable rows**: each row shows the source identity (provider glyph + name/host), an account's derived status, a checkbox to include it, and — once an **account** is included — the per-reference **filter multi-select** (authored / assigned / review-requested; hidden for an rss feed). A single **"+ Connect a service"** action SHALL open the shared Service-dropdown connect picker (`ui/ServiceConnectPicker.svelte` — see the `connector-accounts` capability), which mints the source (`createAccount` + optional `setAccountToken`) and returns it to the picker **pre-selected** (an rss feed pre-selected with `queries: []`). The picker's **OPML import** SHALL behave the same way in the editor — bulk: it SHALL find-or-mint an rss account per parsed feed (deduped by normalized base URL, since the rss `sourceKey` is host-derived) and pre-select them all **into the lens being assembled**, NOT spawn a standalone "Feeds" lens (the editor passes the picker an `onImportFeeds` callback — see the `connector-accounts` capability; the standalone-`importOpml` path is the Options Connections manager's). Confirming SHALL be blocked when no source is selected, when a selected queue account has zero filters, or when a connect flow is incomplete. `createLens`/`updateLens` SHALL carry `sources: LensSourceRef[]` (references, not embedded configs) and SHALL NOT carry `lensKind` (the SW derives it — see `A lens carries a kind`). **Create SHALL open the lens's overview page.** A reference or filter change on an existing lens SHALL trigger an immediate refetch of the affected sections only.
+The connections picker SHALL present **all** of the user's connected sources (accounts and feeds, no provider filtering) as **pickable rows**, composed from the `MultiSelect` primitive in **inline** mode: each row's leading content SHALL be the source's `AccountChip` (provider glyph + name/host + an account's derived status) and a checkbox-square SHALL toggle the source's inclusion in the lens. The picker SHALL surface a **search box** that fuzzily filters the rows by account name **or source type (provider)** once the connected-source count exceeds the `MultiSelect` search threshold — each source contributes a `keywords` entry (its provider/type + host) so typing a type (e.g. "rss", "git") finds sources whose visible name omits it. **Including a source contributes all of its supported queries** — a non-`rss` account fetches every query its provider/deployment supports (a forge or Jira account: `authored` + `assigned` + `review-requested`; a Bitbucket **Server/DC** account: `authored` + `review-requested`; a Bitbucket **Cloud** account: `authored` only — never `assigned`, which Bitbucket has no concept of); an `rss` feed carries `queries: []` — so the editor SHALL NOT present a per-source filter picker and SHALL NOT require choosing a filter per source, and SHALL NOT mint a query its provider rejects (the supported set is derived via `supportedQueriesFor`). A single **"+ Connect a service"** action SHALL open the shared Service-dropdown connect picker (`ui/ServiceConnectPicker.svelte` — see the `connector-accounts` capability), which mints the source (`createAccount` + optional `setAccountToken`) and returns it to the picker **pre-selected** (an rss feed pre-selected with `queries: []`). The picker's **OPML import** SHALL behave the same way in the editor — bulk: it SHALL find-or-mint an rss account per parsed feed (deduped by normalized base URL, since the rss `sourceKey` is host-derived) and pre-select them all **into the lens being assembled**, NOT spawn a standalone "Feeds" lens (the editor passes the picker an `onImportFeeds` callback — see the `connector-accounts` capability; the standalone-`importOpml` path is the Options Connections manager's). Confirming SHALL be blocked when no source is selected or when a connect flow is incomplete. `createLens`/`updateLens` SHALL carry `sources: LensSourceRef[]` (references, not embedded configs) and SHALL NOT carry `lensKind` (the SW derives it — see `A lens carries a kind`). **Create SHALL open the lens's overview page.** A source change on an existing lens SHALL trigger an immediate refetch of the affected sections only.
 
 #### Scenario: A lens is assembled connection-first without choosing a kind
 
 - **GIVEN** a connected `gitlab.com` account and an `rss` feed
-- **WHEN** the user opens "New lens…", ticks both, selects "Authored" on the account, and presses Create
-- **THEN** `createLens` is dispatched with `sources: [{ sourceId: <gitlab>, queries: ['authored'] }, { sourceId: <feed>, queries: [] }]` and **no `lensKind`**, and the overview opens showing a Changes section and an Articles section
+- **WHEN** the user opens "New lens…", ticks both, and presses Create
+- **THEN** `createLens` is dispatched with `sources: [{ sourceId: <gitlab>, queries: ['authored', 'assigned', 'review-requested'] }, { sourceId: <feed>, queries: [] }]` and **no `lensKind`**, and the overview opens showing a Changes section and an Articles section
+
+#### Scenario: Including a source contributes all of its queries
+
+- **GIVEN** the editor with a connected `github` account
+- **WHEN** the user ticks the account
+- **THEN** the lens being assembled references it with `queries: ['authored', 'assigned', 'review-requested']`, and no per-source filter picker is shown for it
+
+#### Scenario: A long source list is searchable by name or type
+
+- **GIVEN** the editor with more connected sources than the `MultiSelect` search threshold
+- **WHEN** the picker renders
+- **THEN** a search box fuzzily filters the visible source rows by account name, and typing a source type (e.g. "rss") narrows to the sources of that provider via their `keywords`
 
 #### Scenario: The editor shows a derived entity preview
 
@@ -1271,63 +1283,92 @@ A launcher result that opens the page is **out of scope** for this change; it is
 
 ### Requirement: The page renders all resolved sections
 
-When mirroring a lens, the page SHALL render **every** resolved section of that lens, **grouped by canonical entity** rather than per source. Each resolved section's entity SHALL be derived by `entityForSource(cfg.source)` (`github`/`gitlab` → `change`, `rss` → `article`, any other queue provider e.g. `jira` → `generic`). The page SHALL render one **entity section** per non-empty bucket, in the canonical order **Changes → Articles → Generic**, merging every connection of the same entity into that one section:
+When mirroring a lens, the lens overview page SHALL render the lens's items as a
+single inline page grouped by **entity** — not by source section — with one
+**collapsible** section per **populated** entity, in the canonical order
+**Changes → Issues → Articles → Other** (the `LensEntity` order `change → ticket →
+article → generic`). A single source section MAY feed more than one entity section
+(e.g. one GitHub section contributes both Changes (PRs) and Issues). Each section
+SHALL render a header (its label + an attention/item count) that toggles the section
+collapsed/expanded (`aria-expanded`), above its items. The page header SHALL show the
+lens identity (name + a provider subline). When the lens has no items the page SHALL
+render a single calm empty note — never per-section skeletons. The existing calm
+per-section states SHALL be preserved — `pending` → static ghosts; `error` →
+last-known items plus a dim "Couldn't reach ⟨host⟩" note; `signed-out` → the
+per-source sign-in / "Add a token in Settings → Connectors" affordance; `needs-access`
+→ the muted "Lunma needs access to ⟨host⟩" grant prompt invoking
+`requestHostPermissions` — and no non-`ok` state SHALL render as a red error card.
 
-- the **Changes** section SHALL render the Review Queue archetype over the change-bucket sections (see `The Changes entity section renders the Review Queue archetype`);
-- the **Articles** section SHALL render the magazine archetype over the article-bucket sections (see `The Articles entity section renders a magazine`);
-- the **Generic** section SHALL render the existing per-source glass panels (`Surface variant="glass"`, source-icon header + item cards) for any remaining queue sections.
+#### Scenario: One source section feeds two entity sections in canonical order
 
-The page SHALL reuse the existing per-section calm states unchanged: `pending` → static ghost cards; `error` → last-known cards plus a dim "Couldn't reach ⟨host⟩" note; `signed-out` → the per-source sign-in / "Add a token in Settings → Connectors" affordance; `needs-access` → the muted "Lunma needs access to ⟨host⟩" grant prompt invoking `requestHostPermissions`. The page SHALL show the lens-level attention sum in its page header. No non-`ok` state SHALL render as a red error card.
-
-#### Scenario: A mixed lens renders one section per entity
-
-- **GIVEN** lens `f1` with a gitlab instance carrying `['authored', 'review-requested']` and one rss feed, all `ok`
+- **GIVEN** a lens whose single GitHub section holds a PR and an issue, both `ok`
 - **WHEN** the page renders
-- **THEN** it shows a **Changes** section (the gitlab changes across both filters) above an **Articles** section (the feed) — not three per-source panels
+- **THEN** it shows a Changes section and an Issues section (in that order), the PR under Changes and the issue under Issues
 
-#### Scenario: A pure-feed lens shows only Articles
+#### Scenario: A section header collapses and expands
 
-- **GIVEN** a lens whose only sources are `rss` feeds
+- **GIVEN** a lens overview with a populated Changes section
+- **WHEN** the user activates the section header
+- **THEN** `aria-expanded` toggles and the section's rows hide/show
+
+#### Scenario: An empty lens renders one calm empty note
+
+- **GIVEN** a lens with no items in any entity
 - **WHEN** the page renders
-- **THEN** it shows a single **Articles** section and no Changes or Generic section
-
-#### Scenario: Per-section calm states render on the page
-
-- **GIVEN** lens `f1` with one github section `signed-out` and one gitlab section `ok`, both in the Changes bucket
-- **WHEN** the page renders
-- **THEN** the Changes section shows the "Add a token in Settings → Connectors" affordance for the github source and the gitlab changes — neither as a red error card
+- **THEN** it shows a single calm empty note and no section skeletons
 
 ### Requirement: The page item is a card with optional content slots
 
-The page's result unit SHALL be a card feature component (`LensPageItem`, local to `lenspage/`) whose layout reserves regions for richer content (a hero image, an excerpt, and a date/meta footer) and renders each region **only when the item carries that field**. A card SHALL always show the item `title` and favicon (recessed at rest, full on hover/active) and at most one `status` dot. The card SHALL show the **full title** — wrapping to as many lines as needed, **never truncated** (no ellipsis); the favicon and status dot top-align with the title's first line. An absent optional region collapses to zero height, so an item with no optional fields (e.g. a queue item) reads as a clean, compact card, never a skeleton with blank boxes.
+The overview's result units SHALL be **entity-specific**, each composing existing
+`ui/` primitives and never re-rolling them or hard-coding design values:
+- **Change** rows present, left to right: a CI light (from `status`; a `draft` shows a
+  distinct hollow glyph), the full untruncated `title`, a `host/owner/repo · @author`
+  subline (host from the source `baseUrl`, `owner/repo` from `change.repo`), a
+  `ReviewerRail` (blocking-wins verdict `changes` > `pending` > `approved`), a
+  `Diffstat` (`change.additions`/`deletions`), and a relative age (from
+  `change.updatedAt`) that warms past a staleness threshold; a linked ticket renders
+  as a chip. Change rows MAY be grouped by their source query into labelled lanes
+  (e.g. "Authored", "Requested your review").
+- **Issue** rows present the ticket `key` + a priority pill and the title (stripped of
+  a leading key prefix), grouped by status (the status is the group header, not a
+  per-row pill).
+- **Article** cards render a hero (a real `imageUrl` loaded with `loading="lazy"` +
+  `referrerpolicy="no-referrer"`, else a generated cover — the title initial in the
+  display serif over a Space-hue wash, at the same ratio), the full title, a clamped
+  excerpt, any `categories` chips, and a meta footer (source · relative `publishedAt`
+  · category); each card carries a read toggle, and the Articles section is
+  switchable between a magazine **grid** and a compact **list** row.
+- **Other** items render a compact row (title + favicon + at most one status dot).
 
-This requirement is **descriptive, not prohibitive**: it describes what the card renders given the optional fields present on `LensItem` and SHALL NOT forbid connectors from carrying additional optional item fields in a future change. In this change the **RSS connector** populates `excerpt`, `imageUrl`, and `publishedAt` (see "The RSS connector fetches and parses public feeds"); queue connectors leave them absent. A future change MAY fill the same slots for queue items (e.g. diff stat, CI detail) additively, with no rewrite of this surface and no schema migration (results are ephemeral). `LensPageItem` is a feature component composing existing `ui/` primitives (`Icon`, `Favicon`, `Surface`); it SHALL NOT re-roll primitives or hard-code design values.
+Every unit SHALL show the full `title` — wrapping to as many lines as needed, never
+truncated (no ellipsis) — and SHALL render an optional region only when the item
+carries that field (absent regions collapse to zero height). This requirement is
+descriptive, not prohibitive: connectors MAY populate additional optional `LensItem`
+fields additively with no rewrite of this surface and no schema migration (results
+are ephemeral).
 
-Every **feed** card SHALL lead with a hero of one fixed aspect ratio so titles align across the magazine grid row: a real hero image when the entry carries an `imageUrl` (loaded with `loading="lazy"` and `referrerpolicy="no-referrer"` — no referrer leaked to the publisher; the residual IP-on-load cost is accepted, see design D8), otherwise a **generated cover** — the title's first letter/character set in the display serif over a soft Space-hue wash, at the same ratio. Below the hero: title, excerpt (clamped), then a footer carrying the relative publication date. **Queue** cards have no hero and render compact. Feed sections SHALL render their cards as a full-width responsive magazine grid; queue sections render compact cards.
+#### Scenario: A change row shows its triage signals
 
-#### Scenario: A queue card renders compact, full-title, no empty regions
+- **GIVEN** a Change with CI `ok`, two reviewers (one approved, one pending), `+112 −40`, updated 2h ago, and a linked ticket
+- **WHEN** its row renders
+- **THEN** it shows the CI light, full title, `host/owner/repo · @author`, a reviewer rail with the pending verdict, a `+112 −40` diffstat, a "2h" age, and the linked-ticket chip
 
-- **GIVEN** a `LensItem` `{ id, title, url, status }` with no optional content fields
-- **WHEN** `LensPageItem` renders it
-- **THEN** it shows the full (wrapping, untruncated) title, a recessed favicon, and the single status dot, with no empty content regions
+#### Scenario: An issue row shows key, priority, and status grouping
 
-#### Scenario: A feed card renders a magazine card with hero, excerpt, and date
+- **GIVEN** an Issue `PAY-91` with priority `urgent` under status "To Do"
+- **WHEN** the Issues section renders
+- **THEN** the row shows `PAY-91` + an `urgent` pill and its title with the key prefix stripped, under a "To do" group header
 
-- **GIVEN** a feed `LensItem` carrying `excerpt`, `imageUrl`, and `publishedAt`
-- **WHEN** `LensPageItem` renders it
-- **THEN** the hero image renders (with `loading="lazy"` and `referrerpolicy="no-referrer"`), the full title, the clamped excerpt, and a relative date label — and the feed section uses the magazine grid
+#### Scenario: An article renders as a grid card switchable to a list row
 
-#### Scenario: A cover-less feed card renders a generated cover
+- **GIVEN** an article carrying `excerpt`, `imageUrl`, `publishedAt`, and `categories`
+- **WHEN** the Articles section renders and the user switches to List
+- **THEN** it first shows a magazine card (hero, title, clamped excerpt, category chips, read toggle), then a compact list row for the same item
 
-- **GIVEN** a feed `LensItem` with no `imageUrl`
-- **WHEN** `LensPageItem` renders it
-- **THEN** it renders a generated cover (the title's initial in the display serif over a Space-hue wash) at the same ratio as a real hero, so its title aligns with image cards in the same row
-- **AND** a queue item renders no hero at all
+#### Scenario: A title is never truncated
 
-#### Scenario: The title is never truncated
-
-- **WHEN** a card renders an item whose title is long enough to exceed one line
-- **THEN** the title wraps to multiple lines and is shown in full (no ellipsis)
+- **WHEN** any unit renders an item whose title exceeds one line
+- **THEN** the title wraps and is shown in full (no ellipsis)
 
 ### Requirement: Page result activation reuses existing open semantics
 
@@ -1484,45 +1525,30 @@ For a `review` lens, the GitLab connector SHALL populate each item's `change` fr
 - **WHEN** the connector builds `change.reviewers`
 - **THEN** that reviewer's `state` is `pending` (never a fabricated verdict)
 
-### Requirement: The review page filters changes by source and repo
-
-The **Changes** entity section SHALL render a filter toolbar **only when the change bucket spans more than one source**. The toolbar SHALL offer **source facets** as chips (one per change-bucket source entry, identified by provider + host) and **repo facets** (the distinct `change.repo` values) rendered as chips when there are five or fewer, otherwise as a `Select`. Repo facets SHALL be scoped to the active source facet so the same `owner/repo` on two hosts never merges. The active filter SHALL be **page-local ephemeral UI state** — not persisted and dispatching no bus command — and SHALL narrow the changes rendered across the lanes. A single-source change bucket SHALL render no toolbar. The Articles section's filters (see its requirement) are independent of this toolbar.
-
-#### Scenario: The toolbar appears only for multi-source change buckets
-
-- **GIVEN** a lens whose change bucket has one source
-- **WHEN** the overview renders
-- **THEN** the Changes section shows no filter toolbar
-- **AND GIVEN** a lens whose change bucket spans two sources, the toolbar renders source chips
-
-#### Scenario: Selecting a source narrows the Changes section
-
-- **GIVEN** a lens whose change bucket spans github.com and a gitlab host
-- **WHEN** the user activates the github.com source chip
-- **THEN** only github changes remain across the lanes, the Articles section is unaffected, and no state is persisted
-
-#### Scenario: Repo facets fall back to a Select past the threshold
-
-- **WHEN** the active source has more than five distinct `change.repo` values
-- **THEN** the repo facet renders as a `Select` rather than a chip row
-
 ### Requirement: The Changes entity section renders the Review Queue archetype
 
-The **Changes** entity section of the overview SHALL render the **Review Queue** archetype over the change-bucket resolved sections of the lens (its `github`/`gitlab` sections). It SHALL group changes into **relationship lanes** derived from each source's query: a `review-requested` query feeds a "Requested your review" lane, an `authored` query feeds an "Authored by you" lane, and any other query feeds its own labelled lane; lanes render in that priority order, each as a frosted-glass panel.
+The **Changes** entity section of the overview SHALL render the **Review Queue** archetype over the change-bucket resolved sections of the lens (its `github`/`gitlab` sections). It SHALL group changes into **relationship lanes** derived from each source's query: a `review-requested` query feeds a "Review requests" lane, an `authored` query feeds an "Authored" lane, and an `assigned` query feeds an "Assigned" lane; empty lanes are dropped and the remaining lanes render in that priority order.
 
-Each change SHALL render as a **row** (not a magazine card) presenting, left to right: a CI light (from `status`, with `draft` shown as a distinct hollow glyph), the full untruncated title, a `host/owner/repo` subline (host from the source `baseUrl`, `owner/repo` from `change.repo`) with the author, a `ReviewerRail` (a verdict icon — blocking-wins `changes` > `pending` > `approved` — leading verdict-tinted reviewer `Avatar`s), a `Diffstat` (`change.additions`/`deletions`), and a relative age (from `change.updatedAt`) that warms to `--warning` past a staleness threshold. Activation SHALL reuse `openLensItem` and the existing per-window bind/focus semantics; the existing calm pending/error/signed-out/needs-access states SHALL be reused; no non-`ok` state SHALL render as a red error card.
+Each change SHALL render as a **row** (not a magazine card) presenting, left to right: a **provider monogram** (`GH`/`GL`); the change title with its optional linked-ticket ref; a **repo subline** (`change.repo`); then a trailing **triage cluster** of three orthogonal signals — a **CI light** derived from the item `status` tone (with a `draft` change shown as a **distinct hollow glyph** in that locus), a **`ReviewerRail`** (a blocking-wins verdict glyph `changes` > `pending` > `approved` leading verdict-ringed reviewer `Avatar`s, composed from the change's `reviewers`; each reviewer's `state`, absent → `pending`), and a **`Diffstat`** of `change.additions`/`deletions`. The row SHALL NOT render a separate review-state pill: the `ReviewerRail` verdict glyph is the row's single review-state signal, and the per-reviewer `Avatar` rings carry each reviewer's state. The row SHALL re-roll none of the reviewer/diffstat affordances — it composes the `ReviewerRail`, `Avatar`, and `Diffstat` primitives and reads their design tokens only through them. Activation SHALL reuse `openLensItem` and the existing per-window bind/focus semantics; the existing calm pending/error/signed-out/needs-access states SHALL be reused; no non-`ok` state SHALL render as a red error card.
 
 #### Scenario: The Changes section renders lanes of rows
 
 - **GIVEN** a lens with `review-requested` and `authored` github sections, all `ok`
 - **WHEN** the overview renders
-- **THEN** the Changes section shows a "Requested your review" lane above an "Authored by you" lane of `Change` rows — not magazine cards
+- **THEN** the Changes section shows a "Review requests" lane above an "Authored" lane of `Change` rows — not magazine cards
 
 #### Scenario: A row shows the change's triage signals
 
-- **GIVEN** a review change with CI `ok`, two reviewers (one approved, one pending), `+112 −40`, updated 2h ago
+- **GIVEN** a review change with CI `ok`, two reviewers (one approved, one pending), and `+112 −40`
 - **WHEN** its row renders
-- **THEN** it shows the CI light, title, `host/owner/repo · @author`, a reviewer rail with the pending verdict icon, a `+112 −40` diffstat, and a "2h" age
+- **THEN** it shows the provider monogram, the title, the `change.repo` subline, a CI light, a `ReviewerRail` whose leading verdict glyph is `pending` with one approved-ringed and one pending-ringed reviewer `Avatar`, and a `+112 −40` `Diffstat`
+- **AND** it renders no separate review-state pill
+
+#### Scenario: A draft change shows a hollow CI light
+
+- **GIVEN** a review change whose `change.draft` is `true`
+- **WHEN** its row renders
+- **THEN** the CI locus shows a distinct hollow glyph and no state pill
 
 #### Scenario: Activation reuses openLensItem
 
@@ -1531,7 +1557,7 @@ Each change SHALL render as a **row** (not a magazine card) presenting, left to 
 
 ### Requirement: The Articles entity section renders a magazine
 
-The **Articles** entity section of the overview SHALL render the magazine archetype over the lens's `rss` (article-bucket) resolved sections, merging every feed into one section. It SHALL reuse the existing feed card rendering (`LensPageItem` cards with cover image / generated initial, recessed favicon, title, excerpt, source · age footer) and the existing per-feed reading controls. It SHALL ADD page-local ephemeral controls (no persistence, no bus command) that do not exist in the current generic feed view: a **feed filter** (chips: "All feeds" + one per feed source, narrowing the rendered articles), a **layout toggle** (`SegmentedControl`: Grid | List), and an **unread filter** (toggle showing the unread count, narrowing to unread items). An unread item in List layout SHALL carry a leading accent unread dot. The section SHALL render only when the lens has at least one `rss` source.
+The **Articles** entity section of the overview SHALL render the magazine archetype over the lens's `rss` (article-bucket) resolved sections, merging every feed into one section. It SHALL reuse the existing feed card rendering (`LensPageItem` cards with cover image / generated initial, recessed favicon, title, excerpt, source · age footer) and the existing per-feed reading controls. It SHALL render three section controls: a **layout toggle** (Grid | List) whose state is the lens's **persisted per-lens** `articleLayout` (read as `node.articleLayout ?? 'grid'`, written via the `setLensArticleLayout` bus command so the choice survives overview re-opens, other windows, and SW restarts), plus two **page-local ephemeral** controls (no persistence, no bus command) that do not exist in the current generic feed view: a **feed filter** (chips: "All feeds" + one per feed source, narrowing the rendered articles) and an **unread filter** (toggle showing the unread count, narrowing to unread items). An unread item in List layout SHALL carry a leading accent unread dot. The section SHALL render only when the lens has at least one `rss` source.
 
 #### Scenario: The Articles section merges feeds with magazine cards
 
@@ -1545,10 +1571,17 @@ The **Articles** entity section of the overview SHALL render the magazine archet
 - **WHEN** the user activates a single feed's filter chip
 - **THEN** only that feed's articles render, and no state is persisted
 
-#### Scenario: The layout toggle switches grid and list
+#### Scenario: The layout toggle switches grid and list and persists
 
-- **WHEN** the user switches the layout toggle from Grid to List
-- **THEN** the same articles re-render as list rows (unread items leading with an accent dot), with no reflow animation
+- **GIVEN** a lens whose Articles section is showing Grid
+- **WHEN** the user switches the layout toggle to List
+- **THEN** the same articles re-render as list rows (unread items leading with an accent dot) with no reflow animation, and the lens node's `articleLayout` is persisted as `'list'` via `setLensArticleLayout`
+
+#### Scenario: A persisted layout is restored on re-open
+
+- **GIVEN** a lens whose node carries `articleLayout: 'list'`
+- **WHEN** the user re-opens the lens overview (in any window, including after a SW restart)
+- **THEN** the Articles section renders as a list immediately, without first flashing the grid default
 
 #### Scenario: The unread filter narrows to unread items
 
@@ -1556,6 +1589,237 @@ The **Articles** entity section of the overview SHALL render the magazine archet
 - **WHEN** the user activates the Unread toggle (labelled with the count)
 - **THEN** only the 3 unread articles render
 
+### Requirement: A lens carries an optional view filter
+
+A lens `PinNode` SHALL carry an optional `filter?: LensFilter` field, where
+`LensFilter` is `{ entities?: LensEntity[]; repos?: string[]; projects?: string[]; feeds?: string[] }`
+and every axis is optional. The field is **additive and backward-compatible**: an
+absent `filter`, an empty object, and a filter whose every array is empty are all
+equivalent and mean "no narrowing" (identical to a lens that has never been
+filtered). The `filter` SHALL persist with the rest of the node configuration and
+round-trip losslessly through `reorderPinned` and a SW restart. It is a property of
+the lens (global), not of any window.
+
+`applyLensFilter` (in `shared/lens-filter.ts`) SHALL be the single, pure predicate
+both surfaces use, so the overview and the sidebar always agree. It operates on
+`{ item: LensItem; host: string; feedName?: string }` rows (each surface supplies the
+host from its source config and the feed name for an article) so repo facets stay
+host-scoped and feed facets match by feed name. A row passes iff **both** axes pass:
+- **type:** `entities` empty **or** `entityForItem(item) ∈ entities` (the `Other`
+  type maps to the `LensEntity` value `generic`); and
+- **scope:** a Change passes iff `repos` empty **or** its host-qualified repo key
+  `${host}/${change.repo}` ∈ `repos`; a Ticket passes iff `projects` empty **or**
+  `ticket.project ∈ projects` (a project-less ticket therefore fails a non-empty
+  `projects` filter and passes when `projects` is empty); an Article passes iff
+  `feeds` empty **or** its `feedName ∈ feeds`; Other items carry no repo/project/feed
+  and SHALL always pass the scope axis (governed by the type axis alone).
+
+When every axis is empty, `applyLensFilter` SHALL return its input unchanged.
+`deriveLensFacets` SHALL emit host-qualified repo keys, distinct feed names, and SHALL
+drop `undefined` from the `projects` facet list (project-less tickets contribute no
+project facet).
+
+#### Scenario: A lens persists its view filter across restart
+
+- **WHEN** the SW boots with a persisted lens whose node carries `filter: { entities: ['ticket'], projects: ['Payments'] }`
+- **THEN** the node is restored with that `filter` intact and validates under the current-version schema
+
+#### Scenario: An absent filter means show everything
+
+- **GIVEN** a lens node with no `filter` field
+- **WHEN** `applyLensFilter(items, node.filter ?? {})` runs
+- **THEN** it returns `items` unchanged
+
+#### Scenario: Scope narrows its own entity only
+
+- **GIVEN** a lens holding Changes in `o/a` and `o/b` on `github.com`, Issues in project `Pay`, and Articles
+- **WHEN** the filter is `{ repos: ['github.com/o/a'] }`
+- **THEN** only `o/a` Changes survive, while all Issues and all Articles still pass (repo scope does not touch tickets or articles)
+
+#### Scenario: Repo facets stay host-scoped
+
+- **GIVEN** a lens with Changes in `o/a` on both `github.com` and an enterprise host `ghe.acme.com`
+- **WHEN** the filter is `{ repos: ['github.com/o/a'] }`
+- **THEN** only the `github.com` `o/a` Changes survive and the `ghe.acme.com` `o/a` Changes do not (the same slug on two hosts never merges)
+
+#### Scenario: A project-less ticket under a project filter
+
+- **GIVEN** a Ticket with no `project` and a Ticket in project `Pay`
+- **WHEN** the filter is `{ projects: ['Pay'] }`
+- **THEN** only the `Pay` ticket survives; the project-less ticket is excluded
+- **AND WHEN** the filter is `{}` (or `projects` empty), both tickets pass and `deriveLensFacets` lists only `Pay` (no `undefined`) in `projects`
+
+#### Scenario: A feed filter narrows Articles only
+
+- **GIVEN** a lens holding Articles from feeds `Lobsters` and `Hacker News`, plus Changes and Issues
+- **WHEN** the filter is `{ feeds: ['Lobsters'] }`
+- **THEN** only `Lobsters` Articles survive while all Changes and all Issues still pass, and `deriveLensFacets` lists `Lobsters` and `Hacker News` in `feeds`
+
+### Requirement: The lens overview filters items by type and scope
+
+The lens overview page SHALL render a **filter bar** between the lens identity and
+the first section. The bar SHALL offer **type facets** — one toggle per entity
+present in the lens (Changes / Issues / Articles / Other, mapping to the `LensEntity`
+values `change` / `ticket` / `article` / `generic`) — and **scope facets** — the
+distinct host-qualified `change.repo` values (for Changes), `ticket.project` values
+(for Issues), and feed-name values (for Articles). Scope facets SHALL render as toggle
+chips when there are five or fewer of a kind, otherwise as a multi-select listbox
+(`MultiSelect`) that selects any number of scope values at once and, once the facet
+count exceeds the `MultiSelect` search threshold, surfaces an in-popover search box to
+filter the options. The overflow control SHALL NOT reduce the axis to a single
+selectable value. The bar SHALL render only facets that the lens can offer (no Articles
+toggle for a lens with no articles); facet values SHALL be the union of values present
+in the held items and values currently selected, so a selection is never stranded by a
+transient empty fetch. The bar SHALL render only when the lens offers **type facets**
+(more than one entity type); when present, it SHALL show a **clear** control (at the end
+of the type-facet row) only while a filter is active. A lens with a single entity type
+SHALL NOT render the bar — selecting a scope value there SHALL NOT pop a standalone clear
+into view (which reflows the page and reads as a stray control); a scope-only filter is
+cleared via the scope control's own clear (the `Chip` row toggles, or the `MultiSelect`'s
+in-popover Clear). Every overflow scope picker SHALL carry an accessible name — repos,
+projects, **and feeds** (closing the prior gap where the feed picker had none).
+
+Toggling a facet SHALL update the lens filter through the `setLensFilter` command
+(persisted, not page-local), and the overview SHALL re-render the narrowed set via
+`applyLensFilter`. The filter bar SHALL compose existing `ui/` primitives (`Chip` —
+using its shipped `selected`/`onToggle`/`aria-pressed` contract — `MultiSelect`,
+`IconButton`, `Divider`) and SHALL NOT re-roll a toggle chip nor a multi-select listbox
+inline nor override the `Chip` selected token from the feature. Selected facets SHALL
+use the `Chip` selected affordance (which resolves to the lens's owning-Space hue via
+the lens-page token scope) and SHALL hold under reduced-motion and WCAG-AA at every
+Colour-intensity level.
+
+#### Scenario: Type facets render only for present entities
+
+- **GIVEN** a lens with Changes and Issues but no Articles
+- **WHEN** the overview renders
+- **THEN** the bar shows Changes and Issues type facets and no Articles facet
+
+#### Scenario: A type facet narrows the overview
+
+- **GIVEN** a lens showing Changes, Issues, and Articles
+- **WHEN** the user selects the Issues type facet only
+- **THEN** only the Issues section renders and `setLensFilter` is dispatched with `entities: ['ticket']`
+
+#### Scenario: Scope facets render a multi-select past the threshold
+
+- **WHEN** the Changes in a lens span more than five distinct `change.repo` values
+- **THEN** the repo scope facet renders as a `MultiSelect` (a multi-toggle listbox) rather than a chip row, and not as a single-select control
+
+#### Scenario: The overflow scope picker selects multiple values
+
+- **GIVEN** a lens whose Articles span more than five distinct feeds and an empty filter
+- **WHEN** the user opens the feed `MultiSelect` and toggles two feeds on
+- **THEN** `setLensFilter` is dispatched with `feeds` holding both feed values, and the overview narrows to items from either feed
+
+#### Scenario: The overflow scope picker offers search for long lists
+
+- **GIVEN** a feed scope picker whose option count exceeds the `MultiSelect` search threshold
+- **WHEN** the picker opens
+- **THEN** an in-popover search box renders and typing into it narrows the listbox to matching feed names
+
+#### Scenario: The feed overflow picker has an accessible name
+
+- **GIVEN** a lens whose Articles span more than five distinct feeds
+- **WHEN** the feed `MultiSelect` renders
+- **THEN** it exposes an accessible name (`launcher_lensFilterByFeed`), matching the repo and project pickers
+
+#### Scenario: Clearing resets the lens to everything
+
+- **GIVEN** a lens with an active filter
+- **WHEN** the user activates Clear
+- **THEN** `setLensFilter` is dispatched with an empty filter and the overview shows every item again
+
+#### Scenario: A selected value absent from the current fetch stays clearable
+
+- **GIVEN** a persisted filter `repos: ['o/gone']` where `o/gone` is absent from the latest items
+- **WHEN** the bar renders
+- **THEN** an `o/gone` value still renders (selected) so the user can deselect it, and it is not auto-pruned from the persisted filter
+
+### Requirement: The sidebar lens listing honours the active filter
+
+The sidebar lens listing SHALL apply the lens's `filter` (via `applyLensFilter`)
+to each section's merged live + held items **before** the `ENTITY_RANK` sort and
+**before** feed windowing / `maxItems`, so the per-section cap counts only items that
+survive the filter. A lens with an active filter SHALL render a quiet **filtered
+affordance** in its sidebar section (a funnel glyph / muted indicator) so the
+narrowed list reads as intentional rather than as missing data; activating it SHALL
+open the lens overview where the filter is authored. An unfiltered lens SHALL render
+exactly as before this change (no affordance, no narrowing).
+
+#### Scenario: The sidebar shows only matching rows
+
+- **GIVEN** a lens filtered to `entities: ['change'], repos: ['o/a']`
+- **WHEN** the sidebar renders the lens
+- **THEN** only `o/a` Change rows appear; Issues, Articles, and other repos' Changes are absent
+
+#### Scenario: The cap counts only surviving items
+
+- **GIVEN** a feed lens with `maxItems: 5` and a filter that excludes most items
+- **WHEN** the sidebar windows the section
+- **THEN** the cap is applied to the filtered items, not the pre-filter set
+
+#### Scenario: A filtered lens shows the filtered affordance
+
+- **GIVEN** a lens with an active filter
+- **WHEN** the sidebar renders it
+- **THEN** a quiet filtered affordance appears on the section; an unfiltered lens shows none
+
+### Requirement: Setting a lens filter persists through a bus command
+
+The SW SHALL handle a `setLensFilter` command — payload `{ spaceId: SpaceId; folderId: FolderId; filter: LensFilter }` — by setting the resolved lens node's `filter`, persisting, and broadcasting the updated state, mirroring the existing per-lens preference mutation (`setLensHideRead`). An empty filter SHALL clear the field so persisted state stays canonical. The command SHALL be a no-op (or calm error) when the `folderId` does not resolve to a lens.
+
+#### Scenario: Dispatching setLensFilter persists and broadcasts
+
+- **WHEN** `setLensFilter` is dispatched with `filter: { entities: ['ticket'] }` for an existing lens
+- **THEN** the node's `filter` is set, the state is persisted, and the new state is broadcast to all surfaces
+
+#### Scenario: An empty filter clears the field
+
+- **WHEN** `setLensFilter` is dispatched with an empty filter
+- **THEN** the node's `filter` is cleared (absent/empty) and the lens shows everything again
+
+### Requirement: A lens carries an optional article layout
+
+A lens `PinNode` SHALL carry an optional `articleLayout?: 'grid' | 'list'` field
+selecting how the overview's Articles entity section renders its cards. The field
+is **additive and backward-compatible**: an absent `articleLayout` is equivalent
+to `'grid'` (the first-open default, identical to a lens that has never had its
+layout changed). The resolved layout SHALL be `node.articleLayout ?? 'grid'`. The
+field SHALL persist with the rest of the node configuration and round-trip
+losslessly through `reorderPinned` and a SW restart. It is a property of the lens
+(global), not of any window.
+
+#### Scenario: A lens persists its article layout across restart
+
+- **WHEN** the SW boots with a persisted lens whose node carries `articleLayout: 'list'`
+- **THEN** the node is restored with `articleLayout: 'list'` intact and validates under the current-version schema
+
+#### Scenario: An absent layout resolves to grid
+
+- **GIVEN** a lens node with no `articleLayout` field
+- **WHEN** the overview resolves the layout as `node.articleLayout ?? 'grid'`
+- **THEN** the Articles section renders as a grid (today's default behaviour)
+
+### Requirement: Setting a lens article layout persists through a bus command
+
+The SW SHALL handle a `setLensArticleLayout` command — payload
+`{ spaceId: SpaceId; folderId: FolderId; layout: 'grid' | 'list' }` — by setting
+the resolved lens node's `articleLayout`, persisting, and broadcasting the updated
+state, mirroring the existing per-lens preference mutations (`setLensFilter`,
+`setLensHideRead`). The command requires **no refetch** (a layout change touches
+no source). The command SHALL be a no-op (or calm error) when the `folderId` does
+not resolve to a lens.
+
+#### Scenario: Dispatching setLensArticleLayout persists and broadcasts
+
+- **WHEN** `setLensArticleLayout` is dispatched with `layout: 'list'` for an existing lens
+- **THEN** the node's `articleLayout` is set to `'list'`, the state is persisted, the new state is broadcast to all surfaces, and no source refetch is triggered
+
+#### Scenario: An unknown folder is a no-op
+
+- **WHEN** `setLensArticleLayout` is dispatched with a `folderId` that does not resolve to a lens
+- **THEN** no node is changed and the command resolves without error
 ### Requirement: The Bitbucket connector fetches canned queries over the Server and Cloud APIs
 
 The Bitbucket connector (`background/connectors/bitbucket.ts`) SHALL support both
