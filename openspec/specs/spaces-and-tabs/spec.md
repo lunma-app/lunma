@@ -417,14 +417,12 @@ rendering, removal, the right-click menu, and drag).
 row**, laid out like the tab and folder rows — the Space glyph at the favicon column,
 the name at the title column, at row height and title weight, **sentence-case (NOT
 uppercased)**, hue-tinted under the immersive tints (Per-Space colour identity, signal
-3). Its trailing edge carries a **kebab overflow menu** — the SAME `RowMenu` morph the
-folder rows compose: a hover-revealed `⋮` kebab whose
-row morphs in place into an action card sharing one elevated surface (the header is
-transparent while open so it reads as a single card, not a darker bar stacked on the
-actions). The menu SHALL carry a **"New folder"** item whose selection dispatches
-`createFolder { spaceId }`. The header SHALL NOT display a count of pinned bookmarks.
-When no menu items are provided (e.g. the Temporary section header), the trailing edge
-SHALL render nothing and the header SHALL NOT morph.
+3). Its trailing edge carries a **kebab overflow menu** — the SAME `Menu` (`trigger: 'kebab'`) the
+folder rows compose: a hover-revealed `⋮` kebab that opens a floating dropdown
+(`DropdownMenu`, portaled, aligned to the trigger's end edge). The menu SHALL carry a
+**"New folder"** item whose selection dispatches `createFolder { spaceId }`. The header
+SHALL NOT display a count of pinned bookmarks. When no menu items are provided (e.g. the
+Temporary section header), the trailing edge SHALL render nothing (no kebab).
 
 **3. Pinned empty state.** When the active Space has zero pinned bookmarks, the sidebar
 SHALL render a two-line empty-state row: "No pinned tabs yet." + dim sub-line "Drag a tab
@@ -458,7 +456,7 @@ renders the grid's standard empty-state placeholder.)
 #### Scenario: Sidebar mounts with active Space and zero temp tabs → divider + New Tab, no empty copy
 
 - **GIVEN** the sidebar is mounted for window 1 with active Space `work` (0 pinned, 0 temp) and a non-empty `state.faviconRow`
-- **THEN** the rendered DOM SHALL contain, in order: a top search bar, a global favicon grid, a pinned section header showing the Space's icon + name as a row with a trailing kebab overflow menu (the `RowMenu` morph), a pinned empty-state row, a temporary divider, a New Tab row, and a space switcher
+- **THEN** the rendered DOM SHALL contain, in order: a top search bar, a global favicon grid, a pinned section header showing the Space's icon + name as a row with a trailing kebab overflow menu (the `Menu` `trigger: 'kebab'` floating dropdown), a pinned empty-state row, a temporary divider, a New Tab row, and a space switcher
 - **AND** the pinned section header SHALL NOT render a count
 - **AND** SHALL NOT render any "No temporary tabs" empty-state copy
 - **AND** SHALL NOT render the Clear action (no temporary tabs)
@@ -844,11 +842,11 @@ At service-worker boot, after windows are seeded and before listener registratio
 
 ### Requirement: Temporary tabs list rendering and interaction
 
-When the active Space has one or more temporary tabs, the sidebar SHALL render the Temporary section as a list of rows — one `TabRow` per temporary tab in `tempTabIds` array order. Each row SHALL show the tab's favicon (resolved by `faviconFor(url, favIconUrl)` as the **primary** source, with the `_favicon` page-URL endpoint — `faviconUrl(url)` — retried as the **fallback** when the primary fails to load, and a neutral globe icon only when both fail; this staged fallback is provided by the shared `Favicon` primitive that `TabRow` composes), the tab's `title`, a hover-revealed **close (`✕`)** button in the row's trailing slot, and a **right-click action menu** — the SAME interaction the global favicon tiles use: a floating `ContextMenu` popover anchored at the pointer, opened on a `contextmenu` event. There SHALL be no on-row kebab and no morph drawer. The row for the window's active tab SHALL render with the active treatment defined in the sidebar shell's colour identity.
+When the active Space has one or more temporary tabs, the sidebar SHALL render the Temporary section as a list of rows — one `TabRow` per temporary tab in `tempTabIds` array order. Each row SHALL show the tab's favicon (resolved by `faviconFor(url, favIconUrl)` as the **primary** source, with the `_favicon` page-URL endpoint — `faviconUrl(url)` — retried as the **fallback** when the primary fails to load, and a neutral globe icon only when both fail; this staged fallback is provided by the shared `Favicon` primitive that `TabRow` composes), the tab's `title`, a hover-revealed **close (`✕`)** button in the row's trailing slot, and a **right-click action menu** — the SAME interaction the global favicon tiles use: a floating `Menu` (`trigger: 'context'`) popover anchored at the pointer, opened on a `contextmenu` event. There SHALL be no on-row kebab menu. The row for the window's active tab SHALL render with the active treatment defined in the sidebar shell's colour identity.
 
 A **home tab** SHALL NEVER appear in this list — home tabs are not added to `tempTabIds` (see "Home tabs are not listed as temporary tabs"), so an empty Space showing only its home renders no temporary rows (the divider + New Tab affordance from the sidebar shell remain).
 
-Clicking a row SHALL dispatch `bus.send({ kind: 'focusTab', payload: { tabId } })`. The hover-revealed `✕` SHALL close the tab directly — dispatching `bus.send({ kind: 'closeTab', payload: { tabId } })` — and SHALL NOT also trigger the row's focus or start a drag (it stops pointer/click propagation); this restores the one-click inline close (reversing the favicon-row change that had folded close into the overflow menu). Right-clicking a row SHALL open the action menu at the cursor, suppressing the browser's native context menu, and SHALL NOT focus or switch to the tab. The right-click menu SHALL carry, top to bottom: a non-destructive **Favorite** action that dispatches `bus.send({ kind: 'favoriteTab', payload: { tabId, windowId } })` and leaves the tab open (see the `lunma-bookmark-bindings` capability, Requirement: Couple and decouple favorites by direct manipulation); a **Rename** action that opens the row's inline rename; **Move up** and **Move down** actions that reorder the row one position within the Temporary list — dispatching `reorderTemp` carrying the full post-move `tabIds` order — each rendered disabled (the standard disabled treatment, not hidden) when the row is already at that end of the list, so reordering is reachable from the keyboard (the context-menu key / `Shift+F10` opens this menu) and from touch long-press; and a **Close tab** action that dispatches `bus.send({ kind: 'closeTab', payload: { tabId } })` and SHALL NOT also trigger the row's focus. A single `ContextMenu` instance SHALL be shared across the Temporary list, opened for whichever row was right-clicked. A drag that begins on a temporary row and ends without crossing into the Pinned section SHALL be treated as a reorder within Temporary (dispatching `reorderTemp`); a drag that ends inside the Pinned section SHALL pin the tab (dispatching `pinTab`). A pointer interaction that does not pass the drag threshold SHALL remain a click, not a drag; a secondary (right) button press SHALL NOT start a drag. The sidebar SHALL NOT optimistically update — it SHALL wait for the next `state-broadcast`. Rows SHALL be keyed by `tabId`. The Temporary list SHALL only render tabs present in `liveTabsById`; a `tempTabId` with no `liveTabsById` entry SHALL be skipped rather than rendered blank.
+Clicking a row SHALL dispatch `bus.send({ kind: 'focusTab', payload: { tabId } })`. The hover-revealed `✕` SHALL close the tab directly — dispatching `bus.send({ kind: 'closeTab', payload: { tabId } })` — and SHALL NOT also trigger the row's focus or start a drag (it stops pointer/click propagation); this restores the one-click inline close (reversing the favicon-row change that had folded close into the overflow menu). Right-clicking a row SHALL open the action menu at the cursor, suppressing the browser's native context menu, and SHALL NOT focus or switch to the tab. The right-click menu SHALL carry, top to bottom: a non-destructive **Favorite** action that dispatches `bus.send({ kind: 'favoriteTab', payload: { tabId, windowId } })` and leaves the tab open (see the `lunma-bookmark-bindings` capability, Requirement: Couple and decouple favorites by direct manipulation); a **Rename** action that opens the row's inline rename; **Move up** and **Move down** actions that reorder the row one position within the Temporary list — dispatching `reorderTemp` carrying the full post-move `tabIds` order — each rendered disabled (the standard disabled treatment, not hidden) when the row is already at that end of the list, so reordering is reachable from the keyboard (the context-menu key / `Shift+F10` opens this menu) and from touch long-press; and a **Close tab** action that dispatches `bus.send({ kind: 'closeTab', payload: { tabId } })` and SHALL NOT also trigger the row's focus. A single `Menu` (`trigger: 'context'`) instance SHALL be shared across the Temporary list, opened for whichever row was right-clicked. A drag that begins on a temporary row and ends without crossing into the Pinned section SHALL be treated as a reorder within Temporary (dispatching `reorderTemp`); a drag that ends inside the Pinned section SHALL pin the tab (dispatching `pinTab`). A pointer interaction that does not pass the drag threshold SHALL remain a click, not a drag; a secondary (right) button press SHALL NOT start a drag. The sidebar SHALL NOT optimistically update — it SHALL wait for the next `state-broadcast`. Rows SHALL be keyed by `tabId`. The Temporary list SHALL only render tabs present in `liveTabsById`; a `tempTabId` with no `liveTabsById` entry SHALL be skipped rather than rendered blank.
 
 #### Scenario: Active Space with temp tabs renders a row list
 
@@ -1612,7 +1610,7 @@ a folder: no state change, and the node animates back to its origin.
 ### Requirement: Create a pinned-tab folder
 
 The sidebar SHALL let the user create a folder in the active Space's
-pinned section, by a **"New folder" item in the pinned-header kebab overflow menu** (the `RowMenu` morph), by dragging one pinned
+pinned section, by a **"New folder" item in the pinned-header kebab overflow menu** (the `Menu` `trigger: 'kebab'` floating dropdown), by dragging one pinned
 tab onto another, or by dragging a temporary tab onto a pinned tab. A
 newly created folder is named "New Folder" and, for EVERY creation path,
 the user is placed into an inline rename field on the new folder so it can
@@ -1679,59 +1677,79 @@ A folder node SHALL carry a `name`, an `icon` (an `IconName`), and a
 `color` (a Space colour identifier). The sidebar SHALL let the user
 edit all three, persisting them to the folder node.
 
-Folder edit actions SHALL be presented through the **same in-place row-morph menu
-used for tab actions** (a shared row-morph primitive), NOT a separate floating
-dropdown. A kebab trigger on the folder row SHALL morph the row open in place into
-an action drawer offering **Rename**, **Icon & colour**, **Move up**, **Move down**,
-and **Delete folder**. Rename SHALL edit the name in place; **Icon & colour** SHALL
-reveal an inline colour-swatch row and icon picker WITHIN the morph (a keep-open
-action that grows the drawer), not a panel rendered elsewhere. **Move up** and
-**Move down** SHALL reorder the folder one position within the top-level pinned
-list, dispatching `reorderPinned` carrying the full post-move node order; each SHALL
-render disabled (the standard disabled treatment, not hidden) when the folder is
-already at that end of the list, so folder reordering is reachable without a pointer
-drag. **Delete folder** SHALL remove the folder (spilling its children per the
-Folder lifecycle requirement) as a **two-step confirm**: the first activation SHALL
-arm the entry into a danger-treated confirm affordance and keep the drawer open
-without dispatching; only a second activation SHALL dispatch `deleteFolder` and
-close the drawer. Closing the drawer, pressing `Escape`, or activating any other
-entry SHALL disarm without deleting. The morph's motion, dismissal (outside-click /
-`Escape`), and roving keyboard focus SHALL match the tab action menu.
+Folder edit actions SHALL be presented through the folder row's **kebab
+overflow menu — a floating dropdown** (the shared `Menu` primitive,
+`trigger: 'kebab'`; `DropdownMenu`, portaled, aligned to the trigger's end
+edge), hover/focus-revealed in the row's trailing slot. The built-in menu SHALL
+offer, top to bottom: **Edit**, **Move up**, **Move down**, and **Delete
+folder**. (A caller MAY replace this list wholesale via a `menuItems` override —
+e.g. a smart folder whose actions are not folder-shaped.)
 
-#### Scenario: Folder editing morphs in place like a tab
+**Edit** SHALL open a **`BottomSheet`** titled "Edit folder" (portaled to the
+host's `portalTo` target — `".sidebar"` in the sidebar, so it slides from the
+panel's bottom) containing, in order: a **Name** text field (seeded with the
+current name, autofocused), an inline **colour-swatch radiogroup** over the
+provided palette, and an **icon picker**; with **Cancel** and **Save** actions
+where Save is disabled while the name is blank. Picking a swatch SHALL set the
+folder `color` and picking an icon SHALL set the folder `icon` (each persisted);
+committing the name (Save or Enter) SHALL persist the name and close the sheet;
+Cancel / scrim / `Escape` SHALL close without committing the name. For a smart
+folder the host MAY forward its own editor (a `panel` snippet + `panelTitle`),
+which FolderRow renders in the SAME `BottomSheet` in place of the built-in body,
+dismissing via `onPanelBack`.
+
+The folder name SHALL ALSO be editable **in place**: when the row is put into
+rename mode the name becomes an inline chromeless field (the `EditableLabel`
+primitive) within the row, committing on Enter/blur (non-empty) and abandoning on
+`Escape`/empty.
+
+**Move up** and **Move down** SHALL reorder the folder one position within the
+top-level pinned list, dispatching `reorderPinned` carrying the full post-move
+node order; each SHALL render disabled (the standard disabled treatment, not
+hidden) when the folder is already at that end of the list, so folder reordering
+is reachable without a pointer drag. **Delete folder** SHALL remove the folder
+(spilling its children per the Folder lifecycle requirement) as a **two-step
+confirm**: the first activation SHALL arm the entry into a danger-treated
+"Delete folder — confirm" affordance and keep the **dropdown** open without
+dispatching; only a second activation SHALL dispatch `deleteFolder` and close the
+dropdown. Closing the dropdown (outside-click / `Escape`) SHALL disarm without
+deleting. The dropdown's motion, dismissal, and roving keyboard focus SHALL match
+the tab action menu.
+
+#### Scenario: Folder editing opens a dropdown, and Edit opens a sheet
 
 - **WHEN** the user activates a folder row's kebab trigger
-- **THEN** the folder row SHALL morph open in place into an action drawer (the same row-morph as tab actions)
-- **AND** the drawer SHALL offer Rename, Icon & colour, Move up, Move down, and Delete folder
+- **THEN** a floating dropdown SHALL open offering Edit, Move up, Move down, and Delete folder
+- **AND WHEN** the user selects **Edit**
+- **THEN** a "Edit folder" `BottomSheet` SHALL open with a Name field, a colour-swatch radiogroup, and an icon picker
 
 #### Scenario: Rename a folder
 
-- **WHEN** the user edits a folder's name and commits
+- **WHEN** the user edits a folder's name (in the Edit sheet's Name field, or via the inline rename field) and commits
 - **THEN** the folder node's `name` updates and persists
 
-#### Scenario: Change folder icon or colour inline
+#### Scenario: Change folder icon or colour
 
-- **WHEN** the user picks "Icon & colour" in the folder morph
-- **THEN** an inline colour-swatch row and icon picker SHALL appear within the morph
-- **AND** picking a new icon or colour SHALL update and persist the folder node's `icon` / `color`
+- **WHEN** the user opens **Edit** and picks a new colour swatch or icon in the sheet
+- **THEN** the folder node's `color` / `icon` SHALL update and persist
 - **AND** the folder row SHALL reflect the new icon/colour
 
 #### Scenario: Delete folder is a two-step confirm
 
-- **WHEN** the user activates **Delete folder** in a folder row's drawer
-- **THEN** the drawer SHALL stay open and the entry SHALL become a danger-treated confirm affordance, with no `deleteFolder` dispatched
+- **WHEN** the user activates **Delete folder** in a folder row's dropdown
+- **THEN** the dropdown SHALL stay open and the entry SHALL become a danger-treated "Delete folder — confirm" affordance, with no `deleteFolder` dispatched
 - **AND WHEN** the user activates the armed entry again
 - **THEN** `deleteFolder` SHALL be dispatched for that folder (its children spilling per the Folder lifecycle requirement)
 
 #### Scenario: Dismissal disarms Delete folder without deleting
 
-- **WHEN** the user has armed **Delete folder** and then closes the drawer or presses `Escape`
+- **WHEN** the user has armed **Delete folder** and then closes the dropdown or presses `Escape`
 - **THEN** no `deleteFolder` SHALL be dispatched and the entry SHALL be unarmed on the next open
 
 #### Scenario: Move down reorders the folder by one
 
 - **GIVEN** a folder that is the first of three top-level pinned nodes
-- **WHEN** the user activates its drawer's **Move down**
+- **WHEN** the user activates its dropdown's **Move down**
 - **THEN** the sidebar SHALL dispatch `reorderPinned` carrying the node order with that folder in the second slot
 
 ### Requirement: Folder expand/collapse is per-window and ephemeral
