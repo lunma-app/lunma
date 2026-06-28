@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "types": ["chrome", "node", "vite/client"]
+  },
+  "include": ["catalog/**/*.ts", "catalog/**/*.svelte", "vite.catalog.config.ts"],
+  "exclude": ["node_modules", "dist", ".devbox"]
+}

@@ -1,0 +1,83 @@
+<script module lang="ts">
+import { defineStory } from '../../lib/story';
+
+export const meta = defineStory({
+  title: 'ResultRow',
+  group: 'Composite',
+  controls: {
+    title: {
+      type: 'text',
+      default: 'svelte/svelte · Pull Request #14201',
+      description: 'Result title.',
+    },
+    url: {
+      type: 'text',
+      default: 'https://github.com/sveltejs/svelte/pull/14201',
+      description: 'Result URL (dimmed).',
+    },
+    source: {
+      type: 'select',
+      options: ['tab', 'saved', 'lens', 'bookmark', 'history', 'websearch', 'navigate'],
+      default: 'tab',
+      typeLabel: 'ResultSource',
+      description: 'Provider (drives the badge).',
+    },
+    selected: { type: 'boolean', default: false, description: 'Roving keyboard selection.' },
+    alreadyOpen: { type: 'boolean', default: false, description: 'Tab-dedup "already open" line.' },
+  },
+});
+</script>
+
+<script lang="ts">
+import type { ResultSource } from '@/shared/launcher-contract';
+import ResultRow from '@/ui/ResultRow.svelte';
+import type { Args } from '../../lib/controls';
+import { favicon, noop } from '../../lib/mock';
+import Story from '../../lib/Story.svelte';
+import Variant from '../../lib/Variant.svelte';
+
+const { source }: { source: string } = $props();
+</script>
+
+<Story {meta} {source}>
+  {#snippet preview(args: Args)}
+    <div style="width: 22rem">
+      <ResultRow
+        title={args.title as string}
+        url={args.url as string}
+        source={args.source as ResultSource}
+        faviconSrc={favicon('github.com')}
+        selected={args.selected as boolean}
+        alreadyOpen={args.alreadyOpen as boolean}
+        onclick={noop}
+      />
+    </div>
+  {/snippet}
+  {#snippet examples()}
+    <Variant label="tab">
+      <div style="width: 22rem">
+        <ResultRow title="svelte/svelte · Pull Request #14201" url="https://github.com/sveltejs/svelte/pull/14201" source="tab" faviconSrc={favicon('github.com')} onclick={noop} />
+      </div>
+    </Variant>
+    <Variant label="selected (roving)">
+      <div style="width: 22rem">
+        <ResultRow title="Immersive shell — Figma" url="https://figma.com/file/abc" source="saved" faviconSrc={favicon('figma.com')} selected onclick={noop} />
+      </div>
+    </Variant>
+    <Variant label="already open">
+      <div style="width: 22rem">
+        <ResultRow title="OKLCH colour picker" url="https://oklch.com" source="bookmark" faviconSrc={favicon('oklch.com')} alreadyOpen onclick={noop} />
+      </div>
+    </Variant>
+    <Variant label="cross-Space marker">
+      <div style="width: 22rem">
+        <ResultRow title="Reading list — Longform" url="https://longform.org" source="saved" faviconSrc={favicon('longform.org')} spaceName="Reading" spaceColor="oklch(0.73 0.16 55)" onclick={noop} />
+      </div>
+    </Variant>
+    <Variant label="websearch action">
+      <div style="width: 22rem">
+        <ResultRow title={'Search DuckDuckGo for "svelte 5 runes"'} url="https://duckduckgo.com/?q=svelte+5+runes" source="websearch" onclick={noop} />
+      </div>
+    </Variant>
+  {/snippet}
+</Story>
