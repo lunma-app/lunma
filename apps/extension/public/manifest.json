@@ -1,9 +1,10 @@
 {
   "manifest_version": 3,
+  "default_locale": "en",
   "name": "Lunma",
   "short_name": "Lunma",
   "version": "0.3.1",
-  "description": "Vertical tabs and per-project Spaces for Chrome, with smart folders and a quick launcher.",
+  "description": "__MSG_extDescription__",
   "minimum_chrome_version": "123",
   "permissions": [
     "tabs",
@@ -80,7 +81,7 @@
     "128": "icons/icon-128.png"
   },
   "action": {
-    "default_title": "Open Lunma sidebar",
+    "default_title": "__MSG_actionDefaultTitle__",
     "default_icon": {
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png",
@@ -93,14 +94,14 @@
         "default": "Alt+P",
         "mac": "Alt+D"
       },
-      "description": "Pin the active tab to the current Space"
+      "description": "__MSG_commandPinActiveTab__"
     },
     "toggle-launcher": {
       "suggested_key": {
         "default": "Alt+L",
         "mac": "Alt+L"
       },
-      "description": "Toggle the Lunma launcher overlay"
+      "description": "__MSG_commandToggleLauncher__"
     }
   },
   "options_ui": {

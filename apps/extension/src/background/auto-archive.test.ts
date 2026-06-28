@@ -16,6 +16,7 @@ import {
 
 function settings(over: Partial<Settings> = {}): Settings {
   return {
+    language: 'auto',
     density: 'normal',
     tint: 'vivid',
     theme: 'dark',

@@ -1,6 +1,7 @@
 import { copyFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { crx } from '@crxjs/vite-plugin';
+import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig } from 'vitest/config';
 import manifest from './public/manifest.json' with { type: 'json' };
@@ -25,7 +26,24 @@ const aliases = {
 };
 
 export default defineConfig(({ mode }) => ({
-  plugins: [svelte(), crx({ manifest })],
+  plugins: [
+    // Compile the inlang messages to `src/shared/paraglide` before Svelte/crx
+    // process the bundle. `strategy` + `emitGitIgnore: false` mirror the
+    // `gen:i18n` CLI flags so this re-emit stays byte-identical to the committed
+    // runtime (no git drift). The SW-safe strategy chain is `custom-lunmaSettings`
+    // (backed by the Settings store, see shared/i18n.ts) then `baseLocale`.
+    paraglideVitePlugin({
+      project: './project.inlang',
+      outdir: './src/shared/paraglide',
+      strategy: ['custom-lunmaSettings', 'baseLocale'],
+      emitGitIgnore: false,
+      // Emit .d.ts so standalone tsc / svelte-check (run outside Vite) see the
+      // runtime's types — the committed-runtime rationale in design D2.
+      emitTsDeclarations: true,
+    }),
+    svelte(),
+    crx({ manifest }),
+  ],
   // Svelte 5 + @testing-library/svelte: resolve the browser entry so mount()
   // works in jsdom tests. Outside of tests, vite picks the right condition
   // automatically.

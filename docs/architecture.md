@@ -23,8 +23,9 @@ lunma/                              # pnpm workspace root (private)
 ├─ apps/
 │  ├─ extension/                    # the Chrome MV3 extension — @lunma/extension
 │  │  ├─ src/
-│  │  │  ├─ shared/                 # cross-surface: types · schemas (+migrations) · store.svelte.ts · messages · settings · onboarding · logger · lens-filter.ts
-│  │  │  │  └─ chrome/              # thin typed wrappers over chrome.* APIs
+│  │  │  ├─ shared/                 # cross-surface: types · schemas (+migrations) · store.svelte.ts · messages · settings · onboarding · logger · lens-filter.ts · i18n.ts (SW-safe locale resolver)
+│  │  │  │  ├─ chrome/              # thin typed wrappers over chrome.* APIs
+│  │  │  │  └─ paraglide/           # generated Paraglide runtime (committed, Biome-excluded; `pnpm gen:i18n`)
 │  │  │  ├─ ui/                     # cross-surface primitives (build primitives, compose features)
 │  │  │  │  ├─ Button.svelte        # …+ Icon · Tooltip · Stack · Kbd · SegmentedControl · TabRow · RowMenu · ContextMenu
 │  │  │  │  ├─ SettingsCard.svelte  # …+ CardHeading · SettingText · InlineError (the shared options-card chrome)
@@ -40,7 +41,10 @@ lunma/                              # pnpm workspace root (private)
 │  │  │  │  └─ shared/              # SearchEngine, scoring, providers, result/query types
 │  │  │  ├─ content/               # second declarative content script (tab-boundary.ts)
 │  │  │  └─ options/               # Options.svelte (orchestrator) · BackupRestore · ConnectionsCard (Accounts + Feeds, one manager) · RecentlyArchived · ResultSourcesCard · ShortcutGuidanceCard · main.ts
+│  │  ├─ project.inlang/            # inlang project: baseLocale + locales + message-format plugin (single source of the locale set)
+│  │  ├─ messages/                  # Paraglide message catalogs {locale}.json (en = source of truth); outside src/, read-at-runtime
 │  │  ├─ public/manifest.json       # MV3 manifest — crxjs derives build entries from it (+ vite rollupOptions.input for lenspage)
+│  │  ├─ public/_locales/           # native chrome.i18n catalogs {locale}/messages.json for the manifest / store listing (underscore locale codes)
 │  │  ├─ e2e/                       # Playwright specs + fixtures (playwright.config.ts in apps/extension)
 │  │  │                             # unit tests are co-located: src/**/*.test.ts (no top-level tests/)
 │  │  ├─ vite.config.ts · svelte.config.js · tsconfig.json · stylelint.config.js · vitest.setup.ts
@@ -685,6 +689,54 @@ reference live in the shared `@lunma/tokens` package
 components compose primitives; they do not re-roll buttons or tooltips inline.
 Neutral tokens are OKLCH expressions parameterised by a `--base-hue` custom
 property, the foundation for a future user-customisable base colour.
+
+## Internationalization (i18n)
+
+Lunma localizes its UI with `@inlang/paraglide-js` (a *compiler*-based i18n
+library — see [tech-stack](tech-stack.md)) and the native `chrome.i18n`
+mechanism for the manifest. Two independent catalogs, one resolver.
+
+**Message catalog + generated runtime.** UI strings live in per-locale
+`apps/extension/messages/{locale}.json` (`en` is the source of truth), *outside*
+`src/` so they stay out of the TypeScript/Biome/Stylelint globs. `pnpm gen:i18n`
+(`paraglide-js compile`, prepended to `dev`/`build` like `gen:icons`) compiles
+them into `apps/extension/src/shared/paraglide/` — **committed and
+Biome-excluded**, mirroring the `src/ui/icon-loaders.generated.ts` precedent so
+standalone `tsc`/`svelte-check` (which run outside Vite) see its `.d.ts`. Living
+under `shared/`, the generated runtime imports nothing from other layers, so the
+import DAG stays legal. The supported-locale *set* exists once in
+`project.inlang/settings.json` and flows to the generated `locales` constant,
+from which `SupportedLocale` (in `shared/settings.ts`) derives — a `shared →
+shared` edge, no cycle; a parity test (`src/i18n-locale-set.test.ts`) asserts the
+three never drift.
+
+**The SW-safe locale resolver (`shared/i18n.ts`).** This module is the single
+source of truth for locale *state*; surfaces never call the generated runtime's
+locale APIs directly. Paraglide's `getLocale()` is synchronous, but Lunma's
+source of truth — the `language` setting in `chrome.storage.sync` — is async.
+The bridge is a custom Paraglide strategy `custom-lunmaSettings` (registered at
+module load, strategy array `['custom-lunmaSettings', 'baseLocale']` **only**)
+whose synchronous `getLocale()` returns an in-memory `cached` locale that
+`initLocale()` seeds — awaiting the settings read — inside each surface's
+pre-`mount()` boot (sidebar/new-tab already have one; `options/main.ts` was
+restructured into an async boot for this). The default `url`/`cookie`/
+`localStorage` strategies touch `window`/`document`/`localStorage` and would
+throw in the service worker, so they are deliberately excluded; the resolver uses
+only `chrome.i18n.getUILanguage()` / `navigator.language` (both SW-safe). The
+`language` setting defaults to `'auto'`, resolved to the nearest supported locale
+(`pt-BR → pt-PT`, `zh-TW → zh-CN`, …, `en` as terminal fallback) on first run.
+Changing the language persists via `setLocale` (`{ reload: false }`) and each
+surface's `watchSettings` callback reloads **only on a `language` delta** — every
+other setting keeps applying live, as before.
+
+**Native manifest / store-listing localization.** A library cannot localize the
+manifest, so `public/manifest.json` declares `default_locale: "en"` and
+references `description`, `action.default_title`, and the two command
+descriptions as `__MSG_*__` placeholders, resolved from
+`public/_locales/{locale}/messages.json` (Chrome uses underscore locale codes —
+`pt_PT`, `zh_CN`). crxjs passes `public/` through verbatim. Brand `name` /
+`short_name` ("Lunma") stay literal. A parity test (`src/i18n-parity.test.ts`)
+guards both the Paraglide and `_locales` catalogs for key-completeness.
 
 ## Storage schema and migrations
 
