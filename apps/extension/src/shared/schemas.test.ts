@@ -5,6 +5,8 @@ import {
   AppStateV12Schema,
   AppStateV13Schema,
   AppStateV14Schema,
+  AppStateV16Schema,
+  AppStateV17Schema,
   CURRENT_SCHEMA_VERSION,
   EnvelopeSchema,
 } from './schemas';
@@ -242,8 +244,62 @@ describe('lens-view-filters schema (v14)', () => {
     expect(result.success).toBe(false);
   });
 
-  test('CURRENT_SCHEMA_VERSION is 16', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(16);
+  test('CURRENT_SCHEMA_VERSION is 17', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(17);
+  });
+});
+
+// persist-lens-article-layout (v17): the lens node gains an optional
+// `articleLayout?: 'grid' | 'list'`. Regression guard: the CURRENT schema
+// (AppStateV17Schema — what storage/messages/backup validate against) MUST accept
+// an `articleLayout`-bearing state, or the sidebar's snapshot validation rejects
+// every state written by current code.
+describe('persist-lens-article-layout schema (v17)', () => {
+  function stateWithLayout(articleLayout?: unknown) {
+    const base = createInitialState() as unknown as Record<string, unknown>;
+    const accId = 'acc-gh';
+    base.sources = { [accId]: { id: accId, provider: 'github', baseUrl: 'https://github.com' } };
+    base.spaces = [{ id: 's1', name: 'Work', color: 'blue', icon: 'star' }];
+    const node: Record<string, unknown> = {
+      kind: 'lens',
+      lensKind: 'general',
+      id: 'f1',
+      name: 'My PRs',
+      icon: 'folder-git-2',
+      sources: [{ sourceId: accId, queries: ['authored'] }],
+      maxItems: 20,
+      hideRead: true,
+      refreshMinutes: 10,
+    };
+    if (articleLayout !== undefined) node.articleLayout = articleLayout;
+    base.pinnedBySpace = { s1: [node] };
+    return base;
+  }
+
+  test('a lens carrying articleLayout round-trips under the current schema (v17)', () => {
+    const result = AppStateV17Schema.safeParse(stateWithLayout('list'));
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const node = result.data.pinnedBySpace.s1?.[0];
+      expect(node?.kind === 'lens' && node.articleLayout).toBe('list');
+    }
+  });
+
+  test('a lens without articleLayout (pre-v17 shape) validates under v17', () => {
+    expect(AppStateV17Schema.safeParse(stateWithLayout()).success).toBe(true);
+  });
+
+  test('an unknown articleLayout value rejects under v17', () => {
+    expect(AppStateV17Schema.safeParse(stateWithLayout('masonry')).success).toBe(false);
+  });
+
+  test('the frozen v16 schema rejects a lens node carrying articleLayout (downgrade detectable)', () => {
+    expect(AppStateV16Schema.safeParse(stateWithLayout('grid')).success).toBe(false);
+  });
+
+  test('the EnvelopeSchema (state = v17) accepts an articleLayout-bearing state', () => {
+    const env = { schemaVersion: CURRENT_SCHEMA_VERSION, state: stateWithLayout('grid') };
+    expect(EnvelopeSchema.safeParse(env).success).toBe(true);
   });
 });
 

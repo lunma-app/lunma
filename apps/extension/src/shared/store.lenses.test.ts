@@ -336,6 +336,23 @@ describe('feed read-state (rss-connector design D3)', () => {
     expect(store.state.pinnedBySpace.work?.[0]).not.toMatchObject({ filter: expect.anything() });
   });
 
+  test('setLensArticleLayout sets the layout on the lens node', () => {
+    store.addLens('work', feedNode());
+    store.setLensArticleLayout('feed-1', 'list');
+    expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({ articleLayout: 'list' });
+    // …and switching back to grid overwrites (no clear case).
+    store.setLensArticleLayout('feed-1', 'grid');
+    expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({ articleLayout: 'grid' });
+  });
+
+  test('setLensArticleLayout with unknown folderId is a no-op', () => {
+    store.addLens('work', feedNode());
+    store.setLensArticleLayout('nonexistent', 'list');
+    expect(store.state.pinnedBySpace.work?.[0]).not.toMatchObject({
+      articleLayout: expect.anything(),
+    });
+  });
+
   test('pruneLensReadState drops read ids absent from the live window (18 → 12 live → 6 dropped)', () => {
     const sk = 'acc-rss-news';
     const all = Array.from({ length: 18 }, (_, i) => `${sk}:item-${i}`);

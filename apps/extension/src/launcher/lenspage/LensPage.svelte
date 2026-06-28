@@ -154,6 +154,14 @@ function setFilter(filter: LensFilter): void {
     payload: { spaceId: located.spaceId, folderId: node.id, filter },
   });
 }
+
+function setArticleLayout(layout: 'grid' | 'list'): void {
+  if (!located || !node) return;
+  dispatch({
+    kind: 'setLensArticleLayout',
+    payload: { spaceId: located.spaceId, folderId: node.id, layout },
+  });
+}
 </script>
 
 <svelte:head>
@@ -184,7 +192,7 @@ function setFilter(filter: LensFilter): void {
         </p>
       </section>
     {:else}
-      <OverviewPage {node} {tagged} {facets} {lensSub} {readSet} {openItem} {toggleRead} {setFilter} />
+      <OverviewPage {node} {tagged} {facets} {lensSub} {readSet} {openItem} {toggleRead} {setFilter} {setArticleLayout} />
     {/if}
   </main>
 </div>

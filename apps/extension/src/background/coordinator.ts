@@ -149,6 +149,7 @@ export const EventPolicy: Record<PendingEventKind, EventPolicyEntry> = {
   markAllLensItemsRead: {},
   setLensHideRead: {},
   setLensFilter: {},
+  setLensArticleLayout: {},
   openLensListing: {},
   // Per-click distinct (smart-folder-page): a re-click of an already-open folder
   // page is the cheap focus path, so coalescing buys nothing.

@@ -31,7 +31,7 @@ import type { AppState, BackupEnvelope, SpaceColor } from './types';
 // `sources` from embedded `LensSource[]` to `LensSourceRef[]` references — a REAL
 // transformation that extracts the embedded `(provider, baseUrl)` pairs into
 // first-class accounts. Each bump is deliberate: it makes a downgrade detectable.
-export const CURRENT_SCHEMA_VERSION = 16;
+export const CURRENT_SCHEMA_VERSION = 17;
 
 const SpaceInstanceSchema = z.strictObject({
   spaceId: z.string(),
@@ -236,6 +236,37 @@ export const PinNodeSchema = z.discriminatedUnion('kind', [
     hideRead: z.boolean().default(true),
     refreshMinutes: z.number(),
     // Optional view filter (lens-view-filters, v14).
+    filter: LensFilterSchema.optional(),
+    // Optional Articles-section layout (persist-lens-article-layout, v17). Absent
+    // resolves to `'grid'` (the first-open default).
+    articleLayout: z.enum(['grid', 'list']).optional(),
+  }),
+]);
+
+// Historical (v14–v16) pinned-tab node: identical to the current `PinNodeSchema`
+// except the lens branch has no `articleLayout` field. Frozen so pre-v17 envelopes
+// (or v16-migration output) validate exactly as they did before
+// persist-lens-article-layout added the optional layout.
+const PinNodeV16Schema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('tab'), id: z.string() }),
+  z.strictObject({
+    kind: z.literal('folder'),
+    id: z.string(),
+    name: z.string(),
+    icon: z.string(),
+    color: z.string(),
+    children: z.array(z.string()),
+  }),
+  z.strictObject({
+    kind: z.literal('lens'),
+    id: z.string(),
+    name: z.string(),
+    icon: z.string(),
+    lensKind: z.enum(['general', 'review']),
+    sources: z.array(LensSourceRefSchema).min(1),
+    maxItems: z.number().default(20),
+    hideRead: z.boolean().default(true),
+    refreshMinutes: z.number(),
     filter: LensFilterSchema.optional(),
   }),
 ]);
@@ -688,7 +719,7 @@ export const AppStateV14Schema = z.strictObject({
   tabLastActivity: z.record(z.coerce.number(), z.number()),
   archivedTabs: z.array(ArchivedTabSchema),
   trash: z.record(z.string(), TrashedSpaceSchema),
-  pinnedBySpace: z.record(z.string(), z.array(PinNodeSchema)),
+  pinnedBySpace: z.record(z.string(), z.array(PinNodeV16Schema)),
   liveTabsById: z.record(z.coerce.number(), LiveTabSchema).default({}),
   faviconRow: z.array(z.string()),
   lensItemBindings: LensItemBindingsSchema.default({}),
@@ -719,9 +750,22 @@ export const AppStateV15Schema = AppStateV14Schema;
  */
 export const AppStateV16Schema = AppStateV15Schema;
 
+/**
+ * v17 (persist-lens-article-layout): the v16 schema with the lens node's optional
+ * `articleLayout?: 'grid' | 'list'` field added (via the current `PinNodeSchema`;
+ * v14–v16 stay frozen at `PinNodeV16Schema`, which lacks it). Fully additive —
+ * pre-v17 nodes simply lack `articleLayout` and remain valid (resolving to the
+ * `grid` default); the v17 migration is an identity pass-through. This is the
+ * CURRENT-version schema — the migration runner validates against it.
+ */
+export const AppStateV17Schema = z.strictObject({
+  ...AppStateV14Schema.shape,
+  pinnedBySpace: z.record(z.string(), z.array(PinNodeSchema)),
+});
+
 export const EnvelopeSchema = z.strictObject({
   schemaVersion: z.number(),
-  state: AppStateV16Schema,
+  state: AppStateV17Schema,
 });
 
 export type AppStateV6 = z.infer<typeof AppStateV6Schema>;
@@ -734,12 +778,13 @@ export type AppStateV13 = z.infer<typeof AppStateV13Schema>;
 export type AppStateV14 = z.infer<typeof AppStateV14Schema>;
 export type AppStateV15 = z.infer<typeof AppStateV15Schema>;
 export type AppStateV16 = z.infer<typeof AppStateV16Schema>;
+export type AppStateV17 = z.infer<typeof AppStateV17Schema>;
 export type Envelope = z.infer<typeof EnvelopeSchema>;
 
 type AssertEqual<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
-const _schemaMatchesAppState: AssertEqual<AppStateV16, AppState> = true;
+const _schemaMatchesAppState: AssertEqual<AppStateV17, AppState> = true;
 void _schemaMatchesAppState;
 
 // ── Data-backup: BackupEnvelopeSchema ────────────────────────────────────────

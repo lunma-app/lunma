@@ -54,9 +54,21 @@ interface Props {
   toggleRead: (t: Tagged, makeRead: boolean) => void;
   /** Dispatch setLensFilter (wired by LensPage). */
   setFilter: (filter: LensFilter) => void;
+  /** Dispatch setLensArticleLayout (wired by LensPage). */
+  setArticleLayout: (layout: 'grid' | 'list') => void;
 }
 
-const { node, tagged, facets, lensSub, readSet, openItem, toggleRead, setFilter }: Props = $props();
+const {
+  node,
+  tagged,
+  facets,
+  lensSub,
+  readSet,
+  openItem,
+  toggleRead,
+  setFilter,
+  setArticleLayout,
+}: Props = $props();
 
 const lensLetter = $derived((node.name.trim()[0] ?? '·').toUpperCase());
 const filter = $derived(node.filter ?? {});
@@ -143,9 +155,11 @@ const changeGroups = $derived(groupByRelation(changes));
 // Issues: status groups (todo / in-progress / done).
 const issueGroups = $derived(groupByStatus(tickets));
 
-// Articles: unread toggle + Grid/List.
+// Articles: unread toggle + Grid/List. The layout is a persisted per-lens
+// preference (persist-lens-article-layout) — derived from the node, written via
+// the bus (no local optimistic copy); the broadcast round-trip re-derives it.
 let unreadOnly = $state(false);
-let articleView = $state<'grid' | 'list'>('grid');
+const articleView = $derived(node.articleLayout ?? 'grid');
 const itemKey = (t: Tagged): string => `${t.sk}:${t.item.id}`;
 const isUnread = (t: Tagged): boolean => !readSet.has(itemKey(t));
 // Items toggled read THIS session stay visible (dimmed) under the Unread filter
@@ -379,8 +393,8 @@ const empty = $derived(
             <span class="controls-right">
               <button class="chip-btn" class:on={unreadOnly} type="button" onclick={toggleUnreadFilter}>{m.launcher_lensUnread({ count: unreadCount })}</button>
               <span class="seg" role="group" aria-label={m.launcher_lensArticleLayout()}>
-                <button class="seg-btn" class:on={articleView === 'grid'} type="button" onclick={() => (articleView = 'grid')}>{m.launcher_lensGrid()}</button>
-                <button class="seg-btn" class:on={articleView === 'list'} type="button" onclick={() => (articleView = 'list')}>{m.launcher_lensList()}</button>
+                <button class="seg-btn" class:on={articleView === 'grid'} type="button" onclick={() => setArticleLayout('grid')}>{m.launcher_lensGrid()}</button>
+                <button class="seg-btn" class:on={articleView === 'list'} type="button" onclick={() => setArticleLayout('list')}>{m.launcher_lensList()}</button>
               </span>
             </span>
           </div>

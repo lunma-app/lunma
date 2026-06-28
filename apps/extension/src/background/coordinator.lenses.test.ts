@@ -1502,6 +1502,53 @@ describe('feed read-state handlers', () => {
     expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'c3', result: 'ok' });
   });
 
+  test('setLensArticleLayout persists the layout and acks without a refetch', async () => {
+    installActivationChrome();
+    const { coordinator, store, emitAck } = makeWithSpace();
+    store.state.pinnedBySpace.work = [feedNode()];
+    store.state.lenses['feed-1'] = {
+      sections: { [FEED_SK]: { state: 'ok', items: [], fetchedAt: 5 } },
+    };
+
+    coordinator.enqueue(
+      sidebar(
+        {
+          kind: 'setLensArticleLayout',
+          payload: { spaceId: 'work', folderId: 'feed-1', layout: 'list' },
+        },
+        'c1',
+      ),
+    );
+    await coordinator.idle();
+
+    expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({ articleLayout: 'list' });
+    expect(store.state.lenses['feed-1']?.sections[FEED_SK]?.fetchedAt).toBe(5);
+    expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'c1', result: 'ok' });
+  });
+
+  test('setLensArticleLayout with unknown folderId is a no-op', async () => {
+    installActivationChrome();
+    const { coordinator, store, emitAck } = makeWithSpace();
+    store.state.pinnedBySpace.work = [feedNode()];
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    coordinator.enqueue(
+      sidebar(
+        {
+          kind: 'setLensArticleLayout',
+          payload: { spaceId: 'work', folderId: 'does-not-exist', layout: 'list' },
+        },
+        'c3',
+      ),
+    );
+    await coordinator.idle();
+
+    expect(store.state.pinnedBySpace.work?.[0]).not.toMatchObject({
+      articleLayout: expect.anything(),
+    });
+    expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'c3', result: 'ok' });
+  });
+
   test('openLensListing opens the feed listing URL in a tab', async () => {
     const stub = installActivationChrome();
     const { coordinator, store, emitAck } = makeWithSpace();
