@@ -28,7 +28,11 @@ const visEntities = $derived([
 ] as LensEntity[]);
 
 const hasTypeFacets = $derived(visEntities.length > 1);
-// Clear is visible when any filter axis is active (entity, repo, project, or feed).
+// The clear (×) sits at the END of the type-facet row, shown only while a filter is
+// active. It is intentionally NOT rendered on its own: a lens with no type facets
+// shows no bar at all, so selecting a scope value never pops an orphaned × in (which
+// caused a reflow and read as a stray control). Scope-only filtering is cleared via
+// the scope control's own Clear (the chip row toggles, or the MultiSelect's Clear).
 const isActive = $derived(
   (filter.entities?.length ?? 0) > 0 ||
     (filter.repos?.length ?? 0) > 0 ||
@@ -47,7 +51,7 @@ function clear(): void {
 }
 </script>
 
-{#if hasTypeFacets || isActive}
+{#if hasTypeFacets}
   <div class="filter-bar" data-testid="lens-filter-bar">
     {#if hasTypeFacets}
       {#each visEntities as entity (entity)}

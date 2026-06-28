@@ -76,6 +76,18 @@ describe('LensFilterBar', () => {
     expect(container.querySelector('[data-testid="filter-clear"]')).not.toBeNull();
   });
 
+  test('a single-entity lens with an active scope filter renders no bar (no orphaned ×)', () => {
+    // Feeds-only lens: one entity type → no type-facet bar. Selecting a feed must NOT
+    // pop a lone clear-× in (it caused a reflow + read as a stray control); the scope
+    // control owns clearing.
+    const { container } = renderBar(
+      { feeds: ['Hacker News'] },
+      { ...emptyFacets(), entities: ['article'] },
+    );
+    expect(container.querySelector('[data-testid="lens-filter-bar"]')).toBeNull();
+    expect(container.querySelector('[data-testid="filter-clear"]')).toBeNull();
+  });
+
   test('clicking Clear calls onfilter with empty filter', async () => {
     const { container, onfilter } = renderBar(
       { entities: ['change'] },

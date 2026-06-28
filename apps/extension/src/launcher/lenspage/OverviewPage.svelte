@@ -5,9 +5,8 @@ import type { LensEntity, LensFilter } from '../../shared/types';
 import Chip from '../../ui/Chip.svelte';
 import Diffstat from '../../ui/Diffstat.svelte';
 import Icon from '../../ui/Icon.svelte';
+import MultiSelect, { type MultiSelectOption } from '../../ui/MultiSelect.svelte';
 import ReviewerRail from '../../ui/ReviewerRail.svelte';
-import type { SelectOption } from '../../ui/Select.svelte';
-import Select from '../../ui/Select.svelte';
 import LensFilterBar from './LensFilterBar.svelte';
 import {
   bucketByEntity,
@@ -68,25 +67,26 @@ const visRepos = $derived([...new Set([...facets.repos, ...(filter.repos ?? [])]
 const visProjects = $derived([...new Set([...facets.projects, ...(filter.projects ?? [])])]);
 const visFeeds = $derived([...new Set([...facets.feeds, ...(filter.feeds ?? [])])]);
 
-const repoSelectOptions = $derived<SelectOption[]>([
-  { value: 'all', label: m.launcher_lensAllRepos() },
-  ...visRepos.map((r) => ({ value: r, label: r })),
-]);
-const repoSelectValue = $derived(filter.repos?.length === 1 ? (filter.repos[0] ?? 'all') : 'all');
-
-const projectSelectOptions = $derived<SelectOption[]>([
-  { value: 'all', label: m.launcher_lensAllProjects() },
-  ...visProjects.map((p) => ({ value: p, label: p })),
-]);
-const projectSelectValue = $derived(
-  filter.projects?.length === 1 ? (filter.projects[0] ?? 'all') : 'all',
+// Overflow (>CHIP_THRESHOLD) picker options — no synthetic "all" row; clearing
+// is the MultiSelect's own Clear action.
+const repoOptions = $derived<MultiSelectOption[]>(visRepos.map((r) => ({ value: r, label: r })));
+const projectOptions = $derived<MultiSelectOption[]>(
+  visProjects.map((p) => ({ value: p, label: p })),
 );
+const feedOptions = $derived<MultiSelectOption[]>(visFeeds.map((f) => ({ value: f, label: f })));
 
-const feedSelectOptions = $derived<SelectOption[]>([
-  { value: 'all', label: m.launcher_lensAllFeeds() },
-  ...visFeeds.map((f) => ({ value: f, label: f })),
-]);
-const feedSelectValue = $derived(filter.feeds?.length === 1 ? (filter.feeds[0] ?? 'all') : 'all');
+// Closed-trigger summary for an overflow scope picker: the "All …" label when
+// nothing is picked, the lone name when one is, else an "{n} selected" count.
+function scopeLabel(sel: string[], all: string): string {
+  if (sel.length === 0) return all;
+  if (sel.length === 1) return sel[0] ?? all;
+  return m.launcher_lensScopeSelected({ count: sel.length });
+}
+const repoTriggerLabel = $derived(scopeLabel(filter.repos ?? [], m.launcher_lensAllRepos()));
+const projectTriggerLabel = $derived(
+  scopeLabel(filter.projects ?? [], m.launcher_lensAllProjects()),
+);
+const feedTriggerLabel = $derived(scopeLabel(filter.feeds ?? [], m.launcher_lensAllFeeds()));
 
 function toggleRepo(r: string): void {
   const current = filter.repos ?? [];
@@ -104,18 +104,6 @@ function toggleFeed(f: string): void {
   const current = filter.feeds ?? [];
   const next = current.includes(f) ? current.filter((x) => x !== f) : [...current, f];
   setFilter({ ...filter, feeds: next });
-}
-
-function onRepoSelectChange(value: string): void {
-  setFilter({ ...filter, repos: value === 'all' ? [] : [value] });
-}
-
-function onProjectSelectChange(value: string): void {
-  setFilter({ ...filter, projects: value === 'all' ? [] : [value] });
-}
-
-function onFeedSelectChange(value: string): void {
-  setFilter({ ...filter, feeds: value === 'all' ? [] : [value] });
 }
 
 // Apply the persisted lens filter before bucketing so both the count and the
@@ -224,13 +212,19 @@ const empty = $derived(
                   />
                 {/each}
               {:else}
-                <Select
-                  options={repoSelectOptions}
-                  value={repoSelectValue}
-                  onchange={onRepoSelectChange}
-                  ariaLabel={m.launcher_lensFilterByRepo()}
-                  testid="repo-select"
-                />
+                <div class="scope-picker">
+                  <MultiSelect
+                    options={repoOptions}
+                    values={filter.repos ?? []}
+                    onchange={(vals) => setFilter({ ...filter, repos: vals })}
+                    label={repoTriggerLabel}
+                    ariaLabel={m.launcher_lensFilterByRepo()}
+                    clearLabel={m.launcher_lensClearFilter()}
+                    selectAllLabel={m.common_selectAll()}
+                    searchPlaceholder={m.launcher_lensScopeSearch()}
+                    testid="repo-select"
+                  />
+                </div>
               {/if}
             </div>
           {/if}
@@ -295,13 +289,19 @@ const empty = $derived(
                   />
                 {/each}
               {:else}
-                <Select
-                  options={projectSelectOptions}
-                  value={projectSelectValue}
-                  onchange={onProjectSelectChange}
-                  ariaLabel={m.launcher_lensFilterByProject()}
-                  testid="project-select"
-                />
+                <div class="scope-picker">
+                  <MultiSelect
+                    options={projectOptions}
+                    values={filter.projects ?? []}
+                    onchange={(vals) => setFilter({ ...filter, projects: vals })}
+                    label={projectTriggerLabel}
+                    ariaLabel={m.launcher_lensFilterByProject()}
+                    clearLabel={m.launcher_lensClearFilter()}
+                    selectAllLabel={m.common_selectAll()}
+                    searchPlaceholder={m.launcher_lensScopeSearch()}
+                    testid="project-select"
+                  />
+                </div>
               {/if}
             </div>
           {/if}
@@ -359,12 +359,19 @@ const empty = $derived(
                   />
                 {/each}
               {:else}
-                <Select
-                  options={feedSelectOptions}
-                  value={feedSelectValue}
-                  onchange={onFeedSelectChange}
-                  testid="feed-select"
-                />
+                <div class="scope-picker">
+                  <MultiSelect
+                    options={feedOptions}
+                    values={filter.feeds ?? []}
+                    onchange={(vals) => setFilter({ ...filter, feeds: vals })}
+                    label={feedTriggerLabel}
+                    ariaLabel={m.launcher_lensFilterByFeed()}
+                    clearLabel={m.launcher_lensClearFilter()}
+                    selectAllLabel={m.common_selectAll()}
+                    searchPlaceholder={m.launcher_lensScopeSearch()}
+                    testid="feed-select"
+                  />
+                </div>
               {/if}
             </div>
           {/if}
@@ -579,6 +586,12 @@ const empty = $derived(
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-1);
+  }
+  /* The overflow multi-select is a compact dropdown, not a full-width bar — cap it
+     (and its popover, which tracks the trigger width) so a short "N selected"
+     summary and the option rows don't stretch across the whole card. */
+  .scope-picker {
+    width: min(22rem, 100%);
   }
 
   /* ── Filter chips / segmented control ─────────────────────────────────────── */

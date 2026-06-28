@@ -57,30 +57,16 @@ const RSS: SourceAccount = {
   provider: 'rss',
   baseUrl: 'https://news.example.com/rss',
 };
-const BB_CLOUD: SourceAccount = {
-  id: 'acc-bb-cloud',
-  provider: 'bitbucket',
-  baseUrl: 'https://bitbucket.org',
-  workspace: 'acme',
-};
-const BB_SERVER: SourceAccount = {
-  id: 'acc-bb-dc',
-  provider: 'bitbucket',
-  baseUrl: 'https://bitbucket.example.com',
-};
 
 const confirmBtn = (c: HTMLElement): HTMLButtonElement =>
   c.querySelector('[data-testid="smart-folder-confirm"]') as HTMLButtonElement;
-const pickRows = (c: HTMLElement): HTMLElement[] =>
-  [...c.querySelectorAll('[data-testid="account-pick-row"]')] as HTMLElement[];
-const rowFor = (c: HTMLElement, id: string): HTMLElement =>
-  c.querySelector(`[data-account-id="${id}"]`) as HTMLElement;
+// The picker is an inline `MultiSelect`: one `multi-select-option` per connected
+// source, keyed by account id via `data-value`.
+const sourceRows = (c: HTMLElement): HTMLElement[] =>
+  [...c.querySelectorAll('[data-testid="multi-select-option"]')] as HTMLElement[];
 const toggleFor = (c: HTMLElement, id: string): HTMLButtonElement =>
-  rowFor(c, id).querySelector('[data-testid="account-pick-toggle"]') as HTMLButtonElement;
-const pillByLabel = (cardEl: HTMLElement, label: string): HTMLButtonElement =>
-  [...cardEl.querySelectorAll('[data-testid="smart-filter-pill"]')].find(
-    (b) => (b.textContent ?? '').trim() === label,
-  ) as HTMLButtonElement;
+  c.querySelector(`[data-testid="multi-select-option"][data-value="${id}"]`) as HTMLButtonElement;
+const isChecked = (el: HTMLElement): boolean => el.getAttribute('aria-selected') === 'true';
 const entityChips = (c: HTMLElement): string[] =>
   [...c.querySelectorAll('[data-testid="entity-chip"]')].map((e) => (e.textContent ?? '').trim());
 
@@ -112,7 +98,7 @@ describe('LensEditor — connection-first (sources-redesign)', () => {
     const { container } = render(LensEditorHarness, {
       props: { spaceId: 'work', accounts: [GL, GH, JIRA, RSS] },
     });
-    expect(pickRows(container)).toHaveLength(4);
+    expect(sourceRows(container)).toHaveLength(4);
   });
 
   test('no connection selected disables Create', () => {
@@ -122,14 +108,35 @@ describe('LensEditor — connection-first (sources-redesign)', () => {
     expect(confirmBtn(container).disabled).toBe(true);
   });
 
-  test('a selected queue account with zero filters keeps Create disabled', async () => {
+  test('a long source list is fuzzy-searchable by type (provider keyword)', async () => {
+    // 9 sources (> the MultiSelect search threshold of 8) so the search box renders.
+    const ghAccounts: SourceAccount[] = Array.from({ length: 8 }, (_, i) => ({
+      id: `gh-${i}`,
+      provider: 'github',
+      baseUrl: 'https://github.com',
+    }));
+    const { container } = render(LensEditorHarness, {
+      props: { spaceId: 'work', accounts: [...ghAccounts, RSS] },
+    });
+    const searchInput = container.querySelector(
+      '[data-testid="multi-select-search"]',
+    ) as HTMLInputElement;
+    expect(searchInput).not.toBeNull();
+    // "rss" appears in no visible label — only in the feed's provider/type keyword.
+    await fireEvent.input(searchInput, { target: { value: 'rss' } });
+    await tick();
+    const rows = sourceRows(container);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.getAttribute('data-value')).toBe(RSS.id);
+  });
+
+  test('ticking a single source enables Create (no per-source filter gate, D7)', async () => {
     const { container } = render(LensEditorHarness, { props: { spaceId: 'work', accounts: [GL] } });
-    await fireEvent.click(toggleFor(container, GL.id)); // default ['review-requested']
-    await tick();
-    // Remove the only filter → invalid.
-    await fireEvent.click(pillByLabel(rowFor(container, GL.id), 'Reviewing'));
-    await tick();
     expect(confirmBtn(container).disabled).toBe(true);
+    await fireEvent.click(toggleFor(container, GL.id));
+    await tick();
+    // Including the source is enough — no filter must be chosen.
+    expect(confirmBtn(container).disabled).toBe(false);
   });
 
   test('the derived preview names the entities the chosen connections produce', async () => {
@@ -145,46 +152,52 @@ describe('LensEditor — connection-first (sources-redesign)', () => {
     expect(entityChips(container)).toEqual(['Changes', 'Issues', 'Articles']);
   });
 
-  test('a Cloud bitbucket account offers ONLY Authored (add-bitbucket-connector D4)', async () => {
+  test('a Bitbucket source contributes only its deployment-supported queries (never an SW-rejected ref)', async () => {
+    // Cloud (host bitbucket.org) supports `authored` only; Server/DC adds
+    // `review-requested`; neither ever carries `assigned`. The auto-included query
+    // set is filtered through `supportedQueriesFor`, so the editor can't mint a ref
+    // the SW rejects (add-bitbucket-connector, D4).
+    const BB_CLOUD: SourceAccount = {
+      id: 'acc-bb-cloud',
+      provider: 'bitbucket',
+      baseUrl: 'https://bitbucket.org',
+      workspace: 'acme',
+    };
+    const BB_SERVER: SourceAccount = {
+      id: 'acc-bb-srv',
+      provider: 'bitbucket',
+      baseUrl: 'https://bitbucket.example.com',
+    };
     const { container } = render(LensEditorHarness, {
-      props: { spaceId: 'work', accounts: [BB_CLOUD] },
+      props: { spaceId: 'work', accounts: [BB_CLOUD, BB_SERVER] },
     });
     await fireEvent.click(toggleFor(container, BB_CLOUD.id));
-    await tick();
-    const row = rowFor(container, BB_CLOUD.id);
-    const labels = [...row.querySelectorAll('[data-testid="smart-filter-pill"]')].map((b) =>
-      (b.textContent ?? '').trim(),
-    );
-    expect(labels).toEqual(['Authored']);
-    // The default selected query is the valid 'authored' (not review-requested).
-    expect(pillByLabel(row, 'Authored').getAttribute('aria-pressed')).toBe('true');
-  });
-
-  test('a self-hosted bitbucket account offers Authored + Reviewing, never Assigned', async () => {
-    const { container } = render(LensEditorHarness, {
-      props: { spaceId: 'work', accounts: [BB_SERVER] },
-    });
     await fireEvent.click(toggleFor(container, BB_SERVER.id));
     await tick();
-    const row = rowFor(container, BB_SERVER.id);
-    const labels = [...row.querySelectorAll('[data-testid="smart-filter-pill"]')].map((b) =>
-      (b.textContent ?? '').trim(),
-    );
-    expect(labels).toEqual(['Authored', 'Reviewing']);
+    await fireEvent.click(confirmBtn(container));
+
+    const sources = lastCreateLens()?.payload.sources as Array<{
+      sourceId: string;
+      queries: string[];
+    }>;
+    expect(sources).toEqual([
+      { sourceId: 'acc-bb-cloud', queries: ['authored'] },
+      { sourceId: 'acc-bb-srv', queries: ['authored', 'review-requested'] },
+    ]);
+    for (const s of sources) expect(s.queries).not.toContain('assigned');
   });
 
   test('Create dispatches sources WITHOUT lensKind and opens the overview page', async () => {
     const { container } = render(LensEditorHarness, { props: { spaceId: 'work', accounts: [GL] } });
     await fireEvent.click(toggleFor(container, GL.id));
     await tick();
-    await fireEvent.click(pillByLabel(rowFor(container, GL.id), 'Authored'));
-    await tick();
     expect(confirmBtn(container).disabled).toBe(false);
     await fireEvent.click(confirmBtn(container));
 
     const create = lastCreateLens();
+    // A ticked git source contributes its FULL query set (D7) — no per-source picking.
     expect(create?.payload.sources).toEqual([
-      { sourceId: 'acc-gl', queries: ['authored', 'review-requested'] },
+      { sourceId: 'acc-gl', queries: ['authored', 'assigned', 'review-requested'] },
     ]);
     // No client-supplied kind — the SW derives it.
     expect(create?.payload).not.toHaveProperty('lensKind');
@@ -284,14 +297,16 @@ describe('LensEditor — connection-first (sources-redesign)', () => {
     const { container } = render(LensEditorHarness, {
       props: { spaceId: 'work', node, accounts: [GL, GH] },
     });
-    expect(
-      rowFor(container, GL.id).querySelector('[data-testid="smart-filter-pill"]'),
-    ).not.toBeNull();
+    // The node's source is pre-selected (its row is ticked).
+    expect(isChecked(toggleFor(container, GL.id))).toBe(true);
     await fireEvent.click(confirmBtn(container));
     const update = cmds('updateLens').at(-1);
     expect(update?.payload.folderId).toBe('lens-1');
+    // Save re-emits the source with its FULL query set (D7) — the editor no longer
+    // scopes a source to a single relation, so the prior `['review-requested']`
+    // widens to the canonical set.
     expect(update?.payload.sources).toEqual([
-      { sourceId: 'acc-gl', queries: ['review-requested'] },
+      { sourceId: 'acc-gl', queries: ['authored', 'assigned', 'review-requested'] },
     ]);
     expect(update?.payload).not.toHaveProperty('lensKind');
     // Save does not open a page (only Create does).

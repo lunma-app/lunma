@@ -1258,7 +1258,8 @@ export class LunmaStore {
     const isEmpty =
       (filter.entities?.length ?? 0) === 0 &&
       (filter.repos?.length ?? 0) === 0 &&
-      (filter.projects?.length ?? 0) === 0;
+      (filter.projects?.length ?? 0) === 0 &&
+      (filter.feeds?.length ?? 0) === 0;
     if (isEmpty) {
       delete node.filter;
     } else {
