@@ -23,7 +23,6 @@ import {
 } from '../shared/space-hue';
 import Aurora from '../ui/Aurora.svelte';
 import Button from '../ui/Button.svelte';
-import Divider from '../ui/Divider.svelte';
 import Icon from '../ui/Icon.svelte';
 import RowButton from '../ui/RowButton.svelte';
 import SearchField from '../ui/SearchField.svelte';
@@ -639,9 +638,12 @@ function onCancel(): void {
                  ride away with the tab list. -->
             <div class="slide-scroll" data-testid="slide-scroll" use:scrollFade>
               <PinnedTabs {windowId} spaceId={panel.space.id} active={i === activeIndex} />
+              <!-- Temporary-section divider: a hairline rule that trails into the
+                   Clear action when the Space has temporary tabs. -->
               {#if temps > 0}
-                <Divider>
-                  {#snippet action()}
+                <div class="divider" data-testid="divider" role="separator">
+                  <span class="rule"></span>
+                  <span class="divider-action">
                     <Button
                       variant="ghost"
                       onclick={() => onClearTemp(panel.space.id)}
@@ -649,10 +651,12 @@ function onCancel(): void {
                     >
                       <Icon name="arrow-down" size={12} /> {m.sidebar_clearSearch()}
                     </Button>
-                  {/snippet}
-                </Divider>
+                  </span>
+                </div>
               {:else}
-                <Divider />
+                <div class="divider" data-testid="divider" role="separator">
+                  <span class="rule"></span>
+                </div>
               {/if}
               <div class="new-tab-row">
                 <RowButton

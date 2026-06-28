@@ -5,9 +5,9 @@ import { dispatch, TAB_DEDUP_FLASH } from '../shared/bus';
 import { labelFor } from '../shared/label-for';
 import { m } from '../shared/paraglide/messages';
 import type { LiveTab, SpaceId, TabId, WindowId } from '../shared/types';
-import BitsContextMenu from '../ui/BitsContextMenu.svelte';
 import { faviconCacheKey, faviconFor, faviconUrl } from '../ui/favicon';
 import IconButton from '../ui/IconButton.svelte';
+import Menu from '../ui/Menu.svelte';
 import type { MenuItem } from '../ui/menu-types';
 import TabRow from '../ui/TabRow.svelte';
 import { type DropResult, drag, reorderFlipMs } from './drag.svelte';
@@ -251,7 +251,7 @@ function moveTemp(item: TempItem, dir: -1 | 1): void {
 }
 
 /** The right-click action menu for a temporary row: Favorite (non-destructive),
- * Rename (inline), Move up/down (reorder), and Close tab. Built as `BitsContextMenu`
+ * Rename (inline), Move up/down (reorder), and Close tab. Built as `Menu`
  * `MenuItem[]` so temp + pinned rows share the favicon-tile right-click interaction.
  * The one-click close lives separately on the row's trailing ✕. */
 function tabMenuItems(item: TempItem): MenuItem[] {
@@ -356,7 +356,7 @@ function commitRename(item: TempItem, newName: string): void {
       }}
       animate:flip={{ duration: () => reorderFlipMs() }}
     >
-      <BitsContextMenu items={tabMenuItems(item)} label={m.sidebar_tabActions()} testid="temp-menu">
+      <Menu trigger="context" items={tabMenuItems(item)} label={m.sidebar_tabActions()} testid="temp-menu">
         {#snippet children(menuProps)}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div {...menuProps} class="menu-trigger">
@@ -390,7 +390,7 @@ function commitRename(item: TempItem, newName: string): void {
             />
           </div>
         {/snippet}
-      </BitsContextMenu>
+      </Menu>
     </div>
   {/each}
 </div>

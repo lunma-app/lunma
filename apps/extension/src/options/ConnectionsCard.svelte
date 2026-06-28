@@ -17,10 +17,10 @@ import { buildOpml, type LensNode } from '../shared/opml';
 import { m } from '../shared/paraglide/messages';
 import type { AppState, LensProvider, PinNode, SourceAccount, SpaceId } from '../shared/types';
 import AccountConnectField from '../ui/AccountConnectField.svelte';
-import BitsMenu, { type MenuItem } from '../ui/BitsMenu.svelte';
 import Button from '../ui/Button.svelte';
 import Icon from '../ui/Icon.svelte';
 import InlineError from '../ui/InlineError.svelte';
+import Menu, { type MenuItem } from '../ui/Menu.svelte';
 import ServiceConnectPicker from '../ui/ServiceConnectPicker.svelte';
 import SettingsCard from '../ui/SettingsCard.svelte';
 import TextInput from '../ui/TextInput.svelte';
@@ -30,7 +30,7 @@ import Toast from '../ui/Toast.svelte';
 // connected source — an **Accounts** group + a **Feeds** group, matching the
 // redesign comp: a `+ Connect` affordance on the card header, ledger rows that
 // lead with an identity tile + bold name + status, an "Used in N lenses · powers
-// …" reach subline, a floating ⋯ menu (BitsMenu primitive), and an inline editor that
+// …" reach subline, a floating ⋯ menu (Menu primitive), and an inline editor that
 // opens below the row for rename / replace-token / disconnect. Reach reads
 // `pinnedBySpace[*]`; tokens go straight to `shared/connectors.ts`.
 
@@ -340,7 +340,7 @@ function handleExport(): void {
             </span>
           </div>
           <span class="row-menu">
-            <BitsMenu label={`Actions for ${accountLabel(account)}`} items={accountMenuItems(account)} />
+            <Menu trigger="kebab" label={`Actions for ${accountLabel(account)}`} items={accountMenuItems(account)} />
           </span>
         </div>
         {#if activeEditor?.account.id === account.id}
@@ -380,7 +380,7 @@ function handleExport(): void {
             </span>
           </div>
           <span class="row-menu">
-            <BitsMenu label={`Actions for ${accountLabel(feed)}`} items={feedMenuItems(feed)} />
+            <Menu trigger="kebab" label={`Actions for ${accountLabel(feed)}`} items={feedMenuItems(feed)} />
           </span>
         </div>
         {#if activeEditor?.account.id === feed.id}

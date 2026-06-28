@@ -18,11 +18,11 @@ import type {
   TabId,
   WindowId,
 } from '../shared/types';
-import BitsContextMenu from '../ui/BitsContextMenu.svelte';
 import BottomSheet from '../ui/BottomSheet.svelte';
 import FolderRow from '../ui/FolderRow.svelte';
 import { faviconCacheKey, faviconFor, faviconUrl } from '../ui/favicon';
 import IconButton from '../ui/IconButton.svelte';
+import Menu from '../ui/Menu.svelte';
 import type { MenuItem } from '../ui/menu-types';
 import TabRow from '../ui/TabRow.svelte';
 import { boundaryDefault } from './boundary-default.svelte';
@@ -636,7 +636,7 @@ let confirmingDeleteId = $state<SavedTabId | null>(null);
 let editingBoundaryId = $state<SavedTabId | null>(null);
 
 // --- right-click menu (bits-ui ContextMenu, per row) --------------------------
-// Each tab row wraps its content in `BitsContextMenu`, which OWNS the right-click,
+// Each tab row wraps its content in `Menu`, which OWNS the right-click,
 // cursor anchoring, keyboard invocation (menu key / Shift+F10), collision clamp,
 // and dismissal. The menu items still re-derive from the row's live view (drift,
 // renamed, delete-confirm) on every render, so they reflect state after each
@@ -836,7 +836,7 @@ function tabMenuItems(row: TabView): MenuItem[] {
              measured-row-internal hit target. The `.row-wrap` keeps the drag
              pointerdown + measured identity (rowEls[i] / data-row-id); only the
              menu's anchor moves down to this inner element. -->
-        <BitsContextMenu
+        <Menu trigger="context"
           items={tabMenuItems(row)}
           label={m.sidebar_tabActions()}
           testid="pinned-menu"
@@ -862,7 +862,7 @@ function tabMenuItems(row: TabView): MenuItem[] {
               />
             </div>
           {/snippet}
-        </BitsContextMenu>
+        </Menu>
       {:else if row.kind === 'lens'}
         <!-- A smart folder: folder-row chrome + live connector results. The
              wrapper arms the smart node's unit drag; the result rows inside
@@ -942,7 +942,7 @@ function tabMenuItems(row: TabView): MenuItem[] {
                 <!-- Same wrap as the top-level tab rows: bits-ui owns the
                      right-click on the child's body; the `.child-wrap` keeps the
                      drag pointerdown + measured identity (childRowElById). -->
-                <BitsContextMenu
+                <Menu trigger="context"
                   items={tabMenuItems(child)}
                   label={m.sidebar_tabActions()}
                   testid="pinned-menu"
@@ -968,7 +968,7 @@ function tabMenuItems(row: TabView): MenuItem[] {
                       />
                     </div>
                   {/snippet}
-                </BitsContextMenu>
+                </Menu>
               </div>
             {/each}
             {#if row.children.length === 0}

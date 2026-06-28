@@ -48,5 +48,10 @@ const { source }: { source: string } = $props();
     <Variant label="removable"><Chip label="svelte" onRemove={noop} /></Variant>
     <Variant label="toggle · off"><Chip label="Drafts" onToggle={noop} /></Variant>
     <Variant label="toggle · on"><Chip label="Drafts" onToggle={noop} selected /></Variant>
+    <!-- Hue-tinted status/verdict token. -->
+    <Variant label="hue · status sm (green)"><Chip label="Open" hue={150} /></Variant>
+    <Variant label="hue · status sm (red)"><Chip label="Blocked" hue={25} /></Variant>
+    <Variant label="hue · verdict md (blue)"><Chip label="Approved" hue={252} size="md" /></Variant>
+    <Variant label="hue · verdict md (purple)"><Chip label="Review" hue={295} size="md" /></Variant>
   {/snippet}
 </Story>

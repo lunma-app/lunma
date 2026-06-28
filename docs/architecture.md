@@ -27,7 +27,7 @@ lunma/                              # pnpm workspace root (private)
 │  │  │  │  ├─ chrome/              # thin typed wrappers over chrome.* APIs
 │  │  │  │  └─ paraglide/           # generated Paraglide runtime (committed, Biome-excluded; `pnpm gen:i18n`)
 │  │  │  ├─ ui/                     # cross-surface primitives (build primitives, compose features)
-│  │  │  │  ├─ Button.svelte        # …+ Icon · Tooltip · Stack · Kbd · SegmentedControl · TabRow · RowMenu · ContextMenu
+│  │  │  │  ├─ Button.svelte        # …+ Icon · Tooltip · Kbd · SegmentedControl · TabRow · Menu (trigger: kebab|context)
 │  │  │  │  ├─ SettingsCard.svelte  # …+ CardHeading · SettingText · InlineError (the shared options-card chrome)
 │  │  │  │  └─ favicon.ts · index.ts   # design tokens come from @lunma/tokens (see packages/)
 │  │  │  ├─ background/             # SW: index · coordinator (+ handlers/ slices · group-orchestrator · boundary-controller) · bus-adapter · *-handler · seed-* · (planned) auto-archive
@@ -682,8 +682,10 @@ or broadcasts.
 
 ## Component library (`apps/extension/src/ui/`)
 
-Cross-surface UI primitives such as `SpaceIcon`, `Tooltip`, `Stack`, `RowMenu`,
-and `ContextMenu` live in `apps/extension/src/ui/`. The options page's shared
+Cross-surface UI primitives such as `SpaceIcon`, `Tooltip`, `Kbd`, and `Menu`
+(one bits-ui action menu with a `trigger: 'kebab' | 'context'`) live in
+`apps/extension/src/ui/`. `Chip` carries an optional `hue`/`size` for hue-tinted
+status/verdict tokens. The options page's shared
 card chrome is primitives too — `SettingsCard` (the glass-`Surface` scaffold),
 `CardHeading` (the editorial serif heading + its `data-tint` identity-hue
 override), `SettingText` (the label/description column), and `InlineError` (the

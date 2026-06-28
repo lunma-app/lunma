@@ -231,7 +231,7 @@ describe('App', () => {
     const store = makeStore('blue');
     const { container } = render(AppHarness, { props: { store, windowId: 1 } });
     const workSlide = container.querySelector('[data-space-id="work"]') as HTMLElement;
-    // Open the pinned header's kebab — now the bits-ui `BitsMenu` (testid
+    // Open the pinned header's kebab — now the bits-ui `Menu` (testid
     // `menu-trigger`), scoped to the section header. bits-ui portals the items to
     // <body> and opens async, so query `document` + `waitFor`.
     const trigger = workSlide.querySelector(

@@ -5,7 +5,6 @@ import type { LensEntity, LensFilter } from '../../shared/types';
 import Chip from '../../ui/Chip.svelte';
 import Diffstat from '../../ui/Diffstat.svelte';
 import Icon from '../../ui/Icon.svelte';
-import Pill from '../../ui/Pill.svelte';
 import ReviewerRail from '../../ui/ReviewerRail.svelte';
 import type { SelectOption } from '../../ui/Select.svelte';
 import Select from '../../ui/Select.svelte';
@@ -323,7 +322,7 @@ const empty = $derived(
                       <span class="row-title">{stripKeyPrefix(t.item.title, tk.key)}</span>
                       {#if tk.project}<span class="row-meta">{tk.project}</span>{/if}
                     </span>
-                    {#if tk.priority}<Pill hue={priorityHue(tk.priority)} testid="issue-priority">{tk.priority}</Pill>{/if}
+                    {#if tk.priority}<Chip label={tk.priority} hue={priorityHue(tk.priority)} testid="issue-priority" />{/if}
                   </button>
                 {/if}
               {/each}
