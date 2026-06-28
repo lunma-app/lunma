@@ -164,7 +164,7 @@ export const SETTINGS: readonly SettingDeclaration[] = [
     default: 'google',
     label: 'Default search engine',
     description: 'Which engine the launcher searches a query with',
-    group: 'Search',
+    group: 'Search & launcher',
     // Options derive from the built-in registry so adding an engine there flows
     // through to the picker automatically; `custom` uses `customSearchUrl`.
     options: [
@@ -178,7 +178,7 @@ export const SETTINGS: readonly SettingDeclaration[] = [
     default: '',
     label: 'Custom search URL',
     description: 'Used when the engine above is set to Custom — %s is the query',
-    group: 'Search',
+    group: 'Search & launcher',
     placeholder: 'https://example.com/?q=%s',
   },
   {
@@ -191,7 +191,7 @@ export const SETTINGS: readonly SettingDeclaration[] = [
     default: '',
     label: 'Custom search keyword',
     description: 'Type this + Tab in the launcher to search your custom engine',
-    group: 'Search',
+    group: 'Search & launcher',
     placeholder: 'k',
   },
   {
@@ -203,7 +203,7 @@ export const SETTINGS: readonly SettingDeclaration[] = [
     default: 'prefer-current-space',
     label: 'Launcher scope',
     description: 'How the launcher ranks items that live in other Spaces',
-    group: 'Search',
+    group: 'Search & launcher',
     options: [
       { value: 'global', label: 'All Spaces' },
       { value: 'prefer-current-space', label: 'Prefer current Space' },
@@ -213,9 +213,9 @@ export const SETTINGS: readonly SettingDeclaration[] = [
   {
     key: 'density',
     type: 'enum',
-    default: 'normal',
+    default: 'comfort',
     label: 'Density',
-    description: 'How much space between tab rows',
+    description: 'How much space rows use — across tabs and launcher results',
     group: 'Appearance',
     options: [
       { value: 'compact', label: 'Compact' },
@@ -236,16 +236,16 @@ export const SETTINGS: readonly SettingDeclaration[] = [
       { value: 'vivid', label: 'Vivid' },
     ],
   },
-  // Look & feel (redesign): local, per-machine presentation — theme, atmosphere
-  // glow, reduce-motion. Not part of a Space. Declared adjacently so the registry
-  // renders them as one card, in this order, matching the comp.
+  // Appearance (cont.): local, per-machine presentation — theme, atmosphere
+  // glow, reduce-motion. Not part of a Space. Declared adjacently so they render
+  // alongside density + colour intensity under the single Appearance section.
   {
     key: 'theme',
     type: 'enum',
     default: 'dark',
     label: 'Theme',
     description: 'Deep warm night, or frosted daylight.',
-    group: 'Look & feel',
+    group: 'Appearance',
     options: [
       { value: 'dark', label: 'Dark' },
       { value: 'light', label: 'Light' },
@@ -257,7 +257,7 @@ export const SETTINGS: readonly SettingDeclaration[] = [
     default: true,
     label: 'Atmosphere glow',
     description: 'Soft aurora glare behind the app.',
-    group: 'Look & feel',
+    group: 'Appearance',
   },
   {
     key: 'reduceMotion',
@@ -265,21 +265,9 @@ export const SETTINGS: readonly SettingDeclaration[] = [
     default: false,
     label: 'Reduce motion',
     description: 'Hold the drifting glow and ease transitions.',
-    group: 'Look & feel',
+    group: 'Appearance',
   },
-  {
-    key: 'pinnedTabBoundaryDefault',
-    type: 'enum',
-    default: 'off',
-    label: 'Lock pinned tabs to their site',
-    description: 'Keep new pins on their own site or page; off-bounds links open in a new tab',
-    group: 'Pinned tabs',
-    options: [
-      { value: 'off', label: 'Off' },
-      { value: 'domain', label: 'Lock to domain' },
-      { value: 'page', label: 'Lock to this page' },
-    ],
-  },
+  // Tabs: the common dedup behaviour leads; the advanced pinned-tab lock follows.
   // Navigation dedup (navigation-tab-dedup): the escape hatch for the
   // address-bar dedup behaviour owned by the `tab-dedup` capability. Default On —
   // the whole point is to fix the duplicate complaint ("smart by default"); the
@@ -294,6 +282,19 @@ export const SETTINGS: readonly SettingDeclaration[] = [
     description:
       "When you open a new tab and go to a page that's already open in this space, switch to it instead of opening a duplicate",
     group: 'Tabs',
+  },
+  {
+    key: 'pinnedTabBoundaryDefault',
+    type: 'enum',
+    default: 'off',
+    label: 'Lock pinned tabs to their site',
+    description: 'Keep new pins on their own site or page; off-bounds links open in a new tab',
+    group: 'Tabs',
+    options: [
+      { value: 'off', label: 'Off' },
+      { value: 'domain', label: 'Lock to domain' },
+      { value: 'page', label: 'Lock to this page' },
+    ],
   },
   // Auto-archive (auto-archive): the master switch + the global idle threshold.
   // Owned by the auto-archive capability; the generic `toggle`/`number` rendering
@@ -345,7 +346,7 @@ export const DEFAULTS: Settings = {
   customSearchUrl: '',
   customSearchKeyword: '',
   launcherScope: 'prefer-current-space',
-  density: 'normal',
+  density: 'comfort',
   tint: 'vivid',
   theme: 'dark',
   showGlares: true,

@@ -180,7 +180,12 @@ function confirmClearAll(): void {
 }
 </script>
 
-<SettingsCard heading="Recently archived" id="recently-archived" testid="recently-archived">
+<SettingsCard
+  heading="Recently archived"
+  description="Tabs archived automatically land here — reopen one, or let it expire on the schedule above."
+  id="recently-archived"
+  testid="recently-archived"
+>
   {#snippet actions()}
     {#if items.length > 0}
       <span class="clear-actions" bind:this={clearActionsEl}>

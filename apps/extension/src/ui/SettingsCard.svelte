@@ -13,7 +13,7 @@ import Surface from './Surface.svelte';
  * `flush` switches to the comp's full-bleed layout: the body has no horizontal
  * padding, so its rows own their own `--space-5` inset and edge-to-edge
  * `border-top` dividers reach the card's rounded corners (clipped by the
- * Surface). The hero sections (Connections, Look & feel, Backup) set it; the
+ * Surface). The hero sections (Connections, Appearance, Backup) set it; the
  * smaller management cards keep the default inset body.
  */
 interface Props {

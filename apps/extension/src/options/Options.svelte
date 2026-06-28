@@ -37,22 +37,35 @@ const version = chrome.runtime.getManifest().version;
 // until launch, the same placeholder the store listing's privacy URL uses.
 const PRIVACY_URL = 'https://lunma.app/privacy';
 
-// Group declarations by `group`, preserving first-seen order.
-const groups = $derived.by(() => {
+// Group declarations by `group`, preserving first-seen order, keyed for lookup.
+const groupMap = $derived.by(() => {
   const map = new Map<string, SettingDeclaration[]>();
   for (const decl of SETTINGS) {
     const list = map.get(decl.group) ?? [];
     list.push(decl);
     map.set(decl.group, list);
   }
-  return [...map.entries()];
+  return map;
 });
 
-// The comp leads with Connections, then Look & feel; the remaining registry
-// groups (Search, Appearance, Pinned tabs, Tabs, Auto-archive) follow as
-// kept-but-restyled cards.
-const lookAndFeel = $derived(groups.find(([group]) => group === 'Look & feel'));
-const otherGroups = $derived(groups.filter(([group]) => group !== 'Look & feel'));
+// One-line intro shown under each section heading, so every card opens with a
+// plain-language "what this is" before its controls. The Auto-archive note also
+// reassures that pinned tabs are never touched.
+const GROUP_INTRO: Record<string, string> = {
+  'Search & launcher': 'How the launcher finds, ranks, and opens what you type.',
+  Appearance: 'Theme, colour, motion, and density — across every Lunma surface.',
+  Tabs: 'How tabs open, dedupe, and stay on their site.',
+  'Auto-archive':
+    'Tidy idle tabs away on their own — only temporary tabs, never your pinned ones — and restore them whenever you need.',
+};
+
+// Sections render in an explicit order so each management card sits with the
+// settings it relates to (Result sources under Search & launcher; Recently
+// archived under Auto-archive). Looked up by name rather than iterated.
+const searchGroup = $derived(groupMap.get('Search & launcher'));
+const appearanceGroup = $derived(groupMap.get('Appearance'));
+const tabsGroup = $derived(groupMap.get('Tabs'));
+const autoArchiveGroup = $derived(groupMap.get('Auto-archive'));
 
 // The custom-search-URL template is invalid only when it is actually the active
 // engine (`custom`) AND lacks the `%s` placeholder — then `resolveDefaultEngine`
@@ -218,25 +231,25 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
          connected source — leads the page per the comp. -->
     <ConnectionsCard />
 
-    <!-- Look & feel (redesign): theme + atmosphere glow + reduce-motion, rendered
-         from the settings registry as segmented rows. -->
-    {#if lookAndFeel}
-      {@render groupCard(lookAndFeel[0], lookAndFeel[1])}
-    {/if}
-
-    <!-- The remaining settings groups (Search, Appearance, Pinned tabs, Tabs,
-         Auto-archive) — kept, restyled into the same solid section card. -->
-    {#each otherGroups as [group, decls] (group)}
-      {@render groupCard(group, decls)}
-    {/each}
-
-    <!-- Recently archived (auto-archive): the management view the sidebar chip
-         deep-links to (`#recently-archived`). -->
-    <RecentlyArchived />
+    <!-- Explicit section order so each management card sits with the settings it
+         relates to: Search & launcher → Result sources; Auto-archive → Recently
+         archived. The registry groups render via the shared groupCard snippet. -->
+    {#if searchGroup}{@render groupCard('Search & launcher', searchGroup)}{/if}
 
     <!-- Result sources (least-privilege-permissions D5): the launcher's optional
-         history/bookmarks providers, granted in-context (#result-sources). -->
+         history/bookmarks providers, granted in-context (#result-sources). Sits
+         directly under Search & launcher — both are launcher concerns. -->
     <ResultSourcesCard />
+
+    {#if appearanceGroup}{@render groupCard('Appearance', appearanceGroup)}{/if}
+
+    {#if tabsGroup}{@render groupCard('Tabs', tabsGroup)}{/if}
+
+    {#if autoArchiveGroup}{@render groupCard('Auto-archive', autoArchiveGroup)}{/if}
+
+    <!-- Recently archived (auto-archive): the management view the sidebar chip
+         deep-links to (`#recently-archived`). Sits directly under Auto-archive. -->
+    <RecentlyArchived />
 
     <!-- Backup & restore (data-backup): the terminal data-management action —
          natural footer before the privacy link. -->
@@ -255,7 +268,13 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
 
 <!-- One registry group → one solid section card with full-bleed setting rows. -->
 {#snippet groupCard(group: string, decls: SettingDeclaration[])}
-  <SettingsCard heading={group} id={groupSlug(group)} headingTestid="group-heading" flush>
+  <SettingsCard
+    heading={group}
+    description={GROUP_INTRO[group]}
+    id={groupSlug(group)}
+    headingTestid="group-heading"
+    flush
+  >
     {#each decls as decl (decl.key)}
       {#if isVisible(decl)}
         <div class="setting" class:stacked={isStacked(decl)}>
