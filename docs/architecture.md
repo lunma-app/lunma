@@ -114,7 +114,7 @@ renders one section card per non-empty bucket in the order **Changes → Issues 
 Reading → Other**: the Change row carries a synthesized CI verdict + an inline
 linked-ticket chip (`refs[0]`); the Issues board (`IssuesBoard`) renders the
 `Ticket` entity (priority/status/project, merging Jira + git issues); Reading
-(`ReadingMagazine`) is the feed magazine. Pills are the shared `ui/Pill` primitive.
+(`ReadingMagazine`) is the feed magazine. Status/verdict pills are the shared `ui/Chip` primitive (its `hue` token).
 It is registered as a vite `rollupOptions.input` entry (not
 `web_accessible_resources` — least privilege).
 

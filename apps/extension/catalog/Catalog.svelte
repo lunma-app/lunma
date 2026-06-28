@@ -127,6 +127,8 @@ function select(entry: StoryEntry): void {
         {#key selected.id}
           {#await Promise.all([selected.load(), selected.loadSource()]) then [StoryComponent, source]}
             <StoryComponent {source} />
+          {:catch error}
+            <p class="error" role="alert">Failed to load story <code>{selected.id}</code>: {error}</p>
           {/await}
         {/key}
       {:else}
@@ -234,5 +236,11 @@ function select(entry: StoryEntry): void {
   }
   .empty {
     color: var(--text-muted);
+  }
+  .error {
+    color: var(--danger);
+  }
+  .error code {
+    font-family: var(--font-mono);
   }
 </style>
