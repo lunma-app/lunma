@@ -60,11 +60,18 @@ describe('LensFilterBar', () => {
     expect(container.querySelector('[data-testid="filter-clear"]')).not.toBeNull();
   });
 
-  test('Clear button appears when a scope filter is active (repo or project set from a card)', () => {
-    // repos are set (from inside the Changes card) but no entity filter in the top bar.
+  test('Clear button appears when a scope filter is active (repo, project, or feed set from a card)', () => {
     const { container } = renderBar(
       { repos: ['github.com/acme/api'] },
       { ...emptyFacets(), entities: ['change', 'ticket'] },
+    );
+    expect(container.querySelector('[data-testid="filter-clear"]')).not.toBeNull();
+  });
+
+  test('Clear button appears when a feed filter is active', () => {
+    const { container } = renderBar(
+      { feeds: ['Hacker News'] },
+      { ...emptyFacets(), entities: ['change', 'article'] },
     );
     expect(container.querySelector('[data-testid="filter-clear"]')).not.toBeNull();
   });

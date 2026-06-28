@@ -167,6 +167,7 @@ const LensFilterSchema = z.strictObject({
   entities: z.array(z.enum(['change', 'ticket', 'article', 'generic'])).optional(),
   repos: z.array(z.string()).optional(),
   projects: z.array(z.string()).optional(),
+  feeds: z.array(z.string()).optional(),
 });
 
 // Historical (v13) pinned-tab node: identical to the current `PinNodeSchema`

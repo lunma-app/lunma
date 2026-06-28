@@ -14,6 +14,7 @@ import {
   changeMeta,
   ciLight,
   feedLabel,
+  feedsOf,
   groupByRelation,
   groupByStatus,
   hostOf,
@@ -43,7 +44,7 @@ interface Props {
    * OverviewPage can apply applyLensFilter before bucketing by entity. */
   tagged: Tagged[];
   /** Available facets derived from all current items (from LensPage). */
-  facets: { entities: LensEntity[]; repos: string[]; projects: string[] };
+  facets: { entities: LensEntity[]; repos: string[]; projects: string[]; feeds: string[] };
   /** The identity sub-line (derived provider summary). */
   lensSub: string;
   /** Unread keys (`${sk}:${id}`) — drives the Articles unread count + dots. */
@@ -65,6 +66,7 @@ const filter = $derived(node.filter ?? {});
 const CHIP_THRESHOLD = 5;
 const visRepos = $derived([...new Set([...facets.repos, ...(filter.repos ?? [])])]);
 const visProjects = $derived([...new Set([...facets.projects, ...(filter.projects ?? [])])]);
+const visFeeds = $derived([...new Set([...facets.feeds, ...(filter.feeds ?? [])])]);
 
 const repoSelectOptions = $derived<SelectOption[]>([
   { value: 'all', label: 'All repos' },
@@ -80,6 +82,12 @@ const projectSelectValue = $derived(
   filter.projects?.length === 1 ? (filter.projects[0] ?? 'all') : 'all',
 );
 
+const feedSelectOptions = $derived<SelectOption[]>([
+  { value: 'all', label: 'All feeds' },
+  ...visFeeds.map((f) => ({ value: f, label: f })),
+]);
+const feedSelectValue = $derived(filter.feeds?.length === 1 ? (filter.feeds[0] ?? 'all') : 'all');
+
 function toggleRepo(r: string): void {
   const current = filter.repos ?? [];
   const next = current.includes(r) ? current.filter((x) => x !== r) : [...current, r];
@@ -92,6 +100,12 @@ function toggleProject(p: string): void {
   setFilter({ ...filter, projects: next });
 }
 
+function toggleFeed(f: string): void {
+  const current = filter.feeds ?? [];
+  const next = current.includes(f) ? current.filter((x) => x !== f) : [...current, f];
+  setFilter({ ...filter, feeds: next });
+}
+
 function onRepoSelectChange(value: string): void {
   setFilter({ ...filter, repos: value === 'all' ? [] : [value] });
 }
@@ -100,11 +114,25 @@ function onProjectSelectChange(value: string): void {
   setFilter({ ...filter, projects: value === 'all' ? [] : [value] });
 }
 
+function onFeedSelectChange(value: string): void {
+  setFilter({ ...filter, feeds: value === 'all' ? [] : [value] });
+}
+
 // Apply the persisted lens filter before bucketing so both the count and the
 // entity sections reflect exactly what the filter allows.
 const filteredTagged = $derived.by(() => {
-  if (!filter.entities?.length && !filter.repos?.length && !filter.projects?.length) return tagged;
-  const rows = tagged.map((t) => ({ item: t.item, host: hostOf(t.cfg.baseUrl) }));
+  if (
+    !filter.entities?.length &&
+    !filter.repos?.length &&
+    !filter.projects?.length &&
+    !filter.feeds?.length
+  )
+    return tagged;
+  const rows = tagged.map((t) => ({
+    item: t.item,
+    host: hostOf(t.cfg.baseUrl),
+    feedName: feedLabel(t),
+  }));
   const passedItems = new Set(applyLensFilter(rows, filter).map((r) => r.item));
   return tagged.filter((t) => passedItems.has(t.item));
 });
@@ -318,6 +346,27 @@ const empty = $derived(
       </button>
       {#if open}
         <div class="sec-body">
+          {#if visFeeds.length > 1}
+            <div class="scope-filter" data-testid="article-scope-filter">
+              {#if visFeeds.length <= CHIP_THRESHOLD}
+                {#each visFeeds as feed (feed)}
+                  <Chip
+                    label={feed}
+                    onToggle={() => toggleFeed(feed)}
+                    selected={(filter.feeds ?? []).includes(feed)}
+                    testid="feed-chip"
+                  />
+                {/each}
+              {:else}
+                <Select
+                  options={feedSelectOptions}
+                  value={feedSelectValue}
+                  onchange={onFeedSelectChange}
+                  testid="feed-select"
+                />
+              {/if}
+            </div>
+          {/if}
           <div class="filter-row article-controls">
             <span class="controls-right">
               <button class="chip-btn" class:on={unreadOnly} type="button" onclick={toggleUnreadFilter}>Unread · {unreadCount}</button>
