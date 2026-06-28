@@ -205,7 +205,11 @@ const PinNodeV13Schema = z.discriminatedUnion('kind', [
 // lens-view-filters (v14). Folder `icon`/`color` are plain strings on the
 // record (as on `Space`); the narrow `IconName`/`SpaceColor` unions live only
 // at the bus boundary.
-const PinNodeSchema = z.discriminatedUnion('kind', [
+// Exported so the migration chain's terminal normalization
+// (`normalizePinnedNodes` in migrations.ts) can validate each migrated node and
+// drop any that fails the current shape — preventing a structurally-invalid node
+// (e.g. a lens left without sources) from poisoning whole-state validation.
+export const PinNodeSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('tab'), id: z.string() }),
   z.strictObject({
     kind: z.literal('folder'),

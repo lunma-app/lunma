@@ -1063,6 +1063,78 @@ describe('salvagePersistedState', () => {
     expect(out?.lensItemBindings).toEqual({});
     expect(out?.spaces).toEqual([{ id: 'a', name: 'Work', color: 'blue', icon: 'star' }]);
   });
+
+  // Regression: one invalid pinned node must cost only that node — never the
+  // whole pinnedBySpace slice (which previously wiped every Space's tree).
+  test('drops only the invalid pinned node, preserving valid nodes across all Spaces', () => {
+    const lensNode = {
+      kind: 'lens',
+      lensKind: 'general',
+      id: 'lens-ok',
+      name: 'Assigned',
+      icon: 'folder-git-2',
+      sources: [{ sourceId: 'acc-1', queries: ['assigned'] }],
+      maxItems: 20,
+      hideRead: false,
+      refreshMinutes: 5,
+    };
+    const out = salvagePersistedState({
+      ...validPersistedState(),
+      spaces: [
+        { id: 's1', name: 'Work', color: 'blue', icon: 'star' },
+        { id: 's2', name: 'Home', color: 'green', icon: 'house' },
+      ],
+      pinnedBySpace: {
+        s1: [
+          { kind: 'tab', id: 't1' },
+          // invalid: a lens with empty sources (violates `.min(1)`)
+          {
+            kind: 'lens',
+            lensKind: 'general',
+            id: 'lens-bad',
+            name: 'Broken',
+            icon: 'folder-git-2',
+            sources: [],
+            maxItems: 20,
+            hideRead: true,
+            refreshMinutes: 10,
+          },
+        ],
+        s2: [lensNode],
+      },
+    });
+    expect(out).not.toBeNull();
+    // s1 keeps the valid tab, drops only the broken lens.
+    expect(out?.pinnedBySpace.s1).toEqual([{ kind: 'tab', id: 't1' }]);
+    // s2's valid lens is untouched — never collateral damage from s1's bad node.
+    expect(out?.pinnedBySpace.s2).toEqual([lensNode]);
+  });
+
+  test('salvages savedTabs and archivedTabs element-wise, dropping only invalid entries', () => {
+    const goodTab = {
+      id: 'g1',
+      spaceId: null,
+      title: 'Good',
+      originalURL: 'https://a.com',
+      currentURL: null,
+    };
+    const goodArchived = {
+      tabId: 1,
+      url: 'https://a.com',
+      title: 'A',
+      spaceId: 's1',
+      archivedAt: 123,
+    };
+    const out = salvagePersistedState({
+      ...validPersistedState(),
+      spaces: [{ id: 's1', name: 'Work', color: 'blue', icon: 'star' }],
+      savedTabs: { g1: goodTab, bad: { id: 'bad' } }, // one valid, one malformed
+      archivedTabs: [goodArchived, { tabId: 'nope' }], // one valid, one malformed
+    });
+    expect(out).not.toBeNull();
+    expect(out?.savedTabs).toEqual({ g1: goodTab });
+    expect(out?.archivedTabs).toEqual([goodArchived]);
+  });
 });
 
 describe('persist', () => {

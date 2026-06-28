@@ -181,6 +181,22 @@ export function dedupePersistedState(state: AppStateV14): { state: AppStateV14; 
  * `pinnedBySpace` entry pointing at a reset `savedTabs`) are tolerated by the
  * load-path dedupe and the sidebar projections (unbound ids drop at render).
  */
+/** Salvage an id-keyed record element-wise: keep each entry whose value validates
+ * against `valueSchema`, drop only the malformed entries. A non-object input
+ * yields `{}`. Pure. */
+function salvageRecord(
+  input: unknown,
+  valueSchema: { safeParse: (v: unknown) => { success: boolean; data?: unknown } },
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) return out;
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    const parsed = valueSchema.safeParse(value);
+    if (parsed.success) out[key] = parsed.data;
+  }
+  return out;
+}
+
 export function salvagePersistedState(migrated: unknown): AppStateV14 | null {
   if (typeof migrated !== 'object' || migrated === null || Array.isArray(migrated)) {
     return null;
@@ -200,20 +216,47 @@ export function salvagePersistedState(migrated: unknown): AppStateV14 | null {
       })
     : [];
 
-  // Every other persisted slice, slice-wise: keep the input's value when it
-  // validates against that slice's own schema, else keep the empty default.
+  // Container slices element-wise (harden-migration-salvage): one bad element
+  // must NOT discard the whole slice. A single invalid pinned node previously
+  // reset every Space's pinned tree; now it costs only that node.
+  //
+  // `pinnedBySpace` per-node: rebuild the record, keep each node validating
+  // against the current `PinNodeSchema`, drop a non-array Space value entirely.
+  // (Zod 4 record value accessor is `.valueType`; its array `.element` is the node.)
+  const pinNodeSchema = shape.pinnedBySpace.valueType.element;
+  const pinnedBySpace: Record<string, unknown[]> = {};
+  if (typeof input.pinnedBySpace === 'object' && input.pinnedBySpace !== null) {
+    for (const [spaceId, nodes] of Object.entries(input.pinnedBySpace as Record<string, unknown>)) {
+      if (!Array.isArray(nodes)) continue;
+      pinnedBySpace[spaceId] = nodes.flatMap((node) => {
+        const parsed = pinNodeSchema.safeParse(node);
+        return parsed.success ? [parsed.data] : [];
+      });
+    }
+  }
+  assembled.pinnedBySpace = pinnedBySpace;
+
+  // `savedTabs` and `trash` (id-keyed records) per-entry; `archivedTabs` (array)
+  // per-element. Keep each valid entry, drop only the malformed ones.
+  assembled.savedTabs = salvageRecord(input.savedTabs, shape.savedTabs.valueType);
+  assembled.trash = salvageRecord(input.trash, shape.trash.valueType);
+  assembled.archivedTabs = Array.isArray(input.archivedTabs)
+    ? input.archivedTabs.flatMap((element) => {
+        const parsed = shape.archivedTabs.element.safeParse(element);
+        return parsed.success ? [parsed.data] : [];
+      })
+    : [];
+
+  // Every remaining slice, slice-wise: keep the input's value when it validates
+  // against that slice's own schema, else keep the empty default.
   const sliceFields = [
     'schemaVersion',
     'sources',
     'activeSpaceByWindow',
     'spaceInstancesByWindow',
     'tabBindings',
-    'savedTabs',
     'lastActivatedSpaceId',
     'tabLastActivity',
-    'archivedTabs',
-    'trash',
-    'pinnedBySpace',
     'faviconRow',
     'lensItemBindings',
     'lensReadState',
