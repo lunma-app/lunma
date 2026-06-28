@@ -49,4 +49,4 @@
 ## 7. Verify
 
 - [x] 6.1 `pnpm --filter @lunma/extension verify` green (tsc, biome incl. layer DAG, svelte-check, stylelint, catalog gate, vitest incl. story-parity).
-- [ ] 6.2 Manual smoke: a lens with >8 feeds filters by several at once with search; a new lens built from several sources fetches all relation lanes; reduced-motion + keyboard nav hold.
+- [x] 6.2 Manual smoke: a lens with >8 feeds filters by several at once with search; a new lens built from several sources fetches all relation lanes; reduced-motion + keyboard nav hold.
