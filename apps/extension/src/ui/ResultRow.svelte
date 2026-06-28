@@ -140,21 +140,6 @@ const {
     row-gap: var(--row-gap);
   }
 
-  /* Leading accent marker for the roving selection — floats inside the pill. */
-  .result-row::before {
-    content: '';
-    position: absolute;
-    left: 5px;
-    top: 50%;
-    transform: translateY(-50%) scaleY(0);
-    width: 3px;
-    height: 18px;
-    border-radius: var(--r-pill);
-    background: var(--accent);
-    opacity: 0.9;
-    transition: transform var(--motion-base) var(--ease-emphasised);
-  }
-
   .result-row:hover {
     background: var(--hover);
     color: var(--text);
@@ -164,13 +149,11 @@ const {
     background: var(--press);
   }
 
-  /* Roving keyboard selection wins over hover: a soft accent wash + the marker. */
+  /* Roving keyboard selection wins over hover: the soft accent wash alone — no
+     leading accent bar (matches the overlay + sidebar tab row's wash-only selection). */
   .result-row.selected {
     background: var(--accent-soft);
     color: var(--text);
-  }
-  .result-row.selected::before {
-    transform: translateY(-50%) scaleY(1);
   }
 
   .result-row:focus-visible {
@@ -280,9 +263,4 @@ const {
     color: var(--text-muted);
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .result-row::before {
-      transition: none;
-    }
-  }
 </style>

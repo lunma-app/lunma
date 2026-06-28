@@ -76,7 +76,12 @@ onMount(() => {
 onMount(() => onPermissionsChange(() => void refreshResultSources()));
 </script>
 
-<SettingsCard heading="Result sources" id="result-sources" testid="result-sources-section">
+<SettingsCard
+  heading="Result sources"
+  description="Let the launcher also search your browser history and bookmarks. Each is granted in your browser, only when you turn it on."
+  id="result-sources"
+  testid="result-sources-section"
+>
   <p class="result-source-intro">
     The launcher can also surface your browsing history and bookmarks. These are optional —
     enable each when you want it, and revoke access anytime from your browser's extension settings.

@@ -95,9 +95,17 @@ describe('Options', () => {
     expect(radios).toHaveLength(REGISTRY_RADIOS + 2);
   });
 
-  test('renders the Pinned tabs group with the boundary-default control (no Options code)', () => {
+  test('each registry section card shows a one-line intro under its heading', () => {
     const { getByText } = render(Options, { props: {} });
-    expect(getByText('Pinned tabs')).not.toBeNull();
+    // Intro copy from GROUP_INTRO renders beneath the section heading.
+    expect(getByText(/across every Lunma surface/)).not.toBeNull();
+    expect(getByText(/How the launcher finds, ranks, and opens/)).not.toBeNull();
+    expect(getByText(/never your pinned ones/)).not.toBeNull();
+  });
+
+  test('renders the pinned-tab boundary control under the Tabs group (folded in)', () => {
+    const { getByText } = render(Options, { props: {} });
+    expect(getByText('Tabs')).not.toBeNull();
     expect(getByText('Lock pinned tabs to their site')).not.toBeNull();
   });
 
@@ -140,11 +148,12 @@ describe('Options', () => {
 
   test('selecting a density writes it and applies data-density to the document', async () => {
     const { container } = render(Options, { props: {} });
-    // Let the initial read settle (normal → no attribute).
+    // Let the initial read settle (comfort is the default, so it is pre-applied).
     await waitFor(() => expect(chromeMock.get).toHaveBeenCalled());
 
-    const comfort = container.querySelector('input[value="comfort"]') as HTMLInputElement;
-    await fireEvent.click(comfort);
+    // Pick compact — comfort is the default/pre-selected, so it would fire no change.
+    const compact = container.querySelector('input[value="compact"]') as HTMLInputElement;
+    await fireEvent.click(compact);
 
     await waitFor(() => {
       // The merge carries every field, so the persisted object includes the
@@ -152,7 +161,7 @@ describe('Options', () => {
       // `density`.
       expect(chromeMock.set).toHaveBeenCalledWith({
         'lunma.settings': {
-          density: 'comfort',
+          density: 'compact',
           tint: 'vivid',
           theme: 'dark',
           showGlares: true,
@@ -169,7 +178,7 @@ describe('Options', () => {
         },
       });
     });
-    expect(document.documentElement.dataset.density).toBe('comfort');
+    expect(document.documentElement.dataset.density).toBe('compact');
   });
 
   test('selecting a colour intensity persists the tint', async () => {
@@ -182,7 +191,7 @@ describe('Options', () => {
     await waitFor(() => {
       expect(chromeMock.set).toHaveBeenCalledWith({
         'lunma.settings': {
-          density: 'normal',
+          density: 'comfort',
           tint: 'subtle',
           theme: 'dark',
           showGlares: true,
@@ -211,7 +220,7 @@ describe('Options', () => {
     await waitFor(() => {
       expect(chromeMock.set).toHaveBeenCalledWith({
         'lunma.settings': {
-          density: 'normal',
+          density: 'comfort',
           tint: 'vivid',
           theme: 'dark',
           showGlares: true,
@@ -244,7 +253,7 @@ describe('Options', () => {
 describe('Options — Search group', () => {
   test('renders the Search group + engine dropdown; custom fields hidden until Custom is selected', async () => {
     const { container, getByText, queryByText } = render(Options, { props: {} });
-    expect(getByText('Search')).not.toBeNull();
+    expect(getByText('Search & launcher')).not.toBeNull();
     expect(getByText('Default search engine')).not.toBeNull();
     // Default engine is a built-in (google) → the custom-engine fields are hidden,
     // so the Search group shows just the picker (the custom slot is unused).
@@ -269,18 +278,18 @@ describe('Options — Search group', () => {
     expect(container.querySelectorAll('[data-testid="text-input"]').length).toBe(2);
   });
 
-  test('Look & feel leads the registry groups (per the comp), Search ahead of Appearance', () => {
+  test('registry groups render in order: Search & launcher → Appearance → Tabs → Auto-archive', () => {
     const { container } = render(Options, { props: {} });
-    // Assert against the registry-group heading testid (not the `.group-label`
-    // class, which the primitive swap + section extraction would break). The
-    // redesign leads with Connections (a standalone card) then Look & feel — so
-    // Look & feel is the first registry group-heading; the remaining groups keep
-    // their declared order (Search before Appearance).
+    // Connections is a standalone card (no group-heading testid), so the first
+    // registry group-heading is Search & launcher. There is no Look & feel group.
     const labels = [...container.querySelectorAll('[data-testid="group-heading"]')].map((el) =>
       el.textContent?.trim(),
     );
-    expect(labels[0]).toBe('Look & feel');
-    expect(labels.indexOf('Search')).toBeLessThan(labels.indexOf('Appearance'));
+    expect(labels[0]).toBe('Search & launcher');
+    expect(labels).not.toContain('Look & feel');
+    expect(labels.indexOf('Search & launcher')).toBeLessThan(labels.indexOf('Appearance'));
+    expect(labels.indexOf('Appearance')).toBeLessThan(labels.indexOf('Tabs'));
+    expect(labels.indexOf('Tabs')).toBeLessThan(labels.indexOf('Auto-archive'));
   });
 
   test('selecting an engine from the dropdown persists it immediately', async () => {

@@ -67,13 +67,13 @@ describe('readSettings', () => {
   test('returns DEFAULTS on first read (no saved settings)', async () => {
     const settings = await readSettings();
     expect(settings).toEqual(DEFAULTS);
-    expect(settings.density).toBe('normal');
+    expect(settings.density).toBe('comfort');
   });
 
   test('unknown enum value falls back to the declared default', async () => {
     chromeMock.data['lunma.settings'] = { density: 'ultra' };
     const settings = await readSettings();
-    expect(settings.density).toBe('normal');
+    expect(settings.density).toBe('comfort');
   });
 
   test('malformed (non-object) stored value yields DEFAULTS', async () => {
@@ -213,7 +213,7 @@ describe('watchSettings', () => {
       'sync',
     );
     expect(cb).toHaveBeenCalledWith({
-      density: 'normal',
+      density: 'comfort',
       tint: 'vivid',
       theme: 'dark',
       showGlares: true,
