@@ -204,7 +204,9 @@ function openOptions(): void {
           data-name={space.name}
           data-active={isActive ? 'true' : 'false'}
           aria-current={isActive ? 'true' : undefined}
-          aria-label={isActive ? `Edit ${space.name}` : m.sidebar_spaceTooltipActivate({ name: space.name })}
+          aria-label={isActive
+            ? m.sidebar_spaceEditAria({ name: space.name })
+            : m.sidebar_spaceTooltipActivate({ name: space.name })}
           style:--space-h={String(ok.h)}
           style:--space-chroma={String(ok.c)}
           style:--space-l={String(ok.l)}

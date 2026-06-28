@@ -586,7 +586,7 @@ function onMenuOpenChange(open: boolean): void {
       icon="star"
       testid="favicon-empty"
       title={m.sidebar_noFavorites()}
-      subtitle={favoriteDropTargeted ? 'Drop to favorite' : 'Drag a tab up here to favorite it.'}
+      subtitle={favoriteDropTargeted ? m.sidebar_favDropHint() : m.sidebar_favDragHint()}
       over={favoriteDropTargeted}
     />
   {/if}

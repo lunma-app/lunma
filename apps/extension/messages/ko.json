@@ -373,5 +373,13 @@
   "options_boundary_domain": "도메인 잠금",
   "options_boundary_page": "이 페이지 잠금",
   "options_toggle_off": "끄기",
-  "options_toggle_on": "켜기"
+  "options_toggle_on": "켜기",
+  "sidebar_lensKindUnread": "읽지 않음",
+  "sidebar_lensKindItems": "항목",
+  "sidebar_lensEditorCreate": "렌즈 만들기",
+  "sidebar_lensRoleWatching": "구독 중",
+  "sidebar_lensRoleReviewing": "검토 중",
+  "sidebar_spaceEditAria": "{name} 편집",
+  "sidebar_favDropHint": "여기에 놓아 즐겨찾기에 추가",
+  "sidebar_favDragHint": "탭을 여기로 드래그하여 즐겨찾기에 추가하세요."
 }

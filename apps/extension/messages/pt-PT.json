@@ -378,5 +378,13 @@
   "options_boundary_domain": "Bloquear ao domínio",
   "options_boundary_page": "Bloquear a esta página",
   "options_toggle_off": "Desligado",
-  "options_toggle_on": "Ligado"
+  "options_toggle_on": "Ligado",
+  "sidebar_lensKindUnread": "não lidos",
+  "sidebar_lensKindItems": "itens",
+  "sidebar_lensEditorCreate": "Criar lens",
+  "sidebar_lensRoleWatching": "A observar",
+  "sidebar_lensRoleReviewing": "A rever",
+  "sidebar_spaceEditAria": "Editar {name}",
+  "sidebar_favDropHint": "Largar para adicionar aos favoritos",
+  "sidebar_favDragHint": "Arraste um separador até aqui para o adicionar aos favoritos."
 }

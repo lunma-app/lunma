@@ -378,5 +378,13 @@
   "options_boundary_domain": "Lock to domain",
   "options_boundary_page": "Lock to this page",
   "options_toggle_off": "Off",
-  "options_toggle_on": "On"
+  "options_toggle_on": "On",
+  "sidebar_lensKindUnread": "unread",
+  "sidebar_lensKindItems": "items",
+  "sidebar_lensEditorCreate": "Create lens",
+  "sidebar_lensRoleWatching": "Watching",
+  "sidebar_lensRoleReviewing": "Reviewing",
+  "sidebar_spaceEditAria": "Edit {name}",
+  "sidebar_favDropHint": "Drop to favorite",
+  "sidebar_favDragHint": "Drag a tab up here to favorite it."
 }

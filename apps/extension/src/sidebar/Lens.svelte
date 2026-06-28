@@ -557,7 +557,11 @@ export function onContextMenu(_e: MouseEvent): void {
         onOpenPage={openPage}
         openPageLabel={badge === undefined
           ? m.sidebar_lensOpenPageLabel({ name: node.name })
-          : m.sidebar_lensOpenPageLabelBadge({ name: node.name, badge, kind: hasFeedSections ? 'unread' : 'items' })}
+          : m.sidebar_lensOpenPageLabelBadge({
+              name: node.name,
+              badge,
+              kind: hasFeedSections ? m.sidebar_lensKindUnread() : m.sidebar_lensKindItems(),
+            })}
         {badge}
         {busy}
       />

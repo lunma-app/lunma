@@ -378,5 +378,13 @@
   "options_boundary_domain": "Anclar al dominio",
   "options_boundary_page": "Anclar a esta página",
   "options_toggle_off": "Desactivado",
-  "options_toggle_on": "Activado"
+  "options_toggle_on": "Activado",
+  "sidebar_lensKindUnread": "no leídas",
+  "sidebar_lensKindItems": "elementos",
+  "sidebar_lensEditorCreate": "Crear lente",
+  "sidebar_lensRoleWatching": "Siguiendo",
+  "sidebar_lensRoleReviewing": "Revisando",
+  "sidebar_spaceEditAria": "Editar {name}",
+  "sidebar_favDropHint": "Soltar para añadir a favoritos",
+  "sidebar_favDragHint": "Arrastra una pestaña aquí para añadirla a favoritos."
 }

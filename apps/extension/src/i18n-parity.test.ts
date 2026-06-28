@@ -28,6 +28,13 @@ const messageKeys = (catalog: Record<string, unknown>): string[] =>
     .filter((key) => !key.startsWith('$'))
     .sort();
 
+// The `{token}` interpolation placeholders in a message value (string or the
+// inlang variant array form). A translation that drops or renames a placeholder
+// silently breaks interpolation (e.g. the overlay's `{engine}` replace no-ops),
+// so every locale must carry the same placeholder set as `en`.
+const placeholders = (value: unknown): string[] =>
+  [...new Set(JSON.stringify(value).match(/\{(\w+)\}/g) ?? [])].sort();
+
 describe('Paraglide message catalogs (messages/{locale}.json)', () => {
   const { baseLocale, locales } = loadProject();
   const baseKeys = messageKeys(readJson(`../messages/${baseLocale}.json`));
@@ -40,6 +47,16 @@ describe('Paraglide message catalogs (messages/{locale}.json)', () => {
     const catalog = readJson(`../messages/${locale}.json`);
     for (const key of messageKeys(catalog)) {
       expect(catalog[key], `messages/${locale}.json → ${key}`).not.toBe('');
+    }
+  });
+
+  test.each(locales)('%s preserves every {token} placeholder from the base locale', (locale) => {
+    const base = readJson(`../messages/${baseLocale}.json`);
+    const catalog = readJson(`../messages/${locale}.json`);
+    for (const key of baseKeys) {
+      expect(placeholders(catalog[key]), `messages/${locale}.json → ${key}`).toEqual(
+        placeholders(base[key]),
+      );
     }
   });
 });

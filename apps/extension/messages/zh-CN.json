@@ -373,5 +373,13 @@
   "options_boundary_domain": "锁定到域",
   "options_boundary_page": "锁定到此页",
   "options_toggle_off": "关闭",
-  "options_toggle_on": "开启"
+  "options_toggle_on": "开启",
+  "sidebar_lensKindUnread": "未读",
+  "sidebar_lensKindItems": "条",
+  "sidebar_lensEditorCreate": "新建镜头",
+  "sidebar_lensRoleWatching": "关注中",
+  "sidebar_lensRoleReviewing": "审阅中",
+  "sidebar_spaceEditAria": "编辑 {name}",
+  "sidebar_favDropHint": "拖放至此以收藏",
+  "sidebar_favDragHint": "将标签页拖到此处以收藏。"
 }

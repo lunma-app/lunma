@@ -388,5 +388,13 @@
   "options_boundary_domain": "Привязать к домену",
   "options_boundary_page": "Привязать к этой странице",
   "options_toggle_off": "Выкл.",
-  "options_toggle_on": "Вкл."
+  "options_toggle_on": "Вкл.",
+  "sidebar_lensKindUnread": "непрочитанных",
+  "sidebar_lensKindItems": "элементов",
+  "sidebar_lensEditorCreate": "Создать линзу",
+  "sidebar_lensRoleWatching": "Отслеживаемые",
+  "sidebar_lensRoleReviewing": "На проверке",
+  "sidebar_spaceEditAria": "Изменить {name}",
+  "sidebar_favDropHint": "Перетащите, чтобы добавить в избранное",
+  "sidebar_favDragHint": "Перетащите вкладку сюда, чтобы добавить в избранное."
 }

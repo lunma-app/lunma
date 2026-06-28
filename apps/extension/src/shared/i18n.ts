@@ -28,14 +28,20 @@ let cached: Locale | undefined;
 
 // Register the SW-safe strategy at MODULE LOAD (import-for-side-effect) so it is
 // in place before any message function evaluates `getLocale()`. `getLocale`
-// reads the in-memory cache; `setLocale` persists the choice to the Settings
-// store (Paraglide calls this internally on a locale switch).
+// reads the in-memory cache; `setLocale` updates ONLY that cache.
 defineCustomClientStrategy('custom-lunmaSettings', {
   getLocale: () => cached,
-  // Paraglide passes a concrete locale string here; the cast narrows it to the
-  // settings union. (The 'auto' sentinel never reaches this path — it is stored
-  // by `setLocale` below and resolved on read.)
-  setLocale: (locale) => void writeSetting('language', locale as SupportedLocale),
+  // Update the in-memory cache only — do NOT persist here. Paraglide's
+  // `getLocale()` self-heals on its first call by invoking `setLocale(resolved,
+  // { reload: false })` (runtime `localeInitiallySet` path); if that wrote to
+  // storage it would clobber the stored `'auto'` sentinel with the resolved
+  // concrete locale on the very first `m.*` render — permanently de-selecting
+  // "System" and firing a spurious first-paint reload (the `watchSettings` guard
+  // would see an `auto → de` delta). Persistence is owned solely by the exported
+  // `setLocale` wrapper below (the Options picker path).
+  setLocale: (locale) => {
+    cached = locale as Locale;
+  },
 });
 
 export { getLocale };
