@@ -346,7 +346,7 @@ const empty = $derived(
       </button>
       {#if open}
         <div class="sec-body">
-          {#if visFeeds.length > 1}
+          {#if visFeeds.length > 0}
             <div class="scope-filter" data-testid="article-scope-filter">
               {#if visFeeds.length <= CHIP_THRESHOLD}
                 {#each visFeeds as feed (feed)}
