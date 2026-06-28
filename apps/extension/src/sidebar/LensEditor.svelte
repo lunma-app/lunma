@@ -5,6 +5,7 @@ import { dispatch } from '../shared/bus';
 import { requiredOriginsForConfig } from '../shared/connector-origins';
 import { readAccountTokens } from '../shared/connectors';
 import { entitiesForSource, type LensEntity } from '../shared/lens-entity';
+import { m } from '../shared/paraglide/messages';
 import { requestHostPermissions } from '../shared/permissions';
 import type {
   LensProvider,
@@ -71,17 +72,17 @@ const SUGGESTED_QUEUE_NAME: Record<Exclude<LensProvider, 'rss'>, Record<LensQuer
 };
 
 const CADENCE_OPTIONS = [
-  { value: '5', label: 'Every 5 minutes' },
-  { value: '10', label: 'Every 10 minutes' },
-  { value: '30', label: 'Every 30 minutes' },
-  { value: '60', label: 'Every hour' },
+  { value: '5', label: m.sidebar_lensCadence5() },
+  { value: '10', label: m.sidebar_lensCadence10() },
+  { value: '30', label: m.sidebar_lensCadence30() },
+  { value: '60', label: m.sidebar_lensCadenceHour() },
 ];
 const MAX_ITEMS_VALUES = ['10', '20', '30', '50'];
 
 function queryOptionsFor(p: LensProvider): Array<{ value: LensQuery; label: string }> {
   return [
-    { value: 'authored', label: 'Authored' },
-    { value: 'assigned', label: 'Assigned' },
+    { value: 'authored', label: m.sidebar_lensRoleAuthored() },
+    { value: 'assigned', label: m.sidebar_lensRoleAssigned() },
     { value: 'review-requested', label: p === 'jira' ? 'Watching' : 'Reviewing' },
   ];
 }
@@ -345,9 +346,9 @@ function confirm(): void {
 <div class="editor" data-testid="smart-folder-editor">
   <div class="editor-head">
     <div class="field">
-      <span class="field-label">Name</span>
+      <span class="field-label">{m.common_name()}</span>
       <TextInput
-        ariaLabel="Name"
+        ariaLabel={m.common_name()}
         bind:value={name}
         placeholder={suggestedName || 'Lens'}
         testid="smart-folder-name"
@@ -361,8 +362,8 @@ function confirm(): void {
 
   <div class="editor-body" use:scrollFade>
     <div class="field">
-    <span class="field-label">Read from</span>
-    <p class="field-help">Pick the connections this lens watches — its type is derived.</p>
+    <span class="field-label">{m.sidebar_lensReadFrom()}</span>
+    <p class="field-help">{m.sidebar_lensReadFromHelp()}</p>
     <div class="account-list" data-testid="smart-source-list">
       {#each pickerAccounts as account (account.id)}
         {@const selected = isSelected(account.id)}
@@ -387,7 +388,7 @@ function confirm(): void {
             />
           </button>
           {#if selected && account.provider !== 'rss'}
-            <div class="filter-pills" role="group" aria-label="Filters">
+            <div class="filter-pills" role="group" aria-label={m.sidebar_lensFiltersLabel()}>
               {#each queryOptionsFor(account.provider) as opt (opt.value)}
                 <Chip
                   label={opt.label}
@@ -413,11 +414,11 @@ function confirm(): void {
     {:else}
       <div class="source-add-row">
         <Button variant="ghost" size="sm" onclick={() => (showPicker = true)} testid="smart-add-source">
-          + Connect a service
+          {m.sidebar_lensConnectService()}
         </Button>
         <span class="add-spacer"></span>
         <button type="button" class="manage-link" data-testid="manage-accounts" onclick={manageAccounts}>
-          Manage <Icon name="external-link" size={12} />
+          {m.common_manage()} <Icon name="external-link" size={12} />
         </button>
       </div>
     {/if}
@@ -427,7 +428,7 @@ function confirm(): void {
   <div class="editor-foot">
   {#if previewEntities.length > 0}
     <div class="field">
-      <span class="field-label">This lens will show</span>
+      <span class="field-label">{m.sidebar_lensWillShow()}</span>
       <div class="entity-preview" data-testid="entity-preview">
         {#each previewEntities as entity (entity)}
           <span class="entity-chip" data-entity={entity} data-testid="entity-chip">
@@ -447,20 +448,20 @@ function confirm(): void {
       onchange={(v) => {
         maxItems = v;
       }}
-      ariaLabel="Maximum items"
+      ariaLabel={m.sidebar_lensMaxItems()}
       testid="smart-folder-max-items"
     />
   </div>
 
   <div class="field">
-    <span class="field-label">Refresh</span>
+    <span class="field-label">{m.common_refresh()}</span>
     <Select
       options={CADENCE_OPTIONS}
       value={refreshMinutes}
       onchange={(v) => {
         refreshMinutes = v;
       }}
-      ariaLabel="Refresh cadence"
+      ariaLabel={m.sidebar_lensRefreshCadence()}
       testid="smart-folder-cadence"
     />
   </div>
@@ -469,7 +470,7 @@ function confirm(): void {
     <p class="hint" data-testid="smart-folder-hint">{hint}</p>
     <span class="confirm-spacer"></span>
     {#if onDone}
-      <Button variant="secondary" onclick={() => onDone?.()}>Cancel</Button>
+      <Button variant="secondary" onclick={() => onDone?.()}>{m.common_cancel()}</Button>
     {/if}
     <Button variant="primary" disabled={!canConfirm} onclick={confirm} testid="smart-folder-confirm">
       {node ? 'Save changes' : 'Create lens'}

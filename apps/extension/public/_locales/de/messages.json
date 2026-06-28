@@ -1,18 +1,18 @@
 {
   "extDescription": {
-    "message": "Vertical tabs and per-project Spaces for Chrome, with smart folders and a quick launcher.",
+    "message": "Vertikale Tabs und projektbezogene Spaces für Chrome, mit Smart-Ordnern und einem schnellen Launcher.",
     "description": "Chrome Web Store / extension listing description."
   },
   "actionDefaultTitle": {
-    "message": "Open Lunma sidebar",
+    "message": "Lunma Sidebar öffnen",
     "description": "Tooltip on the toolbar action button."
   },
   "commandPinActiveTab": {
-    "message": "Pin the active tab to the current Space",
+    "message": "Aktiven Tab im aktuellen Space anheften",
     "description": "Keyboard-shortcut description for the pin-active-tab command."
   },
   "commandToggleLauncher": {
-    "message": "Toggle the Lunma launcher overlay",
+    "message": "Lunma Launcher ein-/ausblenden",
     "description": "Keyboard-shortcut description for the toggle-launcher command."
   }
 }

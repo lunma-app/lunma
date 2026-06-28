@@ -12,6 +12,7 @@ import '@lunma/tokens/fonts.css';
 import '@lunma/tokens/recipes.css';
 import './newtab.css';
 import type { LauncherResult, OptionalResultSource } from '../../shared/launcher-contract';
+import { m } from '../../shared/paraglide/messages';
 import { onPermissionsChange, requestApiPermission } from '../../shared/permissions';
 import {
   colourToOklch,
@@ -149,13 +150,12 @@ const pinnedCount = $derived.by(() => {
   }
   return count;
 });
-const metaLine = $derived(`${tabCount} ${tabCount === 1 ? 'tab' : 'tabs'} · ${pinnedCount} pinned`);
+const metaLine = $derived(m.launcher_metaLine({ tabCount, pinnedCount }));
 // Brand-voice caption (newtab-hearth): the counts line renders only when the
 // Space has something to count; a fresh/empty Space is welcomed, not counted
 // (the brief's empty line) — nothing a dashboard would say.
 const hasCounts = $derived(tabCount + pinnedCount > 0);
-const EMPTY_CAPTION =
-  "Nothing kept here yet. Open a few tabs — anything you don't pin settles out on its own.";
+const EMPTY_CAPTION = m.launcher_emptyCaption();
 
 // --- Global favorites on the idle home (newtab-hearth) ----------------------
 // Project `faviconRow` into renderable tiles, deriving each favorite's
@@ -270,7 +270,7 @@ const engineRow = $derived.by<LauncherResult | null>(() => {
   return {
     id: 'websearch',
     source: 'websearch',
-    title: `Search ${activeEngine.name} for "${q}"`,
+    title: m.launcher_engineRowTitle({ engine: activeEngine.name, query: q }),
     url: buildSearchUrl(activeEngine, q),
     score: 0,
   };
@@ -293,11 +293,14 @@ const showCard = $derived(results.length > 0 || (hasQuery && activeEngine === nu
 const hintModel = $derived.by<{ verb: string; list: SearchEngine[] } | null>(() => {
   if (activeEngine) {
     if (cycle.length <= 1) return null;
-    return { verb: 'Tab to switch', list: cycle };
+    return { verb: m.launcher_engineHintSwitch(), list: cycle };
   }
   const { candidates } = resolveEngine(query, engines);
   if (candidates.length === 0) return null;
-  return { verb: candidates.length === 1 ? 'Tab to search' : 'Tab to cycle', list: candidates };
+  return {
+    verb: candidates.length === 1 ? m.launcher_engineHintSearch() : m.launcher_engineHintCycle(),
+    list: candidates,
+  };
 });
 
 /** Favicon URL for an engine — its domain, via the shared favicon helper (the
@@ -345,8 +348,8 @@ function enableSource(name: OptionalResultSource): void {
 
 /** History first, then bookmarks — the affordance copy. */
 const ENABLE_LABEL: Record<OptionalResultSource, string> = {
-  history: 'Enable history results',
-  bookmarks: 'Enable bookmark results',
+  history: m.launcher_enableHistory(),
+  bookmarks: m.launcher_enableBookmarks(),
 };
 
 function onInput(value: string): void {
@@ -553,8 +556,8 @@ const faviconSrc = (result: LauncherResult): string => faviconFor(result.url);
         bind:this={searchField}
         mode="input"
         testid="newtab-search"
-        placeholder="Search tabs, bookmarks…"
-        ariaLabel="Search tabs, bookmarks, and history"
+        placeholder={m.launcher_placeholder()}
+        ariaLabel={m.launcher_ariaLabel()}
         kbd="{modifierLabel}L"
         autofocus
         value={query}
@@ -630,7 +633,7 @@ const faviconSrc = (result: LauncherResult): string => faviconFor(result.url);
                 }}
               />
               {#if results.length === 0}
-                <p class="empty" data-testid="newtab-empty">No matches</p>
+                <p class="empty" data-testid="newtab-empty">{m.launcher_noMatches()}</p>
               {/if}
             </Surface>
           </div>
@@ -640,24 +643,15 @@ const faviconSrc = (result: LauncherResult): string => faviconFor(result.url);
                the results. -->
           {#if results.length > 0}
             <p class="action-hint" data-testid="newtab-action-hint" aria-live="polite">
-              {#if footerAlreadyOpen}
-                <Kbd>↵</Kbd>
-                <span class="action-hint-verb">Switch</span>
-                <span class="action-hint-sep" aria-hidden="true"></span>
-                <Kbd>⇧↵</Kbd>
-                <span class="action-hint-verb">New tab</span>
-              {:else}
-                <Kbd>↵</Kbd>
-                <span class="action-hint-verb">Open</span>
-              {/if}
+              {footerAlreadyOpen ? m.launcher_actionHintSwitch() : m.launcher_actionHintOpen()}
             </p>
           {/if}
           <!-- Polite count announcement for screen readers (the visible list is a
                listbox the combobox input controls). Off-screen, never focusable. -->
           <span class="sr-only" role="status" aria-live="polite" data-testid="newtab-results-status">
             {results.length === 0
-              ? 'No matches'
-              : `${results.length} result${results.length === 1 ? '' : 's'}`}
+              ? m.launcher_noMatches()
+              : m.launcher_resultStatus({ count: results.length })}
           </span>
         {/if}
 

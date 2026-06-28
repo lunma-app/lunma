@@ -140,3 +140,33 @@ const BADGE_LABELS: Record<ResultSource, string> = {
 export function sourceBadgeLabel(source: ResultSource): string {
   return BADGE_LABELS[source] ?? source;
 }
+
+/**
+ * The localized UI strings the `Alt+L` overlay renders (i18n,
+ * `localize-extension-ui` D3 — Plan B). The overlay is a vanilla content script
+ * with a strict byte budget and no synchronous locale access, so it does NOT
+ * import Paraglide. Instead it requests these strings from the service worker
+ * (which resolves the active locale and renders them via `m.launcher_overlay_*`)
+ * with `{ type: 'lunma/overlay-labels-request' }`, receiving `{ labels }`.
+ *
+ * `exitEngine` is a template carrying a literal `{engine}` placeholder the
+ * overlay fills with a plain string-replace (the engine name is only known
+ * overlay-side). All other fields are ready-to-render strings.
+ */
+export interface OverlayLabels {
+  dialogLabel: string;
+  placeholder: string;
+  searchAriaLabel: string;
+  tabHintSearch: string;
+  tabHintCycle: string;
+  tabHintSwitch: string;
+  /** `"Exit {engine} search"` — fill `{engine}` overlay-side. */
+  exitEngine: string;
+  noMatches: string;
+  alreadyOpen: string;
+  switchAction: string;
+  newTab: string;
+  open: string;
+  enableHistory: string;
+  enableBookmarks: string;
+}

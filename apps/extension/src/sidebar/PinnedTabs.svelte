@@ -5,6 +5,7 @@ import { cubicOut } from 'svelte/easing';
 import { dispatch } from '../shared/bus';
 import type { IconName } from '../shared/icon-names';
 import { hostOf, labelFor } from '../shared/label-for';
+import { m } from '../shared/paraglide/messages';
 import type {
   AppState,
   FolderId,
@@ -688,34 +689,34 @@ function tabMenuItems(row: TabView): MenuItem[] {
   if (row.drifted) {
     items.push({
       id: 'go-home',
-      label: 'Go home',
+      label: m.sidebar_goHome(),
       icon: 'house',
       onSelect: () => dispatch({ kind: 'goHome', payload: { savedTabId: row.id, windowId } }),
     });
     items.push({
       id: 'make-home',
-      label: 'Make this home',
+      label: m.sidebar_makeThisHome(),
       icon: 'map-pin-house',
       onSelect: () => dispatch({ kind: 'makeThisHome', payload: { savedTabId: row.id } }),
     });
   }
   items.push({
     id: 'rename',
-    label: 'Rename',
+    label: m.sidebar_tabRename(),
     icon: 'pencil',
     onSelect: () => startTabRename(row.id),
   });
   if (row.renamed) {
     items.push({
       id: 'reset-name',
-      label: 'Reset name',
+      label: m.sidebar_tabResetName(),
       icon: 'history',
       onSelect: () => resetTabName(row.id),
     });
   }
   items.push({
     id: 'keep-on-site',
-    label: 'Lock to its site…',
+    label: m.sidebar_tabLockToSite(),
     icon: 'anchor',
     onSelect: () => {
       // The boundary editor is an EDITOR, not a menu entry — selecting this
@@ -732,14 +733,14 @@ function tabMenuItems(row: TabView): MenuItem[] {
   items.push(
     {
       id: 'move-up',
-      label: 'Move up',
+      label: m.sidebar_tabMoveUp(),
       icon: 'arrow-up',
       disabled: !bounds.up,
       onSelect: () => moveNode(row.id, -1),
     },
     {
       id: 'move-down',
-      label: 'Move down',
+      label: m.sidebar_tabMoveDown(),
       icon: 'arrow-down',
       disabled: !bounds.down,
       onSelect: () => moveNode(row.id, 1),
@@ -747,14 +748,14 @@ function tabMenuItems(row: TabView): MenuItem[] {
   );
   items.push({
     id: 'unpin',
-    label: 'Unpin',
+    label: m.sidebar_tabUnpin(),
     icon: 'pin-off',
     onSelect: () => dispatch({ kind: 'unpinTab', payload: { savedTabId: row.id, windowId } }),
   });
   if (!row.dormant && confirmingDeleteId !== row.id) {
     items.push({
       id: 'delete',
-      label: 'Delete',
+      label: m.sidebar_tabDelete(),
       icon: 'trash-2',
       danger: true,
       keepOpen: true,
@@ -765,7 +766,7 @@ function tabMenuItems(row: TabView): MenuItem[] {
   } else {
     items.push({
       id: 'delete',
-      label: row.dormant ? 'Delete' : 'Delete — confirm',
+      label: row.dormant ? m.sidebar_tabDelete() : m.sidebar_tabDeleteConfirm(),
       icon: 'trash-2',
       danger: true,
       onSelect: () => {
@@ -790,8 +791,8 @@ function tabMenuItems(row: TabView): MenuItem[] {
          over the card lights it up (`over`) instead of a thin strip beneath it. -->
     <EmptyState
       icon="pin"
-      title="No pinned tabs yet."
-      subtitle="Drag a tab up here, or press Option+D, to pin it."
+      title={m.sidebar_noPinnedTabs()}
+      subtitle={m.sidebar_dragTabsToPinHint({ modifier: 'Option+D' })}
       over={drag.state.active && drag.state.targetZone === ZONE}
     />
   {:else if drag.state.active && drag.state.targetZone === ZONE}
@@ -822,8 +823,8 @@ function tabMenuItems(row: TabView): MenuItem[] {
           <span class="close-slot" onpointerdown={(e) => e.stopPropagation()}>
             <IconButton
               icon="x"
-              ariaLabel="Close tab"
-              title="Close tab"
+              ariaLabel={m.sidebar_closeTabLabel()}
+              title={m.sidebar_closeTabLabel()}
               size={14}
               testid="pinned-close"
               onclick={() => closeBoundTab(row)}
@@ -837,7 +838,7 @@ function tabMenuItems(row: TabView): MenuItem[] {
              menu's anchor moves down to this inner element. -->
         <BitsContextMenu
           items={tabMenuItems(row)}
-          label="Tab actions"
+          label={m.sidebar_tabActions()}
           testid="pinned-menu"
           onOpenChange={onMenuOpenChange}
         >
@@ -930,8 +931,8 @@ function tabMenuItems(row: TabView): MenuItem[] {
                   <span class="close-slot" onpointerdown={(e) => e.stopPropagation()}>
                     <IconButton
                       icon="x"
-                      ariaLabel="Close tab"
-                      title="Close tab"
+                      ariaLabel={m.sidebar_closeTabLabel()}
+                      title={m.sidebar_closeTabLabel()}
                       size={14}
                       testid="pinned-close"
                       onclick={() => closeBoundTab(child)}
@@ -943,7 +944,7 @@ function tabMenuItems(row: TabView): MenuItem[] {
                      drag pointerdown + measured identity (childRowElById). -->
                 <BitsContextMenu
                   items={tabMenuItems(child)}
-                  label="Tab actions"
+                  label={m.sidebar_tabActions()}
                   testid="pinned-menu"
                   onOpenChange={onMenuOpenChange}
                 >
@@ -971,7 +972,7 @@ function tabMenuItems(row: TabView): MenuItem[] {
               </div>
             {/each}
             {#if row.children.length === 0}
-              <div class="folder-empty">Empty — drag tabs here.</div>
+              <div class="folder-empty">{m.sidebar_emptyFolderHint()}</div>
             {/if}
           </div>
         {/if}
@@ -989,7 +990,7 @@ function tabMenuItems(row: TabView): MenuItem[] {
 <BottomSheet
   open={boundaryRow !== null}
   portalTo=".sidebar"
-  title="Lock to its site"
+  title={m.sidebar_lockToSiteTitle()}
   testid="pinned-boundary-sheet"
   onClose={() => {
     editingBoundaryId = null;

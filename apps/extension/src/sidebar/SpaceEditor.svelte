@@ -29,6 +29,7 @@ const COLORS: readonly SpaceColor[] = [
 <script lang="ts">
 import { tick } from 'svelte';
 import { dispatch } from '../shared/bus';
+import { m } from '../shared/paraglide/messages';
 import { normalizeSpaceName } from '../shared/space-names';
 import type { IconName, SpaceAutoArchive, SpaceId } from '../shared/types';
 import BottomSheet from '../ui/BottomSheet.svelte';
@@ -65,17 +66,17 @@ let colorFocus = $state(0);
 // `setSpaceAutoArchive` immediately (like TabBoundaryEditor), independent of the
 // name/colour/icon draft applied on Save.
 type AutoArchiveMode = 'inherit' | 'off' | 'custom';
-const AUTO_ARCHIVE_OPTIONS = [
-  { value: 'inherit', label: 'Inherit' },
-  { value: 'off', label: 'Off' },
-  { value: 'custom', label: 'Custom' },
-];
+const AUTO_ARCHIVE_OPTIONS = $derived([
+  { value: 'inherit', label: m.sidebar_autoArchiveModeInherit() },
+  { value: 'off', label: m.sidebar_autoArchiveModeOff() },
+  { value: 'custom', label: m.sidebar_autoArchiveModeCustom() },
+]);
 const DEFAULT_AUTO_ARCHIVE_MINUTES = 60;
 let autoArchiveMode = $state<AutoArchiveMode>('inherit');
 let autoArchiveMinutes = $state(DEFAULT_AUTO_ARCHIVE_MINUTES);
 
 const isCreate = $derived(mode.kind === 'create');
-const primaryLabel = $derived(isCreate ? 'Create Space' : 'Save changes');
+const primaryLabel = $derived(isCreate ? m.sidebar_spaceEditorConfirmCreate() : m.sidebar_spaceEditorConfirmSave());
 
 let confirmingDelete = $state(false);
 
@@ -279,7 +280,7 @@ function submit(): void {
      dismissal (all routed to `onClose`), the focus trap, return-focus to the
      trigger, and the Instrument Serif title header. The editor keeps only its
      hue-rebound accent panel, the glass-Surface chrome, and its form. -->
-<BottomSheet {open} title={isCreate ? 'New Space' : 'Edit Space'} {onClose} portalTo=".sidebar">
+<BottomSheet {open} title={isCreate ? m.sidebar_spaceEditorTitleNew() : m.sidebar_spaceEditorTitleEdit()} {onClose} portalTo=".sidebar">
   <div
     class="panel"
     data-testid="space-editor"
@@ -296,11 +297,11 @@ function submit(): void {
     <div class="editor">
             <div class="name-field">
               <div class="field" bind:this={nameInputWrap}>
-                <span class="field-label">Name</span>
+                <span class="field-label">{m.sidebar_spaceName()}</span>
                 <TextInput
-                  ariaLabel="Name"
+                  ariaLabel={m.sidebar_spaceName()}
                   bind:value={name}
-                  placeholder="e.g. Work, Reading, Personal"
+                  placeholder={m.sidebar_spaceNamePlaceholder()}
                   invalid={nameTaken}
                   onenter={submit}
                 />
@@ -317,12 +318,12 @@ function submit(): void {
                 data-testid="space-name-error"
                 aria-live="polite"
               >
-                A space named “{name.trim()}” already exists.
+                {m.sidebar_spaceDuplicate({ name: name.trim() })}
               </p>
             </div>
 
             <div class="field">
-              <span class="field-label">Color</span>
+              <span class="field-label">{m.sidebar_spaceColor()}</span>
               <!-- Roving tabindex: focus lives on the swatches; the group is
                    removed from the tab order with tabindex=-1. -->
               <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -330,7 +331,7 @@ function submit(): void {
                 bind:this={swatchRowEl}
                 class="swatch-row"
                 role="radiogroup"
-                aria-label="Space color"
+                aria-label={m.sidebar_spaceColorLabel()}
                 tabindex={-1}
                 style:--swatch-count={String(COLORS.length)}
                 onkeydown={onColorKeydown}
@@ -347,7 +348,7 @@ function submit(): void {
             </div>
 
             <div class="field">
-              <span class="field-label">Icon</span>
+              <span class="field-label">{m.sidebar_spaceIcon()}</span>
               <IconPicker value={icon} onselect={(i) => (icon = i)} />
             </div>
 
@@ -357,28 +358,28 @@ function submit(): void {
                  field. In edit it dispatches immediately; in create it folds into
                  the createSpace payload on submit. -->
             <div class="field">
-              <span class="field-label">Auto-archive</span>
+              <span class="field-label">{m.sidebar_spaceAutoArchive()}</span>
               <p class="field-help">
                 {#if isCreate}
-                  Inherit the global setting, or set this Space's own idle-tab policy.
+                  {m.sidebar_autoArchiveCreateHelp()}
                 {:else}
-                  Override when this Space's idle tabs are archived.
+                  {m.sidebar_autoArchiveEditHelp()}
                 {/if}
               </p>
               <SegmentedControl
                 name="auto-archive-mode"
                 options={AUTO_ARCHIVE_OPTIONS}
                 value={autoArchiveMode}
-                ariaLabel="Auto-archive"
+                ariaLabel={m.sidebar_spaceAutoArchive()}
                 onchange={selectAutoArchiveMode}
                 block
               />
               {#if autoArchiveMode === 'custom'}
                 <div class="aa-custom">
-                  <span class="aa-custom-label">Archive after</span>
+                  <span class="aa-custom-label">{m.sidebar_archiveAfterLabel()}</span>
                   <span class="aa-custom-field">
                     <TextInput
-                      ariaLabel="Idle minutes before archiving"
+                      ariaLabel={m.sidebar_idleMinutesAria()}
                       inputmode="numeric"
                       value={String(autoArchiveMinutes)}
                       placeholder="60"
@@ -386,26 +387,26 @@ function submit(): void {
                       oninput={onAutoArchiveMinutesInput}
                     />
                   </span>
-                  <span class="aa-custom-label">minutes idle</span>
+                  <span class="aa-custom-label">{m.sidebar_minutesIdleLabel()}</span>
                 </div>
               {/if}
             </div>
 
             {#if !isCreate && confirmingDelete}
               <div class="delete-confirm">
-                <p class="delete-msg">Are you sure? This will remove the space and unpin all its tabs.</p>
+                <p class="delete-msg">{m.sidebar_deleteSpaceConfirm()}</p>
                 <div class="actions">
-                  <Button variant="secondary" onclick={cancelDelete}>Cancel</Button>
-                  <Button variant="secondary" onclick={executeDelete}>Delete</Button>
+                  <Button variant="secondary" onclick={cancelDelete}>{m.common_cancel()}</Button>
+                  <Button variant="secondary" onclick={executeDelete}>{m.common_delete()}</Button>
                 </div>
               </div>
             {:else}
               <div class="actions">
                 {#if !isCreate}
-                  <Button variant="ghost" onclick={confirmDelete}>Delete Space…</Button>
+                  <Button variant="ghost" onclick={confirmDelete}>{m.sidebar_deleteSpaceButton()}</Button>
                 {/if}
                 <div class="actions-end">
-                  <Button variant="secondary" onclick={onClose}>Cancel</Button>
+                  <Button variant="secondary" onclick={onClose}>{m.common_cancel()}</Button>
                   <Button variant="primary" disabled={!canSubmit} onclick={submit}>{primaryLabel}</Button>
                 </div>
               </div>

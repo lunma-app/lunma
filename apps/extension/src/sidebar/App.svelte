@@ -4,6 +4,7 @@ import { bus, dispatch } from '../shared/bus';
 import { log } from '../shared/logger';
 import { requestNewTabLauncher } from '../shared/messages';
 import { loadOnboarding, setAutoArchiveNoticeDismissed } from '../shared/onboarding';
+import { m } from '../shared/paraglide/messages';
 import { modifierLabel } from '../shared/platform';
 import { readSettings, type Tint, watchSettings } from '../shared/settings';
 import type { LunmaStore } from '../shared/store.svelte';
@@ -412,7 +413,7 @@ function onClearTemp(spaceId: SpaceId): void {
     .send({ kind: 'clearTempTabs', payload: { windowId, spaceId } })
     .then(() => {
       clearedToast = {
-        message: `Cleared ${tabIds.length} ${tabIds.length === 1 ? 'tab' : 'tabs'}`,
+        message: m.sidebar_clearedTabs({ count: tabIds.length }),
         tabIds,
       };
     })
@@ -548,9 +549,9 @@ function onCancel(): void {
     <SearchField
       mode="trigger"
       leadingIcon="search"
-      placeholder="Search or enter URL…"
+      placeholder={m.sidebar_searchPlaceholder()}
       kbd="{modifierLabel}L"
-      ariaLabel="Open launcher"
+      ariaLabel={m.sidebar_openLauncher()}
       testid="sidebar-search"
       onclick={openLauncher}
     />
@@ -594,13 +595,13 @@ function onCancel(): void {
               menu={[
                 {
                   id: 'new-folder',
-                  label: 'New folder',
+                  label: m.sidebar_newFolder(),
                   icon: 'folder-plus',
                   onSelect: () => onNewFolder(panel.space.id),
                 },
                 {
                   id: 'new-smart-folder',
-                  label: 'New lens…',
+                  label: m.sidebar_newLens(),
                   icon: 'folder-git-2',
                   keepOpen: true,
                   submenu: true,
@@ -610,13 +611,13 @@ function onCancel(): void {
                 },
                 {
                   id: 'edit-space',
-                  label: 'Edit Space…',
+                  label: m.sidebar_editSpace(),
                   icon: 'pencil',
                   onSelect: () => switcherRef?.openEditForSpace(panel.space.id),
                 },
                 {
                   id: 'new-space',
-                  label: 'New Space…',
+                  label: m.sidebar_newSpace(),
                   icon: 'plus',
                   onSelect: () => switcherRef?.openCreateSpace(),
                 },
@@ -644,9 +645,9 @@ function onCancel(): void {
                     <Button
                       variant="ghost"
                       onclick={() => onClearTemp(panel.space.id)}
-                      title="Close all temporary tabs"
+                      title={m.sidebar_closeAllTempTabs()}
                     >
-                      <Icon name="arrow-down" size={12} /> Clear
+                      <Icon name="arrow-down" size={12} /> {m.sidebar_clearSearch()}
                     </Button>
                   {/snippet}
                 </Divider>
@@ -656,7 +657,7 @@ function onCancel(): void {
               <div class="new-tab-row">
                 <RowButton
                   icon={'plus'}
-                  label="New Tab"
+                  label={m.sidebar_newTab()}
                   onclick={() => onNewTab(panel.space.id)}
                 />
                 <!-- Recently archived (auto-archive): a quiet chip on the New Tab row's

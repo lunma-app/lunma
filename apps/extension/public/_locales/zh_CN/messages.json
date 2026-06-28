@@ -1,18 +1,18 @@
 {
   "extDescription": {
-    "message": "Vertical tabs and per-project Spaces for Chrome, with smart folders and a quick launcher.",
+    "message": "适用于 Chrome 的垂直标签页与项目空间，支持智能文件夹和快速启动器",
     "description": "Chrome Web Store / extension listing description."
   },
   "actionDefaultTitle": {
-    "message": "Open Lunma sidebar",
+    "message": "打开 Lunma 侧边栏",
     "description": "Tooltip on the toolbar action button."
   },
   "commandPinActiveTab": {
-    "message": "Pin the active tab to the current Space",
+    "message": "将当前标签页固定到当前空间",
     "description": "Keyboard-shortcut description for the pin-active-tab command."
   },
   "commandToggleLauncher": {
-    "message": "Toggle the Lunma launcher overlay",
+    "message": "切换 Lunma 启动器",
     "description": "Keyboard-shortcut description for the toggle-launcher command."
   }
 }

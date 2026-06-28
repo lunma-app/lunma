@@ -4,6 +4,7 @@ import { SvelteSet } from 'svelte/reactivity';
 import { dispatch } from '../shared/bus';
 import { hostOf, labelFor } from '../shared/label-for';
 import { log } from '../shared/logger';
+import { m } from '../shared/paraglide/messages';
 import type { SavedTabId, TabBoundary, WindowId } from '../shared/types';
 import BitsContextMenu from '../ui/BitsContextMenu.svelte';
 import BottomSheet from '../ui/BottomSheet.svelte';
@@ -213,13 +214,13 @@ function contextItemsFor(fav: FavView): MenuItem[] {
     items.push(
       {
         id: 'go-home',
-        label: 'Go home',
+        label: m.sidebar_goHome(),
         icon: 'house',
         onSelect: () => dispatch({ kind: 'goHome', payload: { savedTabId: fav.id, windowId } }),
       },
       {
         id: 'make-home',
-        label: 'Make this home',
+        label: m.sidebar_makeThisHome(),
         icon: 'map-pin-house',
         onSelect: () => dispatch({ kind: 'makeThisHome', payload: { savedTabId: fav.id } }),
       },
@@ -228,7 +229,7 @@ function contextItemsFor(fav: FavView): MenuItem[] {
   items.push(
     {
       id: 'copy',
-      label: 'Copy link',
+      label: m.sidebar_copyLink(),
       icon: 'link',
       onSelect: () => copyLink(fav.url),
     },
@@ -238,7 +239,7 @@ function contextItemsFor(fav: FavView): MenuItem[] {
       // (bits-ui menus are flat, so an editor is a sheet, not a menu drill-in). The
       // menu closes (no `keepOpen`) and the sheet rises in its place.
       id: 'lock',
-      label: 'Lock to its site…',
+      label: m.sidebar_tabLockToSite(),
       icon: 'anchor',
       onSelect: () => {
         confirmingDeleteId = null; // selecting another entry disarms a pending Delete
@@ -253,20 +254,20 @@ function contextItemsFor(fav: FavView): MenuItem[] {
   items.push(
     {
       id: 'move-left',
-      label: 'Move left',
+      label: m.sidebar_moveLeft(),
       disabled: !bounds.left,
       onSelect: () => moveFavorite(fav, -1),
     },
     {
       id: 'move-right',
-      label: 'Move right',
+      label: m.sidebar_moveRight(),
       disabled: !bounds.right,
       onSelect: () => moveFavorite(fav, 1),
     },
     {
       // Gentle: leaves favorites; a bound tab returns to Temporary and STAYS OPEN.
       id: 'remove',
-      label: 'Remove from favorites',
+      label: m.sidebar_removeFromFavorites(),
       icon: 'x',
       onSelect: () => removeFavorite(fav.id),
     },
@@ -278,7 +279,7 @@ function contextItemsFor(fav: FavView): MenuItem[] {
   if (fav.boundAnywhere && confirmingDeleteId !== fav.id) {
     items.push({
       id: 'delete',
-      label: 'Delete',
+      label: m.common_delete(),
       icon: 'trash-2',
       danger: true,
       keepOpen: true,
@@ -289,7 +290,7 @@ function contextItemsFor(fav: FavView): MenuItem[] {
   } else {
     items.push({
       id: 'delete',
-      label: fav.boundAnywhere ? 'Delete — confirm' : 'Delete',
+      label: fav.boundAnywhere ? m.sidebar_tabDeleteConfirm() : m.common_delete(),
       icon: 'trash-2',
       danger: true,
       onSelect: () => {
@@ -541,7 +542,7 @@ function onMenuOpenChange(open: boolean): void {
              element identity. The `favicon-tile` testid stays inside the wrap. -->
         <BitsContextMenu
           items={contextItemsFor(fav)}
-          label="Favorite actions"
+          label={m.sidebar_favoriteActions()}
           testid="favicon-menu"
           onOpenChange={onMenuOpenChange}
         >
@@ -584,7 +585,7 @@ function onMenuOpenChange(open: boolean): void {
     <EmptyState
       icon="star"
       testid="favicon-empty"
-      title="No favorites yet."
+      title={m.sidebar_noFavorites()}
       subtitle={favoriteDropTargeted ? 'Drop to favorite' : 'Drag a tab up here to favorite it.'}
       over={favoriteDropTargeted}
     />
@@ -599,7 +600,7 @@ function onMenuOpenChange(open: boolean): void {
 <BottomSheet
   open={boundaryOpen && boundaryFav !== null}
   portalTo=".sidebar"
-  title="Lock to its site"
+  title={m.sidebar_lockToSiteTitle()}
   testid="favicon-boundary-sheet"
   onClose={() => {
     boundaryOpen = false;

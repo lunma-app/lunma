@@ -3,6 +3,7 @@ import '../ui/drop-line.css';
 import { flip } from 'svelte/animate';
 import { dispatch, TAB_DEDUP_FLASH } from '../shared/bus';
 import { labelFor } from '../shared/label-for';
+import { m } from '../shared/paraglide/messages';
 import type { LiveTab, SpaceId, TabId, WindowId } from '../shared/types';
 import BitsContextMenu from '../ui/BitsContextMenu.svelte';
 import { faviconCacheKey, faviconFor, faviconUrl } from '../ui/favicon';
@@ -258,38 +259,38 @@ function tabMenuItems(item: TempItem): MenuItem[] {
   return [
     {
       id: 'favorite',
-      label: 'Favorite',
+      label: m.sidebar_tempFavorite(),
       icon: 'star',
       onSelect: () => favoriteTab(item),
     },
     {
       id: 'rename',
-      label: 'Rename',
+      label: m.sidebar_tempRename(),
       icon: 'pencil',
       onSelect: () => startRename(item),
     },
     {
       id: 'move-up',
-      label: 'Move up',
+      label: m.sidebar_tempMoveUp(),
       icon: 'arrow-up',
       disabled: !bounds.up,
       onSelect: () => moveTemp(item, -1),
     },
     {
       id: 'move-down',
-      label: 'Move down',
+      label: m.sidebar_tempMoveDown(),
       icon: 'arrow-down',
       disabled: !bounds.down,
       onSelect: () => moveTemp(item, 1),
     },
     {
       id: 'duplicate',
-      label: 'Duplicate',
+      label: m.sidebar_tempDuplicate(),
       onSelect: () => duplicateTab(item),
     },
     {
       id: 'close',
-      label: 'Close tab',
+      label: m.sidebar_tempCloseTab(),
       icon: 'x',
       onSelect: () => closeTab(item.tabId),
     },
@@ -355,7 +356,7 @@ function commitRename(item: TempItem, newName: string): void {
       }}
       animate:flip={{ duration: () => reorderFlipMs() }}
     >
-      <BitsContextMenu items={tabMenuItems(item)} label="Tab actions" testid="temp-menu">
+      <BitsContextMenu items={tabMenuItems(item)} label={m.sidebar_tabActions()} testid="temp-menu">
         {#snippet children(menuProps)}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div {...menuProps} class="menu-trigger">
@@ -367,8 +368,8 @@ function commitRename(item: TempItem, newName: string): void {
               <span class="close-slot" onpointerdown={(e) => e.stopPropagation()}>
                 <IconButton
                   icon="x"
-                  ariaLabel="Close tab"
-                  title="Close tab"
+                  ariaLabel={m.sidebar_tempCloseTab()}
+                  title={m.sidebar_tempCloseTab()}
                   size={14}
                   testid="temp-close"
                   onclick={() => closeTab(item.tabId)}

@@ -9,6 +9,7 @@ import '@lunma/tokens/tokens.css';
 import '@lunma/tokens/fonts.css';
 import '@lunma/tokens/recipes.css';
 import { applyLensFilter, deriveLensFacets } from '../../shared/lens-filter';
+import { m } from '../../shared/paraglide/messages';
 import type { LensFilter } from '../../shared/types';
 import Aurora from '../../ui/Aurora.svelte';
 import Icon from '../../ui/Icon.svelte';
@@ -113,8 +114,8 @@ const lensSub = $derived.by(() => {
   const provs = [
     ...new Set(node.sources.map((r) => appState.sources[r.sourceId]?.provider).filter((p) => p)),
   ] as (keyof typeof PROVIDER_NAME)[];
-  if (provs.length === 0) return 'No connections yet';
-  if (provs.length === 1 && provs[0] === 'rss') return 'Feeds — a quiet magazine';
+  if (provs.length === 0) return m.launcher_lensNoConnections();
+  if (provs.length === 1 && provs[0] === 'rss') return m.launcher_lensFeedsSubtitle();
   const names = provs.map((p) => PROVIDER_NAME[p]);
   return names.length === 1
     ? (names[0] ?? '')
@@ -177,9 +178,9 @@ function setFilter(filter: LensFilter): void {
     {#if node === null || appState === null}
       <section class="missing" data-testid="lenspage-missing">
         <Icon name="layers" size={40} color="var(--text-dim)" />
-        <h1 class="missing-title">No lens to show</h1>
+        <h1 class="missing-title">{m.launcher_lensMissingTitle()}</h1>
         <p class="missing-copy">
-          This page didn't get a lens to open, or that lens is no longer around.
+          {m.launcher_lensMissingCopy()}
         </p>
       </section>
     {:else}

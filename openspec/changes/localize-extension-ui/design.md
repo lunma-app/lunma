@@ -60,16 +60,28 @@ catalog — so the foundation's `settings → i18n` cycle ban holds (verified by
 - **Alternative:** message-back the labels in `settings.ts` directly. Rejected — forms the
   banned `settings ↔ i18n` edge (foundation D4).
 
-### D3 — Overlay localization: [DECISION PENDING — Plan A vs Plan B]
-Plan A: the overlay imports `m.*` for its (few) labels, accepted only if
-`overlay.budget.test.ts` stays under 15KB with Paraglide's overlay-reachable messages
-tree-shaken in. Plan B: the SW sends pre-localized label strings to the overlay over the
-typed message bus (`launcher-contract`), keeping the overlay catalog-free and vanilla.
-The implementer measures Plan A against the budget first; if it fits, Plan A (simplest,
-no new wire contract); else Plan B. **This design will record the measured choice before
-tasks are marked done** — it is the one open decision, mirroring the foundation's deferral.
-- **Bias:** Plan B is the safe default if the budget is tight, since the overlay's "every
-  byte counts" rule (tech-stack) outranks call-site convenience.
+### D3 — Overlay localization: **Plan B (decided)**
+The overlay localizes via the SW, not by importing Paraglide. Rationale (Plan A rejected
+without a full spike): the overlay is a vanilla content script under a <15KB budget AND it
+has **no synchronous locale access** — it never runs the surface `boot()` that seeds the
+i18n cache, so an imported `getLocale()` would always fall through to `baseLocale` (`en`)
+unless the overlay added its own async `chrome.storage` read + the resolver, *on top of*
+the message-runtime weight. That is both budget-risky and architecturally worse than the
+alternative for 11 strings.
+
+Plan B: a new typed request `lunma/overlay-labels` (in `launcher-contract.ts`). The SW —
+which may import `m.*` and the resolver (`background → shared` is legal) — resolves the
+active locale (`initLocale()` / `getLocale()`, reading the same `language` setting) and
+renders the 11 overlay strings, returning an `OverlayLabels` object. The overlay fetches
+it on open and uses the strings in render; the one templated string (`Exit {engine}
+search`) is sent as a locale template the overlay fills with a trivial `{engine}` replace.
+The overlay keeps English-literal constants as the pre-fetch fallback, so it never blanks
+and degrades to English if the SW is briefly unavailable.
+- **Budget:** the overlay gains only a small request + an `OverlayLabels` object and a
+  string-replace — no Paraglide import — so `overlay.budget.test.ts` stays green by
+  construction (verified in §5/§9).
+- **Alternative (Plan A, rejected):** overlay imports `m.*`. Rejected on the budget +
+  no-sync-locale grounds above.
 
 ### D4 — Enforcement gate: a Vitest `.svelte`-literal guard + inlang lint, on `verify`
 Biome has no `no-literal-string` rule and the repo is Biome-only (adding ESLint for one
