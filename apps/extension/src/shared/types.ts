@@ -147,6 +147,7 @@ export type LensFilter = {
   entities?: LensEntity[] | undefined;
   repos?: string[] | undefined;
   projects?: string[] | undefined;
+  feeds?: string[] | undefined;
 };
 
 /**

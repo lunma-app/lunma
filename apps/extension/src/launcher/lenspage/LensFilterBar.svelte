@@ -27,11 +27,12 @@ const visEntities = $derived([
 ] as LensEntity[]);
 
 const hasTypeFacets = $derived(visEntities.length > 1);
-// Clear is visible when any filter axis is active (entity, repo, or project).
+// Clear is visible when any filter axis is active (entity, repo, project, or feed).
 const isActive = $derived(
   (filter.entities?.length ?? 0) > 0 ||
     (filter.repos?.length ?? 0) > 0 ||
-    (filter.projects?.length ?? 0) > 0,
+    (filter.projects?.length ?? 0) > 0 ||
+    (filter.feeds?.length ?? 0) > 0,
 );
 
 function toggleEntity(e: LensEntity): void {

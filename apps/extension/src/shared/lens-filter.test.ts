@@ -47,8 +47,8 @@ function genericItem(id = 'g1'): LensItem {
   return { id, title: 'Something', url: 'https://example.com' };
 }
 
-function row(item: LensItem, host = 'github.com'): LensRow {
-  return { item, host };
+function row(item: LensItem, host = 'github.com', feedName?: string): LensRow {
+  return feedName !== undefined ? { item, host, feedName } : { item, host };
 }
 
 describe('applyLensFilter — empty filter short-circuits', () => {
@@ -57,7 +57,7 @@ describe('applyLensFilter — empty filter short-circuits', () => {
     expect(applyLensFilter(rows, {})).toBe(rows);
   });
   test('all empty arrays returns same reference', () => {
-    expect(applyLensFilter(rows, { entities: [], repos: [], projects: [] })).toBe(rows);
+    expect(applyLensFilter(rows, { entities: [], repos: [], projects: [], feeds: [] })).toBe(rows);
   });
   test('empty entities array with populated repos still applies the filter', () => {
     const result = applyLensFilter(rows, { entities: [], repos: ['github.com/o/a'] });
@@ -167,6 +167,31 @@ describe('applyLensFilter — scope axis, Issues (projects)', () => {
   });
 });
 
+describe('applyLensFilter — scope axis, Articles (feeds)', () => {
+  const hnRow = row(articleItem('a1'), 'hn.algolia.com', 'Hacker News');
+  const lobsRow = row(articleItem('a2'), 'lobste.rs', 'Lobsters');
+  const changeRow = row(changeItem('o/a'));
+
+  test('feed filter keeps only articles from matching feed', () => {
+    const result = applyLensFilter([hnRow, lobsRow], { feeds: ['Hacker News'] });
+    expect(result).toHaveLength(1);
+    expect(result[0]).toBe(hnRow);
+  });
+
+  test('feed scope does not touch changes or tickets', () => {
+    const result = applyLensFilter([changeRow, hnRow, lobsRow], { feeds: ['Hacker News'] });
+    expect(result).toHaveLength(2);
+    expect(result.some((r) => r.item.change)).toBe(true);
+  });
+
+  test('an article with no feedName is excluded by a non-empty feeds filter', () => {
+    const noFeedRow = row(articleItem('a3'), 'example.com');
+    const result = applyLensFilter([hnRow, noFeedRow], { feeds: ['Hacker News'] });
+    expect(result).toHaveLength(1);
+    expect(result[0]).toBe(hnRow);
+  });
+});
+
 describe('applyLensFilter — AND across axes', () => {
   const rows = [
     row(changeItem('o/a'), 'github.com'),
@@ -196,7 +221,7 @@ describe('applyLensFilter — AND across axes', () => {
 
 describe('deriveLensFacets', () => {
   test('empty rows returns empty facets', () => {
-    expect(deriveLensFacets([])).toEqual({ entities: [], repos: [], projects: [] });
+    expect(deriveLensFacets([])).toEqual({ entities: [], repos: [], projects: [], feeds: [] });
   });
 
   test('collects distinct entities in canonical order', () => {
@@ -237,5 +262,19 @@ describe('deriveLensFacets', () => {
     const facets = deriveLensFacets(rows);
     expect(facets.repos).toHaveLength(0);
     expect(facets.projects).toHaveLength(0);
+  });
+
+  test('collects distinct feed names from article rows', () => {
+    const rows = [
+      row(articleItem('a1'), 'hn.algolia.com', 'Hacker News'),
+      row(articleItem('a2'), 'lobste.rs', 'Lobsters'),
+      row(articleItem('a3'), 'hn.algolia.com', 'Hacker News'),
+    ];
+    expect(deriveLensFacets(rows).feeds.sort()).toEqual(['Hacker News', 'Lobsters'].sort());
+  });
+
+  test('articles with no feedName do not contribute a feed facet', () => {
+    const rows = [row(articleItem('a1')), row(changeItem('o/a'))];
+    expect(deriveLensFacets(rows).feeds).toHaveLength(0);
   });
 });

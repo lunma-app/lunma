@@ -96,7 +96,12 @@ function renderOverview(
   openItem = vi.fn(),
   toggleRead = vi.fn(),
   setFilter = vi.fn(),
-  facets = { entities: [] as LensEntity[], repos: [] as string[], projects: [] as string[] },
+  facets = {
+    entities: [] as LensEntity[],
+    repos: [] as string[],
+    projects: [] as string[],
+    feeds: [] as string[],
+  },
 ) {
   const taggedItems = [
     ...byEntity.change,
@@ -246,6 +251,7 @@ describe('OverviewPage', () => {
       entities: ['change'],
       repos: ['github.com/acme/api'],
       projects: [],
+      feeds: [],
     });
     const scopeFilter = container.querySelector('[data-testid="change-scope-filter"]');
     expect(scopeFilter).not.toBeNull();
@@ -258,11 +264,24 @@ describe('OverviewPage', () => {
       vi.fn(),
       vi.fn(),
       vi.fn(),
-      { entities: ['ticket'], repos: [], projects: ['Payments'] },
+      { entities: ['ticket'], repos: [], projects: ['Payments'], feeds: [] },
     );
     const scopeFilter = container.querySelector('[data-testid="issue-scope-filter"]');
     expect(scopeFilter).not.toBeNull();
     expect(container.querySelector('[data-testid="project-chip"]')).not.toBeNull();
+  });
+
+  test('feed chips render inside the Articles card when facets.feeds is non-empty', () => {
+    const { container } = renderOverview(
+      { ...empty(), article: [ARTICLE] },
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      { entities: ['article'], repos: [], projects: [], feeds: ['Hacker News', 'Lobsters'] },
+    );
+    const scopeFilter = container.querySelector('[data-testid="article-scope-filter"]');
+    expect(scopeFilter).not.toBeNull();
+    expect(container.querySelector('[data-testid="feed-chip"]')).not.toBeNull();
   });
 
   test('scope filters do not appear in the other entity card', () => {
@@ -271,7 +290,12 @@ describe('OverviewPage', () => {
       vi.fn(),
       vi.fn(),
       vi.fn(),
-      { entities: ['change', 'ticket'], repos: ['github.com/acme/api'], projects: ['Payments'] },
+      {
+        entities: ['change', 'ticket'],
+        repos: ['github.com/acme/api'],
+        projects: ['Payments'],
+        feeds: [],
+      },
     );
     // repo chip only inside Changes card
     const changeCard = container.querySelector('[data-entity="change"]');

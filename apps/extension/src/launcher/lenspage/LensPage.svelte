@@ -16,6 +16,7 @@ import OverviewPage from './OverviewPage.svelte';
 import {
   bucketByEntity,
   collectItems,
+  feedLabel,
   hostOf,
   type LensNode,
   resolveRefs,
@@ -100,7 +101,9 @@ $effect(() => {
 // Derived overview model for the lens (never stored).
 const tagged = $derived(node && appState ? collectItems(node, appState, heldItemsBySection) : []);
 // Facets from all currently-held items (unfiltered) for the LensFilterBar.
-const allRows = $derived(tagged.map((t) => ({ item: t.item, host: hostOf(t.cfg.baseUrl) })));
+const allRows = $derived(
+  tagged.map((t) => ({ item: t.item, host: hostOf(t.cfg.baseUrl), feedName: feedLabel(t) })),
+);
 const facets = $derived(deriveLensFacets(allRows));
 const readSet = $derived(new Set(node && appState ? (appState.lensReadState[node.id] ?? []) : []));
 

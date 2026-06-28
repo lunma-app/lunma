@@ -1,7 +1,7 @@
 import { entityForItem } from './lens-entity';
 import type { LensEntity, LensFilter, LensItem } from './types';
 
-export type LensRow = { item: LensItem; host: string };
+export type LensRow = { item: LensItem; host: string; feedName?: string };
 
 /**
  * Pure predicate for lens-view-filters (D3). Operates on `{ item, host }` rows
@@ -12,23 +12,25 @@ export type LensRow = { item: LensItem; host: string };
  * - **scope:** Changes pass iff `repos` empty OR
  *   `` `${host}/${change.repo}` ∈ repos ``; Tickets pass iff `projects` empty
  *   OR `ticket.project ∈ projects` (a project-less ticket fails a non-empty
- *   `projects` filter — it matches no selected project); Articles and Other
- *   items always pass the scope axis.
+ *   `projects` filter — it matches no selected project); Articles pass iff
+ *   `feeds` empty OR `row.feedName ∈ feeds`; Other items always pass.
  *
  * When every axis is empty, returns the input unchanged (identity).
  */
 export function applyLensFilter(rows: LensRow[], filter: LensFilter): LensRow[] {
-  const { entities, repos, projects } = filter;
+  const { entities, repos, projects, feeds } = filter;
   const hasEntities = (entities?.length ?? 0) > 0;
   const hasRepos = (repos?.length ?? 0) > 0;
   const hasProjects = (projects?.length ?? 0) > 0;
-  if (!hasEntities && !hasRepos && !hasProjects) return rows;
+  const hasFeeds = (feeds?.length ?? 0) > 0;
+  if (!hasEntities && !hasRepos && !hasProjects && !hasFeeds) return rows;
 
   const entitySet = hasEntities ? new Set(entities) : null;
   const repoSet = hasRepos ? new Set(repos) : null;
   const projectSet = hasProjects ? new Set(projects) : null;
+  const feedSet = hasFeeds ? new Set(feeds) : null;
 
-  return rows.filter(({ item, host }) => {
+  return rows.filter(({ item, host, feedName }) => {
     const entity: LensEntity = entityForItem(item);
 
     // Type axis.
@@ -47,8 +49,10 @@ export function applyLensFilter(rows: LensRow[], filter: LensFilter): LensRow[] 
         if (project === undefined) return false;
         if (!projectSet.has(project)) return false;
       }
+    } else if (entity === 'article') {
+      if (feedSet && !feedSet.has(feedName ?? '')) return false;
     }
-    // Articles and Other always pass the scope axis.
+    // Other items always pass the scope axis.
 
     return true;
   });
@@ -60,17 +64,20 @@ export function applyLensFilter(rows: LensRow[], filter: LensFilter): LensRow[] 
  * - `repos`: host-qualified keys (`${host}/${change.repo}`) for Change rows
  * - `projects`: distinct `ticket.project` values; `undefined` projects are
  *   dropped so the array never contains a hole
+ * - `feeds`: distinct `feedName` values for Article rows
  */
 export function deriveLensFacets(rows: LensRow[]): {
   entities: LensEntity[];
   repos: string[];
   projects: string[];
+  feeds: string[];
 } {
   const entitySet = new Set<LensEntity>();
   const repoSet = new Set<string>();
   const projectSet = new Set<string>();
+  const feedSet = new Set<string>();
 
-  for (const { item, host } of rows) {
+  for (const { item, host, feedName } of rows) {
     const entity: LensEntity = entityForItem(item);
     entitySet.add(entity);
 
@@ -78,6 +85,8 @@ export function deriveLensFacets(rows: LensRow[]): {
       repoSet.add(`${host}/${item.change.repo}`);
     } else if (entity === 'ticket' && item.ticket?.project) {
       projectSet.add(item.ticket.project);
+    } else if (entity === 'article' && feedName) {
+      feedSet.add(feedName);
     }
   }
 
@@ -89,5 +98,6 @@ export function deriveLensFacets(rows: LensRow[]): {
     entities,
     repos: [...repoSet],
     projects: [...projectSet],
+    feeds: [...feedSet],
   };
 }
