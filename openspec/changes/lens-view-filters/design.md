@@ -69,25 +69,27 @@ while it imports `LensEntity` from `lens-entity.ts` would form
 → types.ts` is a clean one-way chain.
 
 ### D3 — Filter semantics: AND across axes, OR within, scope is per-entity
-The predicate operates on `{ item: LensItem; host: string }` pairs (both surfaces
-have the host in scope — the overview from each `Tagged.cfg`, the sidebar from the
-section `cfg`/`sk`), so repo facets can stay **host-scoped** (see D10). An item
-passes iff **both**:
+The predicate operates on `LensRow = { item: LensItem; host: string; feedName?: string }` tuples.
+`feedName` carries the article source display-name (populated by callers from
+`feedLabel(t) = t.cfg.name ?? hostOf(t.cfg.baseUrl)`), so the feed facet stays in the
+view layer and the shared filter stays pure. An item passes iff **both**:
 - **type:** `entities` is empty **or** `entityForItem(item) ∈ entities`; and
-- **scope:** a Change passes iff `repos` is empty **or** its host-qualified repo key
-  `\`${host}/${change.repo}\`` ∈ `repos`; a Ticket passes iff `projects` is empty
-  **or** `ticket.project ∈ projects`; Article and Other items carry no repo/project
-  and **always** pass the scope axis (governed only by the type axis).
+- **scope (per-entity):**
+  - Change: passes iff `repos` is empty **or** `` `${host}/${change.repo}` ∈ repos ``
+  - Ticket: passes iff `projects` is empty **or** `ticket.project ∈ projects`
+  - Article: passes iff `feeds` is empty **or** `feedName ∈ feeds`; an article with no
+    `feedName` is excluded by a non-empty `feeds` filter
+  - Other: always passes the scope axis
 
-So selecting a repo narrows Changes without hiding Issues/Articles, matching the
-mental model "repo for changes, project for issues". Within an axis, multiple
-selected values are OR'd.
+So selecting a repo narrows Changes without hiding Issues/Articles, and selecting a
+feed narrows Articles without hiding Changes/Issues, matching the per-entity mental
+model. Within an axis, multiple selected values are OR'd.
 
 **Project-less tickets.** `ticket.project` is optional. A project-less ticket passes
 scope only when `projects` is empty; under a non-empty `projects` filter it is
 excluded (it matches no selected project — the same rule, applied honestly).
 `deriveLensFacets` SHALL drop `undefined` so `projects: string[]` never contains a
-hole.
+hole. Likewise, `feedName`-less articles are dropped from `feeds`.
 
 ### D10 — Repo facets are host-scoped (preserve the prior guarantee)
 `change.repo` is a bare `owner/repo` slug (`types.ts`), so the same slug on two hosts
