@@ -172,6 +172,10 @@ export type SidebarCommand =
       payload: { spaceId: SpaceId; folderId: FolderId; filter: LensFilter };
     }
   | {
+      kind: 'setLensArticleLayout';
+      payload: { spaceId: SpaceId; folderId: FolderId; layout: 'grid' | 'list' };
+    }
+  | {
       kind: 'openLensListing';
       payload: { spaceId: SpaceId; folderId: FolderId; windowId: WindowId };
     }
@@ -297,6 +301,7 @@ export const SIDEBAR_COMMAND_KINDS: ReadonlySet<SidebarCommandKind> = new Set<Si
   'markAllLensItemsRead',
   'setLensHideRead',
   'setLensFilter',
+  'setLensArticleLayout',
   'openLensListing',
   'openLensPage',
   'reorderTemp',
@@ -361,6 +366,7 @@ const _kindExhaustiveness = {
   markAllLensItemsRead: true,
   setLensHideRead: true,
   setLensFilter: true,
+  setLensArticleLayout: true,
   openLensListing: true,
   openLensPage: true,
   reorderTemp: true,
@@ -488,6 +494,9 @@ const PinNodeSchema = z.discriminatedUnion('kind', [
     refreshMinutes: z.number(),
     // Optional view filter (lens-view-filters, v14) — must round-trip for reorderPinned.
     filter: LensFilterSchema.optional(),
+    // Optional Articles-section layout (persist-lens-article-layout, v15) — must
+    // round-trip for reorderPinned.
+    articleLayout: z.enum(['grid', 'list']).optional(),
   }),
 ]);
 
@@ -721,6 +730,14 @@ const COMMAND_SCHEMAS = {
       filter: LensFilterSchema,
     }),
   }),
+  setLensArticleLayout: z.strictObject({
+    kind: z.literal('setLensArticleLayout'),
+    payload: z.strictObject({
+      spaceId: z.string(),
+      folderId: z.string(),
+      layout: z.enum(['grid', 'list']),
+    }),
+  }),
   openLensListing: z.strictObject({
     kind: z.literal('openLensListing'),
     payload: z.strictObject({
@@ -886,6 +903,7 @@ export const SidebarCommandSchema = z.discriminatedUnion('kind', [
   COMMAND_SCHEMAS.markAllLensItemsRead,
   COMMAND_SCHEMAS.setLensHideRead,
   COMMAND_SCHEMAS.setLensFilter,
+  COMMAND_SCHEMAS.setLensArticleLayout,
   COMMAND_SCHEMAS.openLensListing,
   COMMAND_SCHEMAS.openLensPage,
   COMMAND_SCHEMAS.reorderTemp,

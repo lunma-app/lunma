@@ -10,7 +10,7 @@ vi.mock('../shared/chrome/storage', () => ({
 }));
 
 import { readPersistedState } from '../shared/chrome/storage';
-import type { AppStateV14 } from '../shared/schemas';
+import type { AppStateV15 } from '../shared/schemas';
 import { createInitialState } from '../shared/store.svelte';
 import { loadState, store } from './store-singleton';
 
@@ -18,7 +18,7 @@ const mockRead = vi.mocked(readPersistedState);
 
 /** A valid state carrying one Space, used for the `ok`/`salvaged` (state-bearing)
  * read kinds. */
-function stateWithWork(): AppStateV14 {
+function stateWithWork(): AppStateV15 {
   const state = createInitialState();
   state.spaces.push({ id: 'w', name: 'Work', color: 'blue', icon: 'star' });
   return state;

@@ -429,6 +429,15 @@ export const migrations: Migration[] = [
     toVersion: 16,
     migrate: (raw: unknown): unknown => raw,
   },
+  {
+    // v17 (persist-lens-article-layout): additive — the lens `PinNode` gains an
+    // OPTIONAL `articleLayout?: 'grid' | 'list'`. Pre-v17 nodes simply lack it and
+    // remain valid (resolving to the `grid` default), so there is nothing to
+    // transform; identity pass-through, present only to advance the version (so a
+    // downgrade past v17 is detectable).
+    toVersion: 17,
+    migrate: (raw: unknown): unknown => raw,
+  },
 ];
 
 /** Port-bearing host for an account `baseUrl`, degrading a malformed url to the

@@ -16,8 +16,8 @@ import { createInitialState } from './store.svelte';
 const realMigrations = [...migrations];
 
 describe('the real migration chain', () => {
-  test('holds exactly the v2 through v16 entries', () => {
-    expect(realMigrations).toHaveLength(15);
+  test('holds exactly the v2 through v17 entries', () => {
+    expect(realMigrations).toHaveLength(16);
     expect(realMigrations[0]?.toVersion).toBe(2);
     expect(realMigrations[1]?.toVersion).toBe(3);
     expect(realMigrations[2]?.toVersion).toBe(4);
@@ -33,7 +33,8 @@ describe('the real migration chain', () => {
     expect(realMigrations[12]?.toVersion).toBe(14);
     expect(realMigrations[13]?.toVersion).toBe(15);
     expect(realMigrations[14]?.toVersion).toBe(16);
-    expect(CURRENT_SCHEMA_VERSION).toBe(16);
+    expect(realMigrations[15]?.toVersion).toBe(17);
+    expect(CURRENT_SCHEMA_VERSION).toBe(17);
     // v2–v6 are pass-throughs (see comment in migrations.ts). v7 is the
     // smart-tab-boundary real transformation; v8 is the multi-source wrap.
     const input = { schemaVersion: 1, pinnedBySpace: { work: [{ kind: 'tab', id: 'a' }] } };

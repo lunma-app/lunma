@@ -89,7 +89,7 @@ that mutate the store. Everything else is read-only or settings-only.
 | Sidebar | DOM, user interaction, drag-drop | yes (subscriber via state broadcast) | yes (calls store methods through the SW message bridge); also mints accounts (`createAccount`) + writes a per-source token inline (`setAccountToken` via `shared/connectors.ts`) from the lens editor's "+ Connect an account" and a section's signed-out reconnect |
 | Launcher overlay | `Alt+L` page injection, search UI | no (queries the suggestions channel) | no — dispatches `focusTab` / `focusSavedTab` / `openSavedTab` / `openUrl` over the bus |
 | Launcher newtab | Empty-Space home (Space identity) + inline search | yes (read-only: snapshot + `state-broadcast`, like the sidebar) + queries the suggestions channel | no — dispatches result actions over the bus |
-| Lens page | One lens's spacious read-only dashboard (`launcher/lenspage/`, `?folderId=…`) | yes (read-only: snapshot + `state-broadcast`, like newtab) + writes a per-source token inline (`setAccountToken`) when a section's signed-out reconnect is used | no — dispatches `openLensItem` / `openLensListing` / `refreshLens` / `setLensFilter` over the bus |
+| Lens page | One lens's spacious read-only dashboard (`launcher/lenspage/`, `?folderId=…`) | yes (read-only: snapshot + `state-broadcast`, like newtab) + writes a per-source token inline (`setAccountToken`) when a section's signed-out reconnect is used | no — dispatches `openLensItem` / `openLensListing` / `refreshLens` / `setLensFilter` / `setLensArticleLayout` over the bus |
 | Options | Settings UI + one **Connections** manager (`ConnectionsCard`: an Accounts group for auth Accounts with per-**source** PATs, and a Feeds group for rss Feeds with OPML import/export), via the shared `ui/ServiceConnectPicker` connect picker | reads `chrome.storage.sync` directly; reads `chrome.storage.local` for archived tabs, the persisted `AppState` (for `AppState.sources` + `pinnedBySpace` reach), and the `lunma.connectors` record | writes `chrome.storage.sync`; account entity over the bus (`createAccount`/`renameAccount`/`deleteAccount`); writes the per-`sourceId` token in `lunma.connectors` via `shared/connectors.ts` (`setAccountToken`) |
 | Onboarding | Static content + open links (Planned) | no | no |
 
@@ -335,7 +335,10 @@ const initial: AppState = {
   pinnedBySpace: {},           // { [spaceId]: PinNode[] } — ordered tree of tab|folder|lens nodes
                                //   PinNode = { kind:'tab'; id }
                                //           | { kind:'folder'; id; name; icon; color; children: savedTabId[] }
-                               //           | {  kind:'lens'; id; name; icon; sources: LensSourceRef[]; maxItems; hideRead; refreshMinutes; filter?: LensFilter }
+                               //           | {  kind:'lens'; id; name; icon; sources: LensSourceRef[]; maxItems; hideRead; refreshMinutes; filter?: LensFilter; articleLayout?: 'grid'|'list' }
+                               //               articleLayout — global-per-lens persisted Articles-section layout (persist-lens-article-layout).
+                               //                 Absent ⇒ 'grid' (first-open default); written via the setLensArticleLayout bus command.
+                               //                 Sits beside hideRead/filter as a durable per-lens reading preference.
                                //               LensFilter = { entities?: LensEntity[]; repos?: string[]; projects?: string[] }
                                //               — a global-per-lens persistent view filter (lens-view-filters). entities narrows by
                                //                 item type ('change'|'ticket'|'article'|'generic'); repos narrows Changes by
@@ -728,6 +731,12 @@ components compose primitives; they do not re-roll buttons or tooltips inline.
 Neutral tokens are OKLCH expressions parameterised by a `--base-hue` custom
 property, the foundation for a future user-customisable base colour.
 
+**Prop convention — `label` vs `ariaLabel`.** Across `src/ui/` primitives, `label`
+means *visible text that doubles as the accessible name* (e.g. `TextInput`,
+`RowButton`), while `ariaLabel` means a *name-only* value with no visible text
+(e.g. `IconButton`, `Select`, `Menu`, `FolderRow`, `LensRow`). A prop used solely
+as an accessible-name override is named `ariaLabel`, never `label`.
+
 ## Internationalization (i18n)
 
 Lunma localizes its UI with `@inlang/paraglide-js` (a *compiler*-based i18n
@@ -837,8 +846,10 @@ schema widened but old data needs no transformation:
 | 8 | replaced the flat `source`/`baseUrl`/`query?` on each lens node with `sources: [{ source, baseUrl, query }]`; re-keyed `lensItemBindings` item ids to `"${sourceKey}:${nativeId}"` |
 | 9 | rewrote each `sources[]` entry from the flat `query?` shape to `queries: LensQuery[]` (queue → `[query]`, rss → `[]`); re-keyed `lensItemBindings` from `"${source}:${host}:${nativeId}"` to the per-filter `"${source}:${host}:${query}:${nativeId}"` (orphans dropped) |
 | 13 | extracted each lens node's embedded `sources: LensSource[]` into first-class `SourceAccount`s under a new `AppState.sources` map (one per distinct `(provider, baseUrl)`, deduped, `name` carried onto the account) and rewrote each lens's `sources` to `LensSourceRef[]` (`{ sourceId, queries }`). The separate, unversioned `lunma.connectors` secrets store is re-keyed host→`sourceId` by the boot-chain `reconcileAccountSecrets` step (NOT the pure migrate fn) |
+| 14 | additive: the lens node gains an optional `filter?: LensFilter` (lens-view-filters). Pre-v14 nodes simply lack it; identity pass-through |
 | 15 | re-keyed lens sections by account `sourceId`: rewrote `lensItemBindings` keys AND `lensReadState` ids from `"${source}:${host}:${query}:${nativeId}"` (rss: `"${source}:${host}:${nativeId}"`) to `"${sourceId}:${query}:${nativeId}"` (rss: `"${sourceId}:${nativeId}"`), resolving each legacy id match-first by **longest** account prefix (port-bearing host carried; a blind `split(':')` is unsafe — host carries ports, rss nativeIds are URLs); unmappable / same-origin-ambiguous ids are dropped (a binding re-arms, a read mark reappears unread once). Idempotent |
 | 16 | widened `LensProvider` with `'bitbucket'` and added the optional `workspace?` field to `SourceAccount` (both in the shared `SourceAccountSchema`); pure identity pass-through (`(raw) => raw`) — additive, no data transform |
+| 17 | additive: the lens node gains an optional `articleLayout?: 'grid'\|'list'` (persist-lens-article-layout). Pre-v17 nodes simply lack it (resolving to the `grid` default); identity pass-through |
 
 The v7 migration walks `smartItemBindings[folderId][itemId][windowId]` and
 rewrites any numeric slot to `{ tabId, allowGlob: '' }`. The v8 migration wraps

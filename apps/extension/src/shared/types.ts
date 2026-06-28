@@ -411,6 +411,13 @@ export type PinNode =
        * Typed `| undefined` to match the persisted schema's `.optional()`
        * inference under `exactOptionalPropertyTypes`. */
       filter?: LensFilter | undefined;
+      /** Optional Articles-section layout (persist-lens-article-layout). Absent
+       * resolves to `'grid'` (the first-open default); read as
+       * `node.articleLayout ?? 'grid'`. Persisted per lens — survives overview
+       * re-opens, other windows, and SW restarts. Typed `| undefined` to match
+       * the persisted schema's `.optional()` inference under
+       * `exactOptionalPropertyTypes`. */
+      articleLayout?: 'grid' | 'list' | undefined;
     };
 
 /**

@@ -1267,6 +1267,18 @@ export class LunmaStore {
     }
   }
 
+  /** Set a lens's persisted Articles-section layout (persist-lens-article-layout).
+   * Unlike `setLensFilter`, there is no empty/clear case — the value is always one
+   * of two concrete strings, so we simply overwrite. */
+  setLensArticleLayout(folderId: FolderId, layout: 'grid' | 'list'): void {
+    const node = this.findLensAnySpace(folderId);
+    if (!node) {
+      log.error('setLensArticleLayout: unknown lens', { folderId });
+      return;
+    }
+    node.articleLayout = layout;
+  }
+
   /** Prune ONE resolved section's read ids to its live feed window (design D3).
    * The folder's read set spans every section (ids are namespaced
    * `${sectionKey}:${nativeId}`), but each section fetches independently — so a

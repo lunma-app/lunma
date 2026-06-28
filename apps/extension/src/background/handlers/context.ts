@@ -94,6 +94,7 @@ export type PendingEvent =
   | SidebarVariant<'markAllLensItemsRead'>
   | SidebarVariant<'setLensHideRead'>
   | SidebarVariant<'setLensFilter'>
+  | SidebarVariant<'setLensArticleLayout'>
   | SidebarVariant<'openLensListing'>
   | SidebarVariant<'openLensPage'>
   | SidebarVariant<'reorderTemp'>

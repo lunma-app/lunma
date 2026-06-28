@@ -343,6 +343,10 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
     kind: 'setLensFilter',
     payload: { spaceId: 'sp', folderId: 'sf', filter: { entities: ['change'] } },
   },
+  setLensArticleLayout: {
+    kind: 'setLensArticleLayout',
+    payload: { spaceId: 'sp', folderId: 'sf', layout: 'list' },
+  },
   openLensListing: {
     kind: 'openLensListing',
     payload: { spaceId: 'sp', folderId: 'sf', windowId: 1 },

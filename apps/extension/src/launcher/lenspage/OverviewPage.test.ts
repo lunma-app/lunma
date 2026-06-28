@@ -102,6 +102,8 @@ function renderOverview(
     projects: [] as string[],
     feeds: [] as string[],
   },
+  setArticleLayout = vi.fn(),
+  node = NODE,
 ) {
   const taggedItems = [
     ...byEntity.change,
@@ -113,9 +115,10 @@ function renderOverview(
     openItem,
     toggleRead,
     setFilter,
+    setArticleLayout,
     ...render(OverviewPage, {
       props: {
-        node: NODE,
+        node,
         tagged: taggedItems,
         facets,
         lensSub: 'GitHub & Jira',
@@ -123,6 +126,7 @@ function renderOverview(
         openItem,
         toggleRead,
         setFilter,
+        setArticleLayout,
       },
     }),
   };
@@ -188,8 +192,8 @@ describe('OverviewPage', () => {
     expect(getByText('To do')).toBeTruthy();
   });
 
-  test('Articles: a grid card by default, switchable to a list row, with a read toggle', async () => {
-    const { container, getByText, toggleRead } = renderOverview({ ...empty(), article: [ARTICLE] });
+  test('Articles: a grid card by default, with a read toggle', async () => {
+    const { container, toggleRead } = renderOverview({ ...empty(), article: [ARTICLE] });
     expect(
       container.querySelector('[data-testid="overview-section"][data-entity="article"]'),
     ).not.toBeNull();
@@ -203,9 +207,36 @@ describe('OverviewPage', () => {
     // Clicking it marks the (unread) item read.
     await fireEvent.click(toggleBtn);
     expect(toggleRead).toHaveBeenCalledWith(ARTICLE, true);
+  });
 
+  test('Articles: clicking List persists the layout via setArticleLayout (no local flip)', async () => {
+    // persist-lens-article-layout: the toggle is the persisted per-lens
+    // `articleLayout`; clicking dispatches the bus command and does NOT mutate a
+    // local copy — the DOM stays grid until the node re-derives.
+    const { container, getByText, setArticleLayout } = renderOverview({
+      ...empty(),
+      article: [ARTICLE],
+    });
     expect(container.querySelector('[data-testid="article-row"]')).toBeNull();
     await fireEvent.click(getByText('List'));
+    expect(setArticleLayout).toHaveBeenCalledWith('list');
+    // No optimistic local flip — still a grid card (the node prop is unchanged).
+    expect(container.querySelector('[data-testid="article-card"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="article-row"]')).toBeNull();
+  });
+
+  test('Articles: a persisted articleLayout:list renders list rows on open', () => {
+    // The restore path: a lens whose node carries `articleLayout: 'list'` opens
+    // directly in List, without first flashing the grid default.
+    const { container } = renderOverview(
+      { ...empty(), article: [ARTICLE] },
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      undefined,
+      vi.fn(),
+      { ...NODE, articleLayout: 'list' },
+    );
     expect(container.querySelector('[data-testid="article-row"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="article-card"]')).toBeNull();
   });
