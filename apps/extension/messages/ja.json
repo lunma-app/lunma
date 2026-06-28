@@ -373,5 +373,13 @@
   "options_boundary_domain": "ドメインにロック",
   "options_boundary_page": "このページにロック",
   "options_toggle_off": "オフ",
-  "options_toggle_on": "オン"
+  "options_toggle_on": "オン",
+  "sidebar_lensKindUnread": "未読",
+  "sidebar_lensKindItems": "件",
+  "sidebar_lensEditorCreate": "レンズを作成",
+  "sidebar_lensRoleWatching": "ウォッチ中",
+  "sidebar_lensRoleReviewing": "レビュー中",
+  "sidebar_spaceEditAria": "{name} を編集",
+  "sidebar_favDropHint": "ドロップしてお気に入りに追加",
+  "sidebar_favDragHint": "タブをここにドラッグしてお気に入りに追加。"
 }

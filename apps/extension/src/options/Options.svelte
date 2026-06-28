@@ -360,7 +360,12 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
                   data-testid="custom-url-hint"
                   aria-live="polite"
                 >
-                  {m.options_customUrlHint()}
+                  <!-- Split the localized hint on the literal `%s` token (every
+                       locale preserves it) so the placeholder users copy stays
+                       visually set apart as monospace code. -->
+                  {#each m.options_customUrlHint().split('%s') as part, i (i)}
+                    {#if i > 0}<code>%s</code>{/if}{part}
+                  {/each}
                 </p>
               {/if}
               {#if decl.key === 'customSearchKeyword'}
@@ -571,6 +576,9 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
     text-overflow: ellipsis;
     opacity: 0;
     transition: opacity var(--motion-fast) var(--ease-standard);
+  }
+  .field-hint code {
+    font-family: var(--font-mono);
   }
   .field-hint.visible {
     opacity: 1;

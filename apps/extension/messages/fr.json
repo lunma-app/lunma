@@ -378,5 +378,13 @@
   "options_boundary_domain": "Verrouiller au domaine",
   "options_boundary_page": "Verrouiller sur cette page",
   "options_toggle_off": "Désactivé",
-  "options_toggle_on": "Activé"
+  "options_toggle_on": "Activé",
+  "sidebar_lensKindUnread": "non lus",
+  "sidebar_lensKindItems": "éléments",
+  "sidebar_lensEditorCreate": "Créer une vue",
+  "sidebar_lensRoleWatching": "Surveillance",
+  "sidebar_lensRoleReviewing": "Révision",
+  "sidebar_spaceEditAria": "Modifier {name}",
+  "sidebar_favDropHint": "Déposer en favori",
+  "sidebar_favDragHint": "Faites glisser un onglet ici pour l'ajouter aux favoris."
 }

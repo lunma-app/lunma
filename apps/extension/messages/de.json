@@ -378,5 +378,13 @@
   "options_boundary_domain": "An Domain binden",
   "options_boundary_page": "An diese Seite binden",
   "options_toggle_off": "Aus",
-  "options_toggle_on": "An"
+  "options_toggle_on": "An",
+  "sidebar_lensKindUnread": "ungelesen",
+  "sidebar_lensKindItems": "Elemente",
+  "sidebar_lensEditorCreate": "Lens erstellen",
+  "sidebar_lensRoleWatching": "Beobachtet",
+  "sidebar_lensRoleReviewing": "In Überprüfung",
+  "sidebar_spaceEditAria": "{name} bearbeiten",
+  "sidebar_favDropHint": "Hierher ziehen zum Favorisieren",
+  "sidebar_favDragHint": "Tab hierher ziehen, um ihn zu favorisieren."
 }

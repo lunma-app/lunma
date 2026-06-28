@@ -83,7 +83,10 @@ function queryOptionsFor(p: LensProvider): Array<{ value: LensQuery; label: stri
   return [
     { value: 'authored', label: m.sidebar_lensRoleAuthored() },
     { value: 'assigned', label: m.sidebar_lensRoleAssigned() },
-    { value: 'review-requested', label: p === 'jira' ? 'Watching' : 'Reviewing' },
+    {
+      value: 'review-requested',
+      label: p === 'jira' ? m.sidebar_lensRoleWatching() : m.sidebar_lensRoleReviewing(),
+    },
   ];
 }
 
@@ -473,7 +476,7 @@ function confirm(): void {
       <Button variant="secondary" onclick={() => onDone?.()}>{m.common_cancel()}</Button>
     {/if}
     <Button variant="primary" disabled={!canConfirm} onclick={confirm} testid="smart-folder-confirm">
-      {node ? 'Save changes' : 'Create lens'}
+      {node ? m.sidebar_spaceEditorConfirmSave() : m.sidebar_lensEditorCreate()}
     </Button>
   </div>
   </div>

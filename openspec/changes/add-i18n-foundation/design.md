@@ -79,11 +79,21 @@ Compile target `apps/extension/src/shared/paraglide/`. In `shared/` it is DAG-le
 
 ### D3 — SW-safe custom locale strategy
 Strategy array is `['custom-lunmaSettings', 'baseLocale']` only. A
-`defineCustomClientStrategy('custom-lunmaSettings', { getLocale, setLocale })` reads a
-module-level sync `cached` value and persists via `writeSetting('language', …)`. The
+`defineCustomClientStrategy('custom-lunmaSettings', { getLocale, setLocale })` reads/writes
+a module-level sync `cached` value. The
 default `url`/`cookie`/`localStorage`/`preferredLanguage` strategies touch
 `window`/`document`/`localStorage` and would throw in the SW — they are deliberately
 omitted.
+- **The strategy's `setLocale` updates the in-memory cache ONLY — it does NOT persist.**
+  Paraglide's `getLocale()` self-heals on its first call by invoking
+  `setLocale(resolved, { reload: false })` (the `localeInitiallySet` path); a persisting
+  strategy would therefore writeSetting the resolved concrete locale over the stored
+  `'auto'` sentinel on the very first `m.*` render — permanently de-selecting "System" and
+  firing a spurious first-paint reload. Persistence is owned solely by the exported
+  `setLocale` wrapper (the Options picker path), which `writeSetting('language', value)`
+  for the raw choice (incl. `'auto'`). *(Corrected in `localize-extension-ui` once surface
+  strings actually consumed `m.*` and activated the latent self-heal; the original
+  foundation draft had the strategy persist.)*
 - **Async bridge:** `getLocale()` is synchronous and returns the in-memory `cached`
   locale; the cache is filled asynchronously by `initLocale()` (which `await`s
   `readSettings()`) inside each surface's existing pre-`mount()` seam. Unseeded (jsdom

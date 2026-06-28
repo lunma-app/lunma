@@ -240,9 +240,17 @@ export function shouldDismissOnFocusOut(
         if (next && typeof next.placeholder === 'string') {
           labels = next;
           applyLabels();
+        } else {
+          // Malformed/empty response — allow a retry on the next open.
+          labelsRequested = false;
         }
       })
-      .catch(() => undefined);
+      .catch(() => {
+        // A transient rejection (e.g. the SW restarting → "message port closed")
+        // must NOT latch the overlay into English for the page's lifetime — clear
+        // the flag so the next open re-requests the localized strings.
+        labelsRequested = false;
+      });
   }
 
   function coerceDensity(value: unknown): Density {
@@ -991,9 +999,16 @@ export function shouldDismissOnFocusOut(
   }
 
   /** "Enable history results" / "Enable bookmark results" (localized via `labels`,
-   * read at render time so a label refresh applies). */
+   * read at render time so a label refresh applies). An exhaustive `switch` so a
+   * future `OptionalResultSource` fails the build rather than silently mislabelling
+   * (the function would no longer return on every path). */
   function enableLabel(source: OptionalResultSource): string {
-    return source === 'history' ? labels.enableHistory : labels.enableBookmarks;
+    switch (source) {
+      case 'history':
+        return labels.enableHistory;
+      case 'bookmarks':
+        return labels.enableBookmarks;
+    }
   }
 
   /**
