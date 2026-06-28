@@ -21,6 +21,7 @@ vi.mock('../shared/chrome/storage', () => ({
 vi.mock('../shared/messages', () => ({
   broadcastState: vi.fn(),
   respondWithCurrentWindow: vi.fn(),
+  respondWithOverlayLabels: vi.fn(),
 }));
 vi.mock('./bus-adapter', () => ({ installBusAdapter: vi.fn() }));
 vi.mock('./launcher-suggestions-handler', () => ({ registerLauncherSuggestionsHandler: vi.fn() }));

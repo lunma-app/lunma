@@ -9,6 +9,7 @@ import {
   type OpenNewTabLauncherMessage,
   type OpenOptionsGrantMessage,
   respondWithCurrentWindow,
+  respondWithOverlayLabels,
   type SidebarFocusMessage,
 } from '../shared/messages';
 import { NEWTAB_PAGE_PATH } from '../shared/new-tab';
@@ -321,19 +322,12 @@ chrome.runtime.onMessage.addListener((raw: unknown, sender: chrome.runtime.Messa
 // overlay can't import Paraglide or seed the locale synchronously, so it asks the
 // SW for its rendered UI strings. `initLocale()` re-reads the `language` setting
 // each time (cheap) so a language change is reflected on the overlay's next open.
-// Returns `true` to keep the message channel open for the async `sendResponse`.
-chrome.runtime.onMessage.addListener(
-  (raw: unknown, sender: chrome.runtime.MessageSender, sendResponse): boolean | undefined => {
-    if (sender.id !== chrome.runtime.id) return;
-    if (!raw || typeof raw !== 'object') return;
-    if ((raw as { type?: unknown }).type !== 'lunma/overlay-labels-request') return;
-    void (async () => {
-      await initLocale();
-      sendResponse({ labels: buildOverlayLabels() });
-    })();
-    return true;
-  },
-);
+// Uses the shared typed-message responder factory (sender/type guards + a
+// try/catch so a throw can't hang the overlay's request).
+respondWithOverlayLabels(async () => {
+  await initLocale();
+  return buildOverlayLabels();
+});
 
 // Sync the auto-archive sweep alarm to the current settings (auto-archive):
 // register it (at the threshold-derived period) only while the master switch is

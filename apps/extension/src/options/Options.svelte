@@ -107,16 +107,21 @@ function isStacked(decl: SettingDeclaration): boolean {
   );
 }
 
-// Localize an enum setting's option labels (Compact / Dark / All Spaces / …) via
-// the `labels.ts` indirection, keeping `settings.ts` catalog-free. Engine names
-// and the `language` endonyms fall back to their declared literal.
-function localizedOptions(decl: SettingDeclaration): { value: string; label: string }[] {
-  if (decl.type !== 'enum') return [];
-  return decl.options.map((o) => ({
-    value: o.value,
-    label: optionLabel(decl.key, o.value, o.label),
-  }));
+// Localized enum option labels (Compact / Dark / All Spaces / …) via the
+// `labels.ts` indirection — engine names and the `language` endonyms fall back to
+// their declared literal. These arrays are session-constant (the locale is fixed
+// until a language change reloads the surface), so compute them once up front
+// rather than rebuilding on every settings change. `toggleSegments()` likewise.
+const localizedOptionsByKey = new Map<string, { value: string; label: string }[]>();
+for (const decl of SETTINGS) {
+  if (decl.type === 'enum') {
+    localizedOptionsByKey.set(
+      decl.key,
+      decl.options.map((o) => ({ value: o.value, label: optionLabel(decl.key, o.value, o.label) })),
+    );
+  }
 }
+const toggleOptions = toggleSegments();
 
 // The custom-engine fields (the search-URL template + its Tab keyword) are only
 // meaningful when the default engine is set to Custom — they configure that slot.
@@ -326,7 +331,7 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
           <SettingText label={settingLabel(decl.key)} description={settingDescription(decl.key)} />
           {#if decl.type === 'enum' && decl.options.length > SEGMENTED_MAX}
             <Select
-              options={localizedOptions(decl)}
+              options={localizedOptionsByKey.get(decl.key) ?? []}
               value={String(settings[decl.key])}
               ariaLabel={settingLabel(decl.key)}
               onchange={(value) => onSelect(decl, value)}
@@ -334,7 +339,7 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
           {:else if decl.type === 'enum'}
             <SegmentedControl
               name={decl.key}
-              options={localizedOptions(decl)}
+              options={localizedOptionsByKey.get(decl.key) ?? []}
               value={String(settings[decl.key])}
               ariaLabel={settingLabel(decl.key)}
               onchange={(value) => onSelect(decl, value)}
@@ -386,7 +391,7 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
           {:else if decl.type === 'toggle'}
             <SegmentedControl
               name={decl.key}
-              options={toggleSegments()}
+              options={toggleOptions}
               value={settings[decl.key] ? 'on' : 'off'}
               ariaLabel={settingLabel(decl.key)}
               onchange={(value) => onToggle(decl, value === 'on')}
