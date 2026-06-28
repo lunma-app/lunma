@@ -2,7 +2,7 @@
 
 > Auto-generated i18n message functions. Import `messages.js` to use translated strings.
 
-Compiled from: `/Users/emanuel.fonseca/Workspaces/lunma/.claude/worktrees/feat+lens-scope-multiselect/apps/extension/project.inlang`
+Compiled from: `./project.inlang`
 
 
 ## What is this folder?
