@@ -140,23 +140,33 @@ function optionEls(): HTMLButtonElement[] {
   return Array.from(rootEl.querySelectorAll<HTMLButtonElement>('[role="option"]'));
 }
 
-/** Dropdown open: focus the first selected row (or first row). When the search box
- * is shown it auto-focuses itself, so leave focus to it. */
+/** Focus the first ENABLED row at or after `start`, stepping by `step` with
+ * wrap-around. Native-`disabled` rows can't take focus, so the roving model must
+ * skip them or it stalls at a disabled boundary (MS-04). */
+function focusEnabledFrom(start: number, step: number): void {
+  const els = optionEls();
+  const n = els.length;
+  if (n === 0) return;
+  for (let i = 0; i < n; i++) {
+    const idx = (((start + i * step) % n) + n) % n;
+    const el = els[idx];
+    if (el && !el.disabled) {
+      el.focus();
+      return;
+    }
+  }
+}
+
+/** Dropdown open: focus the first selected row (or first enabled row). When the
+ * search box is shown it auto-focuses itself, so leave focus to it. */
 async function focusOnOpen(): Promise<void> {
   if (showSearch) return;
   await tick();
-  const els = optionEls();
   const first = Math.max(
     0,
     options.findIndex((o) => selectedSet.has(o.value)),
   );
-  els[first]?.focus();
-}
-
-function moveTo(index: number): void {
-  const els = optionEls();
-  if (els.length === 0) return;
-  els[((index % els.length) + els.length) % els.length]?.focus();
+  focusEnabledFrom(first, 1);
 }
 
 function onKeydown(event: KeyboardEvent): void {
@@ -180,16 +190,16 @@ function onKeydown(event: KeyboardEvent): void {
     }
   } else if (event.key === 'ArrowDown') {
     event.preventDefault();
-    moveTo(idx + 1);
+    focusEnabledFrom(idx + 1, 1);
   } else if (event.key === 'ArrowUp') {
     event.preventDefault();
-    moveTo(idx - 1);
+    focusEnabledFrom(idx - 1, -1);
   } else if (event.key === 'Home' && idx >= 0) {
     event.preventDefault();
-    moveTo(0);
+    focusEnabledFrom(0, 1);
   } else if (event.key === 'End' && idx >= 0) {
     event.preventDefault();
-    moveTo(els.length - 1);
+    focusEnabledFrom(els.length - 1, -1);
   } else if (event.key === 'Tab' && mode === 'dropdown') {
     setOpen(false); // let focus leave naturally
   }
@@ -315,10 +325,13 @@ function removeOutside(): void {
       class:active={selectedCount > 0}
       aria-haspopup="listbox"
       aria-expanded={open}
-      aria-label={ariaLabel}
+      aria-label={ariaLabel !== undefined ? `${ariaLabel}: ${label}` : label}
       data-testid={testid}
       onclick={() => setOpen(!open)}
     >
+      <!-- The trigger's accessible name folds the field name AND the visible
+           selection summary so the collapsed value reaches AT (a bare `aria-label`
+           would suppress the summary — MS-03). -->
       <span class="value">{label}</span>
       <span class="chevron" class:open aria-hidden="true">
         <svg

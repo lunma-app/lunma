@@ -325,12 +325,17 @@ function submit(): void {
             <div class="field">
               <span class="field-label">{m.sidebar_spaceColor()}</span>
               <!-- Roving tabindex: focus lives on the swatches; the group is
-                   removed from the tab order with tabindex=-1. -->
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
+                   removed from the tab order with tabindex=-1.
+                   `role="group"`, not `radiogroup`: the `ColorSwatch` members are
+                   `aria-pressed` toggle buttons, not `aria-checked` radios, so a
+                   labelled group of toggles is the conformant pattern
+                   (COLORSWATCH-01). The roving arrow-keys are kept as a
+                   convenience, so the group carries a keydown handler + tabindex. -->
+              <!-- svelte-ignore a11y_no_noninteractive_element_interactions, a11y_no_noninteractive_tabindex -->
               <div
                 bind:this={swatchRowEl}
                 class="swatch-row"
-                role="radiogroup"
+                role="group"
                 aria-label={m.sidebar_spaceColorLabel()}
                 tabindex={-1}
                 style:--swatch-count={String(COLORS.length)}

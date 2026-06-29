@@ -81,6 +81,8 @@ const { source }: { source: string } = $props();
         <FolderRow name="Inbox" icon="inbox" color="blue" dropTarget onToggle={noop} colors={SPACE_COLORS} />
       </div>
     </Variant>
+    <!-- `busy` sets `aria-busy="true"` on the row; the spinning glyph stays
+         decorative (API-06). -->
     <Variant label="busy (refreshing)">
       <div style="width: 16rem">
         <FolderRow name="Open PRs" icon="git-pull-request" color="green" busy onToggle={noop} colors={SPACE_COLORS} />

@@ -66,6 +66,9 @@ const { source }: { source: string } = $props();
         <AccountConnectField host="github.com" requirement="required" hasToken onConnect={noop} onReplace={noop} />
       </div>
     </Variant>
+    <!-- A `required` field sets `aria-required` on the input (ACF-02); when `error`
+         is set the input's `aria-describedby` points at the `InlineError` `id` so the
+         message re-announces on refocus (ACF-03). -->
     <Variant label="error">
       <div style="width: 20rem">
         <AccountConnectField

@@ -211,7 +211,11 @@ describe('FolderRow', () => {
       );
       const sheet = document.querySelector('[data-testid="folder-appearance"]') as HTMLElement;
       expect(sheet.querySelector('[data-testid="folder-edit-name"]')).not.toBeNull();
-      expect(sheet.querySelector('[role="radiogroup"]')).not.toBeNull();
+      // The swatches are aria-pressed toggles, so the container is a named
+      // role="group" (not radiogroup) — COLORSWATCH-01.
+      const swatchGroup = sheet.querySelector('[role="group"]');
+      expect(swatchGroup).not.toBeNull();
+      expect(swatchGroup?.getAttribute('aria-label')).toBe('Folder colour');
     });
 
     test('the Edit sheet dismisses via Escape', async () => {

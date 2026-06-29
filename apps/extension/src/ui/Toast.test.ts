@@ -98,6 +98,30 @@ describe('Toast', () => {
     expect(onDismiss).toHaveBeenCalledOnce();
   });
 
+  test('a message-only toast is keyboard-engageable: container is a tab stop, focus pauses, Escape dismisses (TOAST-02)', () => {
+    vi.useFakeTimers();
+    const onDismiss = vi.fn();
+    const { container } = render(Toast, {
+      props: { message: 'Saved', onDismiss, duration: 5000 },
+    });
+    const toast = container.querySelector('.toast') as HTMLElement;
+    // No focusable child, so the container itself must be reachable by keyboard.
+    expect(toast.getAttribute('tabindex')).toBe('0');
+    fireEvent.focusIn(toast); // focus the container → pause
+    vi.advanceTimersByTime(10000);
+    expect(onDismiss).not.toHaveBeenCalled();
+    fireEvent.keyDown(toast, { key: 'Escape' });
+    expect(onDismiss).toHaveBeenCalledOnce();
+  });
+
+  test('an action toast keeps its container out of the tab order (the Button is the tab stop)', () => {
+    const { container } = render(Toast, {
+      props: { message: 'Cleared 3 tabs', actionLabel: 'Undo', onDismiss: vi.fn() },
+    });
+    const toast = container.querySelector('.toast') as HTMLElement;
+    expect(toast.getAttribute('tabindex')).toBeNull();
+  });
+
   test('focus moving between the toast’s own controls does not resume the timer', () => {
     vi.useFakeTimers();
     const onDismiss = vi.fn();

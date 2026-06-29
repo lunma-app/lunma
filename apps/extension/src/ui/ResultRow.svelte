@@ -29,6 +29,10 @@ interface Props {
   /** Stable DOM id for the option — the combobox input points its
    * `aria-activedescendant` here when this row is the roving selection. */
   id?: string | undefined;
+  /** `tabindex` for the option button. Pass `-1` under the combobox
+   * `aria-activedescendant` model so DOM focus stays on the input and Tab does not
+   * walk through every row. Defaults to the native `0` (a standalone tab stop). */
+  tabindex?: number | undefined;
   /** Whole-row click (acts on the result). */
   onclick?: (() => void) | undefined;
   /** Pointer entered the row — surfaces use it to move the roving selection here. */
@@ -45,6 +49,7 @@ const {
   spaceName,
   spaceColor,
   id,
+  tabindex,
   onclick,
   onhover,
 }: Props = $props();
@@ -56,6 +61,7 @@ const {
   class:selected
   class:already-open={alreadyOpen}
   {id}
+  {tabindex}
   role="option"
   aria-selected={selected}
   data-testid="result-row"
@@ -87,7 +93,11 @@ const {
     {/if}
     <span class="badge" data-testid="result-badge">{sourceBadgeLabel(source)}</span>
   </span>
-  <span class="url">{url}</span>
+  <!-- The url is the button's hover tooltip (`title={url}`) and a visible scan
+       hint, but it would bloat the option's accessible name (re-read on every
+       arrow keypress under activedescendant), so hide it from the name. The row
+       then announces title + source once (RESULTLIST-02). -->
+  <span class="url" aria-hidden="true">{url}</span>
 </button>
 
 <style>

@@ -11,7 +11,7 @@ interface Props {
   expanded?: boolean;
   dropTarget?: boolean;
   onToggle?: () => void;
-  label?: string;
+  ariaLabel?: string;
   editing?: boolean;
   onRename?: (name: string) => void;
   onRenameCancel?: () => void;
@@ -45,7 +45,7 @@ const {
   expanded,
   dropTarget,
   onToggle,
-  label,
+  ariaLabel,
   editing,
   onRename,
   onRenameCancel,
@@ -94,7 +94,7 @@ let menuOpen = $state(false);
     {expanded}
     {dropTarget}
     {onToggle}
-    {label}
+    {ariaLabel}
     {editing}
     {onRename}
     {onRenameCancel}

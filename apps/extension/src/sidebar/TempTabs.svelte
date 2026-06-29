@@ -356,7 +356,7 @@ function commitRename(item: TempItem, newName: string): void {
       }}
       animate:flip={{ duration: () => reorderFlipMs() }}
     >
-      <Menu trigger="context" items={tabMenuItems(item)} label={m.sidebar_tabActions()} testid="temp-menu">
+      <Menu trigger="context" items={tabMenuItems(item)} ariaLabel={m.sidebar_tabActions()} testid="temp-menu">
         {#snippet children(menuProps)}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div {...menuProps} class="menu-trigger">

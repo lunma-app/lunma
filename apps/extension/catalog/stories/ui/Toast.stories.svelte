@@ -46,6 +46,9 @@ let withAction = $state(false);
     {/if}
   {/snippet}
   {#snippet examples()}
+    <!-- Message-only: the container is itself a tab stop (with a focus ring) so a
+         keyboard user can focus it to pause the timer and Escape-dismiss it — it
+         renders no focusable child otherwise (TOAST-02). -->
     <Variant label="message only (appears bottom-centre)">
       <Button variant="secondary" size="sm" onclick={() => (plain = true)}>Show toast</Button>
       {#if plain}

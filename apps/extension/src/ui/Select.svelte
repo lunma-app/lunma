@@ -61,21 +61,32 @@ function optionEls(): HTMLButtonElement[] {
   return Array.from(rootEl.querySelectorAll<HTMLButtonElement>('[role="option"]'));
 }
 
-/** Open with the roving highlight already on the current value. */
+/** Focus the first ENABLED option at or after `start`, stepping by `step` with
+ * wrap-around. Disabled options can't take DOM focus (native `disabled`), so the
+ * roving model must skip them or it dead-ends at a disabled boundary (SEL-03). */
+function focusEnabledFrom(start: number, step: number): void {
+  const els = optionEls();
+  const n = els.length;
+  if (n === 0) return;
+  for (let i = 0; i < n; i++) {
+    const idx = (((start + i * step) % n) + n) % n;
+    const el = els[idx];
+    if (el && !el.disabled) {
+      el.focus();
+      return;
+    }
+  }
+}
+
+/** Open with the roving highlight already on the current value (or the nearest
+ * enabled option after it, if the current value were somehow disabled). */
 async function focusSelectedSoon(): Promise<void> {
   await tick();
-  const els = optionEls();
   const current = Math.max(
     0,
     options.findIndex((o) => o.value === value),
   );
-  els[current]?.focus();
-}
-
-function moveTo(index: number): void {
-  const els = optionEls();
-  if (els.length === 0) return;
-  els[((index % els.length) + els.length) % els.length]?.focus();
+  focusEnabledFrom(current, 1);
 }
 
 function onKeydown(event: KeyboardEvent): void {
@@ -98,16 +109,16 @@ function onKeydown(event: KeyboardEvent): void {
     close();
   } else if (event.key === 'ArrowDown') {
     event.preventDefault();
-    moveTo(idx + 1);
+    focusEnabledFrom(idx + 1, 1);
   } else if (event.key === 'ArrowUp') {
     event.preventDefault();
-    moveTo(idx - 1);
+    focusEnabledFrom(idx - 1, -1);
   } else if (event.key === 'Home') {
     event.preventDefault();
-    moveTo(0);
+    focusEnabledFrom(0, 1);
   } else if (event.key === 'End') {
     event.preventDefault();
-    moveTo(els.length - 1);
+    focusEnabledFrom(els.length - 1, -1);
   } else if (event.key === 'Tab') {
     setOpen(false); // let focus leave naturally
   }
@@ -170,7 +181,10 @@ function removeOutside(): void {
       <Surface variant="elevated" radius="md">
         <ul class="list" role="listbox" aria-label={ariaLabel} tabindex={-1} use:scrollFade>
           {#each options as option (option.value)}
-            <li>
+            <!-- `role="presentation"` so the option buttons are owned directly by
+                 the listbox (a bare <li>'s implicit listitem role is not a valid
+                 listbox child and can misreport set-size/position — SEL-04). -->
+            <li role="presentation">
               <button
                 type="button"
                 role="option"

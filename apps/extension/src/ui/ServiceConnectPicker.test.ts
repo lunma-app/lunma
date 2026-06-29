@@ -108,6 +108,16 @@ describe('ServiceConnectPicker', () => {
     expect(sel(container, 'connect-import-opml')).not.toBeNull();
   });
 
+  test('the programmatically-clicked OPML file input is out of the tab order and a11y tree (SCP-01)', () => {
+    const { container } = render(Harness, {
+      props: { spaces: [{ id: 'work', name: 'Work' }] },
+    });
+    const fileInput = sel(container, 'connect-import-file') as HTMLInputElement;
+    expect(fileInput).not.toBeNull();
+    expect(fileInput.getAttribute('tabindex')).toBe('-1');
+    expect(fileInput.getAttribute('aria-hidden')).toBe('true');
+  });
+
   test('OPML import reveals the "Found N feeds — import as one folder into:" confirm and dispatches importOpml', async () => {
     const { container, getByText } = render(Harness, {
       props: { spaces: [{ id: 'work', name: 'Work' }] },
@@ -130,6 +140,9 @@ describe('ServiceConnectPicker', () => {
 
     await waitFor(() => expect(sel(container, 'connect-import-confirm')).not.toBeNull());
     expect(getByText(/Found 2 feeds — import as one folder into:/)).toBeTruthy();
+    // The result reveals in a role="status" region so AT is told the parse
+    // succeeded and a confirm step appeared (SCP-03).
+    expect(container.querySelector('.import-found')?.getAttribute('role')).toBe('status');
 
     await fireEvent.click(sel(container, 'connect-import-button') as HTMLButtonElement);
     expect(dispatchMock).toHaveBeenCalledWith(

@@ -1,4 +1,5 @@
 import { fireEvent, render } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { describe, expect, test, vi } from 'vitest';
 import MultiSelectHarness from './MultiSelect.test.harness.svelte';
 
@@ -21,7 +22,9 @@ describe('MultiSelect', () => {
     const { container } = render(MultiSelectHarness, { props: { label: 'All feeds' } });
     const t = trigger(container);
     expect(t.getAttribute('aria-haspopup')).toBe('listbox');
-    expect(t.getAttribute('aria-label')).toBe('Filter by feed');
+    // The accessible name folds the field name AND the visible selection summary so
+    // the collapsed value reaches AT (MS-03).
+    expect(t.getAttribute('aria-label')).toBe('Filter by feed: All feeds');
     expect(t.textContent).toContain('All feeds');
   });
 
@@ -203,5 +206,29 @@ describe('MultiSelect', () => {
     expect(row.querySelector('.opt-label')).toBeNull();
     // …but the option keeps its label as its accessible name.
     expect(row.getAttribute('aria-label')).toBe('Hacker News');
+  });
+
+  test('the collapsed trigger exposes the current selection summary in its name (MS-03)', () => {
+    const { container } = render(MultiSelectHarness, {
+      props: { label: '3 feeds', ariaLabel: 'Filter by feed' },
+    });
+    expect(trigger(container).getAttribute('aria-label')).toBe('Filter by feed: 3 feeds');
+  });
+
+  test('ArrowDown roving skips a disabled option (MS-04)', async () => {
+    const { container } = render(MultiSelectHarness, {
+      props: {
+        options: [
+          { value: 'a', label: 'A' },
+          { value: 'b', label: 'B', disabled: true },
+          { value: 'c', label: 'C' },
+        ],
+      },
+    });
+    await fireEvent.click(trigger(container));
+    await tick(); // focusOnOpen awaits a tick before focusing the first row
+    expect((document.activeElement as HTMLElement)?.getAttribute('data-value')).toBe('a');
+    await fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowDown' });
+    expect((document.activeElement as HTMLElement)?.getAttribute('data-value')).toBe('c');
   });
 });

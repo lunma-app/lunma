@@ -46,8 +46,11 @@ const { source }: { source: string } = $props();
   {#snippet examples()}
     <Variant label="md · no ring"><Avatar initials="AK" title="Ada Kale" /></Variant>
     <Variant label="sm · no ring"><Avatar initials="JR" size="sm" title="Jun Reyes" /></Variant>
+    <!-- Each ring carries a corner glyph (✓ / ! / ◷) so the verdict is shape +
+         colour, never hue alone (AVATAR-01). -->
     <Variant label="ring: approved"><Avatar initials="AK" ring="approved" title="Ada Kale — approved" /></Variant>
     <Variant label="ring: changes"><Avatar initials="JR" ring="changes" title="Jun Reyes — changes requested" /></Variant>
     <Variant label="ring: pending"><Avatar initials="MO" ring="pending" title="Mira Osei — pending" /></Variant>
+    <Variant label="sm · ring: approved"><Avatar initials="AK" size="sm" ring="approved" title="Ada Kale — approved" /></Variant>
   {/snippet}
 </Story>

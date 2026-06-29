@@ -9,14 +9,18 @@
 interface Props {
   /** The error message. */
   message: string;
+  /** Stable `id` for the `<p>` so a consuming field can point its
+   * `aria-describedby` at the error (`role="alert"` already covers the on-inject
+   * announcement; this adds the persistent on-refocus association). */
+  id?: string | undefined;
   /** `data-testid` passthrough. */
   testid?: string | undefined;
 }
 
-const { message, testid }: Props = $props();
+const { message, id, testid }: Props = $props();
 </script>
 
-<p class="inline-error" role="alert" data-testid={testid}>{message}</p>
+<p class="inline-error" {id} role="alert" data-testid={testid}>{message}</p>
 
 <style>
   .inline-error {

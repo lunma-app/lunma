@@ -3,12 +3,16 @@ import type { Snippet } from 'svelte';
 
 interface Props {
   children: Snippet;
+  /** Optional spelled-out accessible name for the `<kbd>` — supply it when the
+   * visible glyph is a pictograph a screen reader can't pronounce (e.g. `'Option
+   * L'` for `⌥L`, `'Command'` for `⌘`), or to hide a purely decorative glyph. */
+  ariaLabel?: string | undefined;
 }
 
-const { children }: Props = $props();
+const { children, ariaLabel }: Props = $props();
 </script>
 
-<kbd class="kbd">{@render children()}</kbd>
+<kbd class="kbd" aria-label={ariaLabel}>{@render children()}</kbd>
 
 <style>
   .kbd {

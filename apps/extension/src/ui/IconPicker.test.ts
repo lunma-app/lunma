@@ -77,6 +77,21 @@ describe('IconPicker', () => {
     expect(container.querySelector('.empty')).not.toBeNull();
   });
 
+  test('a persistent polite live region announces the empty result-state (ICONPICKER-NEW1)', async () => {
+    const { container } = render(IconPickerHarness, { props: { value: 'star' } });
+    const status = container.querySelector('[data-testid="icon-status"]') as HTMLElement;
+    // Always in the DOM (persistent region), polite, and empty while results show.
+    expect(status).not.toBeNull();
+    expect(status.getAttribute('role')).toBe('status');
+    expect(status.textContent?.trim()).toBe('');
+    const search = container.querySelector('[data-testid="icon-search"]') as HTMLInputElement;
+    await fireEvent.input(search, { target: { value: 'zzzznotanicon' } });
+    // The same region now carries the empty message (announced as it changes).
+    expect(status.textContent).toContain('No icons match');
+    // The visible copy is hidden from AT to avoid a double read.
+    expect(container.querySelector('.empty')?.getAttribute('aria-hidden')).toBe('true');
+  });
+
   test('selecting a searched icon emits it', async () => {
     const onselect = vi.fn();
     const { container } = render(IconPickerHarness, { props: { value: 'star', onselect } });

@@ -103,6 +103,7 @@ const returnable = $derived(drifted && !!homeHost);
   class:trailing-visible={trailingVisible}
   data-testid="tab-row"
   data-active={active}
+  aria-busy={loading ? 'true' : undefined}
 >
   {#if editing}
     <div class="hit editing">
@@ -139,11 +140,16 @@ const returnable = $derived(drifted && !!homeHost);
       ></button>
       <Tooltip label={returnable ? `Return to ${homeHost}` : ''} side="top" enabled={returnable}>
         {#snippet children(props)}
+          <!-- When not `returnable` the favicon button duplicates the title button
+               (same name + same action), so drop it from the tab order to avoid a
+               redundant stop; mouse reach is unaffected (TABROW-NEW1). When
+               returnable it is the distinct "Return home" target and stays in. -->
           <button
             {...props}
             type="button"
             class="favicon-btn"
             class:returnable
+            tabindex={returnable ? undefined : -1}
             data-testid="tab-favicon-btn"
             aria-label={returnable ? `Return to ${homeHost}` : title}
             onclick={() => (returnable ? onGoHome?.() : onclick?.())}
@@ -162,6 +168,7 @@ const returnable = $derived(drifted && !!homeHost);
         class="title-btn"
         title={title}
         aria-label={title}
+        aria-current={active ? 'true' : undefined}
         onclick={() => onclick?.()}
       >
         <span class="title">{title}</span>
@@ -494,9 +501,11 @@ const returnable = $derived(drifted && !!homeHost);
   }
 
   /* At-rest metadata (e.g. an archived age + delete countdown), quiet and
-   * right-aligned. Tabular numerals so a column of ages doesn't jitter. */
+   * right-aligned. Tabular numerals so a column of ages doesn't jitter. This is
+   * informative normal-size text, so it uses `--text-dim` (AA 4.5:1), not the
+   * decorative-only `--text-faint` (harden-ui-accessibility THEME-NEW1). */
   .meta {
-    color: var(--text-faint);
+    color: var(--text-dim);
     font: var(--weight-regular) var(--text-xs) / 1 var(--font-sans);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;

@@ -59,6 +59,28 @@ function readTokens(): Map<string, string> {
   return out;
 }
 
+/** Pull the `[data-theme='light']` block and parse `--name: value;` pairs, so the
+ * light token ramp is gated alongside the dark `:root` ramp
+ * (harden-ui-accessibility THEME-NEW1). The light selector list is
+ * `:root[data-theme='light'], [data-theme='light'] { … }`; we match the bare
+ * `[data-theme='light'] {` arm (the `:root…` arm is followed by `,`, not `{`). */
+function readLightTokens(): Map<string, string> {
+  const css = readFileSync(TOKENS_PATH, 'utf-8');
+  const m = css.match(/\[data-theme='light'\]\s*\{([\s\S]*?)\}/);
+  if (!m?.[1]) throw new Error("no [data-theme='light'] block in tokens.css");
+  const stripped = m[1].replace(/\/\*[\s\S]*?\*\//g, '');
+  const out = new Map<string, string>();
+  for (const line of stripped.split(';')) {
+    const mm = line.match(/^\s*(--[a-z0-9-]+)\s*:\s*(.+?)\s*$/);
+    if (!mm?.[1] || !mm?.[2]) continue;
+    out.set(mm[1], mm[2]);
+  }
+  return out;
+}
+
+/** The chrome/body backgrounds every text-ramp pair is gated against. */
+const SURFACE_BGS = ['--bg', '--bg-elev', '--surface', '--surface-2', '--surface-3'];
+
 /** Evaluate the small `calc()` / `clamp()` math the identity tokens use
  * (space-palette-refresh + the warm-substrate redesign): `calc(<a> * <b>)`,
  * `calc(<a> + <b>)`, and `clamp(0, <v>, 1)`. Runs calc first (multiply before
@@ -182,6 +204,134 @@ describe('design tokens — WCAG 2.1 contrast', () => {
       expect(ratio).toBeGreaterThanOrEqual(4.5);
     });
   });
+});
+
+/**
+ * Light theme (`[data-theme='light']`) text ramp — the dark `:root` ramp above is
+ * mirrored on the parsed light block so a light token lightness can't drift below
+ * its WCAG level unnoticed (harden-ui-accessibility THEME-NEW1). Same contract as
+ * dark: `--text` AAA 7:1, `--text-2`/`--text-muted`/`--text-dim` AA 4.5:1,
+ * `--text-faint` AA-Large 3:1 (restricted to incidental/decorative text).
+ */
+describe('design tokens (light theme) — WCAG 2.1 contrast', () => {
+  const light = readLightTokens();
+  function need(name: string): string {
+    const v = light.get(name);
+    if (!v) throw new Error(`tokens.css light block missing ${name}`);
+    return v;
+  }
+  const RAMP: [string, number][] = [
+    ['--text', 7],
+    ['--text-2', 4.5],
+    ['--text-muted', 4.5],
+    ['--text-dim', 4.5],
+    ['--text-faint', 3],
+  ];
+  for (const [token, level] of RAMP) {
+    describe(`${token} MUST meet ${level}:1 on every light surface`, () => {
+      for (const bg of SURFACE_BGS) {
+        test(`${bg}`, () => {
+          expect(contrast(need(token), need(bg))).toBeGreaterThanOrEqual(level);
+        });
+      }
+    });
+  }
+});
+
+/**
+ * Light-theme foreground tokens on a composited `.lunma-glass` surface
+ * (harden-ui-accessibility THEME-01). `--glass-bg` now carries a light expression,
+ * so a glass panel reads frosted-light in light theme; the catalog previews and any
+ * future light glass surface place light foreground tokens on it. We composite the
+ * translucent light `--glass-bg` over the light page substrate (`--bg`) exactly as
+ * the browser does (source-over) and assert each informative foreground token clears
+ * AA on the result (normal text 4.5:1; the decorative `--text-faint` floor is 3:1).
+ */
+describe('light theme — foreground tokens on `.lunma-glass` (WCAG AA)', () => {
+  const light = readLightTokens();
+  interface Rgba {
+    r: number;
+    g: number;
+    b: number;
+    a: number;
+  }
+  function need(name: string): string {
+    const v = light.get(name);
+    if (!v) throw new Error(`tokens.css light block missing ${name}`);
+    return v;
+  }
+  // Substitute the hue-axis vars (keeping any `/ alpha` so the glass composites).
+  function subst(expr: string): string {
+    return evalMath(
+      expr
+        .replace(/var\(--base-hue\)/g, '60')
+        .replace(/var\(--ds-warm-h\)/g, '60')
+        .replace(/var\(--ds-warm-amt\)/g, '1'),
+    );
+  }
+  function toRgba(expr: string): Rgba {
+    const c = parse(subst(expr));
+    if (!c) throw new Error(`culori failed to parse '${expr}'`);
+    const r = rgb(c);
+    const clamp = (n: number): number => Math.min(1, Math.max(0, n));
+    return { r: clamp(r.r), g: clamp(r.g), b: clamp(r.b), a: c.alpha ?? 1 };
+  }
+  function over(fg: Rgba, bg: Rgba): Rgba {
+    const a = fg.a;
+    return {
+      r: fg.r * a + bg.r * (1 - a),
+      g: fg.g * a + bg.g * (1 - a),
+      b: fg.b * a + bg.b * (1 - a),
+      a: 1,
+    };
+  }
+  function col(c: Rgba): { mode: 'rgb'; r: number; g: number; b: number } {
+    return { mode: 'rgb', r: c.r, g: c.g, b: c.b };
+  }
+
+  const glass = over(toRgba(need('--glass-bg')), toRgba(need('--bg')));
+  const FOREGROUND: [string, number][] = [
+    ['--text', 4.5],
+    ['--text-2', 4.5],
+    ['--text-muted', 4.5],
+    ['--text-dim', 4.5],
+    ['--text-faint', 3],
+  ];
+  for (const [token, level] of FOREGROUND) {
+    test(`${token} on light glass meets ${level}:1`, () => {
+      expect(wcagContrast(col(toRgba(need(token))), col(glass))).toBeGreaterThanOrEqual(level);
+    });
+  }
+});
+
+/**
+ * Idle form-control boundary — the non-text 3:1 minimum (WCAG 1.4.11,
+ * harden-ui-accessibility THEME-02). An unfocused `TextInput`/`Select` is a
+ * recessed fill inside a 1px `--border` (hover steps to `--border-strong`); the
+ * fill barely differs from the surface, so the border is the boundary cue and MUST
+ * clear 3:1 against the surface behind it (`--surface` or `--bg`) in both themes.
+ */
+describe('idle form-control boundary — border vs surface non-text contrast (WCAG 1.4.11)', () => {
+  const themes = [
+    ['dark', readTokens()],
+    ['light', readLightTokens()],
+  ] as const;
+  for (const [theme, toks] of themes) {
+    describe(theme, () => {
+      function need(name: string): string {
+        const v = toks.get(name);
+        if (!v) throw new Error(`tokens.css ${theme} block missing ${name}`);
+        return v;
+      }
+      for (const border of ['--border', '--border-strong']) {
+        for (const surf of ['--surface', '--bg']) {
+          test(`${border} vs ${surf} >= 3:1`, () => {
+            expect(contrast(need(border), need(surf))).toBeGreaterThanOrEqual(3);
+          });
+        }
+      }
+    });
+  }
 });
 
 /**

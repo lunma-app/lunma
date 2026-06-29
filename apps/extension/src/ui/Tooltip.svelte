@@ -19,6 +19,12 @@ interface Props {
 }
 
 const { label, side = 'top', enabled = true, children }: Props = $props();
+
+// Explicit, stable content id so bits-ui can wire the trigger's
+// `aria-describedby` to the bubble while open (TOOLTIP-01). bits-ui reads
+// `contentNode.id` for that association; under 2.18.1 the auto-generated id can
+// come through empty via the `child` snippet, so we provide one ourselves.
+const contentId = `lunma-tooltip-${crypto.randomUUID()}`;
 </script>
 
 {#if enabled}
@@ -31,9 +37,19 @@ const { label, side = 'top', enabled = true, children }: Props = $props();
       </Bits.Trigger>
       <Bits.Portal>
         <Bits.Content {side} sideOffset={6} class="lunma-tooltip-content">
-          {#snippet child({ props })}
-            <div {...props} class="lunma-tooltip">
-              {label}
+          {#snippet child({ props, wrapperProps })}
+            <!-- bits-ui 2.x positions the floating bubble via `wrapperProps` on an
+                 outer wrapper; the inner element carries `props` + the visual class.
+                 Spreading only `props` (the prior code) dropped the position, so the
+                 bubble fell to the bottom of <body>. `role="tooltip"` matches the
+                 WAI-ARIA Tooltip pattern. bits-ui reads THIS inner element
+                 (`contentNode`) for the trigger's `aria-describedby`, but its
+                 auto-id lands on the wrapper, leaving this id empty — so set our own
+                 `id` here (after `{...props}`) to wire the description (TOOLTIP-01). -->
+            <div {...wrapperProps}>
+              <div {...props} id={contentId} role="tooltip" class="lunma-tooltip">
+                {label}
+              </div>
             </div>
           {/snippet}
         </Bits.Content>

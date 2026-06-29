@@ -22,6 +22,9 @@ const spaces = [
 
 <Story {meta} {source}>
   {#snippet examples()}
+    <!-- The hidden OPML file input is programmatically clicked by "Import OPML…"
+         and stays out of the tab order / a11y tree (SCP-01); when a file is parsed
+         the "Found N feeds" confirm reveals in a role="status" region (SCP-03). -->
     <Variant label="provider picker (Options mode · OPML import)">
       <div style="width: 22rem">
         <ServiceConnectPicker onConnected={noop} {spaces} onImportFeeds={noop} onCancel={noop} />

@@ -18,9 +18,13 @@ interface Props {
   reviewers: Reviewer[];
   /** How many avatars to show before collapsing the rest into `+N`. */
   max?: number | undefined;
+  /** Accessible name for the reviewer cluster (e.g. `'Reviewers'`). When set, the
+   * rail becomes a named `role="group"` so assistive tech announces the discs as a
+   * labelled collection rather than loose, context-free items. */
+  ariaLabel?: string | undefined;
 }
 
-const { reviewers, max = 4 }: Props = $props();
+const { reviewers, max = 4, ariaLabel }: Props = $props();
 
 // Blocking-wins (D5): `changes` > `pending` > `approved`. An unknown state
 // counts as `pending` (never fabricated). The glyph maps to the curated lucide
@@ -45,7 +49,12 @@ const overflow = $derived(Math.max(0, reviewers.length - max));
 </script>
 
 {#if leadVerdict !== null}
-  <span class="rail" data-testid="reviewer-rail">
+  <span
+    class="rail"
+    data-testid="reviewer-rail"
+    role={ariaLabel ? 'group' : undefined}
+    aria-label={ariaLabel}
+  >
     <span class="verdict" data-verdict={leadVerdict}>
       <Icon name={VERDICT_ICON[leadVerdict].icon} size={14} color={VERDICT_ICON[leadVerdict].color} label={VERDICT_ICON[leadVerdict].label} />
     </span>
@@ -56,7 +65,14 @@ const overflow = $derived(Math.max(0, reviewers.length - max));
         </span>
       {/each}
       {#if overflow > 0}
-        <span class="overflow" data-testid="reviewer-overflow">+{overflow}</span>
+        <!-- `role="img"` + `aria-label` so the badge announces "N more reviewers"
+             rather than a bare "+N"; a generic <span> would not reliably expose an
+             author-supplied name (REVIEWERRAIL-01). -->
+        <span
+          class="overflow"
+          data-testid="reviewer-overflow"
+          role="img"
+          aria-label={`${overflow} more reviewers`}>+{overflow}</span>
       {/if}
     </span>
   </span>

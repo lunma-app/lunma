@@ -17,6 +17,11 @@ interface Props {
    * here, and each option's id is derived from it (`<listboxId>-opt-<index>`) so
    * the input can carry `aria-activedescendant`. */
   listboxId?: string;
+  /** Accessible name for the `role="listbox"` container (e.g. `'Search results'`).
+   * Leave unset where the combobox input already drives option announcement via
+   * `aria-activedescendant`; set it for any surface that focuses the list root
+   * directly, so the listbox is not unnamed. */
+  ariaLabel?: string | undefined;
   /** Act on a result (Enter or click) — the surface maps it to a bus command.
    * `modifiers.shiftKey` is set for Shift+Enter so the surface can force a new
    * tab on an already-open result (tab-dedup). */
@@ -46,6 +51,7 @@ interface Props {
 const {
   results,
   listboxId = 'launcher-results',
+  ariaLabel,
   onact,
   onescape,
   faviconSrc,
@@ -117,6 +123,7 @@ export function handleKeydown(e: KeyboardEvent): void {
   class="result-list"
   id={listboxId}
   role="listbox"
+  aria-label={ariaLabel}
   tabindex="-1"
   data-testid="result-list"
   onkeydown={handleKeydown}
@@ -132,6 +139,7 @@ export function handleKeydown(e: KeyboardEvent): void {
       spaceColor={result.spaceColor}
       id={optionId(i)}
       selected={i === selected}
+      tabindex={-1}
       onhover={() => {
         selected = i;
       }}

@@ -75,6 +75,7 @@ function highlightSource(): void {
                 {#if def.type === 'boolean'}
                   <Chip
                     label={args[prop] ? 'true' : 'false'}
+                    ariaLabel={prop}
                     onToggle={() => (args[prop] = !args[prop])}
                     selected={Boolean(args[prop])}
                   />

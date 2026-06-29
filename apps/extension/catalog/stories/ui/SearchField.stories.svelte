@@ -18,6 +18,11 @@ export const meta = defineStory({
       description: 'Placeholder / trigger label.',
     },
     value: { type: 'text', default: '', description: 'Current value (input mode).' },
+    ariaLabel: {
+      type: 'text',
+      default: 'Search',
+      description: 'Accessible name (input falls back to the placeholder when unset).',
+    },
     kbd: { type: 'text', default: '⌥L', description: 'Trailing keyboard hint.' },
   },
 });
@@ -45,6 +50,7 @@ const { source }: { source: string } = $props();
         mode={args.mode as 'input' | 'trigger'}
         placeholder={args.placeholder as string}
         value={args.value as string}
+        ariaLabel={args.ariaLabel as string}
         kbd={args.kbd as string}
         oninput={(v) => (args.value = v)}
         onclick={noop}
@@ -52,9 +58,12 @@ const { source }: { source: string } = $props();
     </div>
   {/snippet}
   {#snippet examples()}
+    <!-- Input mode passes an explicit `ariaLabel` (modelled usage); without it the
+         field now falls back to the placeholder for its name, matching trigger
+         mode (SF-01). -->
     <Variant label="input mode">
       <div style="width: 18rem">
-        <SearchField mode="input" placeholder="Search tabs, bookmarks…" kbd="⌥L" />
+        <SearchField mode="input" ariaLabel="Search tabs and bookmarks" placeholder="Search tabs, bookmarks…" kbd="⌥L" />
       </div>
     </Variant>
     <Variant label="trigger mode">

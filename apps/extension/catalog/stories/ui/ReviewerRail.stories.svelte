@@ -22,7 +22,7 @@ const { source }: { source: string } = $props();
 
 <Story {meta} {source}>
   {#snippet preview(args: Args)}
-    <ReviewerRail reviewers={REVIEWERS} max={args.max as number} />
+    <ReviewerRail reviewers={REVIEWERS} max={args.max as number} ariaLabel="Reviewers" />
   {/snippet}
   {#snippet examples()}
     <Variant label="all approved">
@@ -41,6 +41,11 @@ const { source }: { source: string } = $props();
     </Variant>
     <Variant label="composed · max 2">
       <ReviewerRail reviewers={REVIEWERS} max={2} />
+    </Variant>
+    <!-- `ariaLabel` makes the cluster a named `role="group"` (REVIEWERRAIL-02);
+         the +N badge announces "N more reviewers" (REVIEWERRAIL-01). -->
+    <Variant label="named group (ariaLabel)">
+      <ReviewerRail reviewers={REVIEWERS} max={4} ariaLabel="Reviewers" />
     </Variant>
   {/snippet}
 </Story>
