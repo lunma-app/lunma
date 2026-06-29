@@ -243,7 +243,7 @@ function removeOutside(): void {
     gap: var(--space-2);
     /* Recessed dark trigger with a crisp idle border — matches the evolved
        TextInput (sources-redesign / comp). */
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-field);
     border-radius: var(--r-md);
     background: var(--bg);
     color: var(--text);

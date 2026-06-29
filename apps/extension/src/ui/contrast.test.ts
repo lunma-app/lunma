@@ -306,10 +306,12 @@ describe('light theme — foreground tokens on `.lunma-glass` (WCAG AA)', () => 
 
 /**
  * Idle form-control boundary — the non-text 3:1 minimum (WCAG 1.4.11,
- * harden-ui-accessibility THEME-02). An unfocused `TextInput`/`Select` is a
- * recessed fill inside a 1px `--border` (hover steps to `--border-strong`); the
- * fill barely differs from the surface, so the border is the boundary cue and MUST
+ * harden-ui-accessibility THEME-02). An unfocused `TextInput`/`Select`/`MultiSelect`
+ * is a recessed fill inside a 1px `--border-field` (hover steps to `--border-strong`);
+ * the fill barely differs from the surface, so the border is the boundary cue and MUST
  * clear 3:1 against the surface behind it (`--surface` or `--bg`) in both themes.
+ * `--border` itself is the soft decorative line (dividers, container edges) and is
+ * deliberately NOT held to 3:1.
  */
 describe('idle form-control boundary — border vs surface non-text contrast (WCAG 1.4.11)', () => {
   const themes = [
@@ -323,7 +325,7 @@ describe('idle form-control boundary — border vs surface non-text contrast (WC
         if (!v) throw new Error(`tokens.css ${theme} block missing ${name}`);
         return v;
       }
-      for (const border of ['--border', '--border-strong']) {
+      for (const border of ['--border-field', '--border-strong']) {
         for (const surf of ['--surface', '--bg']) {
           test(`${border} vs ${surf} >= 3:1`, () => {
             expect(contrast(need(border), need(surf))).toBeGreaterThanOrEqual(3);

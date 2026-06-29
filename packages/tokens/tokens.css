@@ -122,11 +122,13 @@
    * as inset on any surface (warm-substrate redesign). */
   --input: oklch(0.145 calc(var(--ds-warm-amt) * 0.008) var(--ds-warm-h));
 
-  /* `--border`/`--border-strong` are lifted to the minimal lightness that clears
-   * the 3:1 non-text floor (WCAG 1.4.11) against `--surface` AND `--bg`, so an idle
-   * (unfocused) TextInput/Select boundary is distinguishable (harden-ui-accessibility
-   * THEME-02). `--border-soft`/`--divider` stay quiet (alpha'd, decorative). */
-  --border: oklch(0.500 calc(var(--ds-warm-amt) * 0.012) var(--ds-warm-h));
+  /* `--border-field`/`--border-strong` are lifted to the minimal lightness that
+   * clears the 3:1 non-text floor (WCAG 1.4.11) against `--surface` AND `--bg`, so an
+   * idle (unfocused) form-control boundary (TextInput/Select/MultiSelect) is
+   * distinguishable (harden-ui-accessibility THEME-02). `--border` itself stays soft
+   * and decorative (dividers, container/card edges), as do `--border-soft`/`--divider`. */
+  --border: oklch(0.300 calc(var(--ds-warm-amt) * 0.012) var(--ds-warm-h));
+  --border-field: oklch(0.500 calc(var(--ds-warm-amt) * 0.012) var(--ds-warm-h));
   --border-soft: oklch(0.260 calc(var(--ds-warm-amt) * 0.010) var(--ds-warm-h) / 0.7);
   --border-strong: oklch(0.580 calc(var(--ds-warm-amt) * 0.014) var(--ds-warm-h));
   --divider: oklch(0.260 calc(var(--ds-warm-amt) * 0.010) var(--ds-warm-h) / 0.55);
@@ -447,9 +449,12 @@
   --press: oklch(0.890 calc(var(--ds-warm-amt) * 0.014) var(--ds-warm-h));
   --input: oklch(0.975 calc(var(--ds-warm-amt) * 0.006) var(--ds-warm-h));
 
-  /* Darkened to clear the 3:1 non-text floor against the light `--surface`/`--bg`
-   * (harden-ui-accessibility THEME-02); `--border-soft`/`--divider` stay quiet. */
-  --border: oklch(0.620 calc(var(--ds-warm-amt) * 0.012) var(--ds-warm-h));
+  /* `--border-field`/`--border-strong` clear the 3:1 non-text floor against the light
+   * `--surface`/`--bg` so an idle form-control boundary is distinguishable
+   * (harden-ui-accessibility THEME-02); `--border` itself stays soft and decorative,
+   * as do `--border-soft`/`--divider`. */
+  --border: oklch(0.875 calc(var(--ds-warm-amt) * 0.012) var(--ds-warm-h));
+  --border-field: oklch(0.620 calc(var(--ds-warm-amt) * 0.012) var(--ds-warm-h));
   --border-soft: oklch(0.905 calc(var(--ds-warm-amt) * 0.010) var(--ds-warm-h) / 0.85);
   --border-strong: oklch(0.560 calc(var(--ds-warm-amt) * 0.014) var(--ds-warm-h));
   --divider: oklch(0.890 calc(var(--ds-warm-amt) * 0.010) var(--ds-warm-h) / 0.7);
