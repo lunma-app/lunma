@@ -102,6 +102,7 @@ export const SECTION_META: Record<LensEntity, { title: string; dotHue: number }>
 const MONO: Record<LensProvider, string> = {
   github: 'GH',
   gitlab: 'GL',
+  bitbucket: 'BB',
   jira: 'JR',
   rss: 'RSS',
 };

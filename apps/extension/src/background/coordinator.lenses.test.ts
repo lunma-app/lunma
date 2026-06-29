@@ -61,6 +61,14 @@ const ACCOUNTS = {
   // repoints a lens from the gitlab account to this github account on the same
   // host.
   'gh-ghe': { id: 'gh-ghe', provider: 'github', baseUrl: 'https://gitlab.example.com' },
+  // A Cloud bitbucket account (host bitbucket.org) carrying its workspace
+  // (add-bitbucket-connector) — Cloud supports `authored` only.
+  'bb-cloud': {
+    id: 'bb-cloud',
+    provider: 'bitbucket',
+    baseUrl: 'https://bitbucket.org',
+    workspace: 'acme',
+  },
 } as const;
 
 /** Default gitlab node (references the seeded `gl-ex` account); overrides merge
@@ -328,6 +336,125 @@ describe('createLens handler', () => {
         result: { error: expect.stringContaining('unknown spaceId') },
       }),
     );
+  });
+
+  test('a Cloud bitbucket reference carrying review-requested is rejected (add-bitbucket-connector D4)', async () => {
+    const { coordinator, store, emitAck } = makeWithSpace();
+    coordinator.enqueue(
+      sidebar(
+        {
+          kind: 'createLens',
+          payload: {
+            spaceId: 'work',
+            sources: [{ sourceId: 'bb-cloud', queries: ['review-requested'] }],
+            name: 'X',
+            maxItems: 20,
+            refreshMinutes: 10,
+          },
+        },
+        'c1',
+      ),
+    );
+    await coordinator.idle();
+    expect(emitAck).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'c1',
+        result: { error: expect.stringContaining('review-requested') },
+      }),
+    );
+    expect(store.state.pinnedBySpace.work ?? []).toHaveLength(0);
+  });
+
+  test('a Cloud bitbucket reference carrying authored is accepted', async () => {
+    const { coordinator, store, emitAck } = makeWithSpace();
+    coordinator.enqueue(
+      sidebar(
+        {
+          kind: 'createLens',
+          payload: {
+            spaceId: 'work',
+            sources: [{ sourceId: 'bb-cloud', queries: ['authored'] }],
+            name: 'My PRs',
+            maxItems: 20,
+            refreshMinutes: 10,
+          },
+        },
+        'c1',
+      ),
+    );
+    await coordinator.idle();
+    expect(emitAck).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1', result: 'ok' }));
+    const created = store.state.pinnedBySpace.work?.[0] as LensNode;
+    expect(created).toMatchObject({ lensKind: 'review' });
+  });
+});
+
+describe('createAccount handler (add-bitbucket-connector)', () => {
+  test('a Cloud bitbucket account created without a workspace is rejected, no source added', async () => {
+    const { coordinator, store, emitAck } = makeWithSpace();
+    coordinator.enqueue(
+      sidebar(
+        {
+          kind: 'createAccount',
+          payload: { id: 'bb-new', provider: 'bitbucket', baseUrl: 'https://bitbucket.org' },
+        },
+        'c1',
+      ),
+    );
+    await coordinator.idle();
+    expect(emitAck).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'c1',
+        result: { error: expect.stringContaining('workspace') },
+      }),
+    );
+    expect(store.state.sources['bb-new']).toBeUndefined();
+  });
+
+  test('a Cloud bitbucket account with a workspace persists it', async () => {
+    const { coordinator, store, emitAck } = makeWithSpace();
+    coordinator.enqueue(
+      sidebar(
+        {
+          kind: 'createAccount',
+          payload: {
+            id: 'bb-new',
+            provider: 'bitbucket',
+            baseUrl: 'https://bitbucket.org',
+            workspace: 'acme',
+          },
+        },
+        'c1',
+      ),
+    );
+    await coordinator.idle();
+    expect(emitAck).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1', result: 'ok' }));
+    expect(store.state.sources['bb-new']).toMatchObject({
+      provider: 'bitbucket',
+      baseUrl: 'https://bitbucket.org',
+      workspace: 'acme',
+    });
+  });
+
+  test('a self-hosted bitbucket account needs no workspace', async () => {
+    const { coordinator, store, emitAck } = makeWithSpace();
+    coordinator.enqueue(
+      sidebar(
+        {
+          kind: 'createAccount',
+          payload: {
+            id: 'bb-dc',
+            provider: 'bitbucket',
+            baseUrl: 'https://bitbucket.example.com',
+          },
+        },
+        'c1',
+      ),
+    );
+    await coordinator.idle();
+    expect(emitAck).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1', result: 'ok' }));
+    expect(store.state.sources['bb-dc']).toMatchObject({ provider: 'bitbucket' });
+    expect(store.state.sources['bb-dc']?.workspace).toBeUndefined();
   });
 });
 

@@ -16,6 +16,10 @@ import type { ResolvedLensSource } from './types';
  *   - `github` on github.com fetches `api.github.com` (a DIFFERENT origin), so
  *     the gate must request `https://api.github.com/*`, never `github.com`;
  *     GitHub Enterprise Server fetches same-origin under `{baseUrl}/api/v3`.
+ *   - `bitbucket` on bitbucket.org (Cloud) fetches `api.bitbucket.org` (a
+ *     DIFFERENT origin), so the gate must request `https://api.bitbucket.org/*`;
+ *     a self-hosted Server / Data Center host fetches same-origin under
+ *     `{baseUrl}/rest/api/1.0`.
  *   - `gitlab`, `jira`, and `rss` fetch their own `baseUrl` origin.
  *
  * Pure and total: a malformed `baseUrl` yields an empty pattern (treated as
@@ -36,6 +40,15 @@ export function requiredOriginsForConfig(
       // Malformed baseUrl → fall through to the baseUrl-origin pattern below.
     }
     if (isDotCom) return ['https://api.github.com/*'];
+  }
+  if (cfg.source === 'bitbucket') {
+    let isCloud = false;
+    try {
+      isCloud = new URL(cfg.baseUrl).host === 'bitbucket.org';
+    } catch {
+      // Malformed baseUrl → fall through to the baseUrl-origin pattern below.
+    }
+    if (isCloud) return ['https://api.bitbucket.org/*'];
   }
   return [originPatternForBaseUrl(cfg.baseUrl)];
 }

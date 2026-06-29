@@ -17,6 +17,7 @@ export type AccountStatus =
 export const PROVIDER_GLYPH: Record<LensProvider, string> = {
   github: 'folder-git-2',
   gitlab: 'folder-git-2',
+  bitbucket: 'folder-git-2',
   jira: 'folder-kanban',
   rss: 'rss',
 };

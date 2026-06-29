@@ -6,9 +6,7 @@ Request least-privilege permissions at install and grant the rest at runtime
 through one foundation module that gates `chrome.permissions` — so the extension
 asks for host/feature access only on a user gesture and only when a feature
 needs it, with a calm, reversible inline grant.
-
 ## Requirements
-
 ### Requirement: The manifest grants least privilege at install, the rest at runtime
 
 The extension manifest SHALL request at install only the permissions the core
@@ -24,9 +22,10 @@ workspace needs, and SHALL declare the rest as optional, granted at runtime.
 - `optional_permissions` SHALL include `history` and `bookmarks`.
 - `optional_host_permissions` SHALL include the known connector SaaS hosts
   (`https://github.com/*`, `https://api.github.com/*`, `https://gitlab.com/*`,
-  `https://*.atlassian.net/*`) AND the self-hosted fallback patterns
-  `https://*/*` and `http://*/*`, so an arbitrary user-entered connector
-  `baseUrl` can be requested at runtime.
+  `https://api.bitbucket.org/*`, `https://*.atlassian.net/*`) AND the self-hosted
+  fallback patterns `https://*/*` and `http://*/*`, so an arbitrary user-entered
+  connector `baseUrl` — including a Bitbucket Server / Data Center host — can be
+  requested at runtime.
 - The `favicon` permission SHALL be removed unless a verification step
   demonstrates that `tab.favIconUrl` and the `_favicon/*` web-accessible path
   stop resolving without it on the supported Chrome floor; if it is retained,
@@ -45,6 +44,13 @@ workspace needs, and SHALL declare the rest as optional, granted at runtime.
 - **THEN** `history` and `bookmarks` SHALL appear under `optional_permissions`
   and SHALL NOT be granted until requested
 - **AND** the connector hosts SHALL appear under `optional_host_permissions`
+
+#### Scenario: The Bitbucket Cloud API host is requestable at runtime
+
+- **WHEN** a user connects a Bitbucket Cloud account and creates a lens on it
+- **THEN** `https://api.bitbucket.org/*` SHALL appear under `optional_host_permissions`
+  and be requested via a user-gesture-bound `requestHostPermissions`
+- **AND** a Bitbucket Server host SHALL be requestable via the `https://*/*` fallback pattern
 
 #### Scenario: The favicon permission is resolved by verification, not assumption
 
@@ -144,3 +150,4 @@ error.
 - **GIVEN** a previously granted optional permission
 - **WHEN** the user revokes it via Chrome
 - **THEN** `onPermissionsChange` SHALL fire and the feature SHALL return to showing its grant affordance
+

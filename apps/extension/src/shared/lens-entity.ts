@@ -36,7 +36,7 @@ export type { LensEntity };
  * Ticket entity).
  */
 export function entityForSource(provider: LensProvider): LensEntity {
-  if (provider === 'github' || provider === 'gitlab') return 'change';
+  if (provider === 'github' || provider === 'gitlab' || provider === 'bitbucket') return 'change';
   if (provider === 'rss') return 'article';
   if (provider === 'jira') return 'ticket';
   return 'generic';
@@ -45,10 +45,13 @@ export function entityForSource(provider: LensProvider): LensEntity {
 /**
  * Every entity a source provider MAY emit (for the editor's derived preview —
  * "reads Changes + Issues"). A `github`/`gitlab` source emits both `change`
- * (PRs/MRs) and `ticket` (issues); `jira` emits `ticket`; `rss` emits `article`.
+ * (PRs/MRs) and `ticket` (issues); `bitbucket` emits only `change` (the
+ * connector fetches PRs, no issue pass); `jira` emits `ticket`; `rss` emits
+ * `article`.
  */
 export function entitiesForSource(provider: LensProvider): LensEntity[] {
   if (provider === 'github' || provider === 'gitlab') return ['change', 'ticket'];
+  if (provider === 'bitbucket') return ['change'];
   if (provider === 'rss') return ['article'];
   if (provider === 'jira') return ['ticket'];
   return ['generic'];
@@ -73,8 +76,8 @@ export function entityForItem(item: LensItem): LensEntity {
 
 /**
  * Derive a lens's persisted `LensKind` from its source set (design D4): **any**
- * `github`/`gitlab` source ⇒ `'review'` (so `resolvedConfigs` stamps the kind
- * and the git connectors run Change enrichment on those sections); otherwise
+ * `github`/`gitlab`/`bitbucket` source ⇒ `'review'` (so `resolvedConfigs` stamps
+ * the kind and the git connectors run Change enrichment on those sections); otherwise
  * `'general'`. A lens may freely mix providers — a derived-`'review'` lens may
  * also carry `rss` feeds and `jira` accounts (they render Articles / Generic and
  * never carry the `change` bag). A dangling reference (its account was
@@ -89,7 +92,7 @@ export function deriveLensKind(
 ): LensKind {
   const hasGit = sources.some((ref) => {
     const provider = getAccount(ref.sourceId)?.provider;
-    return provider === 'github' || provider === 'gitlab';
+    return provider === 'github' || provider === 'gitlab' || provider === 'bitbucket';
   });
   return hasGit ? 'review' : 'general';
 }

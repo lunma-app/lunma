@@ -417,6 +417,18 @@ export const migrations: Migration[] = [
       return raw;
     },
   },
+  {
+    // v16 (add-bitbucket-connector): a pure identity pass-through. Adding
+    // `'bitbucket'` to the `LensProvider` union and the optional `workspace?`
+    // field to `SourceAccount` are additive enum/field widenings the shared
+    // `SourceAccountSchema` already accepts — no data transformation is needed.
+    // The entry exists only to advance the version, so a downgrade past v16 is
+    // detectable via the version gate (an older extension quarantines newer data
+    // carrying a `bitbucket` source or a `workspace` field). Precedent: the
+    // v2/v4/v6 provider-addition bumps and the v14 lens-view-filters identity.
+    toVersion: 16,
+    migrate: (raw: unknown): unknown => raw,
+  },
 ];
 
 /** Port-bearing host for an account `baseUrl`, degrading a malformed url to the

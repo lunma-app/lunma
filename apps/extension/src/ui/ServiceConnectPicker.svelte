@@ -13,9 +13,12 @@ import Toast from './Toast.svelte';
 
 // ServiceConnectPicker (sources-redesign, D2/D10): the one cross-surface connect
 // affordance, shared by the Options Connections manager and the lens editor. A
-// Service `Select` (GitHub/GitLab/Jira/RSS feed) drives provider-appropriate
-// fields; committing mints a `SourceAccount` via `createAccount` (client-minted
-// id) + an optional off-bus `setAccountToken`, then returns the minted account to
+// Service `Select` (GitHub/GitLab/Bitbucket/Jira/RSS feed) drives
+// provider-appropriate fields — including a conditional, required `workspace`
+// field for Bitbucket Cloud (host bitbucket.org); committing mints a
+// `SourceAccount` via `createAccount` (client-minted id, carrying `workspace`
+// for a Cloud bitbucket account) + an optional off-bus `setAccountToken`, then
+// returns the minted account to
 // the host via `onConnected` (pre-selected in the editor). The RSS branch also
 // offers OPML import as a bulk feed-add path, in one of two MODES set by the host:
 //   • Options/Connections manager — passes `spaces`; the confirm step asks which
@@ -53,7 +56,7 @@ const {
   testid = 'service-connect-picker',
 }: Props = $props();
 
-const SERVICE_OPTIONS = (['github', 'gitlab', 'jira', 'rss'] as const).map((p) => ({
+const SERVICE_OPTIONS = (['github', 'gitlab', 'bitbucket', 'jira', 'rss'] as const).map((p) => ({
   value: p,
   label: PROVIDER_LABEL[p],
 }));
@@ -61,12 +64,20 @@ const SERVICE_OPTIONS = (['github', 'gitlab', 'jira', 'rss'] as const).map((p) =
 let service = $state<LensProvider>('github');
 let baseUrl = $state(DEFAULT_BASE_URL.github);
 let token = $state('');
+// Cloud bitbucket workspace slug (add-bitbucket-connector) — required when the
+// chosen service is Bitbucket and the host resolves to bitbucket.org (Cloud).
+let workspace = $state('');
 let connectError = $state<string | null>(null);
 
 const isFeed = $derived(service === 'rss');
 const requirement = $derived(tokenRequirement(service));
+// A Cloud bitbucket connect (service bitbucket + host bitbucket.org) needs the
+// conditional, required workspace field; a self-hosted bitbucket host hides it.
+const isCloudBitbucket = $derived(service === 'bitbucket' && hostIsCloudBitbucket(baseUrl));
 const canConnect = $derived(
-  baseUrl.trim() !== '' && (requirement !== 'required' || token.trim() !== ''),
+  baseUrl.trim() !== '' &&
+    (requirement !== 'required' || token.trim() !== '') &&
+    (!isCloudBitbucket || workspace.trim() !== ''),
 );
 // Field placeholders (the comp labels via placeholder, not a field label): host
 // seeds from the provider default, the token hints at the expected prefix.
@@ -74,13 +85,29 @@ const hostPlaceholder = $derived(
   isFeed ? 'https://example.com/feed.xml' : DEFAULT_BASE_URL[service],
 );
 const tokenPlaceholder = $derived(
-  requirement === 'optional' ? 'Token (optional) — glpat-…' : 'Token — ghp-…',
+  service === 'bitbucket'
+    ? 'Token — Bearer access token'
+    : requirement === 'optional'
+      ? 'Token (optional) — glpat-…'
+      : 'Token — ghp-…',
 );
+
+/** Whether the host field resolves to Bitbucket Cloud (`bitbucket.org`); a
+ * malformed/partial URL is treated as not-Cloud (the workspace field stays
+ * hidden until a valid bitbucket.org host is typed). */
+function hostIsCloudBitbucket(raw: string): boolean {
+  try {
+    return new URL(raw.trim()).host === 'bitbucket.org';
+  } catch {
+    return false;
+  }
+}
 
 function onServiceChange(value: string): void {
   service = value as LensProvider;
   baseUrl = DEFAULT_BASE_URL[service];
   token = '';
+  workspace = '';
   connectError = null;
 }
 
@@ -89,13 +116,27 @@ async function connect(): Promise<void> {
   connectError = null;
   const id = crypto.randomUUID();
   const trimmedBase = baseUrl.trim();
+  // The Cloud bitbucket workspace slug rides the createAccount payload (and onto
+  // the account) only for a Cloud bitbucket connect; it is meaningless otherwise.
+  const trimmedWorkspace = workspace.trim();
+  const cloudWorkspace = isCloudBitbucket ? trimmedWorkspace : undefined;
   // No inline name — the account labels by host; rename lives in the Connections
   // row menu (the comp's picker has no name field).
-  const account: SourceAccount = { id, provider: service, baseUrl: trimmedBase };
+  const account: SourceAccount = {
+    id,
+    provider: service,
+    baseUrl: trimmedBase,
+    ...(cloudWorkspace !== undefined ? { workspace: cloudWorkspace } : {}),
+  };
   try {
     await bus.send({
       kind: 'createAccount',
-      payload: { id, provider: service, baseUrl: trimmedBase },
+      payload: {
+        id,
+        provider: service,
+        baseUrl: trimmedBase,
+        ...(cloudWorkspace !== undefined ? { workspace: cloudWorkspace } : {}),
+      },
     });
   } catch (err) {
     log.error('ServiceConnectPicker: createAccount failed', { err });
@@ -107,6 +148,7 @@ async function connect(): Promise<void> {
   // Reset for a possible next add; report the minted account to the host.
   baseUrl = DEFAULT_BASE_URL[service];
   token = '';
+  workspace = '';
   onConnected(account);
 }
 
@@ -222,6 +264,18 @@ function confirmImport(): void {
       placeholder={tokenPlaceholder}
       bind:value={token}
       testid="connect-token"
+      onenter={() => void connect()}
+    />
+  {/if}
+
+  {#if isCloudBitbucket}
+    <!-- Cloud bitbucket is workspace-scoped (add-bitbucket-connector): the
+         workspace slug is required and shown only when the host is bitbucket.org. -->
+    <TextInput
+      ariaLabel="Workspace"
+      placeholder="Workspace slug — e.g. acme"
+      bind:value={workspace}
+      testid="connect-workspace"
       onenter={() => void connect()}
     />
   {/if}

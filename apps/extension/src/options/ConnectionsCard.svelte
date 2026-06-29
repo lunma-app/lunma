@@ -55,6 +55,7 @@ let renameDraft = $state('');
 const PROVIDER_ABBREV: Record<LensProvider, string> = {
   github: 'GH',
   gitlab: 'GL',
+  bitbucket: 'BB',
   jira: 'JR',
   rss: '',
 };

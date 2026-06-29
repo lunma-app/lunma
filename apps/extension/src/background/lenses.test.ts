@@ -370,18 +370,28 @@ describe('sourceKey — cross-surface consistency', () => {
 // ── registry dispatch ──────────────────────────────────────────────────────────
 
 describe('the CONNECTORS registry', () => {
-  test('holds exactly the four shipped sources, conforming to the contract', () => {
-    expect(Object.keys(CONNECTORS).sort()).toEqual(['github', 'gitlab', 'jira', 'rss']);
+  test('holds exactly the five shipped sources, conforming to the contract', () => {
+    expect(Object.keys(CONNECTORS).sort()).toEqual([
+      'bitbucket',
+      'github',
+      'gitlab',
+      'jira',
+      'rss',
+    ]);
     expect(CONNECTORS.gitlab.source).toBe('gitlab');
     expect(CONNECTORS.gitlab.defaultBaseUrl).toBe('https://gitlab.com');
     expect(CONNECTORS.github.source).toBe('github');
     expect(CONNECTORS.github.defaultBaseUrl).toBe('https://github.com');
+    expect(CONNECTORS.bitbucket.source).toBe('bitbucket');
+    expect(CONNECTORS.bitbucket.defaultBaseUrl).toBe('https://bitbucket.org');
+    expect(CONNECTORS.bitbucket.authMethods).toEqual(['pat']);
     expect(CONNECTORS.jira.source).toBe('jira');
     expect(CONNECTORS.jira.defaultBaseUrl).toBe('https://your-site.atlassian.net');
     expect(CONNECTORS.rss.source).toBe('rss');
     expect(CONNECTORS.rss.defaultBaseUrl).toBe('');
     expect(CONNECTORS.gitlab.mintedIcon).toBe('folder-git-2');
     expect(CONNECTORS.github.mintedIcon).toBe('folder-git-2');
+    expect(CONNECTORS.bitbucket.mintedIcon).toBe('folder-git-2');
     expect(CONNECTORS.jira.mintedIcon).toBe('folder-kanban');
     expect(CONNECTORS.rss.mintedIcon).toBe('rss');
   });
@@ -431,6 +441,24 @@ describe('the CONNECTORS registry', () => {
         sourceId: 'acc-test',
       }),
     ).toEqual(['https://blog.example.com/*']);
+    // Bitbucket Cloud fetches api.bitbucket.org (a DIFFERENT origin, like GitHub);
+    // a self-hosted Server/DC host is same-origin under its baseUrl.
+    expect(
+      CONNECTORS.bitbucket.requiredOrigins({
+        source: 'bitbucket',
+        baseUrl: 'https://bitbucket.org',
+        lensKind: 'review',
+        sourceId: 'acc-test',
+      }),
+    ).toEqual(['https://api.bitbucket.org/*']);
+    expect(
+      CONNECTORS.bitbucket.requiredOrigins({
+        source: 'bitbucket',
+        baseUrl: 'https://bitbucket.example.com',
+        lensKind: 'review',
+        sourceId: 'acc-test',
+      }),
+    ).toEqual(['https://bitbucket.example.com/*']);
   });
 
   test('a github folder dispatches through CONNECTORS.github and its result reaches the drain', async () => {

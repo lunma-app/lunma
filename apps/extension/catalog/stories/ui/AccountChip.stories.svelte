@@ -7,7 +7,7 @@ export const meta = defineStory({
   controls: {
     provider: {
       type: 'select',
-      options: ['github', 'gitlab', 'jira', 'rss'],
+      options: ['github', 'gitlab', 'bitbucket', 'jira', 'rss'],
       default: 'github',
       typeLabel: 'LensProvider',
       description: 'Account provider (drives the glyph).',
@@ -56,6 +56,9 @@ type Status = 'connected' | 'browser-session' | 'needs-token' | 'signed-out' | '
     </Variant>
     <Variant label="gitlab · needs token">
       <AccountChip provider="gitlab" label="gitlab.com" status="needs-token" />
+    </Variant>
+    <Variant label="bitbucket · connected">
+      <AccountChip provider="bitbucket" label="acme" status="connected" />
     </Variant>
     <Variant label="jira · browser session">
       <AccountChip provider="jira" label="acme.atlassian.net" status="browser-session" />

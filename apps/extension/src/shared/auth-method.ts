@@ -11,6 +11,10 @@ import type { AuthMethod, LensProvider } from './types';
 export const PROVIDER_AUTH_METHODS: Record<LensProvider, AuthMethod[]> = {
   github: ['pat'],
   gitlab: ['session', 'pat'],
+  // bitbucket (add-bitbucket-connector): token-only — Cloud's API lives on
+  // `api.bitbucket.org`, a host distinct from the `bitbucket.org` browser
+  // session, so a cookie ride is impossible (no `session` rung, like github).
+  bitbucket: ['pat'],
   jira: ['session'],
   rss: [],
 };

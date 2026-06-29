@@ -31,7 +31,7 @@ import type { AppState, BackupEnvelope, SpaceColor } from './types';
 // `sources` from embedded `LensSource[]` to `LensSourceRef[]` references — a REAL
 // transformation that extracts the embedded `(provider, baseUrl)` pairs into
 // first-class accounts. Each bump is deliberate: it makes a downgrade detectable.
-export const CURRENT_SCHEMA_VERSION = 15;
+export const CURRENT_SCHEMA_VERSION = 16;
 
 const SpaceInstanceSchema = z.strictObject({
   spaceId: z.string(),
@@ -136,9 +136,13 @@ const LensSourceSchema = z.strictObject({
 // (validated at the create/update boundary; the schema only types the shape).
 const SourceAccountSchema = z.strictObject({
   id: z.string(),
-  provider: z.enum(['gitlab', 'github', 'jira', 'rss']),
+  provider: z.enum(['gitlab', 'github', 'bitbucket', 'jira', 'rss']),
   baseUrl: z.string(),
   name: z.string().optional(),
+  // Cloud bitbucket workspace slug (add-bitbucket-connector, v16). Optional in the
+  // schema (absent for every other provider and for self-hosted bitbucket);
+  // REQUIRED-when-Cloud is enforced at the create/update boundary, not by Zod.
+  workspace: z.string().optional(),
 });
 
 // A lens's per-instance REFERENCE to a connected Account (connector-accounts,
@@ -706,9 +710,18 @@ export const AppStateV14Schema = z.strictObject({
  */
 export const AppStateV15Schema = AppStateV14Schema;
 
+/**
+ * v16 (add-bitbucket-connector) widens the `LensProvider` enum to include
+ * `'bitbucket'` and adds the optional `workspace?` field — both landing in the
+ * shared `SourceAccountSchema` (referenced by every version schema from v13 on),
+ * so no AppState object shape changes: `AppStateV16Schema` is a structural alias
+ * of v15 (and thus v14). The v16 migration is a pure identity pass-through.
+ */
+export const AppStateV16Schema = AppStateV15Schema;
+
 export const EnvelopeSchema = z.strictObject({
   schemaVersion: z.number(),
-  state: AppStateV15Schema,
+  state: AppStateV16Schema,
 });
 
 export type AppStateV6 = z.infer<typeof AppStateV6Schema>;
@@ -720,12 +733,13 @@ export type AppStateV12 = z.infer<typeof AppStateV12Schema>;
 export type AppStateV13 = z.infer<typeof AppStateV13Schema>;
 export type AppStateV14 = z.infer<typeof AppStateV14Schema>;
 export type AppStateV15 = z.infer<typeof AppStateV15Schema>;
+export type AppStateV16 = z.infer<typeof AppStateV16Schema>;
 export type Envelope = z.infer<typeof EnvelopeSchema>;
 
 type AssertEqual<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
-const _schemaMatchesAppState: AssertEqual<AppStateV15, AppState> = true;
+const _schemaMatchesAppState: AssertEqual<AppStateV16, AppState> = true;
 void _schemaMatchesAppState;
 
 // ── Data-backup: BackupEnvelopeSchema ────────────────────────────────────────

@@ -64,6 +64,11 @@ const SUGGESTED_QUEUE_NAME: Record<Exclude<LensProvider, 'rss'>, Record<LensQuer
     assigned: 'Assigned to me',
     'review-requested': 'Review requests',
   },
+  bitbucket: {
+    authored: 'My pull requests',
+    assigned: 'Assigned to me',
+    'review-requested': 'Review requests',
+  },
   jira: {
     authored: 'My reported issues',
     assigned: 'Assigned to me',
@@ -79,15 +84,51 @@ const CADENCE_OPTIONS = [
 ];
 const MAX_ITEMS_VALUES = ['10', '20', '30', '50'];
 
-function queryOptionsFor(p: LensProvider): Array<{ value: LensQuery; label: string }> {
-  return [
+/** Whether an account is Bitbucket Cloud (host bitbucket.org) — the deployment
+ * that supports `authored` only (add-bitbucket-connector, D4). A malformed
+ * baseUrl is treated as not-Cloud (Server/DC). */
+function isCloudBitbucket(account: Pick<SourceAccount, 'provider' | 'baseUrl'>): boolean {
+  if (account.provider !== 'bitbucket') return false;
+  try {
+    return new URL(account.baseUrl).host === 'bitbucket.org';
+  } catch {
+    return false;
+  }
+}
+
+/** The canned queries an account offers in the editor. Bitbucket's set is
+ * deployment-dependent (add-bitbucket-connector, D4): Cloud → `authored` only;
+ * Server/DC → `authored` + `review-requested`; never `assigned` (Bitbucket has
+ * no assignee). Every other queue provider offers all three. */
+function supportedQueriesFor(account: Pick<SourceAccount, 'provider' | 'baseUrl'>): LensQuery[] {
+  if (account.provider === 'bitbucket') {
+    return isCloudBitbucket(account) ? ['authored'] : ['authored', 'review-requested'];
+  }
+  return ['authored', 'assigned', 'review-requested'];
+}
+
+/** The default query stamped on a newly-selected queue account: `review-requested`
+ * for the forges/jira (its established default), but `authored` for bitbucket —
+ * the one query valid on BOTH bitbucket deployments. */
+function defaultQueriesFor(account: SourceAccount): LensQuery[] {
+  if (account.provider === 'rss') return [];
+  return account.provider === 'bitbucket' ? ['authored'] : ['review-requested'];
+}
+
+function queryOptionsFor(
+  account: Pick<SourceAccount, 'provider' | 'baseUrl'>,
+): Array<{ value: LensQuery; label: string }> {
+  const supported = supportedQueriesFor(account);
+  const all: Array<{ value: LensQuery; label: string }> = [
     { value: 'authored', label: m.sidebar_lensRoleAuthored() },
     { value: 'assigned', label: m.sidebar_lensRoleAssigned() },
     {
       value: 'review-requested',
-      label: p === 'jira' ? m.sidebar_lensRoleWatching() : m.sidebar_lensRoleReviewing(),
+      label:
+        account.provider === 'jira' ? m.sidebar_lensRoleWatching() : m.sidebar_lensRoleReviewing(),
     },
   ];
+  return all.filter((opt) => supported.includes(opt.value));
 }
 
 // The entity each canonical bucket shows, with its preview label + dot colour.
@@ -150,7 +191,7 @@ function toggleAccount(account: SourceAccount): void {
     selectedOrder = [...selectedOrder, account.id];
     queriesById = {
       ...queriesById,
-      [account.id]: account.provider === 'rss' ? [] : ['review-requested'],
+      [account.id]: defaultQueriesFor(account),
     };
   }
 }
@@ -180,7 +221,7 @@ function onConnected(account: SourceAccount): void {
     selectedOrder = [...selectedOrder, account.id];
     queriesById = {
       ...queriesById,
-      [account.id]: account.provider === 'rss' ? [] : ['review-requested'],
+      [account.id]: defaultQueriesFor(account),
     };
   }
   showPicker = false;
@@ -392,7 +433,7 @@ function confirm(): void {
           </button>
           {#if selected && account.provider !== 'rss'}
             <div class="filter-pills" role="group" aria-label={m.sidebar_lensFiltersLabel()}>
-              {#each queryOptionsFor(account.provider) as opt (opt.value)}
+              {#each queryOptionsFor(account) as opt (opt.value)}
                 <Chip
                   label={opt.label}
                   selected={(queriesById[account.id] ?? []).includes(opt.value)}

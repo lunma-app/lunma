@@ -144,7 +144,16 @@ export type SidebarCommand =
   // `id`.
   | {
       kind: 'createAccount';
-      payload: { id: SourceId; provider: LensProvider; baseUrl: string; name?: string };
+      payload: {
+        id: SourceId;
+        provider: LensProvider;
+        baseUrl: string;
+        name?: string;
+        // The Cloud bitbucket workspace slug (add-bitbucket-connector) — REQUIRED
+        // for a Cloud bitbucket account (host `bitbucket.org`), absent otherwise;
+        // the SW rejects a Cloud bitbucket payload missing it.
+        workspace?: string;
+      };
     }
   | { kind: 'renameAccount'; payload: { id: SourceId; name: string } }
   | { kind: 'deleteAccount'; payload: { id: SourceId } }
@@ -427,7 +436,7 @@ const LensQuerySchema = z.enum(['authored', 'assigned', 'review-requested']);
 
 // The shipped connector sources — mirrors `LensProvider` in `types.ts`. An
 // out-of-vocabulary source (e.g. 'bitbucket') rejects at the bus boundary.
-const LensProviderSchema = z.enum(['gitlab', 'github', 'jira', 'rss']);
+const LensProviderSchema = z.enum(['gitlab', 'github', 'bitbucket', 'jira', 'rss']);
 
 // Per-instance account REFERENCE — mirrors `LensSourceRef` in `types.ts`
 // (connector-accounts): each entry references a connected Account by `sourceId`
@@ -664,6 +673,9 @@ const COMMAND_SCHEMAS = {
       provider: LensProviderSchema,
       baseUrl: z.string(),
       name: z.string().optional(),
+      // Cloud bitbucket workspace slug (add-bitbucket-connector); the SW rejects a
+      // Cloud bitbucket payload missing it at the create boundary.
+      workspace: z.string().optional(),
     }),
   }),
   renameAccount: z.strictObject({
