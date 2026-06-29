@@ -814,7 +814,11 @@ const empty = $derived(
   /* ── Articles ─────────────────────────────────────────────────────────────── */
   .article-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    /* Responsive magazine columns: cards hold a readable ~340px so a wide window
+       yields several quiet cards rather than two billboard-sized hero images
+       (the 16:9 thumb then lands ~340×190, supporting the headline, not dwarfing
+       it). Narrow widths collapse to a single column. */
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
     gap: 11px;
   }
   .article-list {
