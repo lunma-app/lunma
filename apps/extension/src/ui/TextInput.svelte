@@ -124,7 +124,7 @@ function handleKeydown(event: KeyboardEvent): void {
        draws every form field this way — sheets + options). */
     height: 40px;
     padding: 0 var(--space-3);
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-field);
     border-radius: var(--r-lg);
     background: var(--input);
     color: var(--text);

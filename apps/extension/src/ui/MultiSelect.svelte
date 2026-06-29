@@ -384,7 +384,7 @@ function removeOutside(): void {
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-field);
     border-radius: var(--r-md);
     background: var(--bg);
     color: var(--text);
