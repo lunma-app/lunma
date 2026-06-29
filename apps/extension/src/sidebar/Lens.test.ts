@@ -211,6 +211,74 @@ describe('Lens — multi-filter sections (multi-filter-smart-connectors)', () =>
   });
 });
 
+describe('Lens — feed-scope filter (lens-view-filters)', () => {
+  // Two feeds in one reading lens. The persisted filter narrows to feed A by its
+  // label (the host, since these sources carry no display name). Guards two
+  // regressions at once: the `feedName`-omission bug that emptied EVERY section
+  // under any feed filter (each sidebar row was built without a feedName, so the
+  // article scope axis never matched), and the hide-unselected-sections polish
+  // that drops the unmatched feed instead of leaving an empty "No entries yet" stub.
+  const FEED_A = 'https://a.example.com/rss';
+  const FEED_B = 'https://b.example.com/rss';
+  const A_KEY = 'acc:rss:https://a.example.com/rss';
+  const B_KEY = 'acc:rss:https://b.example.com/rss';
+
+  const twoFeedNode = (filter?: LensNode['filter']): LensNode =>
+    feedNode({
+      id: 'feed-multi',
+      sources: [ref('rss', FEED_A, []), ref('rss', FEED_B, [])],
+      ...(filter ? { filter } : {}),
+    });
+
+  // The feeds axis only applies to Article-entity rows, and `entityForItem`
+  // keys `article` on the flat RSS cluster — a bare post (id/title/url) is
+  // `generic` and slips every feed filter. Stamp `publishedAt` so these read as
+  // articles, exactly as a real feed item would.
+  const article = (i: number): LensItem => ({ ...post(i), publishedAt: i });
+
+  function twoFeedStore(node: LensNode): LunmaStore {
+    const store = new LunmaStore();
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.pinnedBySpace.work = [node];
+    seedAccounts(store);
+    store.state.lenses[node.id] = {
+      sections: {
+        [A_KEY]: { state: 'ok', items: [article(1), article(2)], fetchedAt: 1 },
+        [B_KEY]: { state: 'ok', items: [article(3), article(4)], fetchedAt: 1 },
+      },
+    };
+    return store;
+  }
+
+  test('a feed filter keeps the SELECTED feed populated (feedName regression)', () => {
+    const node = twoFeedNode({ feeds: ['a.example.com'] });
+    const { container } = renderLens(twoFeedStore(node), { node });
+    const rows = container.querySelectorAll('[data-testid="lens-result-row"]');
+    // The bug emptied everything; feed A must keep its rows.
+    expect(rows.length).toBeGreaterThan(0);
+    expect(container.textContent).toContain('Post 1');
+    expect(container.textContent).not.toContain('Post 3');
+  });
+
+  test('the UNSELECTED feed section is dropped, not shown as an empty stub', () => {
+    const node = twoFeedNode({ feeds: ['a.example.com'] });
+    const { container } = renderLens(twoFeedStore(node), { node });
+    expect(container.querySelector('[data-testid="smart-empty-note"]')).toBeNull();
+    // The surviving feed keeps its header (a multi-feed lens still labels which
+    // feed you're seeing); feed B is gone entirely.
+    const headers = [...container.querySelectorAll('.section-host')].map((h) => h.textContent);
+    expect(headers).toHaveLength(1);
+    expect(headers[0]).toContain('a.example.com');
+    expect(container.textContent).not.toContain('b.example.com');
+  });
+
+  test('with no filter both feed sections render', () => {
+    const { container } = renderLens(twoFeedStore(twoFeedNode()), { node: twoFeedNode() });
+    expect(container.textContent).toContain('Post 1');
+    expect(container.textContent).toContain('Post 3');
+  });
+});
+
 describe('Lens — populated render + one-glyph restraint', () => {
   test('renders one row per item with at most ONE status dot, full phrase in the ARIA label', () => {
     const store = makeStore({
