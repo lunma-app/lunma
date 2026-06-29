@@ -235,9 +235,10 @@ Notes on the required tier:
 
 The `optional_host_permissions` set is `https://github.com/*`,
 `https://api.github.com/*`, `https://gitlab.com/*`,
+`https://api.bitbucket.org/*` (the Bitbucket Cloud API host),
 `https://*.atlassian.net/*`, plus the self-hosted fallbacks `https://*/*` and
-`http://*/*`, so an arbitrary user-entered connector `baseUrl` can be requested
-at runtime.
+`http://*/*`, so an arbitrary user-entered connector `baseUrl` — including a
+Bitbucket Server / Data Center host — can be requested at runtime.
 
 **One foundation module.** All `chrome.permissions` access goes through
 `shared/permissions.ts`: `hasApiPermission` / `requestApiPermission`,
@@ -272,6 +273,34 @@ different origin, so the gate requests `https://api.github.com/*`, never
 calm `needs-access` runtime state without a network request, ahead of the
 connector's own `signed-out` auth check.
 
+**The connector roster** (`background/connectors/`, registered in the closed
+`CONNECTORS: Record<LensProvider, SourceConnector>` map) is `github`, `gitlab`,
+`bitbucket`, `jira`, and `rss`. The three git forges (github/gitlab/bitbucket)
+normalise PRs/MRs into the canonical `Change` entity; any of them in a lens'
+source set derives `lensKind: 'review'`. **Bitbucket** (`bitbucket.ts`) covers
+both deployments under one provider, branching on
+`new URL(cfg.baseUrl).host === 'bitbucket.org'`:
+
+- **Server / Data Center** (self-hosted) — REST root `{baseUrl}/rest/api/1.0`,
+  fetched same-origin. Supports both `authored` and `review-requested` via the
+  self-scoped `GET /dashboard/pull-requests?state=OPEN&role=AUTHOR|REVIEWER` (no
+  identity lookup); reviewers are read inline from each PR's `reviewers[]`.
+- **Cloud** (`bitbucket.org`) — REST root `https://api.bitbucket.org/2.0` (a
+  distinct origin, so `requiredOrigins` targets `api.bitbucket.org`). The
+  workspace-scoped, **authored-only** `GET
+  /2.0/workspaces/{workspace}/pullrequests/{uuid}` is the only supported listing
+  (the all-workspaces "PRs for a user" endpoint was removed by Atlassian); the
+  caller `uuid` is resolved once per cycle via `GET /2.0/user` (cached by
+  `sourceId`, not host — every Cloud account shares `bitbucket.org` but carries a
+  distinct token), and because the collection omits reviewers the connector
+  issues one bounded per-PR detail fetch (capped at `maxItems`) to populate the
+  reviewer bag. A Cloud bitbucket account therefore carries a required
+  **`workspace?` slug** on `SourceAccount` (the create boundary rejects a Cloud
+  bitbucket account/lens missing it / carrying `review-requested`); a Server/DC
+  account leaves it absent. Auth is **token-only** (`authMethods: ['pat']`,
+  `Authorization: Bearer`, `credentials: 'omit'`) — Cloud's API host is not the
+  `bitbucket.org` session origin, so there is no `session` rung.
+
 **The broad-host constraint is not escaped.** The launcher overlay and the
 pinned-tab boundary content scripts must stay on `<all_urls>` at
 `document_start`: the launcher must be summonable on any page, and the boundary
@@ -298,7 +327,8 @@ const initial: AppState = {
   archivedTabs: [],
   trash: {},
   sources: {},                 // { [sourceId]: SourceAccount } — connected ACCOUNTS (connector-accounts).
-                               //   SourceAccount = { id; provider:'gitlab'|'github'|'jira'|'rss'; baseUrl; name? }
+                               //   SourceAccount = { id; provider:'gitlab'|'github'|'bitbucket'|'jira'|'rss'; baseUrl; name?; workspace? }
+                               //   (workspace? carries a Cloud bitbucket workspace slug; absent otherwise)
                                //   — a first-class, broadcast-safe source identity carrying NO token (the
                                //     secret lives only in lunma.connectors, keyed by the same id). Lenses
                                //     reference accounts; one account may feed many lenses (many-to-many).
@@ -808,6 +838,7 @@ schema widened but old data needs no transformation:
 | 9 | rewrote each `sources[]` entry from the flat `query?` shape to `queries: LensQuery[]` (queue → `[query]`, rss → `[]`); re-keyed `lensItemBindings` from `"${source}:${host}:${nativeId}"` to the per-filter `"${source}:${host}:${query}:${nativeId}"` (orphans dropped) |
 | 13 | extracted each lens node's embedded `sources: LensSource[]` into first-class `SourceAccount`s under a new `AppState.sources` map (one per distinct `(provider, baseUrl)`, deduped, `name` carried onto the account) and rewrote each lens's `sources` to `LensSourceRef[]` (`{ sourceId, queries }`). The separate, unversioned `lunma.connectors` secrets store is re-keyed host→`sourceId` by the boot-chain `reconcileAccountSecrets` step (NOT the pure migrate fn) |
 | 15 | re-keyed lens sections by account `sourceId`: rewrote `lensItemBindings` keys AND `lensReadState` ids from `"${source}:${host}:${query}:${nativeId}"` (rss: `"${source}:${host}:${nativeId}"`) to `"${sourceId}:${query}:${nativeId}"` (rss: `"${sourceId}:${nativeId}"`), resolving each legacy id match-first by **longest** account prefix (port-bearing host carried; a blind `split(':')` is unsafe — host carries ports, rss nativeIds are URLs); unmappable / same-origin-ambiguous ids are dropped (a binding re-arms, a read mark reappears unread once). Idempotent |
+| 16 | widened `LensProvider` with `'bitbucket'` and added the optional `workspace?` field to `SourceAccount` (both in the shared `SourceAccountSchema`); pure identity pass-through (`(raw) => raw`) — additive, no data transform |
 
 The v7 migration walks `smartItemBindings[folderId][itemId][windowId]` and
 rewrites any numeric slot to `{ tabId, allowGlob: '' }`. The v8 migration wraps

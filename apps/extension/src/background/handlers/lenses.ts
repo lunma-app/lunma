@@ -18,6 +18,7 @@ import { pageGlob } from '../../shared/url-boundary';
 import {
   CONNECTORS,
   fetchLensSectionRuntime,
+  isCloudBitbucketHost,
   type LensDeps,
   type LensNode,
   normalizeBaseUrl,
@@ -64,6 +65,18 @@ function validateSourceRefs(
     } else if (ref.queries.length === 0) {
       throw new Error(
         `${command}: queue account '${account.provider}' requires at least one query`,
+      );
+    }
+    // A Cloud bitbucket source (host bitbucket.org) cannot carry
+    // `review-requested` (add-bitbucket-connector, D4) — Cloud has no
+    // workspace/user-level reviewer endpoint, so it supports `authored` only.
+    if (
+      account.provider === 'bitbucket' &&
+      isCloudBitbucketHost(account.baseUrl) &&
+      ref.queries.includes('review-requested')
+    ) {
+      throw new Error(
+        `${command}: Cloud bitbucket account '${ref.sourceId}' does not support review-requested`,
       );
     }
     return { sourceId: ref.sourceId, queries: ref.queries };

@@ -876,9 +876,24 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
     expect(
       SidebarCommandSchema.safeParse({
         kind: 'createAccount',
-        payload: { id: 'acc-1', provider: 'bitbucket', baseUrl: 'https://bitbucket.org' },
+        payload: { id: 'acc-1', provider: 'mercurial', baseUrl: 'https://example.com' },
       }).success,
     ).toBe(false);
+  });
+
+  test('createAccount accepts the bitbucket provider with a Cloud workspace', () => {
+    const cmd = {
+      kind: 'createAccount',
+      payload: {
+        id: 'acc-bb',
+        provider: 'bitbucket',
+        baseUrl: 'https://bitbucket.org',
+        workspace: 'acme',
+      },
+    };
+    const parsed = SidebarCommandSchema.safeParse(cmd);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data).toEqual(cmd);
   });
 
   test('createAccount rejects an extra key (strict payload)', () => {

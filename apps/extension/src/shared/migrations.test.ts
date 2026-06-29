@@ -6,6 +6,7 @@ import {
   AppStateV12Schema,
   AppStateV13Schema,
   AppStateV14Schema,
+  AppStateV16Schema,
   CURRENT_SCHEMA_VERSION,
 } from './schemas';
 import { createInitialState } from './store.svelte';
@@ -15,8 +16,8 @@ import { createInitialState } from './store.svelte';
 const realMigrations = [...migrations];
 
 describe('the real migration chain', () => {
-  test('holds exactly the v2 through v15 entries', () => {
-    expect(realMigrations).toHaveLength(14);
+  test('holds exactly the v2 through v16 entries', () => {
+    expect(realMigrations).toHaveLength(15);
     expect(realMigrations[0]?.toVersion).toBe(2);
     expect(realMigrations[1]?.toVersion).toBe(3);
     expect(realMigrations[2]?.toVersion).toBe(4);
@@ -31,7 +32,8 @@ describe('the real migration chain', () => {
     expect(realMigrations[11]?.toVersion).toBe(13);
     expect(realMigrations[12]?.toVersion).toBe(14);
     expect(realMigrations[13]?.toVersion).toBe(15);
-    expect(CURRENT_SCHEMA_VERSION).toBe(15);
+    expect(realMigrations[14]?.toVersion).toBe(16);
+    expect(CURRENT_SCHEMA_VERSION).toBe(16);
     // v2–v6 are pass-throughs (see comment in migrations.ts). v7 is the
     // smart-tab-boundary real transformation; v8 is the multi-source wrap.
     const input = { schemaVersion: 1, pinnedBySpace: { work: [{ kind: 'tab', id: 'a' }] } };
@@ -1016,6 +1018,67 @@ describe('v15 migration — rekey lens sections by sourceId', () => {
     );
     expect(out.lensItemBindings.f1).toEqual({ 'acc-r:https://x.com/post/1': SLOT });
     expect(out.lensReadState.f1).toEqual(['acc-r:https://x.com/post/1']);
+  });
+});
+
+describe('v16 migration — add-bitbucket-connector identity pass-through', () => {
+  const v16Migration = realMigrations.find((m) => m.toVersion === 16);
+  if (!v16Migration) throw new Error('expected v16 migration');
+
+  // A minimal valid v15 envelope: a Cloud bitbucket account (with workspace), a
+  // non-bitbucket account (without workspace), and a lens referencing the former.
+  function v15Envelope(): Record<string, unknown> {
+    return {
+      schemaVersion: 15,
+      spaces: [],
+      sources: {
+        'acc-bb': {
+          id: 'acc-bb',
+          provider: 'bitbucket',
+          baseUrl: 'https://bitbucket.org',
+          workspace: 'acme',
+        },
+        'acc-gh': { id: 'acc-gh', provider: 'github', baseUrl: 'https://github.com' },
+      },
+      activeSpaceByWindow: {},
+      spaceInstancesByWindow: {},
+      tabBindings: {},
+      savedTabs: {},
+      lastActivatedSpaceId: null,
+      tabLastActivity: {},
+      archivedTabs: [],
+      trash: {},
+      pinnedBySpace: {
+        s1: [
+          {
+            kind: 'lens',
+            lensKind: 'review',
+            id: 'f1',
+            name: 'My PRs',
+            icon: 'folder-git-2',
+            sources: [{ sourceId: 'acc-bb', queries: ['authored'] }],
+            maxItems: 20,
+            hideRead: true,
+            refreshMinutes: 10,
+          },
+        ],
+      },
+      faviconRow: [],
+      lensItemBindings: {},
+      lensReadState: {},
+    };
+  }
+
+  test('is an identity pass-through (returns the same reference, version advances)', () => {
+    const input = v15Envelope();
+    expect(v16Migration.migrate(input)).toBe(input);
+  });
+
+  test('AppStateV16Schema accepts a Cloud bitbucket account with a workspace and a non-bitbucket account without one', () => {
+    const parsed = AppStateV16Schema.parse(v16Migration.migrate(v15Envelope()));
+    expect(parsed.sources['acc-bb']?.workspace).toBe('acme');
+    expect(parsed.sources['acc-bb']?.provider).toBe('bitbucket');
+    expect(parsed.sources['acc-gh']?.workspace).toBeUndefined();
   });
 });
 

@@ -164,7 +164,7 @@ export type LensQuery = 'authored' | 'assigned' | 'review-requested';
  * first FEED source (a public address, no identity, no canned query), which is
  * why a feed entry carries an empty `queries` array.
  */
-export type LensProvider = 'gitlab' | 'github' | 'jira' | 'rss';
+export type LensProvider = 'gitlab' | 'github' | 'bitbucket' | 'jira' | 'rss';
 
 /**
  * One connector **instance** within a lens (multi-filter-smart-connectors).
@@ -211,6 +211,13 @@ export interface SourceAccount {
    * Typed `| undefined` to match the persisted schema's `.optional()` under
    * `exactOptionalPropertyTypes`. */
   name?: string | undefined;
+  /** The Bitbucket Cloud **workspace slug** (add-bitbucket-connector). REQUIRED
+   * when `provider === 'bitbucket'` and the `baseUrl` host is `bitbucket.org`
+   * (a Cloud PR query is workspace-scoped); ABSENT for every other provider and
+   * for self-hosted (Server / Data Center) bitbucket. Validated at the
+   * create/update boundary. Typed `| undefined` to match the persisted schema's
+   * `.optional()` under `exactOptionalPropertyTypes`. */
+  workspace?: string | undefined;
 }
 
 /**
@@ -263,20 +270,28 @@ export type ResolvedLensSource = {
    * by `sourceId` (not by host), letting two accounts on one host hold distinct
    * tokens. */
   sourceId: SourceId;
+  /** The referenced account's Bitbucket Cloud workspace slug
+   * (add-bitbucket-connector) — stamped by `resolvedConfigs` from the account's
+   * `workspace?`, used by the bitbucket connector to scope the Cloud
+   * `/2.0/workspaces/{workspace}/pullrequests/{uuid}` query. Absent for every
+   * other provider and for self-hosted bitbucket. */
+  workspace?: string | undefined;
 };
 
 /**
  * The kind of lens (lenses). A closed union widened by later typed-kind
  * changes. `'general'` is today's untyped multi-provider bag — the only kind
  * that may mix providers. `'review'` is the first typed kind (review-lens): its
- * sources are github/gitlab only, each normalised into the `Change` entity, and
- * it renders the Review Queue page archetype.
+ * git sources (github/gitlab/bitbucket) each normalise into the `Change` entity
+ * and it renders the Review Queue page archetype (a review lens MAY also mix in
+ * jira/rss sources, which render Generic/Articles).
  */
 export type LensKind = 'general' | 'review';
 
 /**
- * The canonical Change entity (review-lens) — a GitHub PR or GitLab MR
- * normalised into one shape so the Review Queue renders both identically. Rides
+ * The canonical Change entity (review-lens) — a GitHub PR, GitLab MR, or
+ * Bitbucket PR normalised into one shape so the Review Queue renders them
+ * identically. Rides
  * the optional `LensItem.change` bag on the **ephemeral** `lenses` runtime slice
  * (never persisted → no schema migration). The CI/pipeline tone stays on
  * `LensItem.status` and is NOT duplicated here.
@@ -424,8 +439,9 @@ export interface LensItem {
    * `<category term>` values, decoded + de-duped (a feed item may carry several).
    * Ephemeral; only the magazine projection renders them. Absent when none. */
   categories?: string[] | undefined;
-  /** The canonical Change entity (review-lens) — populated by the github/gitlab
-   * connectors for `review`-kind lenses only; absent for `general` lenses. Rides
+  /** The canonical Change entity (review-lens) — populated by the
+   * github/gitlab/bitbucket connectors for `review`-kind lenses only; absent for
+   * `general` lenses. Rides
    * the ephemeral runtime slice (never persisted); the Review Queue page reads
    * it, the sidebar projection ignores it. */
   change?: ChangeData | undefined;

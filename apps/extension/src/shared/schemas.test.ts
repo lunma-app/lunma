@@ -242,8 +242,8 @@ describe('lens-view-filters schema (v14)', () => {
     expect(result.success).toBe(false);
   });
 
-  test('CURRENT_SCHEMA_VERSION is 15', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(15);
+  test('CURRENT_SCHEMA_VERSION is 16', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(16);
   });
 });
 

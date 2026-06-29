@@ -6,7 +6,7 @@
 // a following `createLens` can reference the new id without awaiting the ack.
 
 import type { SourceAccount } from '../../shared/types';
-import { normalizeBaseUrl } from '../lenses';
+import { isCloudBitbucketHost, normalizeBaseUrl } from '../lenses';
 import type { HandlersMap } from './context';
 
 export function accountHandlers(): Pick<
@@ -15,7 +15,7 @@ export function accountHandlers(): Pick<
 > {
   return {
     createAccount: (ctx, event) => {
-      const { id, provider, baseUrl, name } = event.payload;
+      const { id, provider, baseUrl, name, workspace } = event.payload;
       // Reject a duplicate client-minted id (collision) — error ack, no entity.
       if (ctx.store.state.sources[id] !== undefined) {
         throw new Error(`createAccount: account id '${id}' already exists`);
@@ -23,11 +23,22 @@ export function accountHandlers(): Pick<
       // Normalize + validate the baseUrl (absolute http(s), trailing slash
       // stripped); a non-http(s) URL throws → error ack, no entity.
       const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+      // A Cloud bitbucket account (host bitbucket.org) REQUIRES a workspace
+      // (add-bitbucket-connector, D3) — its PR query is workspace-scoped. A
+      // missing/empty workspace throws → error ack, no entity. Self-hosted
+      // (Server/DC) bitbucket and every other provider ignore it.
+      const isCloudBitbucket = provider === 'bitbucket' && isCloudBitbucketHost(normalizedBaseUrl);
+      if (isCloudBitbucket && (workspace === undefined || workspace.trim() === '')) {
+        throw new Error('createAccount: a Cloud bitbucket account requires a workspace');
+      }
       const account: SourceAccount = {
         id,
         provider,
         baseUrl: normalizedBaseUrl,
         ...(name !== undefined ? { name } : {}),
+        // Persist the workspace only for a Cloud bitbucket account (it is
+        // meaningless for every other source).
+        ...(isCloudBitbucket && workspace !== undefined ? { workspace } : {}),
       };
       ctx.store.addSource(account);
       ctx.markDirty();

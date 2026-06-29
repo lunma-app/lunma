@@ -3,7 +3,7 @@ import { runMigrations } from '../migrations';
 import {
   type AppStateV14,
   AppStateV14Schema,
-  AppStateV15Schema,
+  AppStateV16Schema,
   CURRENT_SCHEMA_VERSION,
 } from '../schemas';
 import { createInitialState } from '../store.svelte';
@@ -335,7 +335,7 @@ export async function readPersistedState(): Promise<PersistedRead> {
     return { kind: 'corrupt' };
   }
 
-  const parsed = AppStateV15Schema.safeParse(migrated);
+  const parsed = AppStateV16Schema.safeParse(migrated);
   if (!parsed.success) {
     // Per-slice salvage BEFORE the corrupt fallback (D4): recover every valid
     // Space (and any valid slice) instead of discarding the whole payload. The

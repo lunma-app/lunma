@@ -32,5 +32,12 @@ const spaces = [
         <ServiceConnectPicker onConnected={noop} onCancel={noop} />
       </div>
     </Variant>
+    <Variant
+      label="Bitbucket Cloud (pick Bitbucket, host bitbucket.org → required workspace field)"
+    >
+      <div style="width: 22rem">
+        <ServiceConnectPicker onConnected={noop} onCancel={noop} />
+      </div>
+    </Variant>
   {/snippet}
 </Story>

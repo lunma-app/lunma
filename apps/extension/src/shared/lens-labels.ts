@@ -17,6 +17,7 @@ export function sourceKey(cfg: ResolvedLensSource): string {
 export const ICON_BY_SOURCE: Record<string, string> = {
   gitlab: 'folder-git-2',
   github: 'folder-git-2',
+  bitbucket: 'folder-git-2',
   jira: 'folder-kanban',
   rss: 'rss',
 };

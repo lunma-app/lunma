@@ -47,6 +47,7 @@ describe('sourceIcon', () => {
   test('known sources return the right icon', () => {
     expect(sourceIcon('github')).toBe('folder-git-2');
     expect(sourceIcon('gitlab')).toBe('folder-git-2');
+    expect(sourceIcon('bitbucket')).toBe('folder-git-2');
     expect(sourceIcon('jira')).toBe('folder-kanban');
     expect(sourceIcon('rss')).toBe('rss');
   });
@@ -59,6 +60,7 @@ describe('sourceIcon', () => {
     expect(ICON_BY_SOURCE).toMatchObject({
       gitlab: 'folder-git-2',
       github: 'folder-git-2',
+      bitbucket: 'folder-git-2',
       jira: 'folder-kanban',
       rss: 'rss',
     });
@@ -76,9 +78,10 @@ describe('filterLabel', () => {
     expect(filterLabel('jira', 'assigned')).toBe('assigned');
   });
 
-  test('"review-requested" → "reviewing" for github/gitlab, "Watching" for jira', () => {
+  test('"review-requested" → "reviewing" for github/gitlab/bitbucket, "Watching" for jira', () => {
     expect(filterLabel('github', 'review-requested')).toBe('reviewing');
     expect(filterLabel('gitlab', 'review-requested')).toBe('reviewing');
+    expect(filterLabel('bitbucket', 'review-requested')).toBe('reviewing');
     expect(filterLabel('jira', 'review-requested')).toBe('Watching');
   });
 });

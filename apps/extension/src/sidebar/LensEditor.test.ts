@@ -57,6 +57,17 @@ const RSS: SourceAccount = {
   provider: 'rss',
   baseUrl: 'https://news.example.com/rss',
 };
+const BB_CLOUD: SourceAccount = {
+  id: 'acc-bb-cloud',
+  provider: 'bitbucket',
+  baseUrl: 'https://bitbucket.org',
+  workspace: 'acme',
+};
+const BB_SERVER: SourceAccount = {
+  id: 'acc-bb-dc',
+  provider: 'bitbucket',
+  baseUrl: 'https://bitbucket.example.com',
+};
 
 const confirmBtn = (c: HTMLElement): HTMLButtonElement =>
   c.querySelector('[data-testid="smart-folder-confirm"]') as HTMLButtonElement;
@@ -132,6 +143,34 @@ describe('LensEditor — connection-first (sources-redesign)', () => {
     await fireEvent.click(toggleFor(container, RSS.id));
     await tick();
     expect(entityChips(container)).toEqual(['Changes', 'Issues', 'Articles']);
+  });
+
+  test('a Cloud bitbucket account offers ONLY Authored (add-bitbucket-connector D4)', async () => {
+    const { container } = render(LensEditorHarness, {
+      props: { spaceId: 'work', accounts: [BB_CLOUD] },
+    });
+    await fireEvent.click(toggleFor(container, BB_CLOUD.id));
+    await tick();
+    const row = rowFor(container, BB_CLOUD.id);
+    const labels = [...row.querySelectorAll('[data-testid="smart-filter-pill"]')].map((b) =>
+      (b.textContent ?? '').trim(),
+    );
+    expect(labels).toEqual(['Authored']);
+    // The default selected query is the valid 'authored' (not review-requested).
+    expect(pillByLabel(row, 'Authored').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  test('a self-hosted bitbucket account offers Authored + Reviewing, never Assigned', async () => {
+    const { container } = render(LensEditorHarness, {
+      props: { spaceId: 'work', accounts: [BB_SERVER] },
+    });
+    await fireEvent.click(toggleFor(container, BB_SERVER.id));
+    await tick();
+    const row = rowFor(container, BB_SERVER.id);
+    const labels = [...row.querySelectorAll('[data-testid="smart-filter-pill"]')].map((b) =>
+      (b.textContent ?? '').trim(),
+    );
+    expect(labels).toEqual(['Authored', 'Reviewing']);
   });
 
   test('Create dispatches sources WITHOUT lensKind and opens the overview page', async () => {

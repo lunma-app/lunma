@@ -10,18 +10,18 @@ import type { LensProvider, SourceAccount } from './types';
  */
 
 /** The shipped providers, in editor/picker display order. */
-export const PROVIDERS: readonly LensProvider[] = ['github', 'gitlab', 'jira', 'rss'];
+export const PROVIDERS: readonly LensProvider[] = ['github', 'gitlab', 'bitbucket', 'jira', 'rss'];
 
 /**
  * A Source is one of two KINDS (the Account-vs-Feed model). **Accounts** are
- * connected identities with derived auth (github/gitlab/jira) — managed in
+ * connected identities with derived auth (github/gitlab/bitbucket/jira) — managed in
  * Options → Accounts, added via "Connect an account". **Feeds** are public RSS
  * subscriptions (`rss`) — managed in Options → Feed subscriptions, added via
  * "Add a feed". Both are persisted uniformly as `SourceAccount` in
  * `AppState.sources` and referenced by lenses the same way; only their
  * presentation/management differs.
  */
-export const ACCOUNT_PROVIDERS: readonly LensProvider[] = ['github', 'gitlab', 'jira'];
+export const ACCOUNT_PROVIDERS: readonly LensProvider[] = ['github', 'gitlab', 'bitbucket', 'jira'];
 
 /** Whether a provider is a Feed (public URL) rather than an auth Account. */
 export function isFeedProvider(provider: LensProvider): boolean {
@@ -53,6 +53,7 @@ export function normalizeBaseUrl(raw: string): string {
 export const PROVIDER_LABEL: Record<LensProvider, string> = {
   github: 'GitHub',
   gitlab: 'GitLab',
+  bitbucket: 'Bitbucket',
   jira: 'Jira',
   rss: 'RSS feed',
 };
@@ -62,6 +63,7 @@ export const PROVIDER_LABEL: Record<LensProvider, string> = {
 export const DEFAULT_BASE_URL: Record<LensProvider, string> = {
   github: 'https://github.com',
   gitlab: 'https://gitlab.com',
+  bitbucket: 'https://bitbucket.org',
   jira: 'https://your-site.atlassian.net',
   rss: '',
 };
@@ -106,6 +108,21 @@ export function tokenHelpUrl(provider: LensProvider, baseUrl: string): string | 
     case 'gitlab': {
       const root = baseUrl.replace(/\/+$/, '');
       return `${root}/-/user_settings/personal_access_tokens`;
+    }
+    case 'bitbucket': {
+      // Cloud (bitbucket.org) tokens are created from the support docs flow;
+      // Server / Data Center exposes a personal HTTP access-token page on-host.
+      let host: string;
+      try {
+        host = new URL(baseUrl).host;
+      } catch {
+        host = '';
+      }
+      if (host === 'bitbucket.org') {
+        return 'https://support.atlassian.com/bitbucket-cloud/docs/repository-access-tokens/';
+      }
+      const root = baseUrl.replace(/\/+$/, '');
+      return `${root}/plugins/servlet/access-tokens/manage`;
     }
     default:
       return undefined;

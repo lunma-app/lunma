@@ -10,11 +10,12 @@ import type {
   PinNode,
   ResolvedLensSource,
 } from '../shared/types';
-import type { ConnectorCaches, SourceConnector } from './connectors/connector';
-// All 4 connectors are eagerly imported on every SW boot (~52 KB / ~11 KB gzip
+// All 5 connectors are eagerly imported on every SW boot (~52 KB / ~11 KB gzip
 // total, even for users who have enabled none). Converting to a lazy registry
 // (dynamic import on first use of each source) is the straightforward fix when
 // SW boot budget becomes a concern.
+import { bitbucketConnector } from './connectors/bitbucket';
+import type { ConnectorCaches, SourceConnector } from './connectors/connector';
 import { githubConnector } from './connectors/github';
 import { gitlabConnector } from './connectors/gitlab';
 import { jiraConnector } from './connectors/jira';
@@ -77,6 +78,9 @@ export function resolvedConfigs(
       lensKind,
       sourceId: account.id,
       ...(account.name !== undefined ? { name: account.name } : {}),
+      // Cloud bitbucket workspace slug (add-bitbucket-connector) — stamped from
+      // the account so the bitbucket connector can scope the Cloud query.
+      ...(account.workspace !== undefined ? { workspace: account.workspace } : {}),
     };
     if (ref.queries.length === 0) {
       out.push({ ...base });
@@ -96,6 +100,7 @@ export function resolvedConfigs(
 export const CONNECTORS: Record<LensProvider, SourceConnector> = {
   gitlab: gitlabConnector,
   github: githubConnector,
+  bitbucket: bitbucketConnector,
   jira: jiraConnector,
   rss: rssConnector,
 };
@@ -132,6 +137,20 @@ export interface LensDeps {
 // OPML "add to this lens" find-or-mint) and the SW handlers normalize feed URLs
 // identically. Re-exported here for the existing `from '../lenses'` importers.
 export { normalizeBaseUrl } from '../shared/account-ui';
+
+/**
+ * Whether `baseUrl` is the Bitbucket **Cloud** host (`bitbucket.org`)
+ * (add-bitbucket-connector, D1/D3). A Cloud bitbucket account requires a
+ * `workspace` and supports `authored` only; a self-hosted (Server / Data Center)
+ * host returns `false`. A malformed `baseUrl` degrades to `false` (not Cloud).
+ */
+export function isCloudBitbucketHost(baseUrl: string): boolean {
+  try {
+    return new URL(baseUrl).host === 'bitbucket.org';
+  } catch {
+    return false;
+  }
+}
 
 // ── registry dispatch ──────────────────────────────────────────────────────────
 
