@@ -15,9 +15,12 @@ interface Props {
   icon: string;
   /** Activation handler (skipped while `disabled`). */
   onclick: () => void;
-  /** Native tooltip text (e.g. `"Open launcher (⌥L)"`). */
+  /** Native tooltip text (e.g. `"Open launcher (⌥L)"`). Doubles as the accessible
+   * name when `ariaLabel` is omitted. */
   title?: string | undefined;
-  /** Accessible name for the button; the rendered icon stays decorative. */
+  /** Accessible name for the button; the rendered icon stays decorative. Falls
+   * back to `title` when omitted. This icon-only control needs one of the two —
+   * a dev-mode warning fires when both are missing. */
   ariaLabel?: string | undefined;
   disabled?: boolean | undefined;
   /** Tint treatment. `ghost` is the quiet default (the only variant today; the
@@ -46,6 +49,18 @@ function handleClick(): void {
   if (disabled) return;
   onclick();
 }
+
+// The icon is decorative (no `label` passed to `Icon`), so the button's only
+// accessible name is `ariaLabel`, falling back to the native `title`. Warn in dev
+// when a consumer ships this icon-only control with neither (ICONBUTTON-NEW1).
+const accessibleName = $derived(ariaLabel ?? title);
+$effect(() => {
+  if (import.meta.env.DEV && accessibleName === undefined) {
+    console.warn(
+      '[lunma] IconButton: icon-only control rendered with no accessible name — pass `ariaLabel` (or at least `title`).',
+    );
+  }
+});
 </script>
 
 <button
@@ -55,7 +70,7 @@ function handleClick(): void {
   class="icon-btn"
   data-variant={variant}
   data-testid={testid}
-  aria-label={ariaLabel}
+  aria-label={accessibleName}
   onclick={handleClick}
 >
   <Icon name={icon} {size} />

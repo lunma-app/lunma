@@ -70,6 +70,8 @@ const { source }: { source: string } = $props();
         <LensRow name="Review requested" icon="git-pull-request" color="purple" badge="4" onToggle={noop} onOpenPage={noop} />
       </div>
     </Variant>
+    <!-- `active` sets `aria-current="true"` on the row (LENSROW-01); the `badge`
+         is folded into the toggle's accessible name (LENSROW-NEW1). -->
     <Variant label="active (peek)">
       <div style="width: 16rem">
         <LensRow name="Assigned to me" icon="user-check" color="blue" active badge="2" onToggle={noop} onOpenPage={noop} />
@@ -80,6 +82,8 @@ const { source }: { source: string } = $props();
         <LensRow name="Authored" icon="git-commit-horizontal" color="green" expanded onToggle={noop} onOpenPage={noop} />
       </div>
     </Variant>
+    <!-- `busy` adds a polite sr-only "Refreshing …" live region beside the
+         decorative spinning glyph (LENSROW-02). -->
     <Variant label="busy (refreshing)">
       <div style="width: 16rem">
         <LensRow name="Review requested" icon="git-pull-request" color="purple" busy onToggle={noop} />

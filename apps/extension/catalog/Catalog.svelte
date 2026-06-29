@@ -62,8 +62,14 @@ function select(entry: StoryEntry): void {
         <h2 class="nav-group-heading">{group.name}</h2>
         <ul>
           {#each group.stories as entry (entry.id)}
-            <li class="nav-item" class:active={selected?.id === entry.id}>
-              <RowButton icon="shapes" label={entry.title} onclick={() => select(entry)} />
+            {@const isActive = selected?.id === entry.id}
+            <li class="nav-item" class:active={isActive}>
+              <RowButton
+                icon="shapes"
+                label={entry.title}
+                ariaCurrent={isActive ? 'page' : undefined}
+                onclick={() => select(entry)}
+              />
             </li>
           {/each}
         </ul>

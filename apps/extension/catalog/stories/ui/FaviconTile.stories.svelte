@@ -44,11 +44,18 @@ const { source }: { source: string } = $props();
   {/snippet}
   {#snippet examples()}
     <Variant label="default"><FaviconTile title="GitHub" faviconSrc={favicon('github.com', 64)} onclick={noop} /></Variant>
+    <!-- `active` adds `aria-current="true"` (FAVICONTILE-NEW2); `loading` adds
+         `aria-busy="true"` (FAVICONTENT-01) — neither is colour/spinner-only now. -->
     <Variant label="active (bound + focused)"><FaviconTile title="Figma" faviconSrc={favicon('figma.com', 64)} active onclick={noop} /></Variant>
     <Variant label="unbound (dormant)"><FaviconTile title="Vite" faviconSrc={favicon('vite.dev', 64)} unbound onclick={noop} /></Variant>
     <Variant label="loading"><FaviconTile title="Loading…" faviconSrc={favicon('oklch.com', 64)} loading onclick={noop} /></Variant>
-    <Variant label="drifted (off home)">
+    <Variant label="drifted · returnable (Return home)">
       <FaviconTile title="GitHub" faviconSrc={favicon('github.com', 64)} drifted homeHost="github.com" onGoHome={noop} onclick={noop} />
+    </Variant>
+    <!-- Drifted with no resolvable home host: the off-home state is folded into the
+         accessible name ("…— off home") since the dot is decorative (FAVICONTILE-NEW1). -->
+    <Variant label="drifted · no home (off home in name)">
+      <FaviconTile title="GitHub" faviconSrc={favicon('github.com', 64)} drifted onclick={noop} />
     </Variant>
   {/snippet}
 </Story>

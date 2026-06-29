@@ -49,5 +49,12 @@ const { source }: { source: string } = $props();
         <RowButton icon="plus" label="New tab" disabled onclick={noop} />
       </div>
     </Variant>
+    <!-- `ariaCurrent="page"` marks the one row that is the current location (the
+         catalog nav's active item) so it isn't conveyed by the wash alone. -->
+    <Variant label="current (aria-current)">
+      <div style="width: 14rem">
+        <RowButton icon="box" label="Button" ariaCurrent="page" onclick={noop} />
+      </div>
+    </Variant>
   {/snippet}
 </Story>

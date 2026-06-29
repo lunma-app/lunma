@@ -1,4 +1,6 @@
 <script lang="ts">
+import Icon from './Icon.svelte';
+
 // Avatar (review-lens, D8): an initials disc with an optional verdict/status
 // ring. A cross-surface primitive — the Review Queue row's author disc and the
 // ReviewerRail's reviewer discs both compose it, so the disc never drifts. Reads
@@ -19,6 +21,19 @@ interface Props {
 }
 
 const { initials, size = 'md', ring = 'none', title, testid = 'avatar' }: Props = $props();
+
+// Non-colour verdict cue (AVATAR-01): a small corner glyph per ring state so the
+// verdict is shape + colour, not hue alone (the approved/changes pair is the
+// classic red/green confusion case). Reuses the same lucide glyphs ReviewerRail
+// maps to these states — no new icon, no `gen:icons` regen. The badge is
+// decorative (the verdict reaches AT via `title`/adjacent text), so `aria-hidden`.
+const RING_ICON: Record<'approved' | 'changes' | 'pending', string> = {
+  approved: 'check',
+  changes: 'circle-alert',
+  pending: 'clock',
+};
+const ringIcon = $derived(ring !== 'none' ? RING_ICON[ring] : undefined);
+const badgeIconSize = $derived(size === 'sm' ? 8 : 10);
 </script>
 
 <span
@@ -30,10 +45,15 @@ const { initials, size = 'md', ring = 'none', title, testid = 'avatar' }: Props 
   role={title !== undefined ? 'img' : undefined}
   aria-label={title}
   aria-hidden={title === undefined ? 'true' : undefined}
->{initials}</span>
+><!-- initials kept whitespace-tight so textContent is exactly the initials; the
+     badge is decorative (aria-hidden) and absolutely positioned -->{initials}{#if ringIcon !== undefined}<span
+    class="verdict-badge"
+    data-verdict={ring}
+    aria-hidden="true"><Icon name={ringIcon} size={badgeIconSize} /></span>{/if}</span>
 
 <style>
   .avatar {
+    position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -68,5 +88,38 @@ const { initials, size = 'md', ring = 'none', title, testid = 'avatar' }: Props 
   }
   .avatar[data-ring='pending'] {
     box-shadow: 0 0 0 2px var(--text-dim);
+  }
+
+  /* Non-colour verdict cue (AVATAR-01): a corner badge whose glyph SHAPE
+   * (✓ / ! / ◷) plus the ring colour together convey the verdict, so it never
+   * rests on hue alone. The badge sits on the disc's own surface with a thin ring
+   * so it reads as a distinct token; the glyph inherits the per-state colour. */
+  .verdict-badge {
+    position: absolute;
+    right: -2px;
+    bottom: -2px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--r-pill);
+    background: var(--surface);
+    box-shadow: 0 0 0 1px var(--surface-3);
+  }
+  .avatar[data-size='sm'] .verdict-badge {
+    width: 11px;
+    height: 11px;
+  }
+  .avatar[data-size='md'] .verdict-badge {
+    width: 14px;
+    height: 14px;
+  }
+  .verdict-badge[data-verdict='approved'] {
+    color: var(--success);
+  }
+  .verdict-badge[data-verdict='changes'] {
+    color: var(--danger);
+  }
+  .verdict-badge[data-verdict='pending'] {
+    color: var(--text-dim);
   }
 </style>

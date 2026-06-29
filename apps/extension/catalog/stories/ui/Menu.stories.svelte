@@ -12,10 +12,10 @@ export const meta = defineStory({
       typeLabel: "'kebab' | 'context'",
       description: 'Kebab dropdown or right-click context popover.',
     },
-    label: {
+    ariaLabel: {
       type: 'text',
       default: 'Folder actions',
-      description: 'Accessible label (trigger + popover).',
+      description: 'Accessible name (trigger + popover), name-only.',
     },
     icon: {
       type: 'text',
@@ -54,7 +54,7 @@ const items: MenuItem[] = [
     <Menu
       trigger={args.trigger as 'kebab' | 'context'}
       {items}
-      label={args.label as string}
+      ariaLabel={args.ariaLabel as string}
       icon={args.icon as string}
       headerKind={(args.headerKind as string) || undefined}
       headerTitle={(args.headerTitle as string) || undefined}
@@ -66,13 +66,13 @@ const items: MenuItem[] = [
   {/snippet}
   {#snippet examples()}
     <Variant label="kebab trigger (dropdown)">
-      <Menu trigger="kebab" {items} label="Folder actions" />
+      <Menu trigger="kebab" {items} ariaLabel="Folder actions" />
     </Variant>
     <Variant label="kebab · with header">
-      <Menu trigger="kebab" {items} label="Folder actions" headerKind="FOLDER" headerTitle="Reading" />
+      <Menu trigger="kebab" {items} ariaLabel="Folder actions" headerKind="FOLDER" headerTitle="Reading" />
     </Variant>
     <Variant label="context (right-click the target)">
-      <Menu trigger="context" {items} label="Tab actions" headerKind="TAB" headerTitle="svelte/svelte">
+      <Menu trigger="context" {items} ariaLabel="Tab actions" headerKind="TAB" headerTitle="svelte/svelte">
         {#snippet children(props)}
           <button {...props} type="button" class="ctx-target">Right-click me</button>
         {/snippet}

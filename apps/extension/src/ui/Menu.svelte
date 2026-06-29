@@ -28,8 +28,10 @@ interface Props {
   items: MenuItem[];
   /** Which surface: a kebab dropdown or a right-click context popover. */
   trigger: 'kebab' | 'context';
-  /** Accessible label (trigger + popover). Defaults to a per-trigger label. */
-  label?: string | undefined;
+  /** Accessible name (trigger + popover) — name-only, no visible text. Defaults to
+   * a per-trigger name. (Renamed from `label`: this is an `ariaLabel`, not visible
+   * text — see the `label` vs `ariaLabel` convention in docs/architecture.md.) */
+  ariaLabel?: string | undefined;
   /** Kebab trigger glyph (`trigger='kebab'`); any lucide name. */
   icon?: string | undefined;
   /** `trigger='context'`: panel testid (default `context-menu`), items
@@ -50,7 +52,7 @@ interface Props {
 let {
   items,
   trigger,
-  label,
+  ariaLabel,
   icon = 'ellipsis-vertical',
   testid = 'context-menu',
   headerKind,
@@ -60,7 +62,7 @@ let {
   children,
 }: Props = $props();
 
-const ariaLabel = $derived(label ?? (trigger === 'kebab' ? 'Open menu' : 'Actions'));
+const resolvedLabel = $derived(ariaLabel ?? (trigger === 'kebab' ? 'Open menu' : 'Actions'));
 
 function handleOpenChange(next: boolean): void {
   open = next;
@@ -106,8 +108,8 @@ function triggerPointerDown(props: Record<string, unknown>, event: PointerEvent)
           {...props}
           type="button"
           class="trigger"
-          aria-label={ariaLabel}
-          title={ariaLabel}
+          aria-label={resolvedLabel}
+          title={resolvedLabel}
           data-testid="menu-trigger"
           onpointerdown={(event) => triggerPointerDown(props, event)}
         >
@@ -122,7 +124,7 @@ function triggerPointerDown(props: Record<string, unknown>, event: PointerEvent)
         sideOffset={4}
         align="end"
         collisionPadding={8}
-        aria-label={ariaLabel}
+        aria-label={resolvedLabel}
       >
         {@render header()}
         {#each items as item (item.id)}
@@ -160,7 +162,7 @@ function triggerPointerDown(props: Record<string, unknown>, event: PointerEvent)
       <ContextMenu.Content
         class="lunma-menu"
         collisionPadding={8}
-        aria-label={ariaLabel}
+        aria-label={resolvedLabel}
         data-testid={testid}
       >
         {@render header()}
@@ -254,7 +256,9 @@ function triggerPointerDown(props: Record<string, unknown>, event: PointerEvent)
     font: var(--weight-medium) var(--text-2xs) / 1.2 var(--font-sans);
     letter-spacing: 0.07em;
     text-transform: uppercase;
-    color: var(--text-faint);
+    /* Informative section-kind label → `--text-dim` (AA 4.5:1), not the
+     * decorative-only `--text-faint` (harden-ui-accessibility THEME-NEW1). */
+    color: var(--text-dim);
   }
   :global(.lunma-menu-title) {
     font: var(--weight-semibold) var(--text-sm) / 1.2 var(--font-sans);

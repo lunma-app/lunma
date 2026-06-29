@@ -42,5 +42,10 @@ const { source }: { source: string } = $props();
         <Kbd>⌘</Kbd><Kbd>K</Kbd>
       </span>
     </Variant>
+    <!-- `ariaLabel` spells the pictograph out for screen readers (shows `⌥L`,
+         announces "Option L"). -->
+    <Variant label="named glyph (ariaLabel)">
+      <Kbd ariaLabel="Option L">⌥L</Kbd>
+    </Variant>
   {/snippet}
 </Story>

@@ -57,6 +57,11 @@ let replaceOpened = $state(false);
 let token = $state('');
 const collapsed = $derived(hasToken && !replaceOpened);
 
+// Stable per-instance id linking the token input to its error text via
+// `aria-describedby`, so the error re-announces on refocus, not just on inject
+// (ACF-03). Unique so multiple fields on a page never collide.
+const errorId = `account-token-error-${crypto.randomUUID()}`;
+
 function openReplace(): void {
   replaceOpened = true;
   onReplace?.();
@@ -91,6 +96,8 @@ function confirm(): void {
         placeholder="ghp-… / glpat-…"
         bind:value={token}
         invalid={error !== undefined}
+        required={requirement === 'required'}
+        describedById={error !== undefined ? errorId : undefined}
         testid="account-token-input"
         onenter={confirm}
       />
@@ -116,7 +123,7 @@ function confirm(): void {
       </a>
     {/if}
     {#if error !== undefined}
-      <InlineError message={error} testid="account-connect-error" />
+      <InlineError id={errorId} message={error} testid="account-connect-error" />
     {/if}
   {/if}
 </div>

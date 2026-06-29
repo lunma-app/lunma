@@ -31,8 +31,10 @@ interface Props {
   onOpenPage?: (() => void) | undefined;
   /** Accessible label for the open-overview icon. */
   openPageLabel?: string | undefined;
-  /** Accessible label override for the row/toggle; defaults to a name-derived label. */
-  label?: string | undefined;
+  /** Accessible-name override for the row/toggle (name-only, no visible text);
+   * defaults to a name-derived label. (Renamed from `label` — see the `label` vs
+   * `ariaLabel` convention in docs/architecture.md.) */
+  ariaLabel?: string | undefined;
   /** Trailing count badge (quiet); absent → no badge. */
   badge?: string | undefined;
   /** Spins the glyph while an in-flight refresh runs (static under reduced motion). */
@@ -48,7 +50,7 @@ let {
   onToggle,
   onOpenPage,
   openPageLabel = 'Open lens',
-  label,
+  ariaLabel,
   badge,
   busy = false,
 }: Props = $props();
@@ -60,12 +62,19 @@ const ok = $derived(colourToOklch(color));
 // from the lens hue.
 const fill = $derived(`oklch(${ok.l} ${ok.c} ${ok.h} / 0.16)`);
 const ring = $derived(`oklch(${ok.l} ${ok.c} ${ok.h} / 0.5)`);
+
+// Fold the trailing count into the toggle's accessible name so it isn't announced
+// as a context-free bare number; the visible badge is then hidden from AT
+// (LENSROW-NEW1).
+const baseLabel = $derived(ariaLabel ?? (expanded ? `Collapse ${name}` : `Expand ${name}`));
+const toggleLabel = $derived(badge !== undefined ? `${baseLabel}, ${badge}` : baseLabel);
 </script>
 
 <div
   class="lens-row"
   class:active
   data-testid="lens-row"
+  aria-current={active ? 'true' : undefined}
   style:--lens-c={`oklch(${ok.l} ${ok.c} ${ok.h})`}
   style:--lens-fill={fill}
   style:--lens-ring={ring}
@@ -76,7 +85,7 @@ const ring = $derived(`oklch(${ok.l} ${ok.c} ${ok.h} / 0.5)`);
     type="button"
     class="toggle"
     aria-expanded={expanded}
-    aria-label={label ?? (expanded ? `Collapse ${name}` : `Expand ${name}`)}
+    aria-label={toggleLabel}
     onclick={() => onToggle?.()}
   >
     <span class="tile" class:busy class:expanded aria-hidden="true">
@@ -90,7 +99,9 @@ const ring = $derived(`oklch(${ok.l} ${ok.c} ${ok.h} / 0.5)`);
        cell, so there is no layout shift). -->
   <span class="trailing">
     {#if badge !== undefined}
-      <span class="badge" data-testid="lens-row-badge">{badge}</span>
+      <!-- The count is folded into the toggle's accessible name, so the visible
+           badge is decorative for AT (avoids a context-free re-read). -->
+      <span class="badge" data-testid="lens-row-badge" aria-hidden="true">{badge}</span>
     {/if}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <span class="open-page" onpointerdown={(e) => e.stopPropagation()}>
@@ -104,6 +115,12 @@ const ring = $derived(`oklch(${ok.l} ${ok.c} ${ok.h} / 0.5)`);
       />
     </span>
   </span>
+
+  <!-- Polite live region: the in-flight refresh spins a decorative (aria-hidden)
+       glyph, so announce it here for AT. Empty when idle (LENSROW-02). -->
+  <span class="sr-only" aria-live="polite" data-testid="lens-row-busy"
+    >{busy ? `Refreshing ${name}…` : ''}</span
+  >
 </div>
 
 <style>
@@ -278,5 +295,18 @@ const ring = $derived(`oklch(${ok.l} ${ok.c} ${ok.h} / 0.5)`);
     .open-page {
       transition: none;
     }
+  }
+
+  /* Visually hidden, still in the accessibility tree (the busy live region). */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 </style>

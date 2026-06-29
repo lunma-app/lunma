@@ -103,12 +103,17 @@ function handleAction(): void {
 }
 </script>
 
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<!-- A message-only toast (no action) renders no focusable child, so make the
+     container itself a tab stop (+ a visible focus ring) so keyboard users can
+     focus it to pause the timer and dismiss with Escape; an action toast already
+     has its focusable Button, so it stays out of the tab order (TOAST-02). -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions, a11y_no_noninteractive_tabindex (a focusable status toast is the intended TOAST-02 fix) -->
 <div
   bind:this={toastEl}
   class="toast"
   role="status"
   aria-live="polite"
+  tabindex={actionLabel ? undefined : 0}
   onpointerenter={onPointerEnter}
   onpointerleave={onPointerLeave}
   onfocusin={onFocusIn}
@@ -142,6 +147,12 @@ function handleAction(): void {
     box-shadow: var(--shadow-lg), var(--glass-highlight);
 
     animation: toast-in var(--motion-base) var(--ease-emphasised);
+  }
+
+  /* Visible focus ring for the keyboard-engageable message-only toast (TOAST-02). */
+  .toast:focus-visible {
+    outline: var(--focus-width) solid var(--focus-color);
+    outline-offset: var(--focus-offset);
   }
 
   .toast-message {

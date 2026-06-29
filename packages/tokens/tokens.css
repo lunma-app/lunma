@@ -122,9 +122,13 @@
    * as inset on any surface (warm-substrate redesign). */
   --input: oklch(0.145 calc(var(--ds-warm-amt) * 0.008) var(--ds-warm-h));
 
-  --border: oklch(0.300 calc(var(--ds-warm-amt) * 0.012) var(--ds-warm-h));
+  /* `--border`/`--border-strong` are lifted to the minimal lightness that clears
+   * the 3:1 non-text floor (WCAG 1.4.11) against `--surface` AND `--bg`, so an idle
+   * (unfocused) TextInput/Select boundary is distinguishable (harden-ui-accessibility
+   * THEME-02). `--border-soft`/`--divider` stay quiet (alpha'd, decorative). */
+  --border: oklch(0.500 calc(var(--ds-warm-amt) * 0.012) var(--ds-warm-h));
   --border-soft: oklch(0.260 calc(var(--ds-warm-amt) * 0.010) var(--ds-warm-h) / 0.7);
-  --border-strong: oklch(0.380 calc(var(--ds-warm-amt) * 0.014) var(--ds-warm-h));
+  --border-strong: oklch(0.580 calc(var(--ds-warm-amt) * 0.014) var(--ds-warm-h));
   --divider: oklch(0.260 calc(var(--ds-warm-amt) * 0.010) var(--ds-warm-h) / 0.55);
 
   /* Text — the crisp white primary/secondary stay neutral; the dim labels pick
@@ -423,10 +427,13 @@
  *
  * Per-Space tuples, radii, spacing, motion, and type are theme-independent and
  * NOT redefined here. Contrast was verified per WCAG 2 AA on the rendered pixels
- * (text 17.0 · text-2 11.7 · muted 7.2 · dim 5.5 · faint 4.6 · white-on-primary
- * 4.9, all on --surface). NOTE: the legacy `--glass-*`/`--glow-*` family is not
- * yet given a light expression — the redesigned surfaces compose the theme-aware
- * `--atm-*` family (below) instead; current components migrate to it per surface.
+ * (text 17.0 · text-2 11.7 · muted 7.2 · dim 6.0 · faint 4.6 · white-on-primary
+ * 4.9, all on --surface). NOTE: `--glass-bg`/`--glass-bg-strong` now carry a light
+ * expression (below) so a `.lunma-glass` panel reads frosted-light in light theme
+ * (harden-ui-accessibility THEME-01); the rest of the legacy `--glow-*` family is
+ * not yet given a light expression — the redesigned surfaces compose the
+ * theme-aware `--atm-*` family (below) instead; current components migrate to it
+ * per surface.
  * ════════════════════════════════════════════════════════════════════════════ */
 :root[data-theme='light'],
 [data-theme='light'] {
@@ -440,16 +447,21 @@
   --press: oklch(0.890 calc(var(--ds-warm-amt) * 0.014) var(--ds-warm-h));
   --input: oklch(0.975 calc(var(--ds-warm-amt) * 0.006) var(--ds-warm-h));
 
-  --border: oklch(0.875 calc(var(--ds-warm-amt) * 0.012) var(--ds-warm-h));
+  /* Darkened to clear the 3:1 non-text floor against the light `--surface`/`--bg`
+   * (harden-ui-accessibility THEME-02); `--border-soft`/`--divider` stay quiet. */
+  --border: oklch(0.620 calc(var(--ds-warm-amt) * 0.012) var(--ds-warm-h));
   --border-soft: oklch(0.905 calc(var(--ds-warm-amt) * 0.010) var(--ds-warm-h) / 0.85);
-  --border-strong: oklch(0.800 calc(var(--ds-warm-amt) * 0.014) var(--ds-warm-h));
+  --border-strong: oklch(0.560 calc(var(--ds-warm-amt) * 0.014) var(--ds-warm-h));
   --divider: oklch(0.890 calc(var(--ds-warm-amt) * 0.010) var(--ds-warm-h) / 0.7);
 
   /* Ink — near-black, faintly warm. */
   --text: oklch(0.225 0.006 var(--ds-warm-h));
   --text-2: oklch(0.340 0.006 var(--ds-warm-h));
   --text-muted: oklch(0.455 0 0);
-  --text-dim: oklch(0.520 calc(var(--ds-warm-amt) * 0.012) var(--ds-warm-h));
+  /* `--text-dim` darkened from 0.520 so it clears AA 4.5:1 on every light surface
+   * incl. `--surface-3` (4.62:1) — informative metadata (TabRow `.meta`, Menu kind
+   * label) repoints onto it (harden-ui-accessibility THEME-NEW1). */
+  --text-dim: oklch(0.495 calc(var(--ds-warm-amt) * 0.012) var(--ds-warm-h));
   --text-faint: oklch(0.560 calc(var(--ds-warm-amt) * 0.012) var(--ds-warm-h));
   --text-inverse: oklch(0.985 0 0);
 
@@ -491,6 +503,16 @@
   --shadow-lg: 0 12px 36px oklch(0 0 0 / 0.12);
   --shadow-pop: 0 18px 48px oklch(0 0 0 / 0.16);
   --shadow-raise: inset 0 1px 0 oklch(1 0 0 / 0.22), 0 1px 2px oklch(0 0 0 / 0.18);
+
+  /* Frosted glass, light expression (harden-ui-accessibility THEME-01) — a light,
+   * low-alpha near-white fill carrying the warm base-hue whisper, alpha in the
+   * 0.5 / 0.66 family that mirrors the dark `--glass-bg`/`--glass-bg-strong`. This
+   * gives any `.lunma-glass` consumer (SearchField input, DragClone, the catalog
+   * previews) a frosted-LIGHT substrate in light theme instead of the dark fill,
+   * so light foreground tokens placed on glass clear WCAG AA. Blur, border, and
+   * highlight are unchanged; only the fill lightness/alpha flips. */
+  --glass-bg: oklch(0.98 0.012 var(--base-hue) / 0.5);
+  --glass-bg-strong: oklch(0.99 0.014 var(--base-hue) / 0.66);
 
   /* Atmosphere layer, light expression — frosted-white vibrancy over warm paper. */
   --atm-bg: oklch(0.955 0.014 var(--ds-warm-h));

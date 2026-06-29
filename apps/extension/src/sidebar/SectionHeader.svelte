@@ -53,7 +53,7 @@ const sheetOpen = $derived(!!panel);
     <span class="label">{label}</span>
     {#if hasMenu && menu}
       <span class="trailing">
-        <Menu trigger="kebab" items={menu} label={`${label} actions`} bind:open />
+        <Menu trigger="kebab" items={menu} ariaLabel={`${label} actions`} bind:open />
       </span>
     {/if}
   </div>

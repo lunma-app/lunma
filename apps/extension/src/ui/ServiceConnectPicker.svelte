@@ -311,18 +311,25 @@ function confirmImport(): void {
 
   <!-- OPML bulk-add: a file picker reveals the "Found N feeds — import as one
        folder into:" confirm step (opml-import-export). -->
+  <!-- Programmatically clicked by the "Import OPML…" button, so it leaves the tab
+       order and the a11y tree — otherwise it's an unnamed "Choose File" tab stop in
+       every provider mode (SCP-01). -->
   <input
     bind:this={fileInput}
     type="file"
     accept=".opml,.xml"
     class="sr-only"
+    tabindex="-1"
+    aria-hidden="true"
     data-testid="connect-import-file"
     onchange={(e) => void onFilePicked(e)}
   />
 
   {#if pendingFeeds}
     <div class="import-confirm" data-testid="connect-import-confirm">
-      <span class="import-found">
+      <!-- `role="status"` announces the parse result + the new confirm step to AT
+           when the panel reveals (SCP-03). -->
+      <span class="import-found" role="status">
         Found {pendingFeeds.length}
         {pendingFeeds.length === 1 ? 'feed' : 'feeds'} —
         {editorImport ? 'add to this lens:' : 'import as one folder into:'}

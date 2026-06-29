@@ -95,6 +95,14 @@ const isDrift = $derived(drifted && !unbound);
 // resolvable home host on top of drift; without it the tile keeps its dot but the
 // click stays focus (a weird URL degrades, never breaks — Risks: odd URLs).
 const returnable = $derived(isDrift && !!homeHost);
+
+// Accessible name. A returnable tile already names the off-home state via its
+// "Return to {host}" action; a NON-returnable drifted tile (no resolvable
+// `homeHost`) otherwise loses it, so fold "off home" into the name there
+// (FAVICONTILE-NEW1). A resting tile is just its title.
+const tileLabel = $derived(
+  returnable ? `Return to ${homeHost}` : isDrift ? `${title} — off home` : title,
+);
 </script>
 
 <Tooltip label={returnable ? `Return to ${homeHost}` : title} side="bottom">
@@ -110,7 +118,9 @@ const returnable = $derived(isDrift && !!homeHost);
       class:returnable
       data-testid="favicon-tile"
       data-active={isActive}
-      aria-label={returnable ? `Return to ${homeHost}` : title}
+      aria-label={tileLabel}
+      aria-current={isActive ? 'true' : undefined}
+      aria-busy={loading ? 'true' : undefined}
       {tabindex}
       onclick={() => (returnable ? onGoHome?.() : onclick?.())}
       oncontextmenu={onContextMenu}
@@ -122,7 +132,10 @@ const returnable = $derived(isDrift && !!homeHost);
           <Favicon src={faviconSrc} fallbackSrc={faviconFallbackSrc} size={FAVICON_PX} />
         {/if}
         {#if isDrift}
-          <span class="drift-dot" data-testid="drift-dot" aria-label="Off home"></span>
+          <!-- Decorative: `aria-label` on a roleless <span> is name-prohibited, so
+               the off-home state is conveyed in the button's accessible name
+               instead (FAVICONTILE-NEW1). -->
+          <span class="drift-dot" data-testid="drift-dot" aria-hidden="true"></span>
         {/if}
       </span>
       <!-- Drifted tile: hover/focus cross-fades the favicon → a Space-hued ↩ return

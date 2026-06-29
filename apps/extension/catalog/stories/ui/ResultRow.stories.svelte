@@ -79,5 +79,13 @@ const { source }: { source: string } = $props();
         <ResultRow title={'Search DuckDuckGo for "svelte 5 runes"'} url="https://duckduckgo.com/?q=svelte+5+runes" source="websearch" onclick={noop} />
       </div>
     </Variant>
+    <!-- `tabindex={-1}` keeps the option out of the tab sequence under the
+         combobox `aria-activedescendant` model (the launcher composition; the row
+         looks identical, DOM focus stays on the input). -->
+    <Variant label="activedescendant (tabindex -1)">
+      <div style="width: 22rem">
+        <ResultRow title="svelte/svelte · Pull Request #14201" url="https://github.com/sveltejs/svelte/pull/14201" source="tab" faviconSrc={favicon('github.com')} tabindex={-1} onclick={noop} />
+      </div>
+    </Variant>
   {/snippet}
 </Story>

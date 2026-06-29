@@ -55,11 +55,15 @@ const { source }: { source: string } = $props();
         <TabRow title="svelte/svelte · Pull Request #14201" faviconSrc={favicon('github.com')} onclick={noop} />
       </div>
     </Variant>
+    <!-- `active` now also sets `aria-current="true"` on the title button so the
+         current tab is programmatically determinable, not wash-only (TABROW-01). -->
     <Variant label="active (Space wash)">
       <div style="width: 18rem">
         <TabRow title="Immersive shell — Figma" faviconSrc={favicon('figma.com')} active onclick={noop} />
       </div>
     </Variant>
+    <!-- `loading` sets `aria-busy="true"` on the row; the spinner stays
+         decorative (TABROW-02). -->
     <Variant label="loading">
       <div style="width: 18rem">
         <TabRow title="Loading…" faviconSrc={favicon('vite.dev')} loading onclick={noop} />

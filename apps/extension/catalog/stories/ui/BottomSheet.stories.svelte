@@ -35,6 +35,7 @@ const { source }: { source: string } = $props();
       <BottomSheet
         open={args.open as boolean}
         title={(args.title as string) || undefined}
+        ariaLabel="Sheet"
         onClose={() => (args.open = false)}
       >
         <TextInput label="Name" value="Work" />
@@ -53,9 +54,11 @@ const { source }: { source: string } = $props();
         </BottomSheet>
       </div>
     </Variant>
+    <!-- A headerless sheet has no `Dialog.Title`, so it MUST carry `ariaLabel` to
+         name its `role="dialog"` element (BOTTOMSHEET-01). -->
     <Variant label="no title (headerless)">
       <div class="frame">
-        <BottomSheet open onClose={noop}>
+        <BottomSheet open ariaLabel="Quick actions" onClose={noop}>
           <p style="margin:0">A headerless sheet body.</p>
         </BottomSheet>
       </div>

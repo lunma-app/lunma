@@ -26,6 +26,9 @@ import Variant from '../../lib/Variant.svelte';
 
 const { source }: { source: string } = $props();
 
+// The trailing disabled `Custom…` exercises the roving model: ArrowUp/Down,
+// Home/End skip it rather than dead-ending there (SEL-03); each option button is
+// owned directly by the listbox via `role="presentation"` <li> wrappers (SEL-04).
 const options: SelectOption[] = [
   { value: 'off', label: 'Never archive' },
   { value: '30', label: 'After 30 minutes' },

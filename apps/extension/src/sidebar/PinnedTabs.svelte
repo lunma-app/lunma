@@ -838,7 +838,7 @@ function tabMenuItems(row: TabView): MenuItem[] {
              menu's anchor moves down to this inner element. -->
         <Menu trigger="context"
           items={tabMenuItems(row)}
-          label={m.sidebar_tabActions()}
+          ariaLabel={m.sidebar_tabActions()}
           testid="pinned-menu"
           onOpenChange={onMenuOpenChange}
         >
@@ -944,7 +944,7 @@ function tabMenuItems(row: TabView): MenuItem[] {
                      drag pointerdown + measured identity (childRowElById). -->
                 <Menu trigger="context"
                   items={tabMenuItems(child)}
-                  label={m.sidebar_tabActions()}
+                  ariaLabel={m.sidebar_tabActions()}
                   testid="pinned-menu"
                   onOpenChange={onMenuOpenChange}
                 >

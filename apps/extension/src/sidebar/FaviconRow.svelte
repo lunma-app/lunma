@@ -542,7 +542,7 @@ function onMenuOpenChange(open: boolean): void {
              element identity. The `favicon-tile` testid stays inside the wrap. -->
         <Menu trigger="context"
           items={contextItemsFor(fav)}
-          label={m.sidebar_favoriteActions()}
+          ariaLabel={m.sidebar_favoriteActions()}
           testid="favicon-menu"
           onOpenChange={onMenuOpenChange}
         >

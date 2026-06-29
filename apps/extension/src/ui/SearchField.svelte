@@ -123,7 +123,7 @@ function handleKeydown(event: KeyboardEvent): void {
       {placeholder}
       {value}
       {autofocus}
-      aria-label={ariaLabel}
+      aria-label={ariaLabel ?? placeholder}
       role={combobox ? 'combobox' : undefined}
       aria-autocomplete={combobox ? 'list' : undefined}
       aria-expanded={combobox ? (expanded ?? false) : undefined}

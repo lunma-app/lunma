@@ -72,4 +72,33 @@ describe('AccountConnectField', () => {
       (container.querySelector('[data-testid="account-help"]') as HTMLAnchorElement).href,
     ).toContain('https://example.com/pat');
   });
+
+  test('a required field marks the input aria-required (ACF-02)', () => {
+    const { container } = render(AccountConnectFieldHarness, {
+      props: { requirement: 'required' },
+    });
+    expect(input(container).getAttribute('aria-required')).toBe('true');
+  });
+
+  test('an optional field does not mark the input required (ACF-02)', () => {
+    const { container } = render(AccountConnectFieldHarness, {
+      props: { requirement: 'optional' },
+    });
+    expect(input(container).getAttribute('aria-required')).toBeNull();
+  });
+
+  test('an errored field links its input to the error via aria-describedby (ACF-03)', () => {
+    const { container } = render(AccountConnectFieldHarness, {
+      props: { error: 'That token was rejected.' },
+    });
+    const describedBy = input(container).getAttribute('aria-describedby');
+    const errorEl = container.querySelector('[data-testid="account-connect-error"]') as HTMLElement;
+    expect(describedBy).toBeTruthy();
+    expect(errorEl.id).toBe(describedBy);
+  });
+
+  test('without an error the input carries no aria-describedby', () => {
+    const { container } = render(AccountConnectFieldHarness, {});
+    expect(input(container).getAttribute('aria-describedby')).toBeNull();
+  });
 });

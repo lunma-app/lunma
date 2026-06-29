@@ -28,6 +28,9 @@ let exampleValue = $state('house');
     </div>
   {/snippet}
   {#snippet examples()}
+    <!-- Type a query that matches nothing (e.g. "zzz") or one broad enough to cap
+         the grid: a persistent polite live region announces the empty/truncation
+         status as you type (ICONPICKER-NEW1). -->
     <Variant label="searchable grid (selection drives the value)">
       <div style="width: 20rem">
         <IconPicker value={exampleValue} onselect={(icon) => (exampleValue = icon)} />

@@ -48,6 +48,10 @@ const { source }: { source: string } = $props();
     <Variant label="removable"><Chip label="svelte" onRemove={noop} /></Variant>
     <Variant label="toggle · off"><Chip label="Drafts" onToggle={noop} /></Variant>
     <Variant label="toggle · on"><Chip label="Drafts" onToggle={noop} selected /></Variant>
+    <!-- `ariaLabel` overrides the accessible name when the visible text is
+         ambiguous out of context (e.g. a boolean playground control): announces
+         "Dark mode" while showing "true". -->
+    <Variant label="toggle · ariaLabel override"><Chip label="true" onToggle={noop} selected ariaLabel="Dark mode" /></Variant>
     <!-- Hue-tinted status/verdict token. -->
     <Variant label="hue · status sm (green)"><Chip label="Open" hue={150} /></Variant>
     <Variant label="hue · status sm (red)"><Chip label="Blocked" hue={25} /></Variant>

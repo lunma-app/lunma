@@ -49,6 +49,17 @@ const icons = $derived.by<readonly IconName[]>(() => {
 });
 const truncated = $derived(query.trim() !== '' && icons.length >= SEARCH_CAP);
 
+// Result-state message, mirrored into a persistent polite live region so screen
+// readers hear when the search empties or is capped as the user types — the
+// visible `.empty`/`.more` text alone is not announced (ICONPICKER-NEW1).
+const statusMessage = $derived(
+  icons.length === 0
+    ? `No icons match “${query.trim()}”.`
+    : truncated
+      ? `Showing the first ${SEARCH_CAP} — keep typing to narrow.`
+      : '',
+);
+
 let gridEl = $state<HTMLElement>();
 
 // Lazy SVG loading: the full catalogue is ~400 tiles, and each <Icon> dynamically
@@ -165,8 +176,13 @@ function choose(icon: IconName, index: number): void {
     />
   </div>
 
+  <!-- Persistent polite live region (always in the DOM) carrying the current
+       result-state message, so empties/caps are announced as the query changes;
+       the visible copies below are aria-hidden to avoid a double read. -->
+  <p class="sr-only" role="status" data-testid="icon-status">{statusMessage}</p>
+
   {#if icons.length === 0}
-    <p class="empty">No icons match “{query.trim()}”.</p>
+    <p class="empty" aria-hidden="true">No icons match “{query.trim()}”.</p>
   {:else}
     <!-- Roving tabindex: focus lives on the radio tiles; the group itself is
          removed from the tab order with tabindex=-1. -->
@@ -205,7 +221,7 @@ function choose(icon: IconName, index: number): void {
       {/each}
     </div>
     {#if truncated}
-      <p class="more">Showing the first {SEARCH_CAP} — keep typing to narrow.</p>
+      <p class="more" aria-hidden="true">Showing the first {SEARCH_CAP} — keep typing to narrow.</p>
     {/if}
   {/if}
 </div>
@@ -327,5 +343,18 @@ function choose(icon: IconName, index: number): void {
     padding: var(--space-1) 0;
     font: var(--weight-medium) var(--text-xs) / 1.3 var(--font-sans);
     color: var(--text-faint);
+  }
+
+  /* Visually hidden, still in the accessibility tree (the result-state live region). */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 </style>

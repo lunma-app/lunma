@@ -38,6 +38,11 @@ interface Props {
   /** Disables the toggle pill (e.g. a filter not applicable to a source):
    * `--text-dim`, no press, `aria-disabled`. Only meaningful with `onToggle`. */
   disabled?: boolean | undefined;
+  /** Accessible name override for the toggle button (`aria-label`). Omit to let
+   * the visible `label` name it; set it when the visible text alone is ambiguous
+   * out of context (e.g. a boolean playground control whose label is `'true'`).
+   * Only meaningful with `onToggle`. */
+  ariaLabel?: string | undefined;
   /** `data-testid` for the chip root. Default `'chip'`. */
   testid?: string | undefined;
 }
@@ -53,6 +58,7 @@ const {
   onToggle,
   selected = false,
   disabled = false,
+  ariaLabel,
   testid = 'chip',
 }: Props = $props();
 </script>
@@ -65,6 +71,7 @@ const {
     data-tone={tone}
     data-testid={testid}
     aria-pressed={selected}
+    aria-label={ariaLabel}
     {disabled}
     onclick={() => {
       if (!disabled) onToggle?.();

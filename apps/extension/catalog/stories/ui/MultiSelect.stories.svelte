@@ -24,6 +24,9 @@ import Variant from '../../lib/Variant.svelte';
 
 const { source }: { source: string } = $props();
 
+// The trailing disabled `Archived feed` exercises the roving skip (MS-04); the
+// collapsed trigger folds the `label` summary into its accessible name so the
+// current value reaches AT (MS-03 — see the "several selected" variant).
 const options: MultiSelectOption[] = [
   { value: 'lobsters', label: 'Lobsters' },
   { value: 'hn', label: 'Hacker News' },

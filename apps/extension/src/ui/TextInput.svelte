@@ -1,4 +1,6 @@
 <script lang="ts">
+import type { HTMLInputAttributes } from 'svelte/elements';
+
 interface Props {
   /** Visible label rendered above the field. Omit for an unlabelled field
    * (e.g. a search box that relies on its placeholder + `aria-label`). */
@@ -14,6 +16,17 @@ interface Props {
   /** Tint the field's border to the danger hue and set `aria-invalid` — the
    * field holds a value the surrounding form rejects (e.g. a duplicate name). */
   invalid?: boolean | undefined;
+  /** Marks the field required to assistive tech (`aria-required="true"`). The
+   * surrounding form still enforces the constraint behaviourally. */
+  required?: boolean | undefined;
+  /** id of an element describing this field (e.g. a paired `InlineError`),
+   * forwarded to `aria-describedby` so the description is announced on focus and
+   * re-announced when focus returns to an already-errored field. */
+  describedById?: string | undefined;
+  /** Native `autocomplete` token (e.g. `'username'`, `'current-password'`) so the
+   * input purpose is programmatically determinable (WCAG 1.3.5). Omitted when
+   * unset (the browser default). */
+  autocomplete?: string | undefined;
   /** `data-testid` for the input element. Default `'text-input'`. */
   testid?: string | undefined;
   /** Touch-keyboard hint via the `inputmode` attribute (e.g. `'numeric'` for a
@@ -36,6 +49,9 @@ let {
   placeholder,
   autofocus = false,
   invalid = false,
+  required = false,
+  describedById,
+  autocomplete,
   testid = 'text-input',
   inputmode,
   type = 'text',
@@ -70,8 +86,11 @@ function handleKeydown(event: KeyboardEvent): void {
     {value}
     {placeholder}
     {autofocus}
+    autocomplete={autocomplete as HTMLInputAttributes['autocomplete']}
     aria-label={label === undefined ? ariaLabel : undefined}
     aria-invalid={invalid ? true : undefined}
+    aria-required={required ? true : undefined}
+    aria-describedby={describedById}
     data-invalid={invalid}
     data-testid={testid}
     oninput={handleInput}

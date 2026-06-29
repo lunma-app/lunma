@@ -7,9 +7,13 @@ interface Props {
   onclick: () => void;
   disabled?: boolean | undefined;
   title?: string | undefined;
+  /** `aria-current` passthrough — set `'page'` on the one row representing the
+   * current location (e.g. the active catalog-nav item) so assistive tech can tell
+   * which row is selected when the active treatment is otherwise a CSS wash. */
+  ariaCurrent?: 'page' | 'true' | 'false' | undefined;
 }
 
-const { icon, label, onclick, disabled = false, title }: Props = $props();
+const { icon, label, onclick, disabled = false, title, ariaCurrent }: Props = $props();
 
 function handleClick(): void {
   if (disabled) return;
@@ -23,6 +27,7 @@ function handleClick(): void {
   data-testid="row-button"
   {title}
   {disabled}
+  aria-current={ariaCurrent}
   onclick={handleClick}
 >
   <span class="icon-slot"><Icon name={icon} size={16} /></span>

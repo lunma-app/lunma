@@ -43,6 +43,11 @@ const { source }: { source: string } = $props();
     <Variant label="with tooltip title">
       <IconButton icon="star" ariaLabel="Favourite" title="Favourite" onclick={noop} />
     </Variant>
+    <!-- No `ariaLabel`: the native `title` becomes the accessible name. (Omitting
+         both would dev-warn — ICONBUTTON-NEW1.) -->
+    <Variant label="name from title only">
+      <IconButton icon="bookmark" title="Bookmark" onclick={noop} />
+    </Variant>
     <Variant label="disabled">
       <IconButton icon="trash-2" ariaLabel="Delete" disabled onclick={noop} />
     </Variant>

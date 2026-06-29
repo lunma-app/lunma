@@ -17,11 +17,24 @@ const total = $derived((additions ?? 0) + (deletions ?? 0));
 // The bar proportion; a zero total leaves both segments empty (the track shows).
 const addPct = $derived(total > 0 ? `${((additions ?? 0) / total) * 100}%` : '0%');
 const delPct = $derived(total > 0 ? `${((deletions ?? 0) / total) * 100}%` : '0%');
+
+// Explicit additions/deletions label so the numerals don't rely on the `+`/`−`
+// glyphs (which screen readers suppress at default punctuation verbosity). The
+// `.nums` span becomes a `role="img"` named by this string, omitting an absent
+// side; the visible numerals are unchanged (DIFFSTAT-01).
+const numsLabel = $derived(
+  [
+    additions !== undefined ? `${additions} addition${additions === 1 ? '' : 's'}` : undefined,
+    deletions !== undefined ? `${deletions} deletion${deletions === 1 ? '' : 's'}` : undefined,
+  ]
+    .filter((part) => part !== undefined)
+    .join(', '),
+);
 </script>
 
 {#if hasAny}
   <span class="diffstat" data-testid="diffstat">
-    <span class="nums">
+    <span class="nums" role="img" aria-label={numsLabel}>
       {#if additions !== undefined}<span class="add">+{additions}</span>{/if}
       {#if deletions !== undefined}<span class="del">−{deletions}</span>{/if}
     </span>

@@ -341,7 +341,7 @@ function handleExport(): void {
             </span>
           </div>
           <span class="row-menu">
-            <Menu trigger="kebab" label={`Actions for ${accountLabel(account)}`} items={accountMenuItems(account)} />
+            <Menu trigger="kebab" ariaLabel={`Actions for ${accountLabel(account)}`} items={accountMenuItems(account)} />
           </span>
         </div>
         {#if activeEditor?.account.id === account.id}
@@ -381,7 +381,7 @@ function handleExport(): void {
             </span>
           </div>
           <span class="row-menu">
-            <Menu trigger="kebab" label={`Actions for ${accountLabel(feed)}`} items={feedMenuItems(feed)} />
+            <Menu trigger="kebab" ariaLabel={`Actions for ${accountLabel(feed)}`} items={feedMenuItems(feed)} />
           </span>
         </div>
         {#if activeEditor?.account.id === feed.id}

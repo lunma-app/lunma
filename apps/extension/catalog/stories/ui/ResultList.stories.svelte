@@ -30,10 +30,12 @@ const alreadyOpen = (r: LauncherResult): boolean => open.has(r.id);
 
 <Story {meta} {source}>
   {#snippet examples()}
-    <Variant label="short list">
+    <!-- `ariaLabel` names the `role="listbox"` for a surface that focuses the list
+         root directly (RESULTLIST-01). -->
+    <Variant label="short list (named listbox)">
       <div style="width: 22rem">
         <Surface variant="glass" radius="lg">
-          <ResultList results={RESULTS.slice(0, 3)} {faviconSrc} onact={noop} onescape={noop} />
+          <ResultList results={RESULTS.slice(0, 3)} ariaLabel="Search results" {faviconSrc} onact={noop} onescape={noop} />
         </Surface>
       </div>
     </Variant>

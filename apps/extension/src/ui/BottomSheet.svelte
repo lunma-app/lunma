@@ -11,6 +11,11 @@ interface Props {
    * `title` (e.g. a `$state` that hasn't been set), which falls through to
    * "no header". */
   title?: string | undefined;
+  /** Accessible name for a **headerless** sheet (no `title`). A titled sheet is
+   * named by its `Dialog.Title` (bits-ui wires `aria-labelledby`); a headerless
+   * sheet has no visible heading, so this names its `role="dialog"` element so it
+   * is never an unnamed modal. Ignored when `title` is set. */
+  ariaLabel?: string | undefined;
   /** Called for every dismissal path — scrim click, the ✕, Escape, and a
    * focus-leave outside the sheet. The host sets `open = false` in response;
    * we do NOT mutate `open` ourselves (it is not `$bindable`), so dismissal is
@@ -29,7 +34,7 @@ interface Props {
   portalTo?: string | undefined;
 }
 
-const { open, title, onClose, children, testid, portalTo }: Props = $props();
+const { open, title, ariaLabel, onClose, children, testid, portalTo }: Props = $props();
 
 // Resolve `portalTo` to a live element only while open. bits-ui's Portal THROWS
 // if a `to` selector matches nothing, so we query it ourselves and fall back to
@@ -78,7 +83,16 @@ function onOpenChange(next: boolean): void {
               aria-label="Close"
               onclick={onClose}
             ></button>
-            <div {...props} class="bottom-sheet" data-testid={testid}>
+            <!-- `aria-label` AFTER the `{...props}` spread so it wins for the
+                 headerless case; a titled sheet is named by `Dialog.Title`
+                 (bits-ui sets `aria-labelledby`), so suppress it then to avoid
+                 double-naming. -->
+            <div
+              {...props}
+              class="bottom-sheet"
+              data-testid={testid}
+              aria-label={title ? undefined : ariaLabel}
+            >
               {#if title}
                 <div class="bottom-sheet-header">
                   <Dialog.Title class="bottom-sheet-title">{title}</Dialog.Title>

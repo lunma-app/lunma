@@ -28,8 +28,10 @@ interface Props {
   dropTarget?: boolean | undefined;
   /** Toggle expand/collapse (chevron + label click). */
   onToggle?: (() => void) | undefined;
-  /** Accessible label override; defaults to `name`. */
-  label?: string | undefined;
+  /** Accessible-name override for the disclosure button (name-only, no visible
+   * text); defaults to `name`. (Renamed from `label` — see the `label` vs
+   * `ariaLabel` convention in docs/architecture.md.) */
+  ariaLabel?: string | undefined;
   /** When true, the name becomes an inline editable field (rename in place). */
   editing?: boolean | undefined;
   /** Commit a rename (Enter or blur with a non-empty value). */
@@ -92,7 +94,7 @@ let {
   expanded = false,
   dropTarget = false,
   onToggle,
-  label,
+  ariaLabel,
   editing = false,
   onRename,
   onRenameCancel,
@@ -199,6 +201,7 @@ function onMenuOpenChange(open: boolean): void {
   class:editing
   class:menu-open={menuOpen}
   data-testid="folder-row"
+  aria-busy={busy ? 'true' : undefined}
   style:--folder-c={`oklch(var(--folder-l, 0.62) var(--folder-chroma, 0.16) ${hue})`}
 >
   {#if editing}
@@ -220,7 +223,7 @@ function onMenuOpenChange(open: boolean): void {
     <button
       type="button"
       class="hit"
-      aria-label={label ?? name}
+      aria-label={ariaLabel ?? name}
       aria-expanded={expanded}
       onclick={onToggle}
     >
@@ -240,7 +243,7 @@ function onMenuOpenChange(open: boolean): void {
     <span class="kebab">
       <Menu trigger="kebab"
         items={menuItems ?? builtinMenuItems}
-        label="Folder actions"
+        ariaLabel="Folder actions"
         onOpenChange={onMenuOpenChange}
       />
     </span>
@@ -267,7 +270,9 @@ function onMenuOpenChange(open: boolean): void {
         oninput={(v) => { editName = v; }}
         onenter={commitEdit}
       />
-      <div class="swatch-row" role="radiogroup" aria-label="Folder colour">
+      <!-- `role="group"`, not `radiogroup`: `ColorSwatch` members are `aria-pressed`
+           toggle buttons, not radios (COLORSWATCH-01). -->
+      <div class="swatch-row" role="group" aria-label="Folder colour">
         {#each colors as c (c)}
           <ColorSwatch color={c} selected={c === color} onclick={() => onSetColor?.(c)} />
         {/each}

@@ -11,7 +11,7 @@ interface Props {
   onToggle?: () => void;
   onOpenPage?: () => void;
   openPageLabel?: string;
-  label?: string;
+  ariaLabel?: string;
   badge?: string;
   busy?: boolean;
 }
@@ -25,7 +25,7 @@ const {
   onToggle,
   onOpenPage,
   openPageLabel,
-  label,
+  ariaLabel,
   badge,
   busy,
 }: Props = $props();
@@ -40,7 +40,7 @@ const {
   {onToggle}
   {onOpenPage}
   {openPageLabel}
-  {label}
+  {ariaLabel}
   {badge}
   {busy}
 />

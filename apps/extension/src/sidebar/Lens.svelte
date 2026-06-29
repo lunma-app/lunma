@@ -538,7 +538,7 @@ export function onContextMenu(_e: MouseEvent): void {
      (the legacy `onclose` behaviour). -->
 <Menu trigger="context"
   items={menuItems}
-  label={m.sidebar_smartFolderActions()}
+  ariaLabel={m.sidebar_smartFolderActions()}
   testid="smart-folder-menu"
   onOpenChange={(open) => {
     if (!open) confirmingDelete = false;

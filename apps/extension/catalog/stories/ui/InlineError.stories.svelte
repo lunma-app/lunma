@@ -40,5 +40,12 @@ const { source }: { source: string } = $props();
         <InlineError message="Couldn't reach github.com — check the base URL and that the token has repo scope." />
       </div>
     </Variant>
+    <!-- `id` lets a field point `aria-describedby` at the error (see the TextInput
+         "required + described error" story) so it re-announces on refocus. -->
+    <Variant label="associated (id)">
+      <div style="width: 18rem">
+        <InlineError id="demo-field-err" message="That token didn't work." />
+      </div>
+    </Variant>
   {/snippet}
 </Story>

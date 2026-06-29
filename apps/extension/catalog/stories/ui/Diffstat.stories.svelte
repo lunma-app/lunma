@@ -30,5 +30,9 @@ const { source }: { source: string } = $props();
     <Variant label="deletions-heavy"><Diffstat additions={6} deletions={310} /></Variant>
     <Variant label="additions only"><Diffstat additions={47} /></Variant>
     <Variant label="deletions only"><Diffstat deletions={23} /></Variant>
+    <!-- The numerals carry a `role="img"` label so the additions/deletions
+         distinction survives without the +/− glyphs (announces e.g. "1 addition,
+         1 deletion", singular-aware — DIFFSTAT-01). -->
+    <Variant label="singular (1 / 1)"><Diffstat additions={1} deletions={1} /></Variant>
   {/snippet}
 </Story>
