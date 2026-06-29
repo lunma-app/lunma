@@ -193,8 +193,9 @@ test('a lens row activates like a pinned tab: open bound, re-click focuses, dele
   await page.getByTestId('lens-result-row').first().click();
 
   // The binding key is namespaced: sourceKey:nativeId, where the per-filter
-  // sourceKey carries the query axis → gitlab:forge.e2e.test:authored:42
-  const ITEM_KEY = 'gitlab:forge.e2e.test:authored:42';
+  // sourceKey is keyed by the account sourceId (rekey-lens-sections-by-source-id)
+  // and carries the query axis → e2e-acc:authored:42
+  const ITEM_KEY = 'e2e-acc:authored:42';
   await expect
     .poll(async () => Object.keys((await snapshot(page)).bindings[folderId] ?? {}))
     .toEqual([ITEM_KEY]);
