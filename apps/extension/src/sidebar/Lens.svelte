@@ -149,6 +149,26 @@ const danglingRefs = $derived<LensSourceRef[]>(
 // Whether any resolved section is a feed — gates the feed-only menu items.
 const hasFeedSections = $derived(sections.some((cfg) => cfg.source === 'rss'));
 
+/** Whether the lens carries an active view filter (any non-empty axis). */
+const isFilterActive = $derived(
+  (node.filter?.entities?.length ?? 0) > 0 ||
+    (node.filter?.repos?.length ?? 0) > 0 ||
+    (node.filter?.projects?.length ?? 0) > 0 ||
+    (node.filter?.feeds?.length ?? 0) > 0,
+);
+
+/** Sections to render. With a filter active, a LOADED section the filter empties
+ * (e.g. an unselected feed) is dropped so the list shows only what matches rather
+ * than a wall of "No entries yet"; a still-loading section stays visible. Without
+ * a filter, every section renders as before. */
+const visibleSections = $derived.by(() => {
+  if (!isFilterActive) return sections;
+  return sections.filter((cfg) => {
+    if ((sectionRuntime(cfg)?.state ?? 'pending') === 'pending') return true;
+    return displayItemsForSection(cfg).length > 0;
+  });
+});
+
 /** Read items for the whole folder (feed sections only). */
 const readSet = $derived(new Set(store.state.lensReadState[node.id] ?? []));
 
@@ -274,8 +294,13 @@ function displayItemsForSection(cfg: ResolvedLensSource): LensItem[] {
       return cfg.baseUrl;
     }
   })();
+  // The feed name for this section's articles (the source's display name, host as
+  // fallback) — mirrors the overview's `feedLabel`, so a `feeds` filter matches
+  // here too. Without it every row had `feedName: undefined`, so an active feed
+  // filter failed the article scope axis and emptied the whole sidebar.
+  const feedName = cfg.name ?? host;
   const filterResult = applyLensFilter(
-    ordered.map((item) => ({ item, host })),
+    ordered.map((item) => ({ item, host, feedName })),
     node.filter ?? {},
   );
   const filtered = filterResult.map((r) => r.item);
@@ -359,12 +384,6 @@ const badge = $derived.by<string | undefined>(() => {
   if (total === 0) return undefined;
   return anyCapped ? `${total}+` : String(total);
 });
-
-const isFilterActive = $derived(
-  (node.filter?.entities?.length ?? 0) > 0 ||
-    (node.filter?.repos?.length ?? 0) > 0 ||
-    (node.filter?.projects?.length ?? 0) > 0,
-);
 
 function openItem(cfg: ResolvedLensSource, item: LensItem): void {
   dispatch({
@@ -576,7 +595,7 @@ export function onContextMenu(_e: MouseEvent): void {
     data-testid="smart-children"
     onpointerdown={(e) => e.stopPropagation()}
   >
-    {#each sections as cfg, sectionIndex (sourceKey(cfg))}
+    {#each visibleSections as cfg, sectionIndex (sourceKey(cfg))}
       {@const sec = sectionRuntime(cfg)}
       {@const secState = sec?.state ?? 'pending'}
       {@const secItems = displayItemsForSection(cfg)}
