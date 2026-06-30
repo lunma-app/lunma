@@ -439,7 +439,14 @@ function removeOutside(): void {
     position: absolute;
     top: calc(100% + 6px);
     left: 0;
-    right: 0;
+    /* Grow to the widest option but never narrower than the trigger nor a readable
+       floor, capped so one long label can't make a giant popover (labels ellipsise
+       past the cap — see `.opt-label`). Previously `right: 0` forced the popover to
+       the trigger width, so a compact trigger ("All feeds") opened an unreadably
+       narrow list with truncated names. */
+    min-width: max(100%, 12rem);
+    width: max-content;
+    max-width: min(24rem, 90vw);
     z-index: var(--z-dropdown);
     animation: ms-in var(--motion-fast) var(--ease-emphasised);
   }
