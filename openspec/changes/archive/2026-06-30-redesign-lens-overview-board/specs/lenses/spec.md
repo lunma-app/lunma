@@ -198,7 +198,7 @@ The **Articles** entity section of the overview SHALL render the magazine archet
 - **WHEN** the user activates the Unread toggle (labelled with the count)
 - **THEN** only the 3 unread articles render
 
-### Requirement: The lens overview filters items by scope, per entity card
+### Requirement: The lens overview filters items by type and scope
 
 The lens overview SHALL offer **scope filters** placed **inside their owning entity card** (not in a top filter bar): the distinct host-qualified `change.repo` values inside the **Changes** card, the `ticket.project` values inside the **Issues** card, and the feed-name values inside the **Articles** card. The overview SHALL NOT render an entity-**type** filter control — entities are always-visible board sections, and the per-section collapse hides a section. (The `LensFilter.entities` axis and the `applyLensFilter` type predicate remain in the data model for the sidebar and programmatic use; the overview simply authors no entity-type filter.) Each scope filter SHALL render as toggle chips when there are five or fewer of a kind, otherwise as a multi-select listbox (`MultiSelect`) that selects any number of scope values at once and, once the facet count exceeds the `MultiSelect` search threshold, surfaces an in-popover search box. The overflow control SHALL NOT reduce the axis to a single selectable value. Scope facet values SHALL be the union of values present in the held items and values currently selected, so a selection is never stranded by a transient empty fetch. Every overflow scope picker SHALL carry an accessible name — repos, projects, and feeds.
 
