@@ -1084,9 +1084,9 @@ const empty = $derived(
     display: flex;
     flex-direction: column;
     gap: 7px;
-    /* List stays a TRUE single column capped to a comfortable reading measure —
-       Grid (above) is the multi-column browse view, so the two never duplicate. */
-    max-width: 900px;
+    /* List is a full-width single column — its rows span the content measure like
+       the section header and controls above them (Grid is the multi-column browse
+       view, so the two still don't duplicate). */
   }
   /* Card / row are containers (position context for the corner toggle); `.art-open`
      is the clickable area, `.art-read` the read/unread toggle button. */
