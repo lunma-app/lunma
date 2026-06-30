@@ -193,17 +193,34 @@ rather than assumed. Specifically:
 - The non-text boundary of an idle (unfocused) form control — the
   `TextInput`/`Select` border-or-fill against the surface behind it — SHALL meet
   the 3:1 non-text contrast minimum (WCAG 1.4.11) in both themes.
+- The non-text boundary of a free-floating interactive control that is not a
+  form field — e.g. the `SpaceSwitcher` dashed "add Space" tile — SHALL use
+  `--border-strong` (not the decorative `--border`, which is intentionally below
+  the floor) so it meets the 3:1 non-text minimum (WCAG 1.4.11) on
+  `--surface`/`--surface-2`/`--bg` in both themes. The decorative `--border`
+  SHALL NOT be used as the visible boundary of an interactive control.
 - Informative, normal-size text (≤ `--text-xs`/11px regular metadata such as the
   `TabRow` `.meta` line and the `Menu` section-kind label) SHALL meet the 4.5:1
   normal-text minimum on every surface it renders on, in both themes; tokens
   whose contract floor is only AA-Large (3:1, e.g. `--text-faint`) SHALL be
   restricted to genuinely incidental/decorative/disabled text.
+- An accent-coloured section label (e.g. the lens `OverviewPage` "Review
+  requests" group head) SHALL be coloured with the theme-aware `--accent-heading`
+  token rather than an inline `oklch(var(--accent-text-l) …)` literal, so it
+  meets the 4.5:1 normal-text minimum on `--surface`/`--surface-2`/`--bg`/
+  `--surface-3` in both themes.
 - The status tokens `--success`, `--warning`, `--info`, and `--danger` — which
   drive the PR/CI marks (`Lens` status dots, `Diffstat` `+N −N` text and bars,
   `ReviewerRail` verdict glyphs) and render as both small text and graphical
   marks — SHALL each carry a `[data-theme='light']` expression so they meet the
   4.5:1 normal-text minimum on `--surface`/`--surface-2`/`--bg` and the 3:1
   non-text minimum on the `--surface-3` Diffstat track, in both themes.
+- Icon glyph fills that carry status or Space identity — the `OverviewPage` `.ci`
+  CI glyph and the `SpaceSwitcher` active-chip `.tile` glyph — SHALL compose a
+  theme-aware token (the matching status token for the CI glyph; `--space-c` for
+  the active-chip glyph) rather than a hard-coded `oklch(0.8x …)` lightness, so
+  the glyph stays legible on its tinted backing in light theme (including a gray
+  Space, where the prior hard-coded near-white glyph was effectively invisible).
 - The derived per-Space colour-scope family (`--space-c`/`--space-c-soft`/
   `--space-c-dim`) SHALL carry a `[data-theme='light']` expression that caps the
   lightness at `min(--space-l, 0.55)`, so `--space-c` used as a non-text
@@ -213,7 +230,8 @@ rather than assumed. Specifically:
 - The automated contrast contract (`apps/extension/src/ui/contrast.test.ts`)
   SHALL parse and assert **both** the dark `:root` and the `[data-theme='light']`
   token blocks, and SHALL include the light-theme-on-glass, idle-boundary
-  non-text, and status-token pairs, so none of the above can regress unnoticed.
+  non-text, status-token, `--accent-heading`, and interactive-control
+  `--border-strong` pairs, so none of the above can regress unnoticed.
 
 #### Scenario: Reduced motion removes ambient animation
 
@@ -239,17 +257,35 @@ rather than assumed. Specifically:
 - **THEN** its boundary against the surface behind it SHALL be distinguishable at ≥3:1
 - **AND** the contrast test SHALL assert the border-vs-surface non-text pair
 
+#### Scenario: Interactive-control boundary meets the 3:1 non-text minimum
+
+- **WHEN** the `SpaceSwitcher` dashed "add Space" tile (or another free-floating interactive control) renders its boundary on `--surface`/`--surface-2`/`--bg` in either theme
+- **THEN** the boundary SHALL use `--border-strong` and meet ≥3:1 against the surface behind it
+- **AND** the contrast test SHALL assert the `--border-strong`-vs-surface non-text pair in both themes
+
 #### Scenario: Informative metadata meets the 4.5:1 normal-text floor
 
 - **WHEN** normal-size metadata (e.g. `TabRow` `.meta`, `Menu` section-kind label) renders on any surface in either theme
 - **THEN** its text colour SHALL meet ≥4.5:1 against that surface
 - **AND** `--text-faint` SHALL NOT be used for such informative text
 
+#### Scenario: Accent section label stays AA in both themes
+
+- **WHEN** the lens `OverviewPage` "Review requests" group label renders in either theme
+- **THEN** it SHALL be coloured with `--accent-heading` and meet ≥4.5:1 against `--surface`/`--surface-2`/`--bg`/`--surface-3`
+- **AND** the contrast test SHALL assert the `--accent-heading`-vs-surface pairs in both themes
+
 #### Scenario: PR/CI status colours stay AA in light theme
 
 - **WHEN** a PR/CI status mark (a `Lens` status dot, a `Diffstat` `+N −N` count or bar, or a `ReviewerRail` verdict glyph) renders in light theme using `--success`/`--warning`/`--info`/`--danger`
 - **THEN** the token SHALL meet ≥4.5:1 against `--surface`/`--surface-2`/`--bg` and ≥3:1 against the `--surface-3` Diffstat track
 - **AND** the contrast test SHALL assert each status token against those surfaces in both themes
+
+#### Scenario: Status and identity glyph fills stay legible in light theme
+
+- **WHEN** the `OverviewPage` `.ci` CI glyph or the `SpaceSwitcher` active-chip `.tile` glyph renders in light theme
+- **THEN** the glyph SHALL compose a theme-aware token (the matching status token for the CI glyph; `--space-c` for the active-chip glyph) rather than a hard-coded `oklch(0.8x …)` fill
+- **AND** the glyph SHALL stay legible on its tinted backing, including for a gray Space
 
 #### Scenario: Selected-Space identity ring meets the 3:1 non-text minimum in light theme
 
