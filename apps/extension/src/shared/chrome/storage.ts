@@ -1,6 +1,7 @@
 import { log } from '../logger';
 import { runMigrations } from '../migrations';
 import { type AppStateV17, AppStateV17Schema, CURRENT_SCHEMA_VERSION } from '../schemas';
+import { disambiguateSpaceName, normalizeSpaceName } from '../space-names';
 import { createInitialState } from '../store.svelte';
 import type { AppState } from '../types';
 
@@ -84,6 +85,14 @@ export async function persist(state: AppState): Promise<void> {
  *     tab/folder nodes AND folder `children` share one seen-set per Space);
  *   - each Space instance's `tempTabIds` — unique by tab id.
  *
+ * It additionally reasserts the Space-name uniqueness invariant on read: after
+ * the id-dedup, a normalized-name pass over `spaces` auto-disambiguates any later
+ * Space whose `normalizeSpaceName` collides with one already kept (`"Default"` →
+ * `"Default 2"`), so two same-named Spaces on disk cannot survive the load as
+ * duplicate switcher pills. First occurrence wins; no Space is dropped and no
+ * `pinnedBySpace` / `spaceInstancesByWindow` entry is rewritten (they key by id,
+ * not name) — only the colliding record's `name` changes. Idempotent.
+ *
  * Pure: the input is untouched; returns a new state only when something changed
  * (so the caller can decide whether to write the healed state back). First
  * occurrence wins and ordering is preserved; valid non-duplicate ids are never
@@ -93,7 +102,7 @@ export function dedupePersistedState(state: AppStateV17): { state: AppStateV17; 
   let changed = false;
 
   const seenSpace = new Set<string>();
-  const spaces = state.spaces.filter((s) => {
+  const idDedupedSpaces = state.spaces.filter((s) => {
     if (seenSpace.has(s.id)) {
       changed = true;
       return false;
@@ -101,6 +110,35 @@ export function dedupePersistedState(state: AppStateV17): { state: AppStateV17; 
     seenSpace.add(s.id);
     return true;
   });
+
+  // Normalized-name self-heal: run on the id-deduped list (so it never
+  // disambiguates against a duplicate-id ghost the same call is about to drop).
+  // First occurrence of each normalized name wins; a later collision is
+  // auto-disambiguated, mirroring the non-interactive rename
+  // restoreSpaceFromTrash already performs. `taken` is seeded with EVERY kept
+  // Space's normalized name first, so a collision skips a free suffix already in
+  // use elsewhere in the list (e.g. a pre-existing "Default 2" pushes the second
+  // "Default" to "Default 3"). A new array is built only when a rename fires
+  // (same-reference-when-unchanged).
+  const taken = new Set<string>();
+  const collisions: number[] = [];
+  for (const [i, space] of idDedupedSpaces.entries()) {
+    const norm = normalizeSpaceName(space.name);
+    if (taken.has(norm)) collisions.push(i);
+    else taken.add(norm);
+  }
+  let spaces = idDedupedSpaces;
+  if (collisions.length > 0) {
+    spaces = [...idDedupedSpaces];
+    for (const i of collisions) {
+      const space = spaces[i];
+      if (!space) continue;
+      const name = disambiguateSpaceName(space.name, taken);
+      taken.add(normalizeSpaceName(name));
+      spaces[i] = { ...space, name };
+    }
+    changed = true;
+  }
 
   const pinnedBySpace: AppStateV17['pinnedBySpace'] = {};
   for (const [spaceId, nodes] of Object.entries(state.pinnedBySpace)) {
