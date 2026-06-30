@@ -157,6 +157,18 @@
   --space-c-dim: oklch(var(--space-l) var(--space-chroma) var(--space-h) / 0.5);
 }
 
+/* Light theme: the per-Space hue is tuned for a dark substrate (yellow/teal/cyan/
+ * green/orange sit at L 0.73–0.87), so `--space-c` as a border/line falls below the
+ * 3:1 non-text floor on the near-white light `--surface` (yellow 1.46:1, green
+ * 2.14:1, …) — the selected-Space tile's identity ring becomes invisible. Cap the
+ * lightness at 0.55 so the ring/line clears 3:1 (worst case 3.82:1 on `--surface-2`)
+ * without shifting the hue identity. A `gray` Space (chroma 0) stays neutral. */
+[data-theme='light'] .lunma-space-scope {
+  --space-c: oklch(min(var(--space-l), 0.55) var(--space-chroma) var(--space-h));
+  --space-c-soft: oklch(min(var(--space-l), 0.55) var(--space-chroma) var(--space-h) / 0.16);
+  --space-c-dim: oklch(min(var(--space-l), 0.55) var(--space-chroma) var(--space-h) / 0.5);
+}
+
 /* ── Hue glow ────────────────────────────────────────────────────────────────
  * The active-Space coloured glow used on the highest-emphasis surfaces. `--soft`
  * is the larger, lower-opacity drop used behind panels.

@@ -198,10 +198,22 @@ rather than assumed. Specifically:
   normal-text minimum on every surface it renders on, in both themes; tokens
   whose contract floor is only AA-Large (3:1, e.g. `--text-faint`) SHALL be
   restricted to genuinely incidental/decorative/disabled text.
+- The status tokens `--success`, `--warning`, `--info`, and `--danger` — which
+  drive the PR/CI marks (`Lens` status dots, `Diffstat` `+N −N` text and bars,
+  `ReviewerRail` verdict glyphs) and render as both small text and graphical
+  marks — SHALL each carry a `[data-theme='light']` expression so they meet the
+  4.5:1 normal-text minimum on `--surface`/`--surface-2`/`--bg` and the 3:1
+  non-text minimum on the `--surface-3` Diffstat track, in both themes.
+- The derived per-Space colour-scope family (`--space-c`/`--space-c-soft`/
+  `--space-c-dim`) SHALL carry a `[data-theme='light']` expression that caps the
+  lightness at `min(--space-l, 0.55)`, so `--space-c` used as a non-text
+  boundary — the selected-Space tile's identity ring/line — meets the 3:1
+  non-text minimum on light surfaces for every Space hue, without shifting the
+  hue identity.
 - The automated contrast contract (`apps/extension/src/ui/contrast.test.ts`)
   SHALL parse and assert **both** the dark `:root` and the `[data-theme='light']`
-  token blocks, and SHALL include the light-theme-on-glass and idle-boundary
-  non-text pairs, so none of the above can regress unnoticed.
+  token blocks, and SHALL include the light-theme-on-glass, idle-boundary
+  non-text, and status-token pairs, so none of the above can regress unnoticed.
 
 #### Scenario: Reduced motion removes ambient animation
 
@@ -232,6 +244,18 @@ rather than assumed. Specifically:
 - **WHEN** normal-size metadata (e.g. `TabRow` `.meta`, `Menu` section-kind label) renders on any surface in either theme
 - **THEN** its text colour SHALL meet ≥4.5:1 against that surface
 - **AND** `--text-faint` SHALL NOT be used for such informative text
+
+#### Scenario: PR/CI status colours stay AA in light theme
+
+- **WHEN** a PR/CI status mark (a `Lens` status dot, a `Diffstat` `+N −N` count or bar, or a `ReviewerRail` verdict glyph) renders in light theme using `--success`/`--warning`/`--info`/`--danger`
+- **THEN** the token SHALL meet ≥4.5:1 against `--surface`/`--surface-2`/`--bg` and ≥3:1 against the `--surface-3` Diffstat track
+- **AND** the contrast test SHALL assert each status token against those surfaces in both themes
+
+#### Scenario: Selected-Space identity ring meets the 3:1 non-text minimum in light theme
+
+- **WHEN** the active Space chip's identity ring (`--space-c`) is rendered on the near-white light `--surface` for any Space hue
+- **THEN** the `[data-theme='light'] .lunma-space-scope` lightness cap SHALL bring `--space-c` to ≥3:1 against the surface behind it
+- **AND** the Space's hue identity SHALL be preserved (only lightness is capped)
 
 ### Requirement: Inline rename presents a chromeless field with a single row-owned focus affordance
 

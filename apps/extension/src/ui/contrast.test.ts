@@ -239,6 +239,43 @@ describe('design tokens (light theme) — WCAG 2.1 contrast', () => {
 });
 
 /**
+ * Status tokens (`--success`/`--warning`/`--info`/`--danger`) — the PR/CI state
+ * colours: Lens status dots, Diffstat +/- text & bars, ReviewerRail verdict glyphs.
+ * They render as small text (the Diffstat counts) AND as graphical marks, so they
+ * MUST clear AA Normal (4.5:1) on the list surfaces they sit on
+ * (`--surface`/`--surface-2`/`--bg`) and the non-text 3:1 floor on the Diffstat bar
+ * track (`--surface-3`). The dark `:root` brights failed this on the light
+ * `--surface` (~2.1–2.6:1) until the `[data-theme='light']` block darkened them;
+ * this gate keeps both ramps honest.
+ */
+describe('status tokens — WCAG contrast on list surfaces (both themes)', () => {
+  const themes = [
+    ['dark', readTokens()],
+    ['light', readLightTokens()],
+  ] as const;
+  const STATUS = ['--success', '--warning', '--info', '--danger'];
+  for (const [theme, toks] of themes) {
+    describe(theme, () => {
+      function need(name: string): string {
+        const v = toks.get(name);
+        if (!v) throw new Error(`tokens.css ${theme} block missing ${name}`);
+        return v;
+      }
+      for (const tok of STATUS) {
+        for (const bg of ['--surface', '--surface-2', '--bg']) {
+          test(`${tok} vs ${bg} >= 4.5:1`, () => {
+            expect(contrast(need(tok), need(bg))).toBeGreaterThanOrEqual(4.5);
+          });
+        }
+        test(`${tok} vs --surface-3 >= 3:1`, () => {
+          expect(contrast(need(tok), need('--surface-3'))).toBeGreaterThanOrEqual(3);
+        });
+      }
+    });
+  }
+});
+
+/**
  * Light-theme foreground tokens on a composited `.lunma-glass` surface
  * (harden-ui-accessibility THEME-01). `--glass-bg` now carries a light expression,
  * so a glass panel reads frosted-light in light theme; the catalog previews and any
