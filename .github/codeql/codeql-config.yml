@@ -1,0 +1,16 @@
+# CodeQL advanced-setup config.
+#
+# Default setup can't exclude paths, so committed generated runtime (Paraglide
+# messages, the icon-loaders barrel) gets flagged by CodeQL Code Quality (e.g.
+# "Useless conditional" in paraglide/messages/_index.js). Advanced setup with
+# this config excludes those — they're kept byte-identical to codegen output and
+# are never hand-edited (see .gitattributes: linguist-generated). Real source is
+# still scanned for both security and quality (security-and-quality suite).
+name: Lunma CodeQL config
+
+queries:
+  - uses: security-and-quality
+
+paths-ignore:
+  - 'apps/extension/src/shared/paraglide/**'
+  - 'apps/extension/src/ui/icon-loaders.generated.ts'

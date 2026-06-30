@@ -78,6 +78,20 @@ another Space's name SHALL be resolved through `disambiguateSpaceName` (and the 
 group re-titled to the disambiguated name so group and record stay in lockstep), never
 left to throw inside the drain.
 
+**4. The load-path self-heal SHALL reassert uniqueness.** When persisted state is read,
+`dedupePersistedState` (`apps/extension/src/shared/chrome/storage.ts`) SHALL enforce
+normalized-name uniqueness over `state.spaces` alongside its existing id-dedup, so a
+state that already holds two same-normalized-name Spaces on disk cannot survive the load
+unchanged. The pass SHALL iterate `state.spaces` in order, keep the FIRST occurrence of
+each normalized name unchanged, and for each later Space whose `normalizeSpaceName`
+collides with one already kept, re-derive its display name via
+`disambiguateSpaceName(space.name, takenNormalized)` against the names already kept this
+pass. No Space SHALL be dropped and no `pinnedBySpace` / `spaceInstancesByWindow` entry
+SHALL be rewritten — only the colliding record's `name` changes. Any rename SHALL mark
+the result `changed`, so the existing read-path write-back persists the healed envelope
+on first load. The pass SHALL be idempotent (a second load of the healed state renames
+nothing).
+
 #### Scenario: Creating a Space with an in-use name is rejected
 
 - **GIVEN** `state.spaces` already contains a Space named "Work"
@@ -111,6 +125,15 @@ left to throw inside the drain.
 - **WHEN** `tabGroups.onUpdated` mirrors the title change
 - **THEN** "Side" SHALL be renamed to a disambiguated "Work 2" (its Chrome group re-titled to match), NOT to a duplicate "Work"
 - **AND** the drain SHALL complete without throwing
+
+#### Scenario: Loading a state with duplicate-named Spaces disambiguates on read
+
+- **GIVEN** persisted `state.spaces` holds two distinct-id Spaces both named "Default" (followed by a third named "Default 2")
+- **WHEN** `readPersistedState` runs `dedupePersistedState` on the loaded state
+- **THEN** the first "Default" SHALL keep its name, the second SHALL be renamed to "Default 3" (the first free normalized form, skipping the already-present "Default 2"), and the third SHALL remain "Default 2"
+- **AND** all three Spaces and their `pinnedBySpace` entries SHALL be preserved
+- **AND** the result SHALL be marked `changed` so the healed envelope is written back
+- **AND** loading the healed state again SHALL rename nothing
 
 ### Requirement: Space materialization as tab groups
 
