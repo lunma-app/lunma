@@ -276,6 +276,65 @@ describe('status tokens — WCAG contrast on list surfaces (both themes)', () =>
 });
 
 /**
+ * `--accent-heading` — the accent-coloured uppercase section label (the lens
+ * OverviewPage "Review requests"/"waiting on you" group head). It renders as
+ * small text, so it MUST clear AA Normal (4.5:1) on the list surfaces it sits on.
+ * It previously used an inline `oklch(var(--accent-text-l) 0.09 252)`, which left
+ * the dark-theme lightness on the light surface (~1.7:1); this gate keeps the
+ * shared heading token honest in both themes.
+ */
+describe('--accent-heading — WCAG AA on list surfaces (both themes)', () => {
+  const themes = [
+    ['dark', readTokens()],
+    ['light', readLightTokens()],
+  ] as const;
+  for (const [theme, toks] of themes) {
+    describe(theme, () => {
+      function need(name: string): string {
+        const v = toks.get(name);
+        if (!v) throw new Error(`tokens.css ${theme} block missing ${name}`);
+        return v;
+      }
+      for (const bg of ['--surface', '--surface-2', '--bg', '--surface-3']) {
+        test(`--accent-heading vs ${bg} >= 4.5:1`, () => {
+          expect(contrast(need('--accent-heading'), need(bg))).toBeGreaterThanOrEqual(4.5);
+        });
+      }
+    });
+  }
+});
+
+/**
+ * Interactive control borders — the visible boundary of active UI components
+ * (the dashed "add Space" tile in `SpaceSwitcher`). WCAG 1.4.11 requires 3:1 for
+ * such boundaries. The decorative `--border` (~1.45:1 on the light surface) is
+ * intentionally below this and is NOT used on interactive controls; `--border-strong`
+ * is the AA-safe choice and clears the non-text floor on every list surface in both
+ * themes. (`--border-field` is the field-on-base-surface token — it sits at ~2.98:1
+ * on the dark `--surface-2`, so it is deliberately not used for free-floating chips.)
+ */
+describe('interactive borders — WCAG non-text 3:1 (both themes)', () => {
+  const themes = [
+    ['dark', readTokens()],
+    ['light', readLightTokens()],
+  ] as const;
+  for (const [theme, toks] of themes) {
+    describe(theme, () => {
+      function need(name: string): string {
+        const v = toks.get(name);
+        if (!v) throw new Error(`tokens.css ${theme} block missing ${name}`);
+        return v;
+      }
+      for (const bg of ['--surface', '--surface-2', '--bg']) {
+        test(`--border-strong vs ${bg} >= 3:1`, () => {
+          expect(contrast(need('--border-strong'), need(bg))).toBeGreaterThanOrEqual(3);
+        });
+      }
+    });
+  }
+});
+
+/**
  * Light-theme foreground tokens on a composited `.lunma-glass` surface
  * (harden-ui-accessibility THEME-01). `--glass-bg` now carries a light expression,
  * so a glass panel reads frosted-light in light theme; the catalog previews and any

@@ -309,7 +309,7 @@ const empty = $derived(
                         {#if t.item.change}
                           <span class="row-right">
                             {#if ci}
-                              <span class="ci" class:hollow={ci.draft} style:--ci-h={String(ci.hue)} title={ci.label} aria-hidden="true">{ci.glyph}</span>
+                              <span class="ci" class:hollow={ci.draft} class:ci--passed={ci.tone === 'passed'} class:ci--failing={ci.tone === 'failing'} class:ci--running={ci.tone === 'running'} title={ci.label} aria-hidden="true">{ci.glyph}</span>
                             {/if}
                             <ReviewerRail reviewers={reviewersForRail(t.item.change)} />
                             <Diffstat additions={t.item.change.additions} deletions={t.item.change.deletions} />
@@ -869,7 +869,11 @@ const empty = $derived(
     color: var(--text-dim);
   }
   .group-label.waiting {
-    color: oklch(var(--accent-text-l) 0.09 252);
+    /* The accent "waiting on you" heading. Use the theme-aware, contrast-gated
+     * `--accent-heading` token rather than an inline `oklch(var(--accent-text-l) …)`:
+     * the raw lightness channel left this label at the dark-theme value (~1.7:1) on
+     * the light surface. Gated in contrast.test.ts. */
+    color: var(--accent-heading);
   }
   .group-count {
     padding: 0 7px;
@@ -982,8 +986,21 @@ const empty = $derived(
     border-radius: var(--r-pill);
     font-size: 9px;
     font-weight: var(--weight-bold);
-    color: oklch(0.82 0.1 var(--ci-h));
-    background: oklch(0.55 0.13 var(--ci-h) / 0.2);
+  }
+  /* CI glyph composes the theme-aware status tokens (which carry both-theme
+     contrast gates) instead of a hard-coded ~0.82 lightness that washed out on
+     light paper; the CI hues map exactly onto the status tokens. */
+  .ci--passed {
+    color: var(--success);
+    background: color-mix(in oklch, var(--success) 18%, transparent);
+  }
+  .ci--failing {
+    color: var(--danger);
+    background: color-mix(in oklch, var(--danger) 18%, transparent);
+  }
+  .ci--running {
+    color: var(--warning);
+    background: color-mix(in oklch, var(--warning) 18%, transparent);
   }
   /* Draft: a hollow ring (no fill) so the locus reads as "not yet under CI",
      distinguished by shape, not colour alone. */

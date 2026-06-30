@@ -387,8 +387,13 @@ function openOptions(): void {
     justify-content: center;
     color: var(--text-muted);
   }
+  /* The active glyph reads the same theme-aware, contrast-capped `--space-c` the
+     chip's identity ring uses, so glyph and ring share one identity and the icon
+     darkens correctly on the light `--space-c-soft` fill (a gray Space's glyph
+     becomes the neutral `--space-c` rather than the prior near-white 0.84, which
+     was effectively invisible on light paper). */
   .chip[data-active='true'] .tile {
-    color: oklch(0.84 var(--space-chroma, 0.13) var(--space-h));
+    color: var(--space-c);
   }
 
   /* Settings cluster, pushed to the bar's trailing edge (chips + the add-chip
@@ -400,12 +405,15 @@ function openOptions(): void {
     gap: var(--space-1);
   }
 
-  /* Dashed "add Space" tile (comp's `--text-faint` glyph on a dashed `--border`
-   * outline); hover lifts the glyph + border per the comp. */
+  /* Dashed "add Space" tile (comp's `--text-faint` glyph on a dashed outline);
+   * hover lifts the glyph + border per the comp. The outline uses `--border-strong`,
+   * not the decorative `--border`: this is an interactive control, so its boundary
+   * must clear the WCAG 3:1 non-text floor (decorative `--border` is ~1.45:1 on the
+   * light surface). Gated in contrast.test.ts. */
   .chip-add {
     background: transparent;
     color: var(--text-faint);
-    border: 1px dashed var(--border);
+    border: 1px dashed var(--border-strong);
   }
   .chip-add:hover {
     background: transparent;
