@@ -937,6 +937,71 @@ describe('dedupePersistedState', () => {
     expect(changed).toBe(false);
     expect(out).toBe(state);
   });
+
+  test('disambiguates duplicate-named spaces on load (first wins, skips an in-use suffix)', () => {
+    const state = createInitialState();
+    state.spaces = [
+      { id: 's1', name: 'Default', color: 'blue', icon: 'star' },
+      { id: 's2', name: 'Default', color: 'red', icon: 'book' },
+      { id: 's3', name: 'Default 2', color: 'orange', icon: 'book' },
+    ];
+    state.pinnedBySpace = {
+      s1: [{ kind: 'tab', id: 'a' }],
+      s2: [{ kind: 'tab', id: 'b' }],
+      s3: [{ kind: 'tab', id: 'c' }],
+    };
+    const { state: out, changed } = dedupePersistedState(state);
+    expect(changed).toBe(true);
+    // First "Default" kept; second skips the already-present "Default 2" → "Default 3".
+    expect(out.spaces.map((s) => s.name)).toEqual(['Default', 'Default 3', 'Default 2']);
+    expect(out.spaces.map((s) => s.id)).toEqual(['s1', 's2', 's3']);
+    // No Space dropped, every pinnedBySpace entry preserved untouched.
+    expect(out.pinnedBySpace).toEqual({
+      s1: [{ kind: 'tab', id: 'a' }],
+      s2: [{ kind: 'tab', id: 'b' }],
+      s3: [{ kind: 'tab', id: 'c' }],
+    });
+  });
+
+  test('the name self-heal is idempotent (a second load renames nothing)', () => {
+    const state = createInitialState();
+    state.spaces = [
+      { id: 's1', name: 'Default', color: 'blue', icon: 'star' },
+      { id: 's2', name: 'Default', color: 'red', icon: 'book' },
+      { id: 's3', name: 'Default 2', color: 'orange', icon: 'book' },
+    ];
+    const healed = dedupePersistedState(state).state;
+    const { state: out, changed } = dedupePersistedState(healed);
+    expect(changed).toBe(false);
+    expect(out).toBe(healed);
+  });
+
+  test('a state with unique space names returns the same reference (changed=false)', () => {
+    const state = createInitialState();
+    state.spaces = [
+      { id: 'work', name: 'Work', color: 'blue', icon: 'star' },
+      { id: 'read', name: 'Read', color: 'orange', icon: 'book' },
+    ];
+    const { state: out, changed } = dedupePersistedState(state);
+    expect(changed).toBe(false);
+    expect(out).toBe(state);
+    expect(out.spaces).toBe(state.spaces);
+  });
+
+  test('heals an id-duplicate and a name-duplicate in one pass (name pass runs on the id-deduped list)', () => {
+    const state = createInitialState();
+    state.spaces = [
+      { id: 'work', name: 'Work', color: 'blue', icon: 'star' },
+      { id: 'work', name: 'Work dup-id', color: 'red', icon: 'book' },
+      { id: 'read', name: 'Work', color: 'orange', icon: 'book' },
+    ];
+    const { state: out, changed } = dedupePersistedState(state);
+    expect(changed).toBe(true);
+    // The dup-id "work" is dropped first; the name pass then sees only ['Work','Work']
+    // by id (work, read) and disambiguates the second to "Work 2".
+    expect(out.spaces.map((s) => s.id)).toEqual(['work', 'read']);
+    expect(out.spaces.map((s) => s.name)).toEqual(['Work', 'Work 2']);
+  });
 });
 
 describe('salvagePersistedState', () => {
