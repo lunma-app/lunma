@@ -1,0 +1,51 @@
+# CodeQL advanced setup — replaces GitHub-managed default setup so we can exclude
+# committed generated runtime from analysis (see .github/codeql/codeql-config.yml).
+# Matches default setup's coverage: `actions` + `javascript-typescript`, security
+# AND quality (security-and-quality suite).
+#
+# NOTE: default setup MUST be disabled in repo Settings → Code security → CodeQL
+# analysis (switch to Advanced) or this workflow's results won't upload.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '31 4 * * 1'
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: javascript-typescript
+            build-mode: none
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: '/language:${{ matrix.language }}'
