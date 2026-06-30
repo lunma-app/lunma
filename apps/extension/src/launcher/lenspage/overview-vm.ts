@@ -284,15 +284,25 @@ export function reviewersForRail(change: ChangeData): RailReviewer[] {
 /** The Changes-row CI light from the status tone, or a distinct hollow glyph when
  * the change is a draft (`draft` takes the locus over CI). Null when neither a
  * draft nor a known tone — the row renders no light. */
-export function ciLight(
-  item: LensItem,
-): { glyph: string; hue: number; label: string; draft: boolean } | null {
+export function ciLight(item: LensItem): {
+  glyph: string;
+  hue: number;
+  label: string;
+  draft: boolean;
+  /** Status discriminant the comp maps to a theme-aware status token
+   * (`--success`/`--danger`/`--warning`); absent for the draft locus, which
+   * renders as the neutral `.hollow` ring. `hue` is retained for the draft case
+   * and any existing consumers. */
+  tone?: 'passed' | 'failing' | 'running';
+} | null {
   if (item.change?.draft) return { glyph: '○', hue: 252, label: 'Draft', draft: true };
   const tone = item.status?.tone;
   if (tone === 'ok' || tone === 'warn')
-    return { glyph: '✓', hue: 150, label: 'CI passed', draft: false };
-  if (tone === 'fail') return { glyph: '✕', hue: 25, label: 'CI failing', draft: false };
-  if (tone === 'pending') return { glyph: '●', hue: 75, label: 'CI running', draft: false };
+    return { glyph: '✓', hue: 150, label: 'CI passed', draft: false, tone: 'passed' };
+  if (tone === 'fail')
+    return { glyph: '✕', hue: 25, label: 'CI failing', draft: false, tone: 'failing' };
+  if (tone === 'pending')
+    return { glyph: '●', hue: 75, label: 'CI running', draft: false, tone: 'running' };
   return null;
 }
 
