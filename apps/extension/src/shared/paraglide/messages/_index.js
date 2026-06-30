@@ -255,12 +255,16 @@ import { getLocale, experimentalStaticLocale } from "../runtime.js"
 /** @typedef {{}} Sidebar_Boundarypagehelp2Inputs */
 /** @typedef {{}} Sidebar_Boundarypageslabel2Inputs */
 /** @typedef {{}} Launcher_Lensclearfilter2Inputs */
-/** @typedef {{}} Launcher_Lensinclci2Inputs */
 /** @typedef {{ count: NonNullable<unknown> }} Launcher_Lensunread1Inputs */
 /** @typedef {{}} Launcher_Lensarticlelayout2Inputs */
 /** @typedef {{}} Launcher_Lensgrid1Inputs */
 /** @typedef {{}} Launcher_Lenslist1Inputs */
 /** @typedef {{}} Launcher_Lensempty1Inputs */
+/** @typedef {{}} Launcher_Lenswaitingonyou3Inputs */
+/** @typedef {{}} Launcher_Lensreasonreview2Inputs */
+/** @typedef {{}} Launcher_Lensreasonci2Inputs */
+/** @typedef {{}} Launcher_Lensreasonassigned2Inputs */
+/** @typedef {{}} Launcher_Lensunassigned1Inputs */
 /** @typedef {{}} Options_Accountsgrouptitle2Inputs */
 /** @typedef {{}} Options_Connectionsheading1Inputs */
 /** @typedef {{}} Options_Backupheading1Inputs */
@@ -5883,28 +5887,6 @@ export { launcher_lensclearfilter2 as "launcher_lensClearFilter" }
 /**
 * | output |
 * | --- |
-* | "incl. CI" |
-*
-* @param {Launcher_Lensinclci2Inputs} inputs
-* @param {{ locale?: "en" | "es" | "pt-PT" | "fr" | "de" | "ja" | "ko" | "zh-CN" | "ru" }} options
-* @returns {LocalizedString}
-*/
-const launcher_lensinclci2 = /** @type {((inputs?: Launcher_Lensinclci2Inputs, options?: { locale?: "en" | "es" | "pt-PT" | "fr" | "de" | "ja" | "ko" | "zh-CN" | "ru" }) => LocalizedString) & import('../runtime.js').MessageMetadata<Launcher_Lensinclci2Inputs, { locale?: "en" | "es" | "pt-PT" | "fr" | "de" | "ja" | "ko" | "zh-CN" | "ru" }, {}>} */ ((inputs = {}, options = {}) => {
-	const locale = experimentalStaticLocale ?? options.locale ?? getLocale()
-	if (locale === "en") return __en.launcher_lensinclci2(inputs)
-	if (locale === "es") return __es.launcher_lensinclci2(inputs)
-	if (locale === "pt-PT") return __pt_pt2.launcher_lensinclci2(inputs)
-	if (locale === "fr") return __fr.launcher_lensinclci2(inputs)
-	if (locale === "de") return __de.launcher_lensinclci2(inputs)
-	if (locale === "ja") return __ja.launcher_lensinclci2(inputs)
-	if (locale === "ko") return __ko.launcher_lensinclci2(inputs)
-	if (locale === "zh-CN") return __zh_cn2.launcher_lensinclci2(inputs)
-	return __ru.launcher_lensinclci2(inputs)
-});
-export { launcher_lensinclci2 as "launcher_lensInclCi" }
-/**
-* | output |
-* | --- |
 * | "Unread · {count}" |
 *
 * @param {Launcher_Lensunread1Inputs} inputs
@@ -6012,6 +5994,116 @@ const launcher_lensempty1 = /** @type {((inputs?: Launcher_Lensempty1Inputs, opt
 	return __ru.launcher_lensempty1(inputs)
 });
 export { launcher_lensempty1 as "launcher_lensEmpty" }
+/**
+* | output |
+* | --- |
+* | "Waiting on you" |
+*
+* @param {Launcher_Lenswaitingonyou3Inputs} inputs
+* @param {{ locale?: "en" | "es" | "pt-PT" | "fr" | "de" | "ja" | "ko" | "zh-CN" | "ru" }} options
+* @returns {LocalizedString}
+*/
+const launcher_lenswaitingonyou3 = /** @type {((inputs?: Launcher_Lenswaitingonyou3Inputs, options?: { locale?: "en" | "es" | "pt-PT" | "fr" | "de" | "ja" | "ko" | "zh-CN" | "ru" }) => LocalizedString) & import('../runtime.js').MessageMetadata<Launcher_Lenswaitingonyou3Inputs, { locale?: "en" | "es" | "pt-PT" | "fr" | "de" | "ja" | "ko" | "zh-CN" | "ru" }, {}>} */ ((inputs = {}, options = {}) => {
+	const locale = experimentalStaticLocale ?? options.locale ?? getLocale()
+	if (locale === "en") return __en.launcher_lenswaitingonyou3(inputs)
+	if (locale === "es") return __es.launcher_lenswaitingonyou3(inputs)
+	if (locale === "pt-PT") return __pt_pt2.launcher_lenswaitingonyou3(inputs)
+	if (locale === "fr") return __fr.launcher_lenswaitingonyou3(inputs)
+	if (locale === "de") return __de.launcher_lenswaitingonyou3(inputs)
+	if (locale === "ja") return __ja.launcher_lenswaitingonyou3(inputs)
+	if (locale === "ko") return __ko.launcher_lenswaitingonyou3(inputs)
+	if (locale === "zh-CN") return __zh_cn2.launcher_lenswaitingonyou3(inputs)
+	return __ru.launcher_lenswaitingonyou3(inputs)
+});
+export { launcher_lenswaitingonyou3 as "launcher_lensWaitingOnYou" }
+/**
+* | output |
+* | --- |
+* | "review requested" |
+*
+* @param {Launcher_Lensreasonreview2Inputs} inputs
+* @param {{ locale?: "en" | "es" | "pt-PT" | "fr" | "de" | "ja" | "ko" | "zh-CN" | "ru" }} options
+* @returns {LocalizedString}
+*/
+const launcher_lensreasonreview2 = /** @type {((inputs?: Launcher_Lensreasonreview2Inputs, options?: { locale?: "en" | "es" | "pt-PT" | "fr" | "de" | "ja" | "ko" | "zh-CN" | "ru" }) => LocalizedString) & import('../runtime.js').MessageMetadata<Launcher_Lensreasonreview2Inputs, { locale?: "en" | "es" | "pt-PT" | "fr" | "de" | "ja" | "ko" | "zh-CN" | "ru" }, {}>} */ ((inputs = {}, options = {}) => {
+	const locale = experimentalStaticLocale ?? options.locale ?? getLocale()
+	if (locale === "en") return __en.launcher_lensreasonreview2(inputs)
+	if (locale === "es") return __es.launcher_lensreasonreview2(inputs)
+	if (locale === "pt-PT") return __pt_pt2.launcher_lensreasonreview2(inputs)
+	if (locale === "fr") return __fr.launcher_lensreasonreview2(inputs)
+	if (locale === "de") return __de.launcher_lensreasonreview2(inputs)
+	if (locale === "ja") return __ja.launcher_lensreasonreview2(inputs)
+	if (locale === "ko") return __ko.launcher_lensreasonreview2(inputs)
+	if (locale === "zh-CN") return __zh_cn2.launcher_lensreasonreview2(inputs)
+	return __ru.launcher_lensreasonreview2(inputs)
+});
+export { launcher_lensreasonreview2 as "launcher_lensReasonReview" }
+/**
+* | output |
+* | --- |
+* | "CI failing" |
+*
+* @param {Launcher_Lensreasonci2Inputs} inputs
+* @param {{ locale?: "en" | "es" | "pt-PT" | "fr" | "de" | "ja" | "ko" | "zh-CN" | "ru" }} options
+* @returns {LocalizedString}
+*/
+const launcher_lensreasonci2 = /** @type {((inputs?: Launcher_Lensreasonci2Inputs, options?: { locale?: "en" | "es" | "pt-PT" | "fr" | "de" | "ja" | "ko" | "zh-CN" | "ru" }) => LocalizedString) & import('../runtime.js').MessageMetadata<Launcher_Lensreasonci2Inputs, { locale?: "en" | "es" | "pt-PT" | "fr" | "de" | "ja" | "ko" | "zh-CN" | "ru" }, {}>} */ ((inputs = {}, options = {}) => {
+	const locale = experimentalStaticLocale ?? options.locale ?? getLocale()
+	if (locale === "en") return __en.launcher_lensreasonci2(inputs)
+	if (locale === "es") return __es.launcher_lensreasonci2(inputs)
+	if (locale === "pt-PT") return __pt_pt2.launcher_lensreasonci2(inputs)
+	if (locale === "fr") return __fr.launcher_lensreasonci2(inputs)
+	if (locale === "de") return __de.launcher_lensreasonci2(inputs)
+	if (locale === "ja") return __ja.launcher_lensreasonci2(inputs)
+	if (locale === "ko") return __ko.launcher_lensreasonci2(inputs)
+	if (locale === "zh-CN") return __zh_cn2.launcher_lensreasonci2(inputs)
+	return __ru.launcher_lensreasonci2(inputs)
+});
+export { launcher_lensreasonci2 as "launcher_lensReasonCi" }
+/**
+* | output |
+* | --- |
+* | "assigned to you" |
+*
+* @param {Launcher_Lensreasonassigned2Inputs} inputs
+* @param {{ locale?: "en" | "es" | "pt-PT" | "fr" | "de" | "ja" | "ko" | "zh-CN" | "ru" }} options
+* @returns {LocalizedString}
+*/
+const launcher_lensreasonassigned2 = /** @type {((inputs?: Launcher_Lensreasonassigned2Inputs, options?: { locale?: "en" | "es" | "pt-PT" | "fr" | "de" | "ja" | "ko" | "zh-CN" | "ru" }) => LocalizedString) & import('../runtime.js').MessageMetadata<Launcher_Lensreasonassigned2Inputs, { locale?: "en" | "es" | "pt-PT" | "fr" | "de" | "ja" | "ko" | "zh-CN" | "ru" }, {}>} */ ((inputs = {}, options = {}) => {
+	const locale = experimentalStaticLocale ?? options.locale ?? getLocale()
+	if (locale === "en") return __en.launcher_lensreasonassigned2(inputs)
+	if (locale === "es") return __es.launcher_lensreasonassigned2(inputs)
+	if (locale === "pt-PT") return __pt_pt2.launcher_lensreasonassigned2(inputs)
+	if (locale === "fr") return __fr.launcher_lensreasonassigned2(inputs)
+	if (locale === "de") return __de.launcher_lensreasonassigned2(inputs)
+	if (locale === "ja") return __ja.launcher_lensreasonassigned2(inputs)
+	if (locale === "ko") return __ko.launcher_lensreasonassigned2(inputs)
+	if (locale === "zh-CN") return __zh_cn2.launcher_lensreasonassigned2(inputs)
+	return __ru.launcher_lensreasonassigned2(inputs)
+});
+export { launcher_lensreasonassigned2 as "launcher_lensReasonAssigned" }
+/**
+* | output |
+* | --- |
+* | "Unassigned" |
+*
+* @param {Launcher_Lensunassigned1Inputs} inputs
+* @param {{ locale?: "en" | "es" | "pt-PT" | "fr" | "de" | "ja" | "ko" | "zh-CN" | "ru" }} options
+* @returns {LocalizedString}
+*/
+const launcher_lensunassigned1 = /** @type {((inputs?: Launcher_Lensunassigned1Inputs, options?: { locale?: "en" | "es" | "pt-PT" | "fr" | "de" | "ja" | "ko" | "zh-CN" | "ru" }) => LocalizedString) & import('../runtime.js').MessageMetadata<Launcher_Lensunassigned1Inputs, { locale?: "en" | "es" | "pt-PT" | "fr" | "de" | "ja" | "ko" | "zh-CN" | "ru" }, {}>} */ ((inputs = {}, options = {}) => {
+	const locale = experimentalStaticLocale ?? options.locale ?? getLocale()
+	if (locale === "en") return __en.launcher_lensunassigned1(inputs)
+	if (locale === "es") return __es.launcher_lensunassigned1(inputs)
+	if (locale === "pt-PT") return __pt_pt2.launcher_lensunassigned1(inputs)
+	if (locale === "fr") return __fr.launcher_lensunassigned1(inputs)
+	if (locale === "de") return __de.launcher_lensunassigned1(inputs)
+	if (locale === "ja") return __ja.launcher_lensunassigned1(inputs)
+	if (locale === "ko") return __ko.launcher_lensunassigned1(inputs)
+	if (locale === "zh-CN") return __zh_cn2.launcher_lensunassigned1(inputs)
+	return __ru.launcher_lensunassigned1(inputs)
+});
+export { launcher_lensunassigned1 as "launcher_lensUnassigned" }
 /**
 * | output |
 * | --- |

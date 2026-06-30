@@ -306,7 +306,6 @@
   "sidebar_boundaryPageHelp": "이 페이지 외부 링크는 새 탭에서 열립니다.",
   "sidebar_boundaryPagesLabel": "이 탭이 머무는 페이지",
   "launcher_lensClearFilter": "필터 지우기",
-  "launcher_lensInclCi": "CI 포함",
   "launcher_lensUnread": "읽지 않음 · {count}",
   "launcher_lensArticleLayout": "기사 레이아웃",
   "launcher_lensGrid": "그리드",
@@ -388,5 +387,10 @@
   "sidebar_lensRoleReviewing": "검토 중",
   "sidebar_spaceEditAria": "{name} 편집",
   "sidebar_favDropHint": "여기에 놓아 즐겨찾기에 추가",
-  "sidebar_favDragHint": "탭을 여기로 드래그하여 즐겨찾기에 추가하세요."
+  "sidebar_favDragHint": "탭을 여기로 드래그하여 즐겨찾기에 추가하세요.",
+  "launcher_lensWaitingOnYou": "Waiting on you",
+  "launcher_lensReasonReview": "review requested",
+  "launcher_lensReasonCi": "CI failing",
+  "launcher_lensReasonAssigned": "assigned to you",
+  "launcher_lensUnassigned": "Unassigned"
 }

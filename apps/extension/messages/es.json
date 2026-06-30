@@ -310,7 +310,6 @@
   "sidebar_boundaryPageHelp": "Los enlaces fuera de esta página se abren en una nueva pestaña.",
   "sidebar_boundaryPagesLabel": "Páginas en las que permanece esta pestaña",
   "launcher_lensClearFilter": "Limpiar filtro",
-  "launcher_lensInclCi": "incl. CI",
   "launcher_lensUnread": "Sin leer · {count}",
   "launcher_lensArticleLayout": "Vista de artículos",
   "launcher_lensGrid": "Cuadrícula",
@@ -393,5 +392,10 @@
   "sidebar_lensRoleReviewing": "Revisando",
   "sidebar_spaceEditAria": "Editar {name}",
   "sidebar_favDropHint": "Soltar para añadir a favoritos",
-  "sidebar_favDragHint": "Arrastra una pestaña aquí para añadirla a favoritos."
+  "sidebar_favDragHint": "Arrastra una pestaña aquí para añadirla a favoritos.",
+  "launcher_lensWaitingOnYou": "Waiting on you",
+  "launcher_lensReasonReview": "review requested",
+  "launcher_lensReasonCi": "CI failing",
+  "launcher_lensReasonAssigned": "assigned to you",
+  "launcher_lensUnassigned": "Unassigned"
 }

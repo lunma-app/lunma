@@ -318,7 +318,6 @@
   "sidebar_boundaryPageHelp": "Ссылки с этой страницы открываются в новой вкладке.",
   "sidebar_boundaryPagesLabel": "Страницы этой вкладки",
   "launcher_lensClearFilter": "Сбросить фильтр",
-  "launcher_lensInclCi": "вкл. CI",
   "launcher_lensUnread": "Непрочитанные · {count}",
   "launcher_lensArticleLayout": "Вид статей",
   "launcher_lensGrid": "Сетка",
@@ -403,5 +402,10 @@
   "sidebar_lensRoleReviewing": "На проверке",
   "sidebar_spaceEditAria": "Изменить {name}",
   "sidebar_favDropHint": "Перетащите, чтобы добавить в избранное",
-  "sidebar_favDragHint": "Перетащите вкладку сюда, чтобы добавить в избранное."
+  "sidebar_favDragHint": "Перетащите вкладку сюда, чтобы добавить в избранное.",
+  "launcher_lensWaitingOnYou": "Waiting on you",
+  "launcher_lensReasonReview": "review requested",
+  "launcher_lensReasonCi": "CI failing",
+  "launcher_lensReasonAssigned": "assigned to you",
+  "launcher_lensUnassigned": "Unassigned"
 }

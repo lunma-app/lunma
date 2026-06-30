@@ -253,12 +253,16 @@
 /** @typedef {{}} Sidebar_Boundarypagehelp2Inputs */
 /** @typedef {{}} Sidebar_Boundarypageslabel2Inputs */
 /** @typedef {{}} Launcher_Lensclearfilter2Inputs */
-/** @typedef {{}} Launcher_Lensinclci2Inputs */
 /** @typedef {{ count: NonNullable<unknown> }} Launcher_Lensunread1Inputs */
 /** @typedef {{}} Launcher_Lensarticlelayout2Inputs */
 /** @typedef {{}} Launcher_Lensgrid1Inputs */
 /** @typedef {{}} Launcher_Lenslist1Inputs */
 /** @typedef {{}} Launcher_Lensempty1Inputs */
+/** @typedef {{}} Launcher_Lenswaitingonyou3Inputs */
+/** @typedef {{}} Launcher_Lensreasonreview2Inputs */
+/** @typedef {{}} Launcher_Lensreasonci2Inputs */
+/** @typedef {{}} Launcher_Lensreasonassigned2Inputs */
+/** @typedef {{}} Launcher_Lensunassigned1Inputs */
 /** @typedef {{}} Options_Accountsgrouptitle2Inputs */
 /** @typedef {{}} Options_Connectionsheading1Inputs */
 /** @typedef {{}} Options_Backupheading1Inputs */
@@ -1346,10 +1350,6 @@ export const launcher_lensclearfilter2 = /** @type {(inputs: Launcher_Lensclearf
 	return /** @type {LocalizedString} */ (`Effacer le filtre`)
 };
 
-export const launcher_lensinclci2 = /** @type {(inputs: Launcher_Lensinclci2Inputs) => LocalizedString} */ () => {
-	return /** @type {LocalizedString} */ (`incl. CI`)
-};
-
 export const launcher_lensunread1 = /** @type {(inputs: Launcher_Lensunread1Inputs) => LocalizedString} */ (i) => {
 	return /** @type {LocalizedString} */ (`Non lus · ${i?.count}`)
 };
@@ -1368,6 +1368,26 @@ export const launcher_lenslist1 = /** @type {(inputs: Launcher_Lenslist1Inputs) 
 
 export const launcher_lensempty1 = /** @type {(inputs: Launcher_Lensempty1Inputs) => LocalizedString} */ () => {
 	return /** @type {LocalizedString} */ (`Cette vue n'a rien en attente pour l'instant.`)
+};
+
+export const launcher_lenswaitingonyou3 = /** @type {(inputs: Launcher_Lenswaitingonyou3Inputs) => LocalizedString} */ () => {
+	return /** @type {LocalizedString} */ (`Waiting on you`)
+};
+
+export const launcher_lensreasonreview2 = /** @type {(inputs: Launcher_Lensreasonreview2Inputs) => LocalizedString} */ () => {
+	return /** @type {LocalizedString} */ (`review requested`)
+};
+
+export const launcher_lensreasonci2 = /** @type {(inputs: Launcher_Lensreasonci2Inputs) => LocalizedString} */ () => {
+	return /** @type {LocalizedString} */ (`CI failing`)
+};
+
+export const launcher_lensreasonassigned2 = /** @type {(inputs: Launcher_Lensreasonassigned2Inputs) => LocalizedString} */ () => {
+	return /** @type {LocalizedString} */ (`assigned to you`)
+};
+
+export const launcher_lensunassigned1 = /** @type {(inputs: Launcher_Lensunassigned1Inputs) => LocalizedString} */ () => {
+	return /** @type {LocalizedString} */ (`Unassigned`)
 };
 
 export const options_accountsgrouptitle2 = /** @type {(inputs: Options_Accountsgrouptitle2Inputs) => LocalizedString} */ () => {

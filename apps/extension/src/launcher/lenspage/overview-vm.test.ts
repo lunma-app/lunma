@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'vitest';
-import type { AppState, ChangeData, LensItem } from '../../shared/types';
+import type {
+  AppState,
+  ChangeData,
+  LensItem,
+  LensProvider,
+  LensQuery,
+  ResolvedLensSource,
+} from '../../shared/types';
 import {
   bucketByEntity,
   changeMeta,
@@ -9,6 +16,7 @@ import {
   ciLight,
   collectItems,
   initialsOf,
+  isStale,
   type LensNode,
   priorityHue,
   relTime,
@@ -17,6 +25,7 @@ import {
   statusVM,
   stripKeyPrefix,
   type Tagged,
+  waitingOnYou,
 } from './overview-vm';
 
 // The pure overview view-model (lens-overview): the synthesized Change verdict,
@@ -332,5 +341,68 @@ describe('chipsFor', () => {
       name: 'news.example.com',
       scope: 'news.example.com',
     });
+  });
+});
+
+// A tagged overview row for the lane tests: an item plus the section config that
+// surfaced it (its `query` is the relation axis the lane reads).
+function tagged(
+  over: Partial<LensItem>,
+  query?: LensQuery,
+  source: LensProvider = 'gitlab',
+): Tagged {
+  const cfg: ResolvedLensSource = {
+    source,
+    baseUrl: 'https://host.example',
+    name: 'acct',
+    sourceId: 's',
+    lensKind: 'review',
+    ...(query ? { query } : {}),
+  };
+  return { item: item(over), cfg, sk: `s:${over.id ?? 'i'}` };
+}
+
+describe('isStale (1-week freshness threshold)', () => {
+  const now = 1_700_000_000_000;
+  test('older than a week is stale; within a week is fresh', () => {
+    expect(isStale(now - 8 * 86_400_000, now)).toBe(true);
+    expect(isStale(now - 3 * 86_400_000, now)).toBe(false);
+    expect(isStale(now, now)).toBe(false);
+  });
+});
+
+describe('waitingOnYou (cross-entity actionable lane)', () => {
+  test('surfaces review-requested changes, CI-failing authored changes, assigned non-done tickets — in that order', () => {
+    const reviewCh = tagged({ id: 'r', change: change() }, 'review-requested');
+    const ciCh = tagged({ id: 'c', change: change(), status: { tone: 'fail', label: 'CI' } }); // authored (no query)
+    const assignedTk = tagged(
+      {
+        id: 'a',
+        ticket: { key: 'K-1', statusCategory: 'todo', statusLabel: 'To Do', updatedAt: 0 },
+      },
+      'assigned',
+    );
+    const res = waitingOnYou([assignedTk, ciCh, reviewCh]);
+    expect(res.items.map((i) => i.reason)).toEqual(['review', 'ci', 'assigned']);
+    expect(res.items.map((i) => i.entity)).toEqual(['change', 'change', 'ticket']);
+    expect(res.overflow).toBe(0);
+  });
+
+  test('excludes passing authored changes and done assigned tickets', () => {
+    const okCh = tagged({ id: 'c', change: change(), status: { tone: 'ok', label: 'ok' } });
+    const doneTk = tagged(
+      { id: 'd', ticket: { key: 'K', statusCategory: 'done', statusLabel: 'Done', updatedAt: 0 } },
+      'assigned',
+    );
+    expect(waitingOnYou([okCh, doneTk]).items).toEqual([]);
+  });
+
+  test('caps at the limit and reports overflow', () => {
+    const many = Array.from({ length: 8 }, (_, i) =>
+      tagged({ id: `r${i}`, change: change() }, 'review-requested'),
+    );
+    const res = waitingOnYou(many, 6);
+    expect(res.items).toHaveLength(6);
+    expect(res.overflow).toBe(2);
   });
 });

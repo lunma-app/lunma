@@ -332,6 +332,45 @@ export function feedsOf(articles: Tagged[]): string[] {
   return [...new Set(articles.map(feedLabel))];
 }
 
+// ── Freshness: a ticket warms past a staleness threshold (1 week untouched) ──────
+const STALE_MS = 7 * 24 * 60 * 60 * 1000;
+/** True when `ms` is older than the staleness threshold (1 week) — the Issues row
+ * warms its age cue to `--warning` so an aging ticket stands out. */
+export function isStale(ms: number, now: number = Date.now()): boolean {
+  return now - ms > STALE_MS;
+}
+
+// ── "Waiting on you" lane (lens-overview board) ─────────────────────────────────
+// The cross-entity actionable set surfaced above the board, derived purely from the
+// existing query axis + CI tone (no new persisted field): review-requested changes,
+// CI-failing authored changes, and assigned non-done tickets — in that priority
+// order, capped, with an overflow count. `relationOf`/`entityForItem` are reused.
+export type LaneReason = 'review' | 'ci' | 'assigned';
+export interface LaneItem {
+  t: Tagged;
+  entity: 'change' | 'ticket';
+  reason: LaneReason;
+}
+export function waitingOnYou(tagged: Tagged[], cap = 6): { items: LaneItem[]; overflow: number } {
+  const review: LaneItem[] = [];
+  const ci: LaneItem[] = [];
+  const assigned: LaneItem[] = [];
+  for (const t of tagged) {
+    const e = entityForItem(t.item);
+    if (e === 'change') {
+      const rel = relationOf(t.cfg.query);
+      if (rel === 'waiting') review.push({ t, entity: 'change', reason: 'review' });
+      else if (rel === 'authored' && t.item.status?.tone === 'fail')
+        ci.push({ t, entity: 'change', reason: 'ci' });
+    } else if (e === 'ticket') {
+      if (t.cfg.query === 'assigned' && t.item.ticket?.statusCategory !== 'done')
+        assigned.push({ t, entity: 'ticket', reason: 'assigned' });
+    }
+  }
+  const all = [...review, ...ci, ...assigned];
+  return { items: all.slice(0, cap), overflow: Math.max(0, all.length - cap) };
+}
+
 // ── Relative time ("2h" / "5h" / "1d") ─────────────────────────────────────────
 export function relTime(ms: number, now: number = Date.now()): string {
   const s = Math.max(0, Math.floor((now - ms) / 1000));

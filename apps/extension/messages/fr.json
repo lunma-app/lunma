@@ -310,7 +310,6 @@
   "sidebar_boundaryPageHelp": "Les liens hors de cette page s'ouvrent dans un nouvel onglet.",
   "sidebar_boundaryPagesLabel": "Pages sur lesquelles cet onglet reste",
   "launcher_lensClearFilter": "Effacer le filtre",
-  "launcher_lensInclCi": "incl. CI",
   "launcher_lensUnread": "Non lus · {count}",
   "launcher_lensArticleLayout": "Disposition des articles",
   "launcher_lensGrid": "Grille",
@@ -393,5 +392,10 @@
   "sidebar_lensRoleReviewing": "Révision",
   "sidebar_spaceEditAria": "Modifier {name}",
   "sidebar_favDropHint": "Déposer en favori",
-  "sidebar_favDragHint": "Faites glisser un onglet ici pour l'ajouter aux favoris."
+  "sidebar_favDragHint": "Faites glisser un onglet ici pour l'ajouter aux favoris.",
+  "launcher_lensWaitingOnYou": "Waiting on you",
+  "launcher_lensReasonReview": "review requested",
+  "launcher_lensReasonCi": "CI failing",
+  "launcher_lensReasonAssigned": "assigned to you",
+  "launcher_lensUnassigned": "Unassigned"
 }

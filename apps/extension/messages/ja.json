@@ -306,7 +306,6 @@
   "sidebar_boundaryPageHelp": "このページ外のリンクは新しいタブで開きます。",
   "sidebar_boundaryPagesLabel": "このタブが留まるページ",
   "launcher_lensClearFilter": "フィルターをクリア",
-  "launcher_lensInclCi": "CI 込み",
   "launcher_lensUnread": "未読 · {count}",
   "launcher_lensArticleLayout": "記事レイアウト",
   "launcher_lensGrid": "グリッド",
@@ -388,5 +387,10 @@
   "sidebar_lensRoleReviewing": "レビュー中",
   "sidebar_spaceEditAria": "{name} を編集",
   "sidebar_favDropHint": "ドロップしてお気に入りに追加",
-  "sidebar_favDragHint": "タブをここにドラッグしてお気に入りに追加。"
+  "sidebar_favDragHint": "タブをここにドラッグしてお気に入りに追加。",
+  "launcher_lensWaitingOnYou": "Waiting on you",
+  "launcher_lensReasonReview": "review requested",
+  "launcher_lensReasonCi": "CI failing",
+  "launcher_lensReasonAssigned": "assigned to you",
+  "launcher_lensUnassigned": "Unassigned"
 }
