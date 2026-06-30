@@ -4,7 +4,7 @@ import { dispatch } from '../../shared/bus';
 import { onStateBroadcast } from '../../shared/messages';
 import type { Tint } from '../../shared/settings';
 import { colourToOklch, DEFAULT_HUE, DEFAULT_L, SPACE_CHROMA } from '../../shared/space-hue';
-import type { AppState, LensItem, PinNode, SpaceId } from '../../shared/types';
+import type { AppState, LensItem, LensProvider, PinNode, SpaceId } from '../../shared/types';
 import '@lunma/tokens/tokens.css';
 import '@lunma/tokens/fonts.css';
 import '@lunma/tokens/recipes.css';
@@ -108,12 +108,25 @@ const allRows = $derived(
 const facets = $derived(deriveLensFacets(allRows));
 const readSet = $derived(new Set(node && appState ? (appState.lensReadState[node.id] ?? []) : []));
 
-const PROVIDER_NAME = { github: 'GitHub', gitlab: 'GitLab', jira: 'Jira', rss: 'Feeds' } as const;
+// Typed as Record<LensProvider, …> (not an inline literal) so adding a provider to
+// LensProvider is a compile error here until it gets a display name — the prior map
+// silently dropped `bitbucket`, surfacing "GitLab, Jira & undefined".
+const PROVIDER_NAME: Record<LensProvider, string> = {
+  github: 'GitHub',
+  gitlab: 'GitLab',
+  bitbucket: 'Bitbucket',
+  jira: 'Jira',
+  rss: 'Feeds',
+};
 const lensSub = $derived.by(() => {
   if (!node || !appState) return '';
   const provs = [
-    ...new Set(node.sources.map((r) => appState.sources[r.sourceId]?.provider).filter((p) => p)),
-  ] as (keyof typeof PROVIDER_NAME)[];
+    ...new Set(
+      node.sources
+        .map((r) => appState.sources[r.sourceId]?.provider)
+        .filter((p): p is LensProvider => p != null),
+    ),
+  ];
   if (provs.length === 0) return m.launcher_lensNoConnections();
   if (provs.length === 1 && provs[0] === 'rss') return m.launcher_lensFeedsSubtitle();
   const names = provs.map((p) => PROVIDER_NAME[p]);
