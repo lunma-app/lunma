@@ -94,7 +94,7 @@ When mirroring a lens, the lens overview page SHALL render the lens's items grou
 The overview's result units SHALL be **entity-specific**, each composing existing `ui/` primitives and never re-rolling them or hard-coding design values:
 - **Change** rows present in **two lines**: line one is the full `title` with its optional linked-ticket ref chip; line two is the triage line — a `host/owner/repo` repo label (host from the source `baseUrl`, `owner/repo` from `change.repo`) followed by a right-aligned triage cluster of three orthogonal signals: a **CI light** (from `status`; a `draft` shows a distinct hollow glyph), a `ReviewerRail` (blocking-wins verdict `changes` > `pending` > `approved`), and a `Diffstat` (`change.additions`/`deletions`). A relative age (from `change.updatedAt`) that warms past a staleness threshold MAY ride the triage line. Change rows MAY be grouped by their source query into labelled lanes (e.g. "Authored", "Review requests").
 - **Issue** rows present in **two lines**: line one is the ticket `key` (aligned to the title line) and the title (stripped of a leading key prefix); line two is the **assignee** (an `Avatar` + display name from `ticket.assignee`, or a hollow-ring "Unassigned" affordance when absent), an **updated-age** freshness cue that warms to `--warning` past a staleness threshold (> 1 week), and a right-aligned priority pill. Issues are grouped by status (the status is the group header).
-- **Article** cards render a hero (a real `imageUrl` loaded with `loading="lazy"` + `referrerpolicy="no-referrer"`, else a generated cover — the title initial in the display serif over a Space-hue wash, at the same ratio), the full title, a clamped excerpt, any `categories` chips, and a meta footer (source · relative `publishedAt` · category); each card carries a read toggle. Article **thumbnails SHALL be quiet at rest** — dimmed + desaturated — and SHALL restore to full colour on hover/focus (the transition collapsing to instant under `prefers-reduced-motion`). The Articles section is switchable between a magazine **grid** (responsive multi-column) and a **list** (a single column capped to a comfortable reading measure — the list is not multi-column; the grid is the multi-column browse view).
+- **Article** cards render a hero (a real `imageUrl` loaded with `loading="lazy"` + `referrerpolicy="no-referrer"`, else a generated cover — the title initial in the display serif over a Space-hue wash, at the same ratio), the full title, a clamped excerpt, any `categories` chips, and a meta footer (source · relative `publishedAt` · category); each card carries a read toggle. Article **thumbnails SHALL be quiet at rest** — dimmed + desaturated — and SHALL restore to full colour on hover/focus (the transition collapsing to instant under `prefers-reduced-motion`). The Articles section is switchable between a magazine **grid** (responsive multi-column) and a **list** (a full-width single column — the list is not multi-column; the grid is the multi-column browse view).
 - **Other** items render a compact row (title + favicon + at most one status dot).
 
 Every unit SHALL show the full `title` — wrapping to as many lines as needed, never truncated (no ellipsis) — and SHALL render an optional region only when the item carries that field (absent regions collapse to zero height). This requirement is descriptive, not prohibitive: connectors MAY populate additional optional `LensItem` fields additively with no rewrite of this surface and no schema migration (results are ephemeral).
@@ -127,7 +127,7 @@ Every unit SHALL show the full `title` — wrapping to as many lines as needed, 
 
 - **GIVEN** an article carrying `excerpt`, `imageUrl`, `publishedAt`, and `categories`
 - **WHEN** the Articles section renders and the user switches to List
-- **THEN** it first shows a magazine card in the responsive grid, then a compact single-column list row (capped measure) for the same item
+- **THEN** it first shows a magazine card in the responsive grid, then a compact full-width single-column list row for the same item
 
 #### Scenario: A title is never truncated
 
@@ -166,7 +166,7 @@ Each change SHALL render as a **two-line row** (not a magazine card): line one p
 
 ### Requirement: The Articles entity section renders a magazine
 
-The **Articles** entity section of the overview SHALL render the magazine archetype over the lens's `rss` (article-bucket) resolved sections, merging every feed into one section. It SHALL render two layouts selected by the persisted per-lens `articleLayout` (read as `node.articleLayout ?? 'grid'`, written via `setLensArticleLayout`): a **Grid** — the responsive **multi-column** magazine of cover/initial cards — and a **List** — a **single column capped to a comfortable reading measure** (the List is deliberately not multi-column; the Grid is the multi-column browse view, so the two do not duplicate). In both layouts article **thumbnails SHALL be quiet at rest** (dimmed + desaturated) and restore to full colour on hover/focus. It SHALL reuse the existing feed card rendering and the existing per-feed reading controls. It SHALL render section controls: the **layout toggle** (Grid | List) plus two **page-local ephemeral** controls (no persistence, no bus command): a **feed scope filter** (chips: "All feeds" + one per feed source, narrowing the rendered articles) living within the Articles card, and an **unread filter** (toggle showing the unread count, narrowing to unread items). An unread item in List layout SHALL carry a leading accent unread dot. The section SHALL render only when the lens has at least one `rss` source.
+The **Articles** entity section of the overview SHALL render the magazine archetype over the lens's `rss` (article-bucket) resolved sections, merging every feed into one section. It SHALL render two layouts selected by the persisted per-lens `articleLayout` (read as `node.articleLayout ?? 'grid'`, written via `setLensArticleLayout`): a **Grid** — the responsive **multi-column** magazine of cover/initial cards — and a **List** — a **full-width single column** (the List is deliberately not multi-column; the Grid is the multi-column browse view, so the two do not duplicate). In both layouts article **thumbnails SHALL be quiet at rest** (dimmed + desaturated) and restore to full colour on hover/focus. It SHALL reuse the existing feed card rendering and the existing per-feed reading controls. It SHALL render section controls: the **layout toggle** (Grid | List) plus two **page-local ephemeral** controls (no persistence, no bus command): a **feed scope filter** (chips: "All feeds" + one per feed source, narrowing the rendered articles) living within the Articles card, and an **unread filter** (toggle showing the unread count, narrowing to unread items). An unread item in List layout SHALL carry a leading accent unread dot. The section SHALL render only when the lens has at least one `rss` source.
 
 #### Scenario: The Articles section merges feeds with magazine cards
 
@@ -174,11 +174,11 @@ The **Articles** entity section of the overview SHALL render the magazine archet
 - **WHEN** the overview renders
 - **THEN** the Articles section shows one merged magazine across the three feeds, with an in-card feed filter, a Grid/List toggle, and an Unread toggle
 
-#### Scenario: List is a single capped column, Grid is multi-column
+#### Scenario: List is a full-width single column, Grid is multi-column
 
 - **GIVEN** a lens whose Articles section holds many articles on a wide overview
 - **WHEN** the user views Grid, then switches to List
-- **THEN** Grid renders responsive multi-column cards filling the width, and List renders a single column capped to a comfortable reading measure (not multi-column)
+- **THEN** Grid renders responsive multi-column cards filling the width, and List renders a full-width single column (not multi-column)
 
 #### Scenario: A thumbnail is quiet at rest and wakes on hover
 
