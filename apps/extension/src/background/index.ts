@@ -90,7 +90,14 @@ const bootReady: Promise<void> = loadState()
       log.error('boot storage read unavailable — preserving on-disk state, skipping mint/persist');
     }
     bootUnavailable = outcome === 'unavailable';
-    freshInstall = store.state.spaces.length === 0 && !bootUnavailable;
+    // Convert existing Chrome groups into Spaces ONLY on a genuine first install
+    // (a `clean` read of an absent/empty `lunma.state`). A corruption RECOVERY
+    // (`recovered`) or partial SALVAGE (`salvaged`) ALSO lands an empty `spaces`,
+    // but it is NOT a first install: re-deriving Spaces from the user's live tab
+    // groups there fabricates duplicate "Default"/"Group N" Spaces over real
+    // (quarantined) data on every such boot. Gating on `outcome === 'clean'`
+    // (not merely `!unavailable`) excludes those recovery paths.
+    freshInstall = store.state.spaces.length === 0 && outcome === 'clean';
     return runRestartRecovery();
   })
   .then(async () => {

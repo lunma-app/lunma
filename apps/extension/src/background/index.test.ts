@@ -231,6 +231,22 @@ describe('SW boot — outcome gating', () => {
     expect(store.state.spaces.map((s) => s.name)).toEqual(['Default']);
     expect(persist).toHaveBeenCalled();
   });
+
+  // A corruption RECOVERY also lands an empty `spaces`, but it must NOT be
+  // mistaken for a first install — otherwise the boot re-derives Spaces from the
+  // user's live Chrome tab groups on every such boot, fabricating duplicate
+  // "Default"/"Group N" Spaces over real (quarantined) data.
+  test('a corrupt (recovered) read does NOT run fresh-install group conversion', async () => {
+    await boot({ kind: 'corrupt' });
+    const { reconcileTabGroupsOnBoot } = await import('./tab-group-adoption');
+    expect(reconcileTabGroupsOnBoot).toHaveBeenCalledWith(expect.anything(), false);
+  });
+
+  test('a clean empty read (true first boot) DOES run fresh-install group conversion', async () => {
+    await boot({ kind: 'empty' });
+    const { reconcileTabGroupsOnBoot } = await import('./tab-group-adoption');
+    expect(reconcileTabGroupsOnBoot).toHaveBeenCalledWith(expect.anything(), true);
+  });
 });
 
 describe('toggle-launcher command path (launcher-tab-to-search)', () => {
