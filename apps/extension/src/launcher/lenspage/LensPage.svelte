@@ -101,7 +101,7 @@ $effect(() => {
 
 // Derived overview model for the lens (never stored).
 const tagged = $derived(node && appState ? collectItems(node, appState, heldItemsBySection) : []);
-// Facets from all currently-held items (unfiltered) for the LensFilterBar.
+// Facets from all currently-held items (unfiltered) for the per-card scope filters.
 const allRows = $derived(
   tagged.map((t) => ({ item: t.item, host: hostOf(t.cfg.baseUrl), feedName: feedLabel(t) })),
 );
@@ -236,10 +236,11 @@ function setArticleLayout(layout: 'grid' | 'list'): void {
     /* Above the ambient aurora (`--z-base`), like the new-tab `.stage`. */
     z-index: var(--z-raised);
     width: 100%;
-    /* Responsive: fills the viewport (minus a small gutter) up to a 1080px cap, so
-       the overview breathes on wide screens (the article grid gains columns) while
-       single-column change/issue lists keep a sane measure. */
-    max-width: min(94vw, 1080px);
+    /* Responsive: fills the viewport (minus a small gutter) up to a 1440px cap, so
+       the width-aware board can place Changes and Issues side-by-side on wide
+       screens (each column keeps its ≤~640px reading measure) while narrow widths
+       collapse to a single stack. */
+    max-width: min(96vw, 1440px);
     margin: 0 auto;
     padding: 34px 28px 80px;
     display: flex;

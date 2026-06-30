@@ -310,7 +310,6 @@
   "sidebar_boundaryPageHelp": "Links außerhalb dieser Seite öffnen in einem neuen Tab.",
   "sidebar_boundaryPagesLabel": "Seiten, auf denen dieser Tab bleibt",
   "launcher_lensClearFilter": "Filter löschen",
-  "launcher_lensInclCi": "inkl. CI",
   "launcher_lensUnread": "Ungelesen · {count}",
   "launcher_lensArticleLayout": "Artikelansicht",
   "launcher_lensGrid": "Raster",
@@ -393,5 +392,10 @@
   "sidebar_lensRoleReviewing": "In Überprüfung",
   "sidebar_spaceEditAria": "{name} bearbeiten",
   "sidebar_favDropHint": "Hierher ziehen zum Favorisieren",
-  "sidebar_favDragHint": "Tab hierher ziehen, um ihn zu favorisieren."
+  "sidebar_favDragHint": "Tab hierher ziehen, um ihn zu favorisieren.",
+  "launcher_lensWaitingOnYou": "Waiting on you",
+  "launcher_lensReasonReview": "review requested",
+  "launcher_lensReasonCi": "CI failing",
+  "launcher_lensReasonAssigned": "assigned to you",
+  "launcher_lensUnassigned": "Unassigned"
 }

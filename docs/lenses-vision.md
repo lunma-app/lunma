@@ -73,6 +73,26 @@ The `sources-redesign` change established the connection-first model; the
   is realised as "the page merges by *entity*, per item", with `kind` reduced to the
   enrichment gate. **`entityForSource`** survives as the source-level hint (editor
   preview, jira → `ticket`); **`entityForItem`** is the overview router.
+- **The overview is a width-aware board, not a stack (`redesign-lens-overview-board`).**
+  The single-lens page (`min(96vw, 1440px)`) leads with a **"Waiting on you" lane** —
+  a cross-entity actionable set (review-requested changes, CI-failing authored changes,
+  assigned non-done tickets), derived purely from the query axis + CI tone
+  (`waitingOnYou` in `overview-vm`), carrying the Space hue glow. Each lane row leads
+  with an `EntityBadge` (a `ui/` primitive: pull-request glyph on change-blue 252 vs
+  issue-dot on ticket-purple 295 — shape + colour, colour-blind safe). Beneath it,
+  **Changes and Issues render side-by-side as two columns when both are populated** (a
+  CSS container query; a single populated entity spans full width), with Articles and
+  Other full-width below. **Change and Issue rows are two-line**: the full title (never
+  truncated) on its own line, then a triage/owner line — for Changes the repo + CI light
+  + `ReviewerRail` + `Diffstat`; for Issues the assignee (`Avatar` + name, or a hollow
+  "Unassigned") + an updated-age freshness cue that warms to `--warning` past a week +
+  the priority pill. Scope filters (repos/projects/feeds) live **inside their owning
+  entity card** — there is no entity-type filter bar (the always-visible columns plus
+  per-card collapse make it redundant; `LensFilter.entities` stays in the model,
+  unused by the overview). Articles keep both views: **Grid** (responsive multi-column)
+  and **List** (a single column capped to a reading measure — List is not multi-column,
+  Grid is); thumbnails are quiet (dimmed + desaturated) at rest and wake to full colour
+  on hover/focus.
 
 ## Naming
 
