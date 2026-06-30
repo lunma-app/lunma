@@ -168,6 +168,7 @@ export const iconLoaders: Record<string, IconLoader> = {
   frame: () => import('@lucide/svelte/icons/frame'),
   frown: () => import('@lucide/svelte/icons/frown'),
   fuel: () => import('@lucide/svelte/icons/fuel'),
+  funnel: () => import('@lucide/svelte/icons/funnel'),
   gamepad: () => import('@lucide/svelte/icons/gamepad'),
   'gamepad-2': () => import('@lucide/svelte/icons/gamepad-2'),
   'gamepad-directional': () => import('@lucide/svelte/icons/gamepad-directional'),
