@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en" data-tint="vivid">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Lens board prototype · Lunma</title>
+<link rel="stylesheet" href="../../../../packages/tokens/tokens.css" />
+<link rel="stylesheet" href="../../../../packages/tokens/fonts.css" />
+<style>
+  /* ── Prototype-only: Space hue scope (the real page sets these inline per lens).
+     Code = blue (252), News = green (150). Toggling [data-space] re-points them. */
+  :root { color-scheme: dark; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font-sans); }
+
+  .lenspage {
+    position: relative; isolation: isolate; min-height: 100vh;
+    --space-h: 252; --space-chroma: 0.16; --space-l: 0.55; --lens-h: 252;
+  }
+  .lenspage[data-space="news"] { --space-h: 150; --space-chroma: 0.17; --space-l: 0.74; --lens-h: 150; }
+
+  /* Ambient aurora — two drifting blobs in the Space hue (mirrors Aurora.svelte). */
+  .aurora { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+  .aurora::before, .aurora::after {
+    content: ""; position: absolute; border-radius: 50%;
+    filter: blur(80px); opacity: var(--aurora-opacity);
+  }
+  .aurora::before {
+    width: 60vw; height: 60vw; top: -18vw; left: -10vw;
+    background: radial-gradient(circle, oklch(calc(var(--space-l) + 0.08) var(--space-chroma) var(--space-h) / 0.5), transparent 70%);
+  }
+  .aurora::after {
+    width: 50vw; height: 50vw; bottom: -16vw; right: -8vw;
+    background: radial-gradient(circle, oklch(0.62 0.12 var(--ds-primary-h) / 0.35), transparent 70%);
+  }
+
+  /* ── Page shell — raised cap so the board fills wide screens (was min(94vw,1080)). */
+  .main {
+    position: relative; z-index: var(--z-raised);
+    width: 100%; max-width: min(96vw, 1440px); margin: 0 auto;
+    padding: 30px 28px 80px; display: flex; flex-direction: column; gap: 18px;
+  }
+
+  /* Prototype toolbar (not part of the design). */
+  .proto-bar {
+    position: relative; z-index: var(--z-sticky);
+    display: flex; gap: 8px; align-items: center;
+    max-width: min(96vw, 1440px); margin: 14px auto 0; padding: 0 28px;
+    font-size: var(--text-xs); color: var(--text-faint);
+  }
+  .proto-bar button {
+    appearance: none; padding: 5px 12px; border-radius: var(--r-pill);
+    border: 1px solid var(--border-soft); background: var(--surface-2);
+    color: var(--text-muted); font: inherit; cursor: pointer;
+  }
+  .proto-bar button.on { background: var(--lens-soft); color: var(--lens-text); border-color: var(--lens-border); }
+
+  /* ── Identity row ── */
+  .identity { display: flex; align-items: center; gap: 15px; }
+  .lens-tile {
+    flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+    width: 52px; height: 52px; border-radius: 14px;
+    background: var(--lens-soft); color: var(--lens-text);
+    font-family: var(--font-display); font-size: 28px;
+  }
+  .lens-name { margin: 0; font-family: var(--font-display); font-size: 32px; line-height: 1; font-weight: var(--weight-regular); }
+  .lens-sub { margin: 5px 0 0; font-size: 12.5px; color: var(--text-muted); }
+
+  /* ── Signature: "Waiting on you" lane ── */
+  .lane {
+    border-radius: var(--r-2xl);
+    background:
+      linear-gradient(180deg, oklch(0.62 var(--space-chroma) var(--space-h) / 0.10), transparent 60%),
+      var(--surface);
+    border: 1px solid var(--lens-border);
+    box-shadow: var(--glow-space-soft);
+    overflow: hidden;
+  }
+  .lane-head { display: flex; align-items: center; gap: 10px; padding: 13px 18px 11px; }
+  .lane-star { color: var(--lens-text); display: inline-flex; }
+  .lane-title { font-size: 13px; font-weight: var(--weight-semibold); letter-spacing: 0.02em; text-transform: uppercase; color: var(--lens-text); }
+  .lane-count { padding: 1px 8px; border-radius: var(--r-pill); background: var(--lens-soft); color: var(--lens-text); font-size: var(--text-xs); }
+  .lane-body { display: flex; flex-direction: column; gap: 6px; padding: 0 12px 12px; }
+  .lane-row {
+    appearance: none; border: 0; width: 100%; box-sizing: border-box;
+    display: flex; align-items: center; gap: 11px; padding: 10px 12px;
+    border-radius: var(--r-lg); background: var(--surface-2); cursor: pointer; text-align: left;
+    transition: background var(--motion-fast) var(--ease-standard);
+  }
+  .lane-row:hover { background: var(--hover); }
+  /* Entity badge — the immediate PR-vs-ticket signal in the mixed lane: a distinct
+     glyph (branch vs dot) AND the section-dot hue (change 252 blue / ticket 295
+     purple). Shape carries the meaning for colour-blind readers; colour reinforces. */
+  .ent-badge { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: var(--r-md); background: oklch(0.55 0.13 var(--ent) / 0.20); color: oklch(var(--accent-text-l) 0.11 var(--ent)); }
+  .ent-badge svg { display: block; }
+  .lane-row .prov { color: var(--text-dim); }
+  .lane-row .why {
+    flex-shrink: 0; margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: var(--weight-semibold); color: var(--lens-text);
+  }
+  .lane-row .why .arrow { transition: transform var(--motion-fast) var(--ease-standard); }
+  .lane-row:hover .why .arrow { transform: translateX(2px); }
+
+  /* ── The board: two columns on wide, stack on narrow ── */
+  .board { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 940px) { .board { grid-template-columns: 1fr; } }
+  .board > .full { grid-column: 1 / -1; }
+
+  /* ── Section card ── */
+  .card { border-radius: var(--r-xl); background: var(--surface); border: 1px solid var(--border-soft); overflow: hidden; }
+  .sec-head { width: 100%; box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: 13px 18px; background: none; border: 0; cursor: pointer; text-align: left; color: var(--text); appearance: none; }
+  .chev { display: inline-flex; color: var(--text-muted); }
+  .sec-dot { width: 9px; height: 9px; border-radius: var(--r-2xs); background: oklch(0.62 0.15 var(--dot-h)); }
+  .sec-title { font-size: 15px; font-weight: var(--weight-semibold); }
+  .count { padding: 1px 8px; border-radius: var(--r-pill); background: var(--surface-3); color: var(--text-muted); font-size: var(--text-xs); }
+  .sec-trail { margin-left: auto; font-size: var(--text-xs); color: var(--text-faint); }
+  .sec-body { background: var(--bg); border-top: 1px solid var(--border-soft); padding: 13px; display: flex; flex-direction: column; gap: 13px; }
+
+  .group { display: flex; flex-direction: column; gap: 6px; }
+  .group-head { display: flex; align-items: center; gap: 8px; padding: 0 2px; }
+  .group-label { font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; font-weight: var(--weight-semibold); color: var(--text-dim); }
+  .group-count { padding: 0 7px; border-radius: var(--r-pill); background: var(--surface-3); color: var(--text-muted); font-size: 10px; }
+  .status-dot { width: 8px; height: 8px; border-radius: var(--r-pill); background: var(--sd); }
+
+  /* Rows */
+  .row { appearance: none; border: 0; width: 100%; box-sizing: border-box; display: flex; align-items: center; gap: 11px; padding: 9px 12px; border-radius: var(--r-lg); background: var(--surface-2); cursor: pointer; text-align: left; transition: background var(--motion-fast) var(--ease-standard); }
+  .row:hover { background: var(--hover); }
+  .mono { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: var(--r-md); background: var(--surface-3); color: var(--text-2); font-size: 9px; font-weight: var(--weight-bold); }
+  .issue-key { flex-shrink: 0; width: 62px; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); }
+  .row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .row-title-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .row-title { font-size: var(--text-base); font-weight: var(--weight-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ticket-ref { flex-shrink: 0; font-family: var(--font-mono); font-size: var(--text-2xs); padding: 1px 7px; border-radius: var(--r-sm); color: oklch(var(--accent-text-l) 0.1 295); background: oklch(0.55 0.13 295 / var(--accent-fill-a)); }
+  .row-meta { font-size: var(--text-xs); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row-right { flex-shrink: 0; display: inline-flex; align-items: center; gap: 10px; }
+  .ci { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: var(--r-pill); font-size: 9px; font-weight: var(--weight-bold); }
+  .ci--passed { color: var(--success); background: color-mix(in oklch, var(--success) 18%, transparent); }
+  .ci--failing { color: var(--danger); background: color-mix(in oklch, var(--danger) 18%, transparent); }
+  .rail { display: inline-flex; }
+  .rail .av { width: 19px; height: 19px; border-radius: var(--r-pill); margin-left: -5px; border: 1.5px solid var(--surface-2); display: inline-flex; align-items: center; justify-content: center; font-size: 8px; font-weight: var(--weight-bold); color: var(--space-on); background: oklch(0.6 0.12 var(--av-h, 252)); }
+  .rail .av:first-child { margin-left: 0; }
+  .rail .more { background: var(--surface-3); color: var(--text-muted); }
+  .diff { font-family: var(--font-mono); font-size: 10px; display: inline-flex; gap: 5px; }
+  .diff .add { color: var(--success); } .diff .del { color: var(--danger); }
+  .pill { padding: 1px 8px; border-radius: var(--r-pill); font-size: 10px; color: oklch(var(--accent-text-l) 0.1 var(--ph, 25)); background: oklch(0.55 0.13 var(--ph, 25) / var(--accent-fill-a)); flex-shrink: 0; }
+
+  /* Two-row change row: title gets a full-width line of its own; the triage
+     metadata (repo · CI · reviewers · diffstat) drops to a second line. Lets the
+     title breathe in the narrow board column instead of truncating early. */
+  .crow { align-items: center; }
+  .crow-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+  .crow-body .row-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.3; }
+  .crow-meta { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .crow-meta .row-meta { min-width: 0; }
+  .crow-meta .row-right { margin-left: auto; }
+  /* Leading issue-key rides the TITLE line (not the row's vertical centre), so it
+     reads as the title's label instead of floating between the two lines. */
+  .crow .issue-key { align-self: flex-start; line-height: 17px; }
+
+  /* Issue meta line: assignee (avatar + name) · updated age, priority pill right. */
+  .assignee { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-size: 11px; color: var(--text-muted); }
+  .assignee .av { flex-shrink: 0; width: 18px; height: 18px; margin-left: 0; border-radius: var(--r-pill); display: inline-flex; align-items: center; justify-content: center; font-size: 8px; font-weight: var(--weight-bold); color: var(--space-on); background: oklch(0.6 0.12 var(--av-h, 252)); }
+  .assignee .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .av-hollow { background: transparent !important; color: var(--text-faint) !important; box-shadow: inset 0 0 0 1.5px var(--border); }
+  .idot { color: var(--text-faint); }
+  .age { font-size: 11px; color: var(--text-faint); white-space: nowrap; }
+  /* Stale (>1 week untouched) reads warm so an aging ticket stands out. */
+  .age.stale { color: var(--warning); }
+
+  /* ── Articles: quiet feed ── */
+  .article-controls { display: flex; align-items: center; }
+  .article-controls .right { margin-left: auto; display: inline-flex; gap: 8px; align-items: center; }
+  .chip-btn { appearance: none; padding: 4px 11px; border-radius: var(--r-pill); border: 1px solid var(--border-soft); background: transparent; color: var(--text-muted); font-size: 11.5px; font-weight: var(--weight-medium); cursor: pointer; }
+  .chip-btn.on { border-color: transparent; background: var(--lens-soft); color: var(--lens-text); }
+  .seg { display: inline-flex; gap: 2px; padding: 2px; background: var(--surface-2); border: 1px solid var(--border-soft); border-radius: 8px; }
+  .seg-btn { appearance: none; padding: 4px 11px; border: none; border-radius: var(--r-sm); background: transparent; color: var(--text-muted); font-size: 11.5px; font-weight: var(--weight-semibold); cursor: pointer; }
+  .seg-btn.on { background: var(--surface-3); color: var(--text); }
+
+  /* List = a TRUE single column, capped to a comfortable reading measure. Grid (below)
+     is the multi-column browse view, so List stays a list — they don't duplicate. */
+  .article-list { display: flex; flex-direction: column; gap: 5px; max-width: 900px; }
+  /* Grid = the existing responsive magazine cards: vertical card with a 16:9 hero. */
+  .article-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 11px; }
+  .art-open { appearance: none; border: 0; padding: 0; width: 100%; box-sizing: border-box; background: none; color: inherit; cursor: pointer; text-align: left; display: flex; flex-direction: column; align-items: stretch; }
+  .art-card { position: relative; background: var(--surface-2); border-radius: var(--r-lg); overflow: hidden; }
+  .gridthumb { width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 0; }
+  .art-card:hover .art-thumb { opacity: 1; filter: saturate(1); }
+  .art-text { display: flex; flex-direction: column; gap: 5px; padding: 11px 13px 13px; min-width: 0; }
+  .art-title2 { font-size: 13px; font-weight: var(--weight-semibold); line-height: 1.3; color: var(--text); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .art-card:hover .art-title2 { color: var(--lens-text); }
+  .art-desc { font-size: 11px; line-height: 1.45; color: var(--text-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .art-foot2 { display: flex; align-items: center; gap: 7px; margin-top: 3px; font-size: 10.5px; color: var(--text-faint); }
+  .art-row { position: relative; display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: var(--r-lg); background: var(--surface-2); cursor: pointer; transition: background var(--motion-fast) var(--ease-standard); }
+  .art-row:hover { background: var(--hover); }
+  /* Quiet thumbs: dimmed + desaturated at rest, full colour on hover/focus. */
+  .art-thumb { flex-shrink: 0; width: 64px; height: 44px; border-radius: var(--r-md); background-size: cover; background-position: center; opacity: 0.62; filter: saturate(0.7); transition: opacity var(--motion-base) var(--ease-standard), filter var(--motion-base) var(--ease-standard); }
+  .art-row:hover .art-thumb { opacity: 1; filter: saturate(1); }
+  .art-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .art-title { font-size: 13px; font-weight: var(--weight-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .art-foot { display: flex; align-items: center; gap: 7px; font-size: 10.5px; color: var(--text-faint); }
+  .art-src { color: var(--text-muted); }
+  .fdot { width: 3px; height: 3px; border-radius: var(--r-pill); background: var(--text-faint); }
+  .cat { margin-left: 4px; padding: 1px 8px; border-radius: var(--r-pill); font-size: 10px; color: oklch(var(--accent-text-l) 0.09 150); background: oklch(0.55 0.13 150 / var(--accent-fill-a)); }
+  .art-read { flex-shrink: 0; width: 26px; height: 26px; border: 0; border-radius: var(--r-md); background: transparent; color: oklch(var(--accent-text-l) 0.1 150); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+  .art-read:hover { background: var(--surface-3); }
+  .art-row.read { opacity: 0.72; }
+  .art-row.read .art-title { color: var(--text-muted); font-weight: var(--weight-medium); }
+  .art-row.read .art-thumb { opacity: 0.4; }
+  .art-row.read .art-read { color: var(--text-faint); }
+
+  /* ── Filtering (re-added) ── */
+  /* Persistent entity-type filter bar — sits full-width between the lane and the
+     board. Renders only when the lens has >1 entity type (so News, articles-only,
+     shows no bar — its feed scope lives in the article controls instead). */
+  .filter-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 0 2px; }
+  .filter-bar .lbl { font-size: 11px; color: var(--text-faint); margin-right: 4px; }
+  .fchip { appearance: none; padding: 4px 12px; border-radius: var(--r-pill); border: 1px solid var(--border-soft); background: transparent; color: var(--text-muted); font-size: 12px; font-weight: var(--weight-medium); cursor: pointer; }
+  .fchip.on { border-color: transparent; background: var(--lens-soft); color: var(--lens-text); }
+  .fchip-x { margin-left: 2px; width: 26px; height: 26px; border-radius: var(--r-md); border: 0; background: transparent; color: var(--text-faint); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+  .fchip-x:hover { background: var(--surface-3); color: var(--text); }
+  /* Per-card scope filter (repos / projects / feeds). Chips up to 5, then this
+     compact "All …" dropdown — mirrors OverviewPage's CHIP_THRESHOLD overflow. */
+  .scope { display: flex; flex-wrap: wrap; gap: 6px; }
+  .scope-pick { appearance: none; display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: var(--r-md); border: 1px solid var(--border-field); background: var(--input); color: var(--text-muted); font-size: 11.5px; cursor: pointer; }
+  .scope-pick .car { color: var(--text-faint); font-size: 9px; }
+  .scope-chip { appearance: none; padding: 4px 11px; border-radius: var(--r-pill); border: 1px solid var(--border-soft); background: transparent; color: var(--text-muted); font-size: 11px; cursor: pointer; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .hide { display: none !important; }
+</style>
+</head>
+<body>
+  <div class="proto-bar">
+    <span>prototype —</span>
+    <button id="b-code" class="on" onclick="showSpace('code')">Code (board + lane)</button>
+    <button id="b-news" onclick="showSpace('news')">News (quiet feed)</button>
+    <span id="hint" style="margin-left:auto">hover a feed row to see thumbnails wake up</span>
+  </div>
+
+  <!-- ════════════ CODE SPACE ════════════ -->
+  <div class="lenspage" id="space-code" data-space="code">
+    <div class="aurora" aria-hidden="true"></div>
+    <main class="main">
+      <header class="identity">
+        <span class="lens-tile">C</span>
+        <div>
+          <h1 class="lens-name">Code</h1>
+          <p class="lens-sub">GitLab, Jira &amp; Bitbucket</p>
+        </div>
+      </header>
+
+      <!-- Signature lane -->
+      <section class="lane">
+        <div class="lane-head">
+          <span class="lane-star" aria-hidden="true">★</span>
+          <span class="lane-title">Waiting on you</span>
+          <span class="lane-count">3</span>
+        </div>
+        <div class="lane-body">
+          <button class="lane-row">
+            <span class="ent-badge" style="--ent:252"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="4" r="1.7"/><circle cx="5" cy="12" r="1.7"/><circle cx="11" cy="5" r="1.7"/><path d="M5 5.7v6.3"/><path d="M5 8.5c3 0 4.6-1 4.9-2.1"/></svg></span>
+            <span class="row-body"><span class="row-title-line"><span class="row-title">fix(auth-federator): s2s related configs</span><span class="ticket-ref">ONE-1442</span></span><span class="row-meta"><span class="prov">GitLab</span> · remote-tensor/md-austria/dev/p2-services</span></span>
+            <span class="why">review requested <span class="arrow">→</span></span>
+          </button>
+          <button class="lane-row">
+            <span class="ent-badge" style="--ent:252"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="4" r="1.7"/><circle cx="5" cy="12" r="1.7"/><circle cx="11" cy="5" r="1.7"/><path d="M5 5.7v6.3"/><path d="M5 8.5c3 0 4.6-1 4.9-2.1"/></svg></span>
+            <span class="row-body"><span class="row-title-line"><span class="row-title">feat(auth-federator): implementation of the gateway routes</span><span class="ticket-ref">ONE-1449</span></span><span class="row-meta"><span class="prov">GitLab</span> · CI failing · 2 files</span></span>
+            <span class="why" style="color:var(--danger)">CI failing <span class="arrow">→</span></span>
+          </button>
+          <button class="lane-row">
+            <span class="ent-badge" style="--ent:295"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5.4"/><circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none"/></svg></span>
+            <span class="row-body"><span class="row-title-line"><span class="row-title">Q2 TV↔1E communication ships without full remediation</span><span class="ticket-ref">SEC-4367</span></span><span class="row-meta"><span class="prov">Jira</span> · Security · assigned to Emanuel</span></span>
+            <span class="why">assigned to you <span class="arrow">→</span></span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Board: Changes | Issues, Articles full width -->
+      <div class="board">
+        <section class="card">
+          <button class="sec-head"><span class="chev">▸</span><span class="sec-dot" style="--dot-h:252"></span><span class="sec-title">Changes</span><span class="count">11</span></button>
+          <div class="sec-body">
+            <div class="scope"><button class="scope-pick">All repos <span class="car">▾</span></button></div>
+            <div class="group">
+              <div class="group-head"><span class="group-label">Authored</span><span class="group-count">4</span></div>
+              <button class="row crow"><span class="mono">GL</span><span class="crow-body"><span class="row-title-line"><span class="row-title">chore(dexsync): archive bcommand-pagination-helpers</span><span class="ticket-ref">ONE-1535</span></span><span class="crow-meta"><span class="row-meta">remote-tensor/md-austria/dev/p2-services</span><span class="row-right"><span class="ci ci--passed">✓</span><span class="rail"><span class="av" style="--av-h:30">LI</span><span class="av" style="--av-h:120">EF</span></span><span class="diff"><span class="add">+84</span><span class="del">−12</span></span></span></span></span></button>
+              <button class="row crow"><span class="mono">GL</span><span class="crow-body"><span class="row-title-line"><span class="row-title">feat(auth-federator): add new application</span><span class="ticket-ref">ONE-1442</span></span><span class="crow-meta"><span class="row-meta">platform-2-0/argocd-environments</span><span class="row-right"><span class="ci ci--passed">✓</span><span class="rail"><span class="av" style="--av-h:300">MI</span><span class="av" style="--av-h:60">TT</span><span class="av more">+4</span></span><span class="diff"><span class="add">+212</span><span class="del">−3</span></span></span></span></span></button>
+              <button class="row crow"><span class="mono">GL</span><span class="crow-body"><span class="row-title-line"><span class="row-title">docs(dexsync): add proposals</span></span><span class="crow-meta"><span class="row-meta">remote-tensor/md-austria/dev/p2-services</span><span class="row-right"><span class="ci ci--passed">✓</span><span class="rail"><span class="av" style="--av-h:200">DP</span><span class="av more">+3</span></span><span class="diff"><span class="add">+340</span></span></span></span></span></button>
+            </div>
+            <div class="group">
+              <div class="group-head"><span class="group-label">Drafts</span><span class="group-count">2</span></div>
+              <button class="row crow"><span class="mono">GL</span><span class="crow-body"><span class="row-title-line"><span class="row-title">Draft: feat(uem): deploy first version of uem core service</span><span class="ticket-ref">RMMDM-2233</span></span><span class="crow-meta"><span class="row-meta">platform-2-0/argocd-environments</span><span class="row-right"><span class="ci" style="color:var(--text-dim);box-shadow:inset 0 0 0 1.5px var(--border)">○</span><span class="rail"><span class="av more">+2</span></span></span></span></span></button>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <button class="sec-head"><span class="chev">▸</span><span class="sec-dot" style="--dot-h:295"></span><span class="sec-title">Issues</span><span class="count">24</span></button>
+          <div class="sec-body">
+            <div class="scope"><button class="scope-pick">All projects <span class="car">▾</span></button></div>
+            <div class="group">
+              <div class="group-head"><span class="status-dot" style="--sd:var(--text-faint)"></span><span class="group-label">To do</span><span class="group-count">10</span></div>
+              <button class="row crow"><span class="issue-key">ONE-1377</span><span class="crow-body"><span class="row-title-line"><span class="row-title">Consumer cutover: tvone-automation</span></span><span class="crow-meta"><span class="assignee"><span class="av" style="--av-h:260">JP</span><span class="nm">João P.</span></span><span class="idot">·</span><span class="age">3d ago</span><span class="row-right"><span class="pill" style="--ph:25">High</span></span></span></span></button>
+              <button class="row crow"><span class="issue-key">ONE-1278</span><span class="crow-body"><span class="row-title-line"><span class="row-title">Consumer cutover: scale-orchestrator</span></span><span class="crow-meta"><span class="assignee"><span class="av" style="--av-h:20">ML</span><span class="nm">Marta L.</span></span><span class="idot">·</span><span class="age stale">2w ago</span><span class="row-right"><span class="pill" style="--ph:75">Med</span></span></span></span></button>
+              <button class="row crow"><span class="issue-key">ONE-1276</span><span class="crow-body"><span class="row-title-line"><span class="row-title">Decommission dexcore-proxy</span></span><span class="crow-meta"><span class="assignee"><span class="av av-hollow">?</span><span class="nm">Unassigned</span></span><span class="idot">·</span><span class="age">2d ago</span><span class="row-right"><span class="pill" style="--ph:75">Med</span></span></span></span></button>
+            </div>
+            <div class="group">
+              <div class="group-head"><span class="status-dot" style="--sd:var(--warning)"></span><span class="group-label">In progress</span><span class="group-count">14</span></div>
+              <button class="row crow"><span class="issue-key">ONE-1379</span><span class="crow-body"><span class="row-title-line"><span class="row-title">Remove superseded dexcore KeyExportService</span></span><span class="crow-meta"><span class="assignee"><span class="av" style="--av-h:150">EF</span><span class="nm">Emanuel F.</span></span><span class="idot">·</span><span class="age">5h ago</span><span class="row-right"><span class="pill" style="--ph:233">ADR</span></span></span></span></button>
+              <button class="row crow"><span class="issue-key">ONE-1199</span><span class="crow-body"><span class="row-title-line"><span class="row-title">gRPC API — Backward-Compatible Auth Service</span></span><span class="crow-meta"><span class="assignee"><span class="av" style="--av-h:30">LI</span><span class="nm">Lukas I.</span></span><span class="idot">·</span><span class="age">1d ago</span><span class="row-right"><span class="pill" style="--ph:25">High</span></span></span></span></button>
+              <button class="row crow"><span class="issue-key">ONE-1274</span><span class="crow-body"><span class="row-title-line"><span class="row-title">Implement REST token issue endpoint</span></span><span class="crow-meta"><span class="assignee"><span class="av" style="--av-h:60">TT</span><span class="nm">Tina T.</span></span><span class="idot">·</span><span class="age">4d ago</span><span class="row-right"><span class="pill" style="--ph:75">Med</span></span></span></span></button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- ════════════ NEWS SPACE ════════════ -->
+  <div class="lenspage hide" id="space-news" data-space="news">
+    <div class="aurora" aria-hidden="true"></div>
+    <main class="main">
+      <header class="identity">
+        <span class="lens-tile">N</span>
+        <div>
+          <h1 class="lens-name">News</h1>
+          <p class="lens-sub">Feeds — a quiet magazine</p>
+        </div>
+      </header>
+
+      <section class="card">
+        <button class="sec-head"><span class="chev">▸</span><span class="sec-dot" style="--dot-h:150"></span><span class="sec-title">Articles</span><span class="count">367</span><span class="sec-trail">RSS</span></button>
+        <div class="sec-body">
+          <div class="article-controls">
+            <button class="scope-pick">All feeds <span class="car">▾</span></button>
+            <span class="right">
+              <button class="chip-btn on">Unread 367</button>
+              <span class="seg"><button class="seg-btn" id="b-grid">Grid</button><button class="seg-btn on" id="b-list">List</button></span>
+            </span>
+          </div>
+          <div class="article-grid hide" id="feedgrid"></div>
+          <div class="article-list" id="feed"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+<script>
+  function showSpace(s) {
+    document.getElementById('space-code').classList.toggle('hide', s !== 'code');
+    document.getElementById('space-news').classList.toggle('hide', s !== 'news');
+    document.getElementById('b-code').classList.toggle('on', s === 'code');
+    document.getElementById('b-news').classList.toggle('on', s === 'news');
+  }
+  // Feed mock — note the deliberately loud thumbnails (RTP red, SHEIN orange) to
+  // show the dim-at-rest → wake-on-hover treatment doing its job.
+  const G = (a,b)=>`linear-gradient(135deg, ${a}, ${b})`;
+  const feed = [
+    ['Caça ao homem após explosão que atingiu oligarca ucraniano no Mónaco','RTP Notícias','now','Mundo', G('oklch(0.45 0.08 250)','oklch(0.3 0.05 250)'), false],
+    ['IPMA. Termómetros sobem aos 43º a partir de amanhã','RTP Notícias','now','País', G('oklch(0.6 0.12 60)','oklch(0.4 0.1 40)'), false],
+    ['9h Operações de socorro complicadas pela chuva','RTP Antena1','now','Antena1', G('oklch(0.55 0.22 25)','oklch(0.45 0.2 25)'), false],
+    ['Portugal garante apoio à reconstrução da Venezuela','RTP Notícias','5m','Mundo', G('oklch(0.5 0.1 150)','oklch(0.35 0.08 150)'), false],
+    ['Corina Machado acusa Governo de bloquear o seu regresso','RTP Notícias','7m','Mundo', G('oklch(0.5 0.06 30)','oklch(0.4 0.05 30)'), false],
+    ['Compras até 150 euros a lojas fora da UE com taxa de 3 euros','RTP Notícias','13m','Economia', G('oklch(0.75 0.18 55)','oklch(0.6 0.2 35)'), false],
+    ['Fiscalização de terrenos avança em zonas críticas sob alerta','RTP Notícias','21m','País', G('oklch(0.55 0.08 145)','oklch(0.4 0.06 145)'), true],
+    ['Prazo para entrega do IRS termina esta terça-feira','RTP Notícias','21m','Economia', G('oklch(0.5 0.05 233)','oklch(0.4 0.04 233)'), true],
+    ['Incêndios. Interior de Portugal continental em perigo máximo','RTP Notícias','27m','País', G('oklch(0.55 0.2 35)','oklch(0.45 0.18 30)'), false],
+    ['08h Quase 60 mil edifícios destruídos na Venezuela','RTP Antena1','38m','Antena1', G('oklch(0.55 0.22 25)','oklch(0.45 0.2 25)'), false],
+    ['PS não deve tomar posição definitiva sobre o Orçamento','RTP Notícias','1h','Política', G('oklch(0.45 0.06 280)','oklch(0.35 0.05 280)'), true],
+    ['Técnico do Brasil justifica gestão de Neymar e assume jogo difícil','RTP Notícias','1h','Desporto', G('oklch(0.55 0.12 140)','oklch(0.4 0.1 140)'), false],
+  ];
+  const qs = new URLSearchParams(location.search);
+  if (qs.get('space') === 'news') showSpace('news');
+  const EXCERPT = 'Resumo do artigo em duas linhas, para mostrar o ritmo do cartão na vista de grelha sem dominar o título.';
+  document.getElementById('feed').innerHTML = feed.map(([t,s,age,cat,bg,read]) => `
+    <div class="art-row${read?' read':''}">
+      <span class="art-thumb" style="background-image:${bg}"></span>
+      <span class="art-main">
+        <span class="art-title">${t}</span>
+        <span class="art-foot"><span class="art-src">${s}</span><span class="fdot"></span><span>${age}</span><span class="cat">${cat}</span></span>
+      </span>
+      <button class="art-read" title="${read?'Mark as unread':'Mark as read'}">${read?'✉':'●'}</button>
+    </div>`).join('');
+  document.getElementById('feedgrid').innerHTML = feed.map(([t,s,age,cat,bg,read]) => `
+    <div class="art-card${read?' read':''}">
+      <button class="art-open">
+        <span class="art-thumb gridthumb" style="background-image:${bg}"></span>
+        <span class="art-text">
+          <span class="art-title2">${t}</span>
+          <span class="art-desc">${EXCERPT}</span>
+          <span class="art-foot2"><span class="art-src">${s}</span><span class="fdot"></span><span>${age}</span><span class="cat">${cat}</span></span>
+        </span>
+      </button>
+    </div>`).join('');
+  if (qs.get('news') === 'grid') {
+    document.getElementById('feed').classList.add('hide');
+    document.getElementById('feedgrid').classList.remove('hide');
+    document.getElementById('b-grid').classList.add('on');
+    document.getElementById('b-list').classList.remove('on');
+  }
+</script>
+</body>
+</html>
