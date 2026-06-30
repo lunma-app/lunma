@@ -787,7 +787,7 @@ export function onContextMenu(_e: MouseEvent): void {
             onclick={openPage}
             title={m.sidebar_lensFiltered()}
           >
-            <Icon name="filter" size={11} />
+            <Icon name="funnel" size={11} />
             <span>{m.sidebar_lensFilteredBadge()}</span>
           </button>
         {/if}
