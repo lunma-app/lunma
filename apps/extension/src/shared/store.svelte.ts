@@ -2,6 +2,7 @@ import { deriveLensKind } from './lens-entity';
 import { sourceKey } from './lens-labels';
 import { log } from './logger';
 import { CURRENT_SCHEMA_VERSION } from './schemas';
+import { isSpaceEmpty } from './space-empty';
 import { disambiguateSpaceName, normalizeSpaceName } from './space-names';
 import type {
   AppState,
@@ -413,10 +414,7 @@ export class LunmaStore {
     if (this.state.spaces.length <= 1) return;
     const index = this.state.spaces.findIndex((s) => s.id === spaceId);
     if (index === -1) return;
-    if ((this.state.pinnedBySpace[spaceId]?.length ?? 0) > 0) return;
-    for (const windowMap of Object.values(this.state.spaceInstancesByWindow)) {
-      if ((windowMap?.[spaceId]?.tempTabIds.length ?? 0) > 0) return;
-    }
+    if (!isSpaceEmpty(this.state, spaceId)) return;
     this.state.spaces.splice(index, 1);
     for (const [windowIdStr, windowMap] of Object.entries(this.state.spaceInstancesByWindow)) {
       if (windowMap?.[spaceId]) {

@@ -1,9 +1,14 @@
 import { log } from '../logger';
 import { runMigrations } from '../migrations';
 import { type AppStateV17, AppStateV17Schema, CURRENT_SCHEMA_VERSION } from '../schemas';
-import { disambiguateSpaceName, normalizeSpaceName } from '../space-names';
+import { isSpaceEmpty } from '../space-empty';
+import {
+  disambiguateSpaceName,
+  groupDuplicateSpaceNames,
+  normalizeSpaceName,
+} from '../space-names';
 import { createInitialState } from '../store.svelte';
-import type { AppState } from '../types';
+import type { AppState, SpaceId } from '../types';
 
 /** The single `chrome.storage.local` key the persisted app-state envelope lives
  * under. Exported so the options data cards (Backup & restore, Feed
@@ -111,37 +116,73 @@ export function dedupePersistedState(state: AppStateV17): { state: AppStateV17; 
     return true;
   });
 
-  // Normalized-name self-heal: run on the id-deduped list (so it never
-  // disambiguates against a duplicate-id ghost the same call is about to drop).
-  // First occurrence of each normalized name wins; a later collision is
-  // auto-disambiguated, mirroring the non-interactive rename
-  // restoreSpaceFromTrash already performs. `taken` is seeded with EVERY kept
-  // Space's normalized name first, so a collision skips a free suffix already in
-  // use elsewhere in the list (e.g. a pre-existing "Default 2" pushes the second
-  // "Default" to "Default 3"). A new array is built only when a rename fires
-  // (same-reference-when-unchanged).
-  const taken = new Set<string>();
-  const collisions: number[] = [];
-  for (const [i, space] of idDedupedSpaces.entries()) {
-    const norm = normalizeSpaceName(space.name);
-    if (taken.has(norm)) collisions.push(i);
-    else taken.add(norm);
-  }
-  let spaces = idDedupedSpaces;
-  if (collisions.length > 0) {
-    spaces = [...idDedupedSpaces];
-    for (const i of collisions) {
-      const space = spaces[i];
-      if (!space) continue;
-      const name = disambiguateSpaceName(space.name, taken);
-      taken.add(normalizeSpaceName(name));
-      spaces[i] = { ...space, name };
-    }
+  // Empty-aware duplicate-name resolution (spec `spaces-and-tabs` → "Space
+  // names are unique", item 4): group by normalized name (run on the
+  // id-deduped list, so it never resolves against a duplicate-id ghost the
+  // same call is about to drop). A group with exactly one content-holding
+  // member drops every empty duplicate outright; an all-empty group keeps
+  // only its first (array-order) member and drops the rest; a group with
+  // two-or-more content-holding members falls back to today's
+  // disambiguating rename (unchanged) — this never auto-merges real content.
+  // `taken` is seeded with every NON-colliding Space's normalized name first,
+  // so a rename skips a free suffix already in use elsewhere in the list
+  // (e.g. a pre-existing "Default 2" pushes a renamed second "Default" to
+  // "Default 3").
+  const duplicateGroups = groupDuplicateSpaceNames(idDedupedSpaces);
+  const droppedIds = new Set<SpaceId>();
+  const keptIdByDroppedId = new Map<SpaceId, SpaceId>();
+  const renamedNameById = new Map<SpaceId, string>();
+
+  if (duplicateGroups.length > 0) {
     changed = true;
+    const byId = new Map(idDedupedSpaces.map((s) => [s.id, s]));
+    const inGroup = new Set(duplicateGroups.flat());
+    const taken = new Set<string>();
+    for (const space of idDedupedSpaces) {
+      if (!inGroup.has(space.id)) taken.add(normalizeSpaceName(space.name));
+    }
+
+    for (const group of duplicateGroups) {
+      const nonEmptyIds = group.filter((id) => !isSpaceEmpty(state, id));
+      if (nonEmptyIds.length <= 1) {
+        // Zero non-empty members: keep the first (array order). Exactly one:
+        // keep it. Either way every other member of the group is dropped.
+        const keepId = nonEmptyIds[0] ?? group[0];
+        if (keepId === undefined) continue;
+        const keepName = byId.get(keepId)?.name;
+        if (keepName !== undefined) taken.add(normalizeSpaceName(keepName));
+        for (const id of group) {
+          if (id === keepId) continue;
+          droppedIds.add(id);
+          keptIdByDroppedId.set(id, keepId);
+        }
+        continue;
+      }
+      // Two or more content-holding members: keep the first under its
+      // original name, disambiguate every later member (empty or not).
+      const [firstId, ...restIds] = group;
+      const firstName = firstId !== undefined ? byId.get(firstId)?.name : undefined;
+      if (firstName !== undefined) taken.add(normalizeSpaceName(firstName));
+      for (const id of restIds) {
+        const name = byId.get(id)?.name;
+        if (name === undefined) continue;
+        const disambiguated = disambiguateSpaceName(name, taken);
+        taken.add(normalizeSpaceName(disambiguated));
+        renamedNameById.set(id, disambiguated);
+      }
+    }
   }
+
+  const spaces = idDedupedSpaces
+    .filter((s) => !droppedIds.has(s.id))
+    .map((s) => {
+      const renamed = renamedNameById.get(s.id);
+      return renamed !== undefined ? { ...s, name: renamed } : s;
+    });
 
   const pinnedBySpace: AppStateV17['pinnedBySpace'] = {};
   for (const [spaceId, nodes] of Object.entries(state.pinnedBySpace)) {
+    if (droppedIds.has(spaceId)) continue;
     const seen = new Set<string>();
     const out: typeof nodes = [];
     for (const node of nodes) {
@@ -181,6 +222,10 @@ export function dedupePersistedState(state: AppStateV17): { state: AppStateV17; 
     }
     const nextBySpace: NonNullable<AppStateV17['spaceInstancesByWindow'][number]> = {};
     for (const [spaceId, instance] of Object.entries(bySpace)) {
+      if (droppedIds.has(spaceId)) {
+        changed = true;
+        continue;
+      }
       const seen = new Set<number>();
       const tempTabIds: number[] = [];
       for (const tabId of instance.tempTabIds) {
@@ -194,11 +239,42 @@ export function dedupePersistedState(state: AppStateV17): { state: AppStateV17; 
       nextBySpace[spaceId] =
         tempTabIds.length === instance.tempTabIds.length ? instance : { ...instance, tempTabIds };
     }
-    spaceInstancesByWindow[wid] = nextBySpace;
+    // A window whose only instance(s) were dropped above is omitted entirely
+    // (mirrors `removeEmptySpace` deleting the window key once its instance
+    // map is empty) rather than persisted as an explicit `{}`.
+    if (Object.keys(nextBySpace).length > 0) spaceInstancesByWindow[wid] = nextBySpace;
+  }
+
+  // Redirect any window's active Space, or the global last-activated Space,
+  // off a dropped id onto the group's surviving member (mirroring
+  // `removeEmptySpace`'s own redirect-to-fallback behaviour).
+  const activeSpaceByWindow: AppStateV17['activeSpaceByWindow'] = { ...state.activeSpaceByWindow };
+  if (droppedIds.size > 0) {
+    const fallback = spaces[0]?.id ?? null;
+    for (const [windowIdStr, activeSpaceId] of Object.entries(activeSpaceByWindow)) {
+      if (activeSpaceId !== null && droppedIds.has(activeSpaceId)) {
+        activeSpaceByWindow[Number(windowIdStr)] = keptIdByDroppedId.get(activeSpaceId) ?? fallback;
+      }
+    }
+  }
+
+  let lastActivatedSpaceId = state.lastActivatedSpaceId;
+  if (lastActivatedSpaceId !== null && droppedIds.has(lastActivatedSpaceId)) {
+    lastActivatedSpaceId = keptIdByDroppedId.get(lastActivatedSpaceId) ?? spaces[0]?.id ?? null;
   }
 
   if (!changed) return { state, changed };
-  return { state: { ...state, spaces, pinnedBySpace, spaceInstancesByWindow }, changed };
+  return {
+    state: {
+      ...state,
+      spaces,
+      pinnedBySpace,
+      spaceInstancesByWindow,
+      activeSpaceByWindow,
+      lastActivatedSpaceId,
+    },
+    changed,
+  };
 }
 
 /**
