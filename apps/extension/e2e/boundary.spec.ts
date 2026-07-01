@@ -85,6 +85,12 @@ async function lockToSite(sidebar: Page): Promise<void> {
   await lockItem(sidebar).click();
   const editor = sidebar.getByTestId('tab-boundary-editor');
   await expect(editor).toBeVisible();
+  // Wait for the editor to finish rendering in its initial `inherit` mode before
+  // clicking On. `boundary-options-link` renders only when `mode === 'inherit'`,
+  // so its visibility proves the SegmentedControl is mounted and interactive —
+  // clicking On before that races the control's `onchange` wiring, dropping the
+  // `setTabBoundary` dispatch so the seeded chip never appears (flaky timeout).
+  await expect(editor.getByTestId('boundary-options-link')).toBeVisible();
   await editor.getByText('On', { exact: true }).click();
   await expect(editor.getByTestId('chip')).toBeVisible();
 }
