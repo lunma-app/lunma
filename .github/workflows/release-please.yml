@@ -13,6 +13,9 @@ name: Release
 on:
   push:
     branches: [main]
+  # Manual re-run lever: release-please otherwise only reacts to pushes on main,
+  # so a mistaken/blocked Release PR can't be recomputed on demand without one.
+  workflow_dispatch:
 
 # Least privilege: open/update the Release PR, create the tag + GitHub release,
 # and upload the release asset (all `contents: write`).
