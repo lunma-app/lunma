@@ -10,6 +10,7 @@ import type { ArchivedTab } from '../../shared/types';
 import { handleRestoreArchivedTab } from '../auto-archive';
 import { activateTab } from '../tab-groups';
 import type { HandlersMap } from './context';
+import { markPendingDuplicateTab } from './pending-duplicate-tabs';
 import { findTabInActiveSpace, spaceExists } from './queries';
 
 export function tempTabHandlers(): Pick<
@@ -218,8 +219,19 @@ export function tempTabHandlers(): Pick<
     // Duplicate a temp tab via chrome.tabs.duplicate; the cloned tab is adopted
     // into the active Space by the existing tabs.onCreated path — no direct state
     // mutation here. Throws on failure so bus.send rejects with a descriptive error.
-    duplicateTab: async (_ctx, event) => {
+    //
+    // The source tab's (windowId, url) is recorded via markPendingDuplicateTab
+    // BEFORE calling chrome.tabs.duplicate (tab-dedup): the new onCreated-time
+    // dedup check is unscoped by gesture, so without this it would treat the
+    // clone (same URL as its still-open source) as a dedup match and collapse
+    // it right back into the source tab, defeating Duplicate entirely. Recording
+    // synchronously, before the async duplicate() call, sidesteps the fact that
+    // tabs.onCreated firing and duplicate()'s promise resolving are not
+    // guaranteed to order one before the other.
+    duplicateTab: async (ctx, event) => {
       const { tabId } = event.payload;
+      const live = ctx.store.state.liveTabsById[tabId];
+      if (live?.url) markPendingDuplicateTab(live.windowId, live.url);
       await chrome.tabs.duplicate(tabId);
     },
   };

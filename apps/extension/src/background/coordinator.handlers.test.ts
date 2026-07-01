@@ -1756,6 +1756,188 @@ describe('Coordinator handlers: navigation dedup (navigation-tab-dedup)', () => 
   });
 });
 
+// =====================================================================
+// onCreated-time direct-URL dedup (tab-dedup, unscoped by gesture). Exercised
+// through the `tabs.onCreated` handler in handlers/chrome-tabs.ts. Unlike
+// navigation dedup above (gated on the blank-new-tab → real-URL transition),
+// this fires for a tab that is BORN with a target URL — external-app
+// handoffs, but also (deliberately, per the empirical finding in design.md)
+// middle-click/target="_blank"/window.open/"open in new window". The one
+// exclusion is a chrome.tabs.duplicate clone (see the pending-duplicate
+// correlation tests below).
+// =====================================================================
+describe('Coordinator handlers: onCreated-time direct-URL dedup (tab-dedup)', () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  /** Seed window 100's active Space ('work') with an existing temp tab (42) at
+   * `existingUrl` — the dedup target for a tab about to be born at that URL. */
+  function seedOnCreatedDedup(store: LunmaStore, existingUrl: string): void {
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [42], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[42] = {
+      tabId: 42,
+      windowId: 100,
+      title: 'Example',
+      url: existingUrl,
+      active: false,
+      status: 'complete',
+    };
+  }
+
+  test('direct-URL creation matching a temp tab → focuses it, closes the new tab, never tracked', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    seedOnCreatedDedup(store, 'https://example.com/');
+    coordinator.enqueue(tabCreated(99, 100, 'https://example.com/'));
+    await coordinator.idle();
+    expect(chromeStub.tabs.update).toHaveBeenCalledWith(42, { active: true });
+    expect(chromeStub.windows.update).toHaveBeenCalledWith(100, { focused: true });
+    expect(chromeStub.tabs.remove).toHaveBeenCalledWith(99);
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([42]);
+  });
+
+  test('matching a bound (pinned) saved tab in the active Space → focuses it, closes the new tab', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [], tempTabTitles: {} },
+    };
+    store.state.savedTabs['st-1'] = savedTab(
+      'st-1',
+      'https://example.com/',
+      'https://example.com/',
+    );
+    store.state.tabBindings['st-1'] = { 100: 77 };
+    store.state.liveTabsById[77] = {
+      tabId: 77,
+      windowId: 100,
+      title: 'Pinned Example',
+      url: 'https://example.com/',
+      active: false,
+      status: 'complete',
+    };
+    coordinator.enqueue(tabCreated(99, 100, 'https://example.com/'));
+    await coordinator.idle();
+    expect(chromeStub.tabs.update).toHaveBeenCalledWith(77, { active: true });
+    expect(chromeStub.tabs.remove).toHaveBeenCalledWith(99);
+  });
+
+  test('unscoped: a tab created WITH a defined openerTabId is still deduped (accepted behaviour change)', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    seedOnCreatedDedup(store, 'https://example.com/');
+    coordinator.enqueue({
+      source: 'chrome',
+      kind: 'tabs.onCreated',
+      payload: {
+        tab: {
+          id: 99,
+          windowId: 100,
+          url: 'https://example.com/',
+          openerTabId: 7,
+        } as chrome.tabs.Tab,
+      },
+    });
+    await coordinator.idle();
+    // No openerTabId gate: a middle-click/target="_blank"/window.open-style
+    // creation (defined openerTabId) is deduped exactly like an external-app
+    // handoff — see design.md Decision 1 (empirically, openerTabId cannot
+    // distinguish the two once the tab lands in an existing window).
+    expect(chromeStub.tabs.update).toHaveBeenCalledWith(42, { active: true });
+    expect(chromeStub.tabs.remove).toHaveBeenCalledWith(99);
+  });
+
+  test('no match in the active Space → created/tracked normally, no focus/close', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    seedOnCreatedDedup(store, 'https://example.com/');
+    coordinator.enqueue(tabCreated(99, 100, 'https://new.example/'));
+    await coordinator.idle();
+    expect(chromeStub.tabs.update).not.toHaveBeenCalled();
+    expect(chromeStub.tabs.remove).not.toHaveBeenCalled();
+    expect(chromeStub.runtime.sendMessage).not.toHaveBeenCalled();
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toContain(99);
+  });
+
+  test('home tab is never subject to this check, even if its resolved URL matched something', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    seedOnCreatedDedup(store, 'chrome://newtab/');
+    coordinator.enqueue(tabCreated(50, 100, 'chrome://newtab/'));
+    await coordinator.idle();
+    // Grouped as a home tab, not deduped/closed.
+    expect(chromeStub.tabs.remove).not.toHaveBeenCalledWith(50);
+    expect(chromeStub.tabs.update).not.toHaveBeenCalledWith(42, { active: true });
+  });
+
+  test('dedupNewTabNavigations off → created/tracked normally even when the URL is already open', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    coordinator.setDedupNewTabNavigations(false);
+    seedOnCreatedDedup(store, 'https://example.com/');
+    coordinator.enqueue(tabCreated(99, 100, 'https://example.com/'));
+    await coordinator.idle();
+    expect(chromeStub.tabs.update).not.toHaveBeenCalled();
+    expect(chromeStub.tabs.remove).not.toHaveBeenCalled();
+    expect(chromeStub.runtime.sendMessage).not.toHaveBeenCalled();
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toContain(99);
+  });
+
+  test('a URL open only in a different Space or window is not deduped', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.spaces.push({ id: 'archive', name: 'Archive', color: 'green', icon: 'box' });
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [], tempTabTitles: {} },
+      archive: { spaceId: 'archive', groupId: 2, tempTabIds: [42], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[42] = {
+      tabId: 42,
+      windowId: 100,
+      title: 'Example',
+      url: 'https://example.com/',
+      active: false,
+      status: 'complete',
+    };
+    coordinator.enqueue(tabCreated(99, 100, 'https://example.com/'));
+    await coordinator.idle();
+    expect(chromeStub.tabs.update).not.toHaveBeenCalled();
+    expect(chromeStub.tabs.remove).not.toHaveBeenCalled();
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toContain(99);
+  });
+
+  test('focus/close failure falls through to normal tracking (no lost tab)', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    chromeStub.tabs.update.mockRejectedValueOnce(new Error('No tab with id: 42'));
+    const { coordinator, store } = makeCoordinator();
+    seedOnCreatedDedup(store, 'https://example.com/');
+    coordinator.enqueue(tabCreated(99, 100, 'https://example.com/'));
+    await coordinator.idle();
+    expect(chromeStub.tabs.remove).not.toHaveBeenCalled();
+    expect(chromeStub.runtime.sendMessage).not.toHaveBeenCalled();
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toContain(99);
+  });
+
+  test('emits the lunma/tab-dedup-flash message for the focused tab', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    seedOnCreatedDedup(store, 'https://example.com/');
+    coordinator.enqueue(tabCreated(99, 100, 'https://example.com/'));
+    await coordinator.idle();
+    expect(chromeStub.runtime.sendMessage).toHaveBeenCalledWith({
+      type: TAB_DEDUP_FLASH,
+      tabId: 42,
+    });
+  });
+});
+
 describe('Coordinator handlers: duplicateTab', () => {
   beforeEach(() => vi.restoreAllMocks());
 
@@ -1780,5 +1962,73 @@ describe('Coordinator handlers: duplicateTab', () => {
       id: 'sess:1',
       result: { error: 'no such tab' },
     });
+  });
+
+  // The onCreated-time dedup check (tab-dedup) is unscoped by gesture, so
+  // without an explicit exclusion it would treat the clone's tabs.onCreated
+  // (same URL as its still-open source, tab 42) as a dedup match and collapse
+  // it right back — defeating Duplicate. `duplicateTab` records a
+  // pending-duplicate correlation (pending-duplicate-tabs.ts) before calling
+  // chrome.tabs.duplicate; the onCreated-time check consumes it.
+  test('duplicateTab clone is excluded from onCreated-time dedup via the pending-duplicate record', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [42], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[42] = {
+      tabId: 42,
+      windowId: 100,
+      title: 'Example',
+      url: 'https://example.com/',
+      active: true,
+      status: 'complete',
+    };
+    coordinator.enqueue(sidebar({ kind: 'duplicateTab', payload: { tabId: 42 } }, 'sess:1'));
+    await coordinator.idle();
+    expect(chromeStub.tabs.duplicate).toHaveBeenCalledWith(42);
+
+    // Simulate Chrome firing tabs.onCreated for the resulting clone (1000),
+    // same window, same URL as its source.
+    coordinator.enqueue(tabCreated(1000, 100, 'https://example.com/'));
+    await coordinator.idle();
+
+    // NOT deduped: no focus/close of the source, the clone is tracked normally.
+    expect(chromeStub.tabs.update).not.toHaveBeenCalledWith(42, { active: true });
+    expect(chromeStub.tabs.remove).not.toHaveBeenCalledWith(1000);
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toContain(1000);
+  });
+
+  test('the pending-duplicate record is consumed once — a later unrelated tab at the same URL is deduped normally', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [42], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[42] = {
+      tabId: 42,
+      windowId: 100,
+      title: 'Example',
+      url: 'https://example.com/',
+      active: true,
+      status: 'complete',
+    };
+    coordinator.enqueue(sidebar({ kind: 'duplicateTab', payload: { tabId: 42 } }, 'sess:1'));
+    await coordinator.idle();
+    // First onCreated (the clone itself) consumes the pending record.
+    coordinator.enqueue(tabCreated(1000, 100, 'https://example.com/'));
+    await coordinator.idle();
+
+    // A second, unrelated tab created at the same URL afterwards has no
+    // leftover record protecting it — it IS deduped, matching the active
+    // Space's newest-first tempTabIds order (tab 1000, tracked most recently).
+    coordinator.enqueue(tabCreated(1001, 100, 'https://example.com/'));
+    await coordinator.idle();
+    expect(chromeStub.tabs.update).toHaveBeenCalledWith(1000, { active: true });
+    expect(chromeStub.tabs.remove).toHaveBeenCalledWith(1001);
   });
 });

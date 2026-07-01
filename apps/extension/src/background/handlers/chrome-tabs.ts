@@ -12,6 +12,7 @@ import { forgetPageOpenedTab, isPageOpenedTab } from '../page-opened-tabs';
 import { closeTab } from '../tab-groups';
 import { activateSpaceInWindow } from './activation';
 import type { HandlersMap } from './context';
+import { consumePendingDuplicateTab } from './pending-duplicate-tabs';
 import {
   findTabInActiveSpace,
   isTrackedTab,
@@ -36,6 +37,53 @@ export function chromeTabHandlers(): Pick<
       // adopted into the Temporary list. Treated like `isHome` for adoption.
       const isLensPage = isLensPageUrl(tab.url) || isLensPageUrl(tab.pendingUrl);
       if (!isHome && !isLensPage) {
+        // Direct-URL creation dedup (tab-dedup): a tab born with its target URL
+        // already populated (`tab.url` or, mid-navigation, `tab.pendingUrl`) never
+        // reaches the `tabs.onUpdated` first-navigation dedup path below, because
+        // `ctx.store.onTabCreated` (a few lines down) marks it tracked immediately —
+        // this is the gap that path leaves for external-app "open in Chrome"
+        // handoffs. Deliberately UNSCOPED by gesture: a live empirical test (real
+        // built extension, Playwright-driven Chromium, every gesture including a
+        // no-opener CDP Target.createTarget call) showed `openerTabId` is present
+        // for every new tab landing in an existing window regardless of how it was
+        // created, so it cannot distinguish "external app" from "in-page gesture" —
+        // see design.md (fix-direct-url-tab-dedup) Decision 1. So this dedupes
+        // middle-click/target="_blank"/window.open/"open in new window" too, not
+        // just external handoffs — a disclosed, intentional behaviour change from
+        // the previous blanket exclusion.
+        //
+        // The ONE exclusion: a tab created via chrome.tabs.duplicate (the
+        // `duplicateTab` handler in temp-tabs.ts) must never be caught here — it's
+        // the deliberate "give me a second tab of this page" action, and its clone's
+        // URL is by definition identical to its still-open source tab's URL (always
+        // an exact match). `duplicateTab` records the source's (windowId, url) via
+        // `markPendingDuplicateTab` BEFORE calling `chrome.tabs.duplicate`;
+        // `consumePendingDuplicateTab` here recognises and consumes that record.
+        const resolvedUrl = tab.url || tab.pendingUrl;
+        if (
+          resolvedUrl &&
+          ctx.dedupNewTabNavigations() &&
+          !consumePendingDuplicateTab(tab.windowId, resolvedUrl)
+        ) {
+          const found = findTabInActiveSpace(ctx.store.state, tab.windowId, resolvedUrl);
+          if (found !== null && tab.id !== undefined) {
+            try {
+              await chrome.tabs.update(found, { active: true });
+              await chrome.windows.update(tab.windowId, { focused: true });
+              await chrome.tabs.remove(tab.id);
+              ctx.runSideEffect(async () => {
+                await chrome.runtime.sendMessage({ type: TAB_DEDUP_FLASH, tabId: found });
+              });
+              return;
+            } catch (err) {
+              log.debug('onCreated dedup: focus/close failed, adopting normally', {
+                tabId: tab.id,
+                found,
+                err,
+              });
+            }
+          }
+        }
         ctx.store.onTabCreated({ id: tab.id, windowId: tab.windowId });
       }
       ctx.store.syncLiveTab({
