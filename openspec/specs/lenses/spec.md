@@ -1812,12 +1812,17 @@ Each path SHALL normalise results onto the agnostic `LensItem`/`LensSectionRunti
 shapes, slice to `maxItems`, and — for a `review` lens (always, since any bitbucket
 source derives `'review'`) — populate the `change: ChangeData` bag (see Requirement: A
 review lens normalises its sources into Change entities): `author`, `repo`
-(`workspace/repo` on Cloud, `project/repo` on Server), `targetBranch`, `draft` (Cloud
-`draft` flag; Server's listed shape has no draft → `false`), and `reviewers[]` mapped
-onto `approved | changes | pending`. The connector SHALL be bounded (never throws;
-every failure resolves to a runtime state). `requiredOrigins` SHALL follow Requirement:
-Each connector declares the origins it fetches; `listingUrl` SHALL return
-`https://bitbucket.org/dashboard/pullrequests` (Cloud) or `{baseUrl}/dashboard`
+(`workspace/repo` on Cloud, `project/repo` on Server), `targetBranch`, `draft` (both
+deployments read the API's own `draft` boolean field off the PR object already present
+in their respective list responses — Server/DC's dashboard endpoint carries `draft` the
+same as Cloud's), and `reviewers[]` mapped onto `approved | changes | pending`. On both
+paths, the `LensItem` title SHALL be prefixed `Draft: ` when the PR's `draft` is `true`
+(matching the GitHub/GitLab precedent — see Requirement: The GitHub connector fetches
+canned queries over the search API, "Scenario: Draft PRs read as drafts"), restoring
+at-a-glance parity across every source in a mixed lens. The connector SHALL be bounded
+(never throws; every failure resolves to a runtime state). `requiredOrigins` SHALL
+follow Requirement: Each connector declares the origins it fetches; `listingUrl` SHALL
+return `https://bitbucket.org/dashboard/pullrequests` (Cloud) or `{baseUrl}/dashboard`
 (Server); `mintedIcon` SHALL be `'folder-git-2'`.
 
 #### Scenario: A Server bitbucket section fetches review-requested PRs
@@ -1837,6 +1842,12 @@ Each connector declares the origins it fetches; `listingUrl` SHALL return
 - **WHEN** a bitbucket source on `bitbucket.org` is configured in the editor
 - **THEN** only `authored` is offered (no `review-requested`, no `assigned`)
 - **AND WHEN** a self-hosted bitbucket source is configured, `authored` and `review-requested` are offered (no `assigned`)
+
+#### Scenario: A Server draft PR reads as a draft
+
+- **GIVEN** a review lens with a Server/DC `bitbucket` account
+- **WHEN** the connector normalizes a PR whose dashboard response entry carries `draft: true`
+- **THEN** the item's `change.draft` is `true` and its title is prefixed `Draft: `
 
 ### Requirement: Bitbucket connector auth is token-only
 
