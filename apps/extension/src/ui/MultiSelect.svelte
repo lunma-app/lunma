@@ -39,6 +39,9 @@ interface Props {
   label: string;
   /** `dropdown` (trigger + popover, the default) or `inline` (always-open list). */
   mode?: 'dropdown' | 'inline';
+  /** Trigger look (dropdown mode only): `field` (recessed control, the default) or
+   * `chip` (a pill matching the filter chips, for compact filter toolbars). */
+  variant?: 'field' | 'chip';
   /** Show the in-popover search box once `options.length` exceeds this. Default 8. */
   searchThreshold?: number;
   /** Placeholder for the search box (when shown). */
@@ -64,6 +67,7 @@ const {
   onchange,
   label,
   mode = 'dropdown',
+  variant = 'field',
   searchThreshold = 8,
   searchPlaceholder,
   ariaLabel,
@@ -312,6 +316,7 @@ function removeOutside(): void {
 <div
   class="multiselect"
   class:inline={mode === 'inline'}
+  class:chip-variant={variant === 'chip'}
   bind:this={rootEl}
   onkeydown={onKeydown}
   data-testid={mode === 'inline' ? testid : undefined}
@@ -321,6 +326,7 @@ function removeOutside(): void {
       bind:this={triggerEl}
       type="button"
       class="trigger"
+      class:chip={variant === 'chip'}
       class:open
       class:active={selectedCount > 0}
       aria-haspopup="listbox"
@@ -369,6 +375,11 @@ function removeOutside(): void {
     display: flex;
     width: 100%;
   }
+  /* Chip variant sizes to its trigger (a pill) rather than filling the row, so it
+     sits inline in a compact filter toolbar. */
+  .multiselect.chip-variant {
+    width: auto;
+  }
   .multiselect.inline {
     display: block;
   }
@@ -395,6 +406,29 @@ function removeOutside(): void {
       border-color var(--motion-base) var(--ease-standard),
       box-shadow var(--motion-base) var(--ease-standard),
       background var(--motion-base) var(--ease-standard);
+  }
+  /* Chip trigger: a pill matching the filter chips (Chip / the Unread toggle) so a
+     compact filter toolbar reads as one family. Sizes to content; the active/open
+     state fills like a selected chip. */
+  .trigger.chip {
+    width: auto;
+    height: auto;
+    padding: 4px 11px;
+    gap: 6px;
+    border-radius: var(--r-pill);
+    border-color: var(--border-soft);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: var(--text-xs);
+  }
+  .trigger.chip.active,
+  .trigger.chip.open {
+    border-color: transparent;
+    background: var(--surface-3);
+    color: var(--text);
+  }
+  .trigger.chip .chevron {
+    margin-left: 0;
   }
   .trigger:hover {
     border-color: var(--border-strong);
