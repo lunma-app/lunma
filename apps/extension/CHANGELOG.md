@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/lunma-app/lunma/compare/v0.4.1...v0.4.2) (2026-07-01)
+
+
+### Bug Fixes
+
+* **i18n:** ship Portuguese manifest catalog as pt_BR + pt_PT ([c73a02e](https://github.com/lunma-app/lunma/commit/c73a02e7b0226168ecbaf35965954e8a462b0c08))
+
 ## [0.4.1](https://github.com/lunma-app/lunma/compare/v0.4.0...v0.4.1) (2026-07-01)
 
 
