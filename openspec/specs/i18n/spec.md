@@ -6,10 +6,12 @@ TBD - created by archiving change add-i18n-foundation. Update Purpose after arch
 ### Requirement: Supported locales and the message-catalog contract
 
 Lunma SHALL define a fixed set of supported UI locales: `en` (the base locale and
-source of truth) plus `es`, `pt-PT`, `fr`, `de`, `ja`, `ko`, `zh-CN`, `ru`. The set
+source of truth) plus `es`, `pt`, `fr`, `de`, `ja`, `ko`, `zh-CN`, `ru`. The set
 SHALL be declared once in `apps/extension/project.inlang/settings.json`
 (`baseLocale: "en"`, `locales: [...]`) and mirrored by the `SupportedLocale` union type
-exported from `apps/extension/src/shared/settings.ts`.
+exported from `apps/extension/src/shared/settings.ts`. The Portuguese locale is
+region-neutral `pt` (not `pt-PT`): a single Portuguese catalog serves every
+Portuguese browser, whether European or Brazilian.
 
 UI message strings SHALL live in per-locale catalog files
 `apps/extension/messages/{locale}.json` (one file per supported locale), outside
@@ -29,7 +31,7 @@ the import DAG legal.
 #### Scenario: The locale set is single-sourced
 
 - **WHEN** the supported-locale set is needed by the inlang project and by the `SupportedLocale` type
-- **THEN** both SHALL list exactly `en, es, pt-PT, fr, de, ja, ko, zh-CN, ru` with `en` as the base
+- **THEN** both SHALL list exactly `en, es, pt, fr, de, ja, ko, zh-CN, ru` with `en` as the base
 
 #### Scenario: Generated runtime keeps the layer DAG legal
 
@@ -67,8 +69,10 @@ it; the wrapper accepts `SupportedLocale | 'auto'`, persists the choice via
 `watchSettings` path owns the reload, design D6) never reloads. `initLocale()` SHALL read the persisted `language`
 setting; when it is `'auto'` (or unset) it SHALL resolve the locale from the browser via
 `chrome.i18n.getUILanguage()` (falling back to `navigator.language`), mapping a
-base-language tag to the nearest supported locale (e.g. `pt → pt-PT`, `zh → zh-CN`),
-and SHALL fall back to the base locale `en` when no supported match exists. When the
+base-language tag to the nearest supported locale (e.g. `pt → pt`, `zh → zh-CN`),
+and SHALL fall back to the base locale `en` when no supported match exists. Every
+Portuguese browser variant — `pt`, `pt-PT`, and `pt-BR` — SHALL resolve to the single
+region-neutral `pt` locale. When the
 cache is unseeded (e.g. under jsdom in unit tests, where `chrome.storage` is absent),
 `getLocale()` returning `undefined` SHALL fall through to `baseLocale` (`en`).
 
@@ -87,8 +91,9 @@ cache is unseeded (e.g. under jsdom in unit tests, where `chrome.storage` is abs
 
 - **GIVEN** effective `language` is `'auto'` and the browser UI language is `pt-BR`
 - **WHEN** `initLocale()` runs
-- **THEN** the resolved locale SHALL be `pt-PT` (nearest supported), not the base locale
-- **AND** a `zh-TW` (Traditional) browser SHALL likewise map to `zh-CN` — the only
+- **THEN** the resolved locale SHALL be `pt` (the single region-neutral Portuguese locale), not the base locale
+- **AND** a `pt-PT` browser SHALL likewise resolve to `pt`
+- **AND** a `zh-TW` (Traditional) browser SHALL map to `zh-CN` — the only
   supported Chinese variant (a documented, accepted lossiness, not a silent gap)
 
 #### Scenario: An unsupported browser locale falls back to base
@@ -167,11 +172,11 @@ For every supported locale there SHALL be a
 `apps/extension/public/_locales/{locale}/messages.json` providing the referenced message
 keys; these files SHALL be passed through verbatim by the build (as `public/` already is
 for `fonts/` and `icons/`). The `_locales` subdirectory names SHALL use Chrome's
-underscore locale codes (`pt_PT`, `zh_CN`), not the BCP-47 hyphens the Paraglide
+underscore locale codes (`pt`, `zh_CN`), not the BCP-47 hyphens the Paraglide
 `messages/` catalogs use — a platform path convention, mapped (`-` → `_`) by the parity
-and locale-set tests. The Chrome Web Store listing's title/description fields are
-localized in the CWS dashboard (an external, non-code task) and are out of scope for this
-spec.
+and locale-set tests (region-neutral `pt` maps to itself). The Chrome Web Store listing's
+title/description fields are localized in the CWS dashboard (an external, non-code task)
+and are out of scope for this spec.
 
 #### Scenario: Manifest declares a default locale and message placeholders
 

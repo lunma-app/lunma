@@ -239,7 +239,7 @@ export const SETTINGS: readonly SettingDeclaration[] = [
       { value: 'auto', label: 'System' },
       { value: 'en', label: 'English' },
       { value: 'es', label: 'Español' },
-      { value: 'pt-PT', label: 'Português' },
+      { value: 'pt', label: 'Português' },
       { value: 'fr', label: 'Français' },
       { value: 'de', label: 'Deutsch' },
       { value: 'ja', label: '日本語' },

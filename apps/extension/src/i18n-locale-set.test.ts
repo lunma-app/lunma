@@ -9,7 +9,7 @@ import { locales as runtimeLocales } from './shared/paraglide/runtime';
 // parity (i18n-parity.test.ts) checks the catalogs' KEYS; this checks the locale
 // SET itself, so the three can never silently drift.
 
-const EXPECTED = ['de', 'en', 'es', 'fr', 'ja', 'ko', 'pt-PT', 'ru', 'zh-CN'];
+const EXPECTED = ['de', 'en', 'es', 'fr', 'ja', 'ko', 'pt', 'ru', 'zh-CN'];
 
 const sorted = (values: readonly string[]): string[] => [...values].sort();
 

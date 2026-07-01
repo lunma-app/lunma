@@ -64,8 +64,9 @@ describe('Paraglide message catalogs (messages/{locale}.json)', () => {
 describe('Native manifest catalogs (_locales/{locale}/messages.json)', () => {
   const { baseLocale, locales } = loadProject();
 
-  // Chrome `_locales` subdirectories use underscore locale codes (`pt_PT`,
-  // `zh_CN`), not the BCP-47 hyphens Paraglide uses — map before resolving paths.
+  // Chrome `_locales` subdirectories use underscore locale codes (`zh_CN`), not
+  // the BCP-47 hyphens Paraglide uses — map before resolving paths. Region-neutral
+  // codes without a hyphen (`pt`) map to themselves.
   const chromeDir = (locale: string): string => locale.replace('-', '_');
 
   type ChromeMessage = { message?: unknown };
