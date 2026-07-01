@@ -6,7 +6,7 @@
 
 ## 2. StoryMeta wiring, registry merge, codegen
 
-- [x] 2.1 `apps/extension/catalog/lib/story.ts`: add `excludeControls?: Record<string, string>` and `controlOverrides?: Partial<Controls>` to `StoryMeta`. Leave `controls` in place for now (removed in task 3.3) so migration can proceed incrementally.
+- [x] 2.1 `apps/extension/catalog/lib/story.ts`: add `excludeControls?: Record<string, string>` and `controlOverrides?: Record<string, Partial<ControlDef>>` to `StoryMeta`. Leave `controls` in place for now (removed in task 3.3) so migration can proceed incrementally.
 - [x] 2.2 `apps/extension/vite.catalog.config.ts`: before `defineConfig`, glob-read every `apps/extension/src/ui/*.svelte` (excluding `*.test.*`), run `deriveControls()` per file, and write the result to a gitignored `apps/extension/catalog/lib/derived-controls.generated.ts` (mirrors the existing font-copy side effect in the same file).
 - [x] 2.3 `.gitignore`: add `apps/extension/catalog/lib/derived-controls.generated.ts` alongside the existing `catalog/public/fonts/` entry.
 - [x] 2.4 `apps/extension/catalog/lib/registry.ts`: for each story entry, merge `derived-controls.generated.ts`'s entry for that primitive with the story's `excludeControls` (remove) and `controlOverrides` (shallow-merge per prop) to produce the final `Controls` passed to `Story.svelte`. Fall back to `meta.controls` (task 3's old field) while it still exists, preferring the derived+override result once a story has migrated.
