@@ -169,10 +169,9 @@ function highlightSource(): void {
   }
 
   .playground {
-    display: grid;
-    grid-template-columns: 1fr minmax(16rem, 22rem);
+    display: flex;
+    flex-direction: column;
     gap: var(--space-4);
-    align-items: start;
   }
   .preview {
     display: flex;
@@ -184,9 +183,9 @@ function highlightSource(): void {
     border-radius: var(--r-lg);
   }
   .controls {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+    gap: var(--space-4);
   }
   .control-row {
     display: flex;
