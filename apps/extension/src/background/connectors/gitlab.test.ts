@@ -502,6 +502,21 @@ describe('fetchRuntime — review-lens change enrichment', () => {
     expect(runtime.items[0]?.change?.reviewers).toEqual([{ login: 'dave', state: 'changes' }]);
   });
 
+  test('a draft MR populates change.draft as true', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes('/api/v4/merge_requests?')) {
+        return jsonResponse([reviewMr(1, { draft: true })]);
+      }
+      if (url.includes('/approvals')) return approvals([]);
+      throw new Error(`unrouted: ${url}`);
+    });
+    const runtime = await gitlabConnector.fetchRuntime(
+      node({ lensKind: 'review', query: 'authored' }),
+      20,
+    );
+    expect(runtime.items[0]?.change?.draft).toBe(true);
+  });
+
   test('a general lens makes no approvals call and carries no change', async () => {
     let approvalsCalled = false;
     fetchMock.mockImplementation(async (url: string) => {

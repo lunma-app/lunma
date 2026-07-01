@@ -116,6 +116,7 @@ const ServerRepoSchema = z.object({
 const ServerPrSchema = z.object({
   id: z.union([z.number(), z.string()]),
   title: z.string(),
+  draft: z.boolean().optional(),
   author: z
     .object({
       user: z
@@ -159,8 +160,8 @@ function serverReviewers(pr: ServerPr): ChangeData['reviewers'] {
 }
 
 /** Build a {@link ChangeData} bag from a Server PR. The dashboard list carries
- * no draft flag and no diffstat → `draft: false`, `additions`/`deletions`
- * omitted. `repo` is `project/repo` from `toRef.repository`. */
+ * no diffstat → `additions`/`deletions` omitted. `repo` is `project/repo`
+ * from `toRef.repository`. */
 function serverChange(pr: ServerPr): ChangeData {
   const author = pr.author?.user?.name ?? pr.author?.user?.displayName ?? '';
   const projectKey = pr.toRef?.repository?.project?.key;
@@ -171,7 +172,7 @@ function serverChange(pr: ServerPr): ChangeData {
     author,
     repo,
     reviewers: serverReviewers(pr),
-    draft: false,
+    draft: pr.draft === true,
     updatedAt: pr.updatedDate ?? Number.NaN,
     ...(pr.toRef?.displayId !== undefined ? { targetBranch: pr.toRef.displayId } : {}),
   };
@@ -179,7 +180,12 @@ function serverChange(pr: ServerPr): ChangeData {
 
 function serverItem(pr: ServerPr): LensItem {
   const href = pr.links?.self?.[0]?.href ?? '';
-  return { id: String(pr.id), title: pr.title, url: href, change: serverChange(pr) };
+  return {
+    id: String(pr.id),
+    title: pr.draft === true ? `Draft: ${pr.title}` : pr.title,
+    url: href,
+    change: serverChange(pr),
+  };
 }
 
 /**

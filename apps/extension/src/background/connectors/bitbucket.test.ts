@@ -182,6 +182,19 @@ describe('Server / Data Center', () => {
     const runtime = await bitbucketConnector.fetchRuntime(serverNode(), 2);
     expect(runtime.items).toHaveLength(2);
   });
+
+  test('draft PRs carry the draft flag and a "Draft:" title prefix', async () => {
+    storageData = { ...SERVER_TOKEN };
+    routeFetch([
+      [
+        (u) => u.includes('/dashboard/pull-requests'),
+        () => serverPage([serverPr(7, { draft: true })]),
+      ],
+    ]);
+    const runtime = await bitbucketConnector.fetchRuntime(serverNode(), 20);
+    expect(runtime.items[0]?.title).toBe('Draft: PR 7');
+    expect(runtime.items[0]?.change?.draft).toBe(true);
+  });
 });
 
 // ── Cloud ──────────────────────────────────────────────────────────────────────
