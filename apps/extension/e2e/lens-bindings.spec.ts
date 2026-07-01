@@ -62,11 +62,19 @@ async function grantForgeHost(context: BrowserContext): Promise<void> {
  * until the menu is genuinely open. */
 async function openFolderMenu(page: Page): Promise<void> {
   const deleteItem = page.locator('[data-menu-id="delete"]');
+  const row = page.getByTestId('lens-row');
   await expect(async () => {
     if (!(await deleteItem.isVisible())) {
-      // The lens kebab is gone (sources-redesign) — the row's actions live on its
-      // right-click context menu now.
-      await page.getByTestId('lens-row').click({ button: 'right' });
+      // Reset to a known-closed state before re-triggering: dismiss any open
+      // Tooltip/menu and park the pointer off-row. The lens row shows a hover
+      // Tooltip (e.g. "Pipeline passed"); when the pointer is already resting on
+      // the row from a prior action, that open Tooltip swallows the `contextmenu`
+      // gesture under load, so the menu never opens (the reveal is not rAF-timing
+      // but a lost trigger). Escaping + moving off-row makes each attempt a clean
+      // hover→right-click that reliably opens the menu on the first try.
+      await page.keyboard.press('Escape');
+      await page.mouse.move(5, 5);
+      await row.click({ button: 'right' });
     }
     await expect(deleteItem).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 15_000 });

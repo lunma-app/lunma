@@ -78,6 +78,37 @@ async function pinSite(context: BrowserContext, sidebar: Page): Promise<Page> {
   return site;
 }
 
+/**
+ * Switch the boundary editor to "On" and wait for the seeded-domain chip.
+ *
+ * The chip renders only after `setTabBoundary` round-trips through the SW and the
+ * resulting store update flows back into the editor (mode → 'locked' with a
+ * non-empty allow-list). That command is fire-and-forget over the bus with a 10s
+ * timeout and NO product-level retry (`TabBoundaryEditor.send` only logs on
+ * failure), so under heavy CI load a single dispatch can time out and silently
+ * leave the tab unlocked — the seeded chip then never appears.
+ *
+ * Re-clicking the SAME "On" segment cannot recover that: the SegmentedControl is
+ * a group of native radios, and once "On" is checked, clicking its label fires no
+ * further `change` event, so no new dispatch goes out (and `select()` guards on
+ * the model value too). To force a genuine re-dispatch each retry we bounce off
+ * "Default" first, then click "On" again — the second click is always a real
+ * state change (model mode is still `inherit` until a dispatch lands), so it
+ * re-sends `setTabBoundary`. Gated on the chip's own visibility so a lock that
+ * DID land is never toggled back off, and the loop always ends on an "On" click
+ * (never a trailing "Default"), so the committed state is locked when it exits.
+ */
+async function selectOnUntilChipSeeds(editor: Locator): Promise<void> {
+  const chip = editor.getByTestId('chip');
+  await expect(async () => {
+    if (!(await chip.isVisible())) {
+      await editor.getByText('Default', { exact: true }).click();
+      await editor.getByText('On', { exact: true }).click();
+    }
+    await expect(chip).toBeVisible({ timeout: 3_000 });
+  }).toPass({ timeout: 20_000, intervals: [500, 1_000, 2_000] });
+}
+
 /** Open the pinned row's right-click menu, drill into the editor, and switch to On
  * (which seeds the registrable domain). Leaves the menu open. */
 async function lockToSite(sidebar: Page): Promise<void> {
@@ -89,19 +120,7 @@ async function lockToSite(sidebar: Page): Promise<void> {
   // renders only when `mode === 'inherit'`, so its visibility proves the
   // SegmentedControl is mounted and the BottomSheet's entrance has settled.
   await expect(editor.getByTestId('boundary-options-link')).toBeVisible();
-  // Switching to On dispatches `setTabBoundary`; the seeded-domain chip renders
-  // only AFTER that command round-trips through the SW and the resulting store
-  // update flows back into the editor's `boundary` prop (mode → 'locked'). Under
-  // heavy parallel suite load the first click can be lost — it races the sheet's
-  // async mount and the just-pinned tab's store-settle — or the round-trip can
-  // lag past a fixed wait, so the chip intermittently never appears. Retry the
-  // whole click→chip sequence so a dropped/early click self-heals: `selectMode`
-  // no-ops once already locked and the radio fires no `change` when already
-  // selected, so re-clicking On is idempotent.
-  await expect(async () => {
-    await editor.getByText('On', { exact: true }).click();
-    await expect(editor.getByTestId('chip')).toBeVisible({ timeout: 2_000 });
-  }).toPass({ timeout: 15_000, intervals: [500, 1_000, 2_000] });
+  await selectOnUntilChipSeeds(editor);
 }
 
 test('the menu opens the boundary editor sheet, seeds the domain, and dismiss returns', async ({
@@ -124,14 +143,9 @@ test('the menu opens the boundary editor sheet, seeds the domain, and dismiss re
   // Default mode surfaces a discoverability link to the global default.
   await expect(editor.getByTestId('boundary-options-link')).toBeVisible();
 
-  // On seeds the tab's registrable domain (localhost) as a chip. The chip only
-  // renders after `setTabBoundary` round-trips through the SW and the store
-  // update flows back into the editor; retry the click→chip sequence so a
-  // dropped/early first click self-heals (idempotent — see `lockToSite`).
-  await expect(async () => {
-    await editor.getByText('On', { exact: true }).click();
-    await expect(editor.getByTestId('chip')).toBeVisible({ timeout: 2_000 });
-  }).toPass({ timeout: 15_000, intervals: [500, 1_000, 2_000] });
+  // On seeds the tab's registrable domain (localhost) as a chip (retrying a
+  // dropped/timed-out dispatch — see `selectOnUntilChipSeeds`).
+  await selectOnUntilChipSeeds(editor);
   await expect(editor.getByTestId('chip')).toHaveText(/localhost/);
 
   // Dismissing the sheet (✕) returns to the sidebar (editor gone).
