@@ -670,3 +670,75 @@ describe('reconcileTabGroupsOnBoot — favorite ungroup reconciliation (D4)', ()
     expect(chrome.tabs.get(43)?.groupId).toBe(-1);
   });
 });
+
+describe('reconcileTabGroupsOnBoot — duplicate-Space cleanup (D9)', () => {
+  test('a duplicate exposed only after the boot group query is cleaned up before the broadcast', async () => {
+    const store = makeStore();
+    // The current "Default" holds an open tab; the leftover empty one is a
+    // duplicate from a prior boot's fresh-install conversion that missed
+    // folding a stale Chrome group whose window had not finished restoring.
+    store.state.spaces.push(
+      { id: 'current', name: 'Default', color: 'gray', icon: 'star' },
+      { id: 'stale', name: 'Default', color: 'gray', icon: 'star' },
+    );
+    store.state.activeSpaceByWindow[100] = 'current';
+    store.state.spaceInstancesByWindow[100] = {
+      current: { spaceId: 'current', groupId: -1, tempTabIds: [17], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[17] = live(17, 100);
+
+    await reconcileTabGroupsOnBoot(store);
+
+    expect(store.state.spaces.map((s) => s.id)).toEqual(['current']);
+  });
+
+  test('a two-content-holding-Spaces pair is left untouched by this step', async () => {
+    const store = makeStore();
+    store.state.spaces.push(
+      { id: 's1', name: 'Default', color: 'gray', icon: 'star' },
+      { id: 's2', name: 'Default', color: 'gray', icon: 'star' },
+    );
+    store.state.activeSpaceByWindow[100] = 's1';
+    store.state.activeSpaceByWindow[200] = 's2';
+    store.state.spaceInstancesByWindow[100] = {
+      s1: { spaceId: 's1', groupId: -1, tempTabIds: [17], tempTabTitles: {} },
+    };
+    store.state.spaceInstancesByWindow[200] = {
+      s2: { spaceId: 's2', groupId: -1, tempTabIds: [30], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[17] = live(17, 100);
+    store.state.liveTabsById[30] = live(30, 200);
+
+    await reconcileTabGroupsOnBoot(store);
+
+    // Both Spaces survive, still named "Default" — the boot pass never renames.
+    expect(store.state.spaces.map((s) => s.id).sort()).toEqual(['s1', 's2']);
+    expect(store.state.spaces.every((s) => s.name === 'Default')).toBe(true);
+  });
+
+  test('a no-op when state.spaces has no name collisions', async () => {
+    const store = makeStore();
+    store.state.spaces.push(
+      { id: 'work', name: 'Work', color: 'blue', icon: 'star' },
+      { id: 'side', name: 'Side', color: 'red', icon: 'star' },
+    );
+    store.state.activeSpaceByWindow[100] = 'work';
+
+    await reconcileTabGroupsOnBoot(store);
+
+    expect(store.state.spaces.map((s) => s.id)).toEqual(['work', 'side']);
+  });
+
+  test('the last-remaining-Space guard is exercised (no-op in practice)', async () => {
+    const store = makeStore();
+    // Only one Space exists — no collision group is possible — but this
+    // asserts `removeEmptySpace`'s own last-Space refusal is never bypassed
+    // by this step even if grouping/partition ever disagreed.
+    store.state.spaces.push({ id: 'only', name: 'Default', color: 'gray', icon: 'star' });
+    store.state.activeSpaceByWindow[100] = 'only';
+
+    await reconcileTabGroupsOnBoot(store);
+
+    expect(store.state.spaces.map((s) => s.id)).toEqual(['only']);
+  });
+});

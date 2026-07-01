@@ -1,6 +1,11 @@
 import { log } from '../shared/logger';
 import { isNewTabUrl } from '../shared/new-tab';
-import { disambiguateSpaceName, normalizeSpaceName } from '../shared/space-names';
+import { isSpaceEmpty } from '../shared/space-empty';
+import {
+  disambiguateSpaceName,
+  groupDuplicateSpaceNames,
+  normalizeSpaceName,
+} from '../shared/space-names';
 import type { LunmaStore } from '../shared/store.svelte';
 import type { SpaceColor, SpaceId, TabId, WindowId } from '../shared/types';
 import {
@@ -437,6 +442,33 @@ async function ungroupRestoredFavorites(
 }
 
 /**
+ * Duplicate-Space cleanup (D9 / spec `spaces-and-tabs` "Boot reconciliation of
+ * tab groups"): after adoption/materialization/favorite-ungroup, group
+ * `store.state.spaces` into normalized-name collision groups and, for each
+ * group, partition members via `isSpaceEmpty` exactly as the load-path
+ * self-heal (`dedupePersistedState`) does. Every member the resolution marks
+ * as a drop — the "exactly one non-empty" and "all empty" cases — is removed
+ * via `store.removeEmptySpace`. A group resolved as "two or more non-empty
+ * members" is left untouched here (the boot pass never renames; only the
+ * load-path self-heal does — renaming mid-boot could retitle a Space out from
+ * under an already-rendered sidebar with no user action). Runs unconditionally
+ * every boot (not only on `freshInstall`), so a duplicate exposed only after
+ * the boot's single `chrome.tabGroups.query({})` call (e.g. a window still
+ * restoring at query time) is still caught before the broadcast.
+ */
+function cleanUpDuplicateSpaces(store: LunmaStore): void {
+  const groups = groupDuplicateSpaceNames(store.state.spaces);
+  for (const group of groups) {
+    const nonEmptyIds = group.filter((id) => !isSpaceEmpty(store.state, id));
+    if (nonEmptyIds.length > 1) continue; // left for the load-path self-heal
+    const keepId = nonEmptyIds[0] ?? group[0];
+    for (const id of group) {
+      if (id !== keepId) store.removeEmptySpace(id);
+    }
+  }
+}
+
+/**
  * The boot entry point (called from the SW boot chain after
  * `seedExistingTabs` / `rebuildLiveTabs`, before the boot persist + broadcast).
  * Queries Chrome's existing groups + tabs once, then:
@@ -447,10 +479,15 @@ async function ungroupRestoredFavorites(
  *   - **materializes** any still-missing active-Space group;
  *   - **ungroups** any global favorite (`spaceId === null`) Chrome restored still
  *     inside a group, so it is global again before a Space switch can hide it
- *     (favicon-row-model D4).
+ *     (favicon-row-model D4);
+ *   - **cleans up** any empty Space left duplicate-named after the above steps
+ *     (D9), run every boot (not only on `freshInstall`), so a duplicate that
+ *     escaped this boot's fresh-install fold or a prior boot's adoption is
+ *     still caught before the broadcast.
  * Order matters: convert (mint Spaces + assign tabs) → adopt (re-bind) →
- * materialize → ungroup-favorites, so a restored group is reused rather than
- * duplicated and favorites end ungrouped after the Space groups are settled.
+ * materialize → ungroup-favorites → duplicate cleanup, so a restored group is
+ * reused rather than duplicated, favorites end ungrouped, and any still-empty
+ * duplicate is gone before the Space groups are settled and broadcast.
  */
 export async function reconcileTabGroupsOnBoot(
   store: LunmaStore,
@@ -489,4 +526,5 @@ export async function reconcileTabGroupsOnBoot(
   adoptExistingGroups(store, groups, tabsByGroup);
   await materializeActiveGroups(store, tabGroupById);
   await ungroupRestoredFavorites(store, tabGroupById);
+  cleanUpDuplicateSpaces(store);
 }

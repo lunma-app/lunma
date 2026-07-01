@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { disambiguateSpaceName, normalizeSpaceName } from './space-names';
+import { disambiguateSpaceName, groupDuplicateSpaceNames, normalizeSpaceName } from './space-names';
 
 describe('normalizeSpaceName', () => {
   test('trims surrounding whitespace', () => {
@@ -63,5 +63,68 @@ describe('disambiguateSpaceName', () => {
     const taken = new Set(['work']);
     disambiguateSpaceName('Work', taken);
     expect([...taken]).toEqual(['work']);
+  });
+});
+
+describe('groupDuplicateSpaceNames', () => {
+  test('returns no groups when every name is unique', () => {
+    const spaces = [
+      { id: 'a', name: 'Work' },
+      { id: 'b', name: 'Personal' },
+    ];
+    expect(groupDuplicateSpaceNames(spaces)).toEqual([]);
+  });
+
+  test('returns one group for a single collision', () => {
+    const spaces = [
+      { id: 'a', name: 'Default' },
+      { id: 'b', name: 'Work' },
+      { id: 'c', name: 'Default' },
+    ];
+    expect(groupDuplicateSpaceNames(spaces)).toEqual([['a', 'c']]);
+  });
+
+  test('returns multiple groups for multiple collisions', () => {
+    const spaces = [
+      { id: 'a', name: 'Default' },
+      { id: 'b', name: 'Work' },
+      { id: 'c', name: 'Default' },
+      { id: 'd', name: 'Work' },
+    ];
+    expect(groupDuplicateSpaceNames(spaces)).toEqual([
+      ['a', 'c'],
+      ['b', 'd'],
+    ]);
+  });
+
+  test('groups case/whitespace-insensitively', () => {
+    const spaces = [
+      { id: 'a', name: 'Default' },
+      { id: 'b', name: ' default ' },
+      { id: 'c', name: 'DEFAULT' },
+    ];
+    expect(groupDuplicateSpaceNames(spaces)).toEqual([['a', 'b', 'c']]);
+  });
+
+  test('preserves array order within a group and across groups', () => {
+    const spaces = [
+      { id: 'z', name: 'Work' },
+      { id: 'y', name: 'Default' },
+      { id: 'x', name: 'Work' },
+      { id: 'w', name: 'Default' },
+    ];
+    expect(groupDuplicateSpaceNames(spaces)).toEqual([
+      ['z', 'x'],
+      ['y', 'w'],
+    ]);
+  });
+
+  test('a group of 3+ same-named Spaces is returned as one group', () => {
+    const spaces = [
+      { id: 'a', name: 'Default' },
+      { id: 'b', name: 'Default' },
+      { id: 'c', name: 'Default' },
+    ];
+    expect(groupDuplicateSpaceNames(spaces)).toEqual([['a', 'b', 'c']]);
   });
 });

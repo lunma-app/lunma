@@ -10,6 +10,8 @@
  * V5 → V6 migration, all of which must stay chrome-free.
  */
 
+import type { SpaceId } from './types';
+
 /**
  * The normalized comparison form of a Space name: trimmed and case-folded.
  * Only the *comparison* is normalized — the Space record keeps the user's
@@ -36,4 +38,25 @@ export function disambiguateSpaceName(desired: string, takenNormalized: Set<stri
     const candidate = `${desired} ${suffix}`;
     if (!takenNormalized.has(normalizeSpaceName(candidate))) return candidate;
   }
+}
+
+/**
+ * Partition `spaces` into normalized-name collision groups, in first-seen
+ * order. Each returned group holds the ids of every Space sharing a
+ * normalized name, in `spaces` array order; a name held by only one Space is
+ * omitted entirely (every returned group has length ≥ 2). Pure, synchronous —
+ * shared by the load-path self-heal (`dedupePersistedState`) and the boot-time
+ * duplicate cleanup, so both resolve the same grouping.
+ */
+export function groupDuplicateSpaceNames<T extends { id: SpaceId; name: string }>(
+  spaces: T[],
+): SpaceId[][] {
+  const idsByName = new Map<string, SpaceId[]>();
+  for (const space of spaces) {
+    const key = normalizeSpaceName(space.name);
+    const ids = idsByName.get(key);
+    if (ids) ids.push(space.id);
+    else idsByName.set(key, [space.id]);
+  }
+  return [...idsByName.values()].filter((ids) => ids.length >= 2);
 }

@@ -995,12 +995,108 @@ describe('dedupePersistedState', () => {
       { id: 'work', name: 'Work dup-id', color: 'red', icon: 'book' },
       { id: 'read', name: 'Work', color: 'orange', icon: 'book' },
     ];
+    // Both surviving Spaces hold content, so the name pass takes the
+    // two-or-more-non-empty rename branch (an empty duplicate would be
+    // dropped instead — see the dedicated empty-duplicate tests below).
+    state.pinnedBySpace = {
+      work: [{ kind: 'tab', id: 'a' }],
+      read: [{ kind: 'tab', id: 'b' }],
+    };
     const { state: out, changed } = dedupePersistedState(state);
     expect(changed).toBe(true);
     // The dup-id "work" is dropped first; the name pass then sees only ['Work','Work']
     // by id (work, read) and disambiguates the second to "Work 2".
     expect(out.spaces.map((s) => s.id)).toEqual(['work', 'read']);
     expect(out.spaces.map((s) => s.name)).toEqual(['Work', 'Work 2']);
+  });
+
+  test('an empty duplicate is removed, not renamed', () => {
+    const state = createInitialState();
+    state.spaces = [
+      { id: 's1', name: 'Default', color: 'blue', icon: 'star' },
+      { id: 's2', name: 'Default', color: 'red', icon: 'book' },
+    ];
+    state.spaceInstancesByWindow = {
+      100: {
+        s1: { spaceId: 's1', groupId: -1, tempTabIds: [7], tempTabTitles: {} },
+        s2: { spaceId: 's2', groupId: -1, tempTabIds: [], tempTabTitles: {} },
+      },
+    };
+    const { state: out, changed } = dedupePersistedState(state);
+    expect(changed).toBe(true);
+    expect(out.spaces.map((s) => s.id)).toEqual(['s1']);
+    expect(out.spaces.map((s) => s.name)).toEqual(['Default']);
+    expect(out.spaceInstancesByWindow[100]).toEqual({
+      s1: { spaceId: 's1', groupId: -1, tempTabIds: [7], tempTabTitles: {} },
+    });
+  });
+
+  test('all members of a collision group are empty: first kept, rest dropped', () => {
+    const state = createInitialState();
+    state.spaces = [
+      { id: 's1', name: 'Default', color: 'blue', icon: 'star' },
+      { id: 's2', name: 'Default', color: 'red', icon: 'book' },
+      { id: 's3', name: 'Default', color: 'gray', icon: 'book' },
+    ];
+    const { state: out, changed } = dedupePersistedState(state);
+    expect(changed).toBe(true);
+    expect(out.spaces.map((s) => s.id)).toEqual(['s1']);
+  });
+
+  test('a dropped empty duplicate redirects activeSpaceByWindow and lastActivatedSpaceId to the kept Space', () => {
+    const state = createInitialState();
+    state.spaces = [
+      { id: 's1', name: 'Default', color: 'blue', icon: 'star' },
+      { id: 's2', name: 'Default', color: 'red', icon: 'book' },
+    ];
+    state.spaceInstancesByWindow = {
+      100: {
+        s1: { spaceId: 's1', groupId: -1, tempTabIds: [7], tempTabTitles: {} },
+      },
+    };
+    state.activeSpaceByWindow = { 100: 's1', 200: 's2' };
+    state.lastActivatedSpaceId = 's2';
+    const { state: out } = dedupePersistedState(state);
+    expect(out.spaces.map((s) => s.id)).toEqual(['s1']);
+    expect(out.activeSpaceByWindow).toEqual({ 100: 's1', 200: 's1' });
+    expect(out.lastActivatedSpaceId).toBe('s1');
+  });
+
+  test('a two-or-more-non-empty collision is left for the rename path, not dropped', () => {
+    const state = createInitialState();
+    state.spaces = [
+      { id: 's1', name: 'Default', color: 'blue', icon: 'star' },
+      { id: 's2', name: 'Default', color: 'red', icon: 'book' },
+    ];
+    state.pinnedBySpace = {
+      s1: [{ kind: 'tab', id: 'a' }],
+      s2: [{ kind: 'tab', id: 'b' }],
+    };
+    const { state: out, changed } = dedupePersistedState(state);
+    expect(changed).toBe(true);
+    expect(out.spaces.map((s) => s.id)).toEqual(['s1', 's2']);
+    expect(out.spaces.map((s) => s.name)).toEqual(['Default', 'Default 2']);
+    expect(out.pinnedBySpace).toEqual({
+      s1: [{ kind: 'tab', id: 'a' }],
+      s2: [{ kind: 'tab', id: 'b' }],
+    });
+  });
+
+  test('dropping an empty duplicate is idempotent (a second load changes nothing further)', () => {
+    const state = createInitialState();
+    state.spaces = [
+      { id: 's1', name: 'Default', color: 'blue', icon: 'star' },
+      { id: 's2', name: 'Default', color: 'red', icon: 'book' },
+    ];
+    state.spaceInstancesByWindow = {
+      100: {
+        s1: { spaceId: 's1', groupId: -1, tempTabIds: [7], tempTabTitles: {} },
+      },
+    };
+    const healed = dedupePersistedState(state).state;
+    const { state: out, changed } = dedupePersistedState(healed);
+    expect(changed).toBe(false);
+    expect(out).toBe(healed);
   });
 });
 
