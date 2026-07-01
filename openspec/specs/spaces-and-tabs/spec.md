@@ -1186,7 +1186,7 @@ On service-worker boot, after `seedExistingTabs` / `rebuildLiveTabs`, the coordi
 
 ### Requirement: Fresh-install conversion of Chrome groups into Spaces
 
-On a **fresh install** — when no Spaces were loaded from storage at boot — the boot tab-group pass (`reconcileTabGroupsOnBoot(store, freshInstall)`, before adoption/materialization) SHALL convert each existing Chrome tab group into a Space so the user's existing groups appear as Spaces instead of collapsing into the single auto-created Default. `freshInstall` SHALL be determined as "`state.spaces` was empty after load, before `ensureAtLeastOneSpace`, AND the boot read `outcome` returned by `loadState()` was NOT `'unavailable'`". An `'unavailable'` outcome (a transient storage-read failure) is NOT a fresh install — its empty in-memory store SHALL NOT trigger conversion. Outside a fresh install the pass SHALL NOT convert any group into a Space.
+On a **fresh install** — when no Spaces were loaded from a clean storage read at boot — the boot tab-group pass (`reconcileTabGroupsOnBoot(store, freshInstall)`, before adoption/materialization) SHALL convert each existing Chrome tab group into a Space so the user's existing groups appear as Spaces instead of collapsing into the single auto-created Default. `freshInstall` SHALL be determined as "`state.spaces` was empty after load, before `ensureAtLeastOneSpace`, AND the boot read `outcome` returned by `loadState()` was `'clean'`" — i.e. a genuine first install (a clean read of an absent/empty `lunma.state`). A `'recovered'` (corruption-quarantine fallback), `'salvaged'` (partial-corruption recovery), or `'unavailable'` (transient read failure) outcome is NOT a fresh install: each can leave `state.spaces` empty, but re-deriving Spaces from the user's live Chrome tab groups there would fabricate duplicate `'Default'`/`'Group N'` Spaces over real (quarantined) data on every such boot. None of those outcomes SHALL trigger conversion. Outside a fresh install the pass SHALL NOT convert any group into a Space.
 
 For each existing group the conversion SHALL mint a Space whose colour is `fromGroupColor(group.color)` (the inverse of `toGroupColor`: Chrome `grey` → Lunma `gray`, other Chrome colours pass through, unknown → `gray`), MOVE that group's member tabs out of the Default into the new Space's `(window, Space)` instance (`store.assignSpaceTabs`, which removes them from any other instance in the same window), and re-bind the live group id (`store.recordSpaceGroup`). Bound (saved) tabs SHALL NOT be moved.
 
@@ -1237,6 +1237,14 @@ Each window SHALL activate the Space whose group holds the window's active tab; 
 - **WHEN** the boot pass runs and the window contains a Chrome group matching no Space
 - **THEN** no Space SHALL be created from that group (it is handled only by adoption / left untracked)
 
+#### Scenario: Conversion does not run after a corruption recovery
+
+- **GIVEN** the boot read `outcome` is `'recovered'` (a corrupt payload was quarantined and the layer fell back to `createInitialState()`), or `'salvaged'` with no Spaces recovered, so `state.spaces` is empty after load
+- **WHEN** the boot tab-group pass runs
+- **THEN** `freshInstall` SHALL be `false`
+- **AND** no Space SHALL be created from any existing Chrome group
+- **AND** the boot SHALL mint only the single Default (per Requirement: At-least-one-Space invariant), never one Space per tab group
+
 #### Scenario: Conversion does not run after an unavailable read
 
 - **GIVEN** the boot read `outcome` is `'unavailable'` (a transient `chrome.storage.local.get` failure), so `state.spaces` is empty after load
@@ -1244,28 +1252,6 @@ Each window SHALL activate the Space whose group holds the window's active tab; 
 - **THEN** `freshInstall` SHALL be `false`
 - **AND** no Space SHALL be created from any existing Chrome group
 - **AND** the on-disk `lunma.state` SHALL be left intact (no Default minted, no persist)
-
-#### Scenario: A group titled "Default" folds into the auto-created Default
-
-- **GIVEN** a fresh install where the auto-created Default exists and window 100 has a group `77` titled "Default" (tabs 17+22) plus an ungrouped, active tab 99
-- **WHEN** the boot pass converts
-- **THEN** exactly ONE Space named "Default" SHALL exist, with NO Space named "Default 2"
-- **AND** that Default SHALL hold tabs 17+22 (folded from group `77`, bound to `77`) and SHALL retain ungrouped tab 99
-
-#### Scenario: An untitled group colliding with an oddly-named Default still disambiguates
-
-- **GIVEN** a fresh install where the auto-created Default is (unusually) named "Group 1" and window 100 has an untitled group `88` (tab 17) plus an ungrouped, active tab 99 keeping the Default
-- **WHEN** the boot pass converts
-- **THEN** the untitled group SHALL mint a distinct Space named "Group 1 2" (it SHALL NOT fold into the same-named Default)
-- **AND** both "Group 1" and "Group 1 2" SHALL exist
-
-#### Scenario: A recovery boot recovers Space names from restored group titles (no poisoning)
-
-- **GIVEN** a corrupt-and-unsalvageable read (boot `outcome` `'recovered'`), so `state.spaces` is empty, and window 100 has a restored Chrome group `77` titled "Work" (tabs 17+22) with tab 17 active
-- **WHEN** the boot pass runs with `freshInstall = true`
-- **THEN** a Space named "Work" SHALL exist holding tabs 17+22 bound to group `77`
-- **AND** group `77` SHALL NOT be retitled to "Default"
-- **AND** no Space named "Default" SHALL persist (the empty auto-created Default is discarded)
 
 ### Requirement: Chrome tab-group lifecycle reconciliation (backend contract)
 
