@@ -277,10 +277,10 @@ describe('OverviewPage', () => {
     expect(getByTestId('overview-empty')).toBeTruthy();
   });
 
-  test('repo chips render inside the Changes card when facets.repos is non-empty', () => {
+  test('repo chips render inside the Changes card when facets.repos has 2+ values', () => {
     const { container } = renderOverview({ ...empty(), change: [PR] }, vi.fn(), vi.fn(), vi.fn(), {
       entities: ['change'],
-      repos: ['github.com/acme/api'],
+      repos: ['github.com/acme/api', 'github.com/acme/web'],
       projects: [],
       feeds: [],
     });
@@ -289,20 +289,20 @@ describe('OverviewPage', () => {
     expect(container.querySelector('[data-testid="repo-chip"]')).not.toBeNull();
   });
 
-  test('project chips render inside the Issues card when facets.projects is non-empty', () => {
+  test('project chips render inside the Issues card when facets.projects has 2+ values', () => {
     const { container } = renderOverview(
       { ...empty(), ticket: [ISSUE] },
       vi.fn(),
       vi.fn(),
       vi.fn(),
-      { entities: ['ticket'], repos: [], projects: ['Payments'], feeds: [] },
+      { entities: ['ticket'], repos: [], projects: ['Payments', 'Platform'], feeds: [] },
     );
     const scopeFilter = container.querySelector('[data-testid="issue-scope-filter"]');
     expect(scopeFilter).not.toBeNull();
     expect(container.querySelector('[data-testid="project-chip"]')).not.toBeNull();
   });
 
-  test('feed chips render inside the Articles card when facets.feeds is non-empty', () => {
+  test('feed chips render inside the Articles card when facets.feeds has 2+ values', () => {
     const { container } = renderOverview(
       { ...empty(), article: [ARTICLE] },
       vi.fn(),
@@ -323,8 +323,8 @@ describe('OverviewPage', () => {
       vi.fn(),
       {
         entities: ['change', 'ticket'],
-        repos: ['github.com/acme/api'],
-        projects: ['Payments'],
+        repos: ['github.com/acme/api', 'github.com/acme/web'],
+        projects: ['Payments', 'Platform'],
         feeds: [],
       },
     );
@@ -336,5 +336,108 @@ describe('OverviewPage', () => {
     // project chip only inside Issues card
     expect(ticketCard?.querySelector('[data-testid="project-chip"]')).not.toBeNull();
     expect(changeCard?.querySelector('[data-testid="project-chip"]')).toBeNull();
+  });
+
+  test('a single-value repo facet renders no scope filter', () => {
+    const { container } = renderOverview({ ...empty(), change: [PR] }, vi.fn(), vi.fn(), vi.fn(), {
+      entities: ['change'],
+      repos: ['github.com/acme/api'],
+      projects: [],
+      feeds: [],
+    });
+    expect(container.querySelector('[data-testid="change-scope-filter"]')).toBeNull();
+  });
+
+  test('a single-value feed facet renders no scope filter', () => {
+    const { container } = renderOverview(
+      { ...empty(), article: [ARTICLE] },
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      { entities: ['article'], repos: [], projects: [], feeds: ['Hacker News'] },
+    );
+    expect(container.querySelector('[data-testid="article-scope-filter"]')).toBeNull();
+  });
+
+  test('exactly two repo values render as a two-chip toggle row, not the overflow MultiSelect', () => {
+    const { container } = renderOverview({ ...empty(), change: [PR] }, vi.fn(), vi.fn(), vi.fn(), {
+      entities: ['change'],
+      repos: ['github.com/acme/api', 'github.com/acme/web'],
+      projects: [],
+      feeds: [],
+    });
+    expect(container.querySelectorAll('[data-testid="repo-chip"]')).toHaveLength(2);
+    expect(container.querySelector('[data-testid="repo-select"]')).toBeNull();
+  });
+
+  test('clicking Select all in the overflow feed picker collapses the filter to []', async () => {
+    const feeds = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6'];
+    const { container, setFilter } = renderOverview(
+      { ...empty(), article: [ARTICLE] },
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      { entities: ['article'], repos: [], projects: [], feeds },
+    );
+    const trigger = container.querySelector('[data-testid="feed-select"]') as HTMLButtonElement;
+    expect(trigger).not.toBeNull();
+    await fireEvent.click(trigger);
+    const selectAllBtn = container.querySelector(
+      '[data-testid="multi-select-all"]',
+    ) as HTMLButtonElement;
+    expect(selectAllBtn).not.toBeNull();
+    await fireEvent.click(selectAllBtn);
+    expect(setFilter).toHaveBeenCalledWith(expect.objectContaining({ feeds: [] }));
+  });
+
+  test('manually checking the last of every repo option also collapses the filter to []', async () => {
+    // PR's host-qualified repo (github.com/payments-api) must itself be one of the
+    // ALREADY-selected repos, otherwise the active (non-empty) filter would filter
+    // the PR out entirely and the Changes card — and its scope filter — wouldn't render.
+    const repos = ['github.com/payments-api', 'R2', 'R3', 'R4', 'R5', 'R6'];
+    const node: LensNode = { ...NODE, filter: { repos: repos.slice(0, 5) } };
+    const { container, setFilter } = renderOverview(
+      { ...empty(), change: [PR] },
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      { entities: ['change'], repos, projects: [], feeds: [] },
+      vi.fn(),
+      node,
+    );
+    const trigger = container.querySelector('[data-testid="repo-select"]') as HTMLButtonElement;
+    expect(trigger).not.toBeNull();
+    await fireEvent.click(trigger);
+    const lastOption = container.querySelector(
+      '[data-testid="multi-select-option"][data-value="R6"]',
+    ) as HTMLButtonElement;
+    expect(lastOption).not.toBeNull();
+    await fireEvent.click(lastOption);
+    expect(setFilter).toHaveBeenCalledWith(expect.objectContaining({ repos: [] }));
+  });
+
+  test('after a collapse to [], a newly-arriving feed still passes the (empty) filter', () => {
+    const secondFeedArticle = tagged(
+      {
+        id: 'a2',
+        title: 'A late arrival from a new feed',
+        url: 'u',
+        excerpt: 'x',
+        publishedAt: 2,
+      },
+      'rss',
+      { sourceId: 'rss-2' },
+    );
+    const node: LensNode = { ...NODE, filter: { feeds: [] } };
+    const { container } = renderOverview(
+      { ...empty(), article: [ARTICLE, secondFeedArticle] },
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      { entities: ['article'], repos: [], projects: [], feeds: ['Lobsters', 'A New Feed'] },
+      vi.fn(),
+      node,
+    );
+    expect(container.querySelectorAll('[data-testid="article-card"]')).toHaveLength(2);
   });
 });
