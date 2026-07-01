@@ -1,0 +1,17 @@
+export { sidebar_spaceeditortitlenew3 as "sidebar_spaceEditorTitleNew" };
+export type LocalizedString = import("../runtime.js").LocalizedString;
+export type Sidebar_Spaceeditortitlenew3Inputs = {};
+/**
+* | output |
+* | --- |
+* | "New Space" |
+*
+* @param {Sidebar_Spaceeditortitlenew3Inputs} inputs
+* @param {{ locale?: "en" | "es" | "pt" | "fr" | "de" | "ja" | "ko" | "zh-CN" | "ru" }} options
+* @returns {LocalizedString}
+*/
+declare const sidebar_spaceeditortitlenew3: ((inputs?: Sidebar_Spaceeditortitlenew3Inputs, options?: {
+    locale?: "en" | "es" | "pt" | "fr" | "de" | "ja" | "ko" | "zh-CN" | "ru";
+}) => LocalizedString) & import("../runtime.js").MessageMetadata<Sidebar_Spaceeditortitlenew3Inputs, {
+    locale?: "en" | "es" | "pt" | "fr" | "de" | "ja" | "ko" | "zh-CN" | "ru";
+}, {}>;

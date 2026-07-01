@@ -1,0 +1,17 @@
+export { sidebar_lenswillshow2 as "sidebar_lensWillShow" };
+export type LocalizedString = import("../runtime.js").LocalizedString;
+export type Sidebar_Lenswillshow2Inputs = {};
+/**
+* | output |
+* | --- |
+* | "This lens will show" |
+*
+* @param {Sidebar_Lenswillshow2Inputs} inputs
+* @param {{ locale?: "en" | "es" | "pt" | "fr" | "de" | "ja" | "ko" | "zh-CN" | "ru" }} options
+* @returns {LocalizedString}
+*/
+declare const sidebar_lenswillshow2: ((inputs?: Sidebar_Lenswillshow2Inputs, options?: {
+    locale?: "en" | "es" | "pt" | "fr" | "de" | "ja" | "ko" | "zh-CN" | "ru";
+}) => LocalizedString) & import("../runtime.js").MessageMetadata<Sidebar_Lenswillshow2Inputs, {
+    locale?: "en" | "es" | "pt" | "fr" | "de" | "ja" | "ko" | "zh-CN" | "ru";
+}, {}>;
