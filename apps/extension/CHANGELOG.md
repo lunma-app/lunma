@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.3](https://github.com/lunma-app/lunma/compare/v0.4.2...v0.4.3) (2026-07-01)
+
+
+### Bug Fixes
+
+* **bitbucket:** read real draft state for Server/DC pull requests ([6b0a286](https://github.com/lunma-app/lunma/commit/6b0a286ee72d7252c69375915703b4b89432e721))
+* **e2e:** widen boundary chip retry budget for heavy-CI runs ([6e4b369](https://github.com/lunma-app/lunma/commit/6e4b369deb19399dbbb01c255ef9cc93ee03bf07))
+* **launcher:** consistent lens scope filters, no stale select-all ([fc16e83](https://github.com/lunma-app/lunma/commit/fc16e8367e8bcbca60776d401850e76ee53609a0))
+
 ## [0.4.2](https://github.com/lunma-app/lunma/compare/v0.4.1...v0.4.2) (2026-07-01)
 
 
