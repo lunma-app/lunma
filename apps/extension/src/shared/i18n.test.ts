@@ -48,11 +48,18 @@ describe('initLocale() locale resolution', () => {
     expect(getLocale()).toBe('de');
   });
 
-  test("'auto' + a regional tag maps to the nearest supported locale (pt-BR → pt-PT)", async () => {
+  test("'auto' + any Portuguese variant maps to the region-neutral locale (pt-BR → pt)", async () => {
     chromeMock.settings = { language: 'auto' };
     chromeMock.uiLanguage = 'pt-BR';
     await initLocale();
-    expect(getLocale()).toBe('pt-PT');
+    expect(getLocale()).toBe('pt');
+  });
+
+  test("'auto' + pt-PT also maps to the region-neutral pt", async () => {
+    chromeMock.settings = { language: 'auto' };
+    chromeMock.uiLanguage = 'pt-PT';
+    await initLocale();
+    expect(getLocale()).toBe('pt');
   });
 
   test("'auto' + zh-TW maps to the only supported Chinese variant (zh-CN)", async () => {

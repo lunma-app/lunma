@@ -358,7 +358,7 @@ export const sidebar_newtab1 = /** @type {(inputs: Sidebar_Newtab1Inputs) => Loc
 	return /** @type {LocalizedString} */ (`Novo separador`)
 };
 
-export const sidebar_clearedtabs1 = /** @type {(inputs: Sidebar_Clearedtabs1Inputs) => LocalizedString} */ (i) => {const countPlural = registry.plural("pt-PT", i?.count, {});
+export const sidebar_clearedtabs1 = /** @type {(inputs: Sidebar_Clearedtabs1Inputs) => LocalizedString} */ (i) => {const countPlural = registry.plural("pt", i?.count, {});
 	if (countPlural === "one") return /** @type {LocalizedString} */ (`${i?.count} separador fechado`);
 	if (countPlural === "other") return /** @type {LocalizedString} */ (`${i?.count} separadores fechados`);
 	return /** @type {LocalizedString} */ ("sidebar_clearedTabs");
@@ -680,7 +680,7 @@ export const launcher_emptycaption1 = /** @type {(inputs: Launcher_Emptycaption1
 	return /** @type {LocalizedString} */ (`Ainda nada aqui. Abra alguns separadores — o que não fixar desaparece por si só.`)
 };
 
-export const launcher_metaline1 = /** @type {(inputs: Launcher_Metaline1Inputs) => LocalizedString} */ (i) => {const tabPlural = registry.plural("pt-PT", i?.tabCount, {});
+export const launcher_metaline1 = /** @type {(inputs: Launcher_Metaline1Inputs) => LocalizedString} */ (i) => {const tabPlural = registry.plural("pt", i?.tabCount, {});
 	if (tabPlural === "one") return /** @type {LocalizedString} */ (`${i?.tabCount} separador · ${i?.pinnedCount} fixos`);
 	if (tabPlural === "other") return /** @type {LocalizedString} */ (`${i?.tabCount} separadores · ${i?.pinnedCount} fixos`);
 	return /** @type {LocalizedString} */ ("launcher_metaLine");
@@ -722,7 +722,7 @@ export const launcher_actionhintswitch2 = /** @type {(inputs: Launcher_Actionhin
 	return /** @type {LocalizedString} */ (`↵ Mudar  ⇧↵ Novo separador`)
 };
 
-export const launcher_resultstatus1 = /** @type {(inputs: Launcher_Resultstatus1Inputs) => LocalizedString} */ (i) => {const countPlural = registry.plural("pt-PT", i?.count, {});
+export const launcher_resultstatus1 = /** @type {(inputs: Launcher_Resultstatus1Inputs) => LocalizedString} */ (i) => {const countPlural = registry.plural("pt", i?.count, {});
 	if (countPlural === "one") return /** @type {LocalizedString} */ (`${i?.count} resultado`);
 	if (countPlural === "other") return /** @type {LocalizedString} */ (`${i?.count} resultados`);
 	return /** @type {LocalizedString} */ ("launcher_resultStatus");
@@ -952,7 +952,7 @@ export const options_reachnotused2 = /** @type {(inputs: Options_Reachnotused2In
 	return /** @type {LocalizedString} */ (`Ainda não utilizado`)
 };
 
-export const options_reachused1 = /** @type {(inputs: Options_Reachused1Inputs) => LocalizedString} */ (i) => {const countPlural = registry.plural("pt-PT", i?.count, {});
+export const options_reachused1 = /** @type {(inputs: Options_Reachused1Inputs) => LocalizedString} */ (i) => {const countPlural = registry.plural("pt", i?.count, {});
 	if (countPlural === "one") return /** @type {LocalizedString} */ (`Usado em ${i?.count} lens`);
 	if (countPlural === "other") return /** @type {LocalizedString} */ (`Usado em ${i?.count} lenses`);
 	return /** @type {LocalizedString} */ ("options_reachUsed");
@@ -1414,7 +1414,7 @@ export const options_feedreachline2 = /** @type {(inputs: Options_Feedreachline2
 	return /** @type {LocalizedString} */ (`${i?.feedUrl} · ${i?.reach} · alimenta ${i?.entity}`)
 };
 
-export const options_removeconfirmwarn2 = /** @type {(inputs: Options_Removeconfirmwarn2Inputs) => LocalizedString} */ (i) => {const countPlural = registry.plural("pt-PT", i?.count, {});
+export const options_removeconfirmwarn2 = /** @type {(inputs: Options_Removeconfirmwarn2Inputs) => LocalizedString} */ (i) => {const countPlural = registry.plural("pt", i?.count, {});
 	if (countPlural === "one") return /** @type {LocalizedString} */ (`Ainda usado em ${i?.count} lens — essas secções mostrarão "conta removida".`);
 	if (countPlural === "other") return /** @type {LocalizedString} */ (`Ainda usado em ${i?.count} lenses — essas secções mostrarão "conta removida".`);
 	return /** @type {LocalizedString} */ ("options_removeConfirmWarn");

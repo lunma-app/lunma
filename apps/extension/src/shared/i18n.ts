@@ -51,8 +51,10 @@ export { getLocale };
 type LanguagePreference = SupportedLocale | 'auto';
 
 // A browser base-language tag → nearest supported locale. Locales that exist
-// only as a regional variant map their base tag here (`pt → pt-PT`,
-// `zh → zh-CN`); base tags that are themselves supported map to themselves.
+// only as a regional variant map their base tag here (`zh → zh-CN`); base tags
+// that are themselves supported (`pt`, …) map to themselves. Portuguese is
+// region-neutral `pt`, so every Portuguese variant (`pt`, `pt-PT`, `pt-BR`)
+// resolves to it.
 const BASE_TAG_TO_LOCALE: Record<string, SupportedLocale> = {
   en: 'en',
   es: 'es',
@@ -61,7 +63,7 @@ const BASE_TAG_TO_LOCALE: Record<string, SupportedLocale> = {
   ja: 'ja',
   ko: 'ko',
   ru: 'ru',
-  pt: 'pt-PT',
+  pt: 'pt',
   zh: 'zh-CN',
 };
 
@@ -69,10 +71,10 @@ const BASE_TAG_TO_LOCALE: Record<string, SupportedLocale> = {
  * supported locale, or `undefined` when none matches. Pure and SW-safe. */
 function matchSupportedLocale(tag: string): SupportedLocale | undefined {
   const lower = tag.toLowerCase();
-  // Exact match first (e.g. `pt-pt` → `pt-PT`, `zh-cn` → `zh-CN`).
+  // Exact match first (e.g. `pt` → `pt`, `zh-cn` → `zh-CN`).
   const exact = locales.find((locale) => locale.toLowerCase() === lower);
   if (exact) return exact;
-  // Otherwise fall back to the base tag (`de-DE` → `de`, `pt-BR` → `pt → pt-PT`).
+  // Otherwise fall back to the base tag (`de-DE` → `de`, `pt-BR`/`pt-PT` → `pt`).
   const base = lower.split('-')[0];
   return base ? BASE_TAG_TO_LOCALE[base] : undefined;
 }

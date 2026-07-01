@@ -771,7 +771,7 @@ restructured into an async boot for this). The default `url`/`cookie`/
 throw in the service worker, so they are deliberately excluded; the resolver uses
 only `chrome.i18n.getUILanguage()` / `navigator.language` (both SW-safe). The
 `language` setting defaults to `'auto'`, resolved to the nearest supported locale
-(`pt-BR → pt-PT`, `zh-TW → zh-CN`, …, `en` as terminal fallback) on first run.
+(`pt-BR`/`pt-PT → pt`, `zh-TW → zh-CN`, …, `en` as terminal fallback) on first run.
 Changing the language persists via `setLocale` (`{ reload: false }`) and each
 surface's `watchSettings` callback reloads **only on a `language` delta** — every
 other setting keeps applying live, as before.
@@ -781,7 +781,8 @@ manifest, so `public/manifest.json` declares `default_locale: "en"` and
 references `description`, `action.default_title`, and the two command
 descriptions as `__MSG_*__` placeholders, resolved from
 `public/_locales/{locale}/messages.json` (Chrome uses underscore locale codes —
-`pt_PT`, `zh_CN`). crxjs passes `public/` through verbatim. Brand `name` /
+`zh_CN`; region-neutral `pt` has no hyphen). crxjs passes `public/` through
+verbatim. Brand `name` /
 `short_name` ("Lunma") stay literal. A parity test (`src/i18n-parity.test.ts`)
 guards both the Paraglide and `_locales` catalogs for key-completeness.
 
