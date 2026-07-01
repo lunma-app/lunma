@@ -32,7 +32,7 @@ jobs:
       COREPACK_ENABLE_DOWNLOAD_PROMPT: 0
     steps:
       # --- Setup: identical to ci.yml's proven steps (no second toolchain) ---
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: 24
@@ -43,7 +43,7 @@ jobs:
       # static string, and the store only exists once corepack activates pnpm.
       - id: pnpm-store
         run: echo "dir=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v5.0.5
+      - uses: actions/cache@v6.1.0
         with:
           path: ${{ steps.pnpm-store.outputs.dir }}
           key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
