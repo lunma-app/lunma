@@ -4,26 +4,14 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'ColorSwatch',
   group: 'Atoms',
-  controls: {
-    color: {
-      type: 'select',
-      options: [
-        'red',
-        'orange',
-        'yellow',
-        'green',
-        'teal',
-        'cyan',
-        'blue',
-        'purple',
-        'pink',
-        'gray',
-      ],
-      default: 'purple',
-      typeLabel: 'SpaceColor',
-      description: 'The Space colour this swatch represents.',
-    },
-    selected: { type: 'boolean', default: true, description: 'Selected (ring + full scale).' },
+  controlOverrides: {
+    selected: { default: true, description: 'Selected (ring + full scale).' },
+  },
+  excludeControls: {
+    color:
+      'SpaceColor is an imported type alias, not an inline string-literal union — not mechanically derivable (syntactic-only parsing). See the full-palette example below.',
+    onclick: 'Callback prop — no meaningful live control.',
+    tabindex: 'Roving-tabindex wiring — not meaningful to fiddle with in an isolated preview.',
   },
 });
 </script>
@@ -43,7 +31,7 @@ let selected = $state<SpaceColor>('blue');
 
 <Story {meta} {source}>
   {#snippet preview(args: Args)}
-    <ColorSwatch color={args.color as SpaceColor} selected={args.selected as boolean} onclick={noop} />
+    <ColorSwatch color="purple" selected={args.selected as boolean} onclick={noop} />
   {/snippet}
   {#snippet examples()}
     <Variant label="full palette · selectable">

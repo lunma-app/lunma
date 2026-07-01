@@ -4,27 +4,18 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'Surface',
   group: 'Layout',
-  controls: {
-    variant: {
-      type: 'select',
-      options: ['glass', 'elevated', 'flat', 'section'],
-      default: 'glass',
-      typeLabel: "'glass' | 'elevated' | 'flat' | 'section'",
-      description: 'Panel chrome treatment.',
-    },
-    radius: {
-      type: 'select',
-      options: ['sm', 'md', 'lg', 'xl', '2xl'],
-      default: 'lg',
-      typeLabel: "'sm' | 'md' | 'lg' | 'xl' | '2xl'",
-      description: 'Corner radius.',
-    },
-    glow: { type: 'boolean', default: false, description: 'Soft Space-hue glow.' },
-    clip: {
-      type: 'boolean',
-      default: false,
-      description: 'overflow:hidden for full-bleed children.',
-    },
+  controlOverrides: {
+    glow: { description: 'Soft Space-hue glow.' },
+    clip: { description: 'overflow:hidden for full-bleed children.' },
+  },
+  excludeControls: {
+    variant:
+      'SurfaceVariant is a module-script type alias, not an inline string-literal union on the Props interface itself — not mechanically derivable (syntactic-only parsing). See the per-variant Examples below.',
+    radius:
+      'SurfaceRadius is a module-script type alias, not an inline string-literal union on the Props interface itself — not mechanically derivable (syntactic-only parsing).',
+    testid: 'data-testid passthrough — not meaningful to fiddle with here.',
+    children:
+      'Snippet prop — the panel content is rendered by the preview snippet below, not a control.',
   },
 });
 </script>
@@ -40,12 +31,7 @@ const { source }: { source: string } = $props();
 
 <Story {meta} {source}>
   {#snippet preview(args: Args)}
-    <Surface
-      variant={args.variant as 'glass' | 'elevated' | 'flat' | 'section'}
-      radius={args.radius as 'sm' | 'md' | 'lg' | 'xl' | '2xl'}
-      glow={args.glow as boolean}
-      clip={args.clip as boolean}
-    >
+    <Surface variant="glass" radius="lg" glow={args.glow as boolean} clip={args.clip as boolean}>
       <span style="padding:8px">Surface content</span>
     </Surface>
   {/snippet}

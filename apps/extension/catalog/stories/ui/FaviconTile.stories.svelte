@@ -4,16 +4,18 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'FaviconTile',
   group: 'Atoms',
-  controls: {
-    title: { type: 'text', default: 'GitHub', description: 'Favorite title (tooltip).' },
-    active: { type: 'boolean', default: false, description: 'Bound tab is focused.' },
-    unbound: {
-      type: 'boolean',
-      default: false,
-      description: 'No live tab in this window (dormant).',
-    },
-    loading: { type: 'boolean', default: false, description: 'Show spinner.' },
-    drifted: { type: 'boolean', default: false, description: 'Tab wandered off home.' },
+  controlOverrides: {
+    title: { default: 'GitHub', description: 'Favorite title (tooltip).' },
+    active: { description: 'Bound tab is focused.' },
+    unbound: { description: 'No live tab in this window (dormant).' },
+    loading: { description: 'Show spinner.' },
+    drifted: { description: 'Tab wandered off home.' },
+  },
+  excludeControls: {
+    onGoHome: 'Callback prop — no meaningful live control.',
+    onclick: 'Callback prop — no meaningful live control.',
+    oncontextmenu: 'Callback prop — no meaningful live control.',
+    tabindex: 'Roving-tabindex wiring — not meaningful to fiddle with in an isolated preview.',
   },
 });
 </script>
@@ -32,12 +34,14 @@ const { source }: { source: string } = $props();
   {#snippet preview(args: Args)}
     <FaviconTile
       title={args.title as string}
-      faviconSrc={favicon('github.com', 64)}
+      faviconSrc={(args.faviconSrc as string) || favicon('github.com', 64)}
+      faviconFallbackSrc={(args.faviconFallbackSrc as string) || undefined}
       active={args.active as boolean}
       unbound={args.unbound as boolean}
       loading={args.loading as boolean}
       drifted={args.drifted as boolean}
-      homeHost="github.com"
+      favoriting={args.favoriting as boolean}
+      homeHost={(args.homeHost as string) || 'github.com'}
       onGoHome={noop}
       onclick={noop}
     />

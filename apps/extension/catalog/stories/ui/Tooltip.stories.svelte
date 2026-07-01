@@ -4,16 +4,14 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'Tooltip',
   group: 'Atoms',
-  controls: {
-    label: { type: 'text', default: 'Saved to this Space', description: 'Tooltip text.' },
-    side: {
-      type: 'select',
-      options: ['top', 'bottom', 'left', 'right'],
-      default: 'top',
-      typeLabel: "'top' | 'bottom' | 'left' | 'right'",
-      description: 'Tooltip side.',
-    },
-    enabled: { type: 'boolean', default: true, description: 'Suppress the tooltip when false.' },
+  controlOverrides: {
+    label: { default: 'Saved to this Space', description: 'Tooltip text.' },
+    side: { description: 'Tooltip side.' },
+    enabled: { description: 'Suppress the tooltip when false.' },
+  },
+  excludeControls: {
+    children:
+      'Snippet prop — the trigger element is rendered by the preview snippet below, not a control.',
   },
 });
 </script>

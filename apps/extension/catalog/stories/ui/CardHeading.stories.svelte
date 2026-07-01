@@ -4,12 +4,12 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'CardHeading',
   group: 'Layout',
-  controls: {
-    heading: {
-      type: 'text',
-      default: 'Connections',
-      description: 'Card heading text (sentence case).',
-    },
+  controlOverrides: {
+    heading: { default: 'Connections', description: 'Card heading text (sentence case).' },
+  },
+  excludeControls: {
+    actions: 'Snippet prop — see the "heading + actions" example below.',
+    testid: 'data-testid passthrough — not meaningful to fiddle with here.',
   },
 });
 </script>

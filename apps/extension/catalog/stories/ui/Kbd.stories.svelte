@@ -4,12 +4,9 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'Kbd',
   group: 'Atoms',
-  controls: {
-    label: {
-      type: 'text',
-      default: '⌥L',
-      description: 'Keybinding text (the `children` content).',
-    },
+  excludeControls: {
+    children:
+      'Snippet prop — the keybinding glyph is rendered by the preview snippet below, not a control.',
   },
 });
 </script>
@@ -25,7 +22,7 @@ const { source }: { source: string } = $props();
 
 <Story {meta} {source}>
   {#snippet preview(args: Args)}
-    <Kbd>{args.label}</Kbd>
+    <Kbd ariaLabel={(args.ariaLabel as string) || undefined}>⌥L</Kbd>
   {/snippet}
   {#snippet examples()}
     <Variant label="shortcut">

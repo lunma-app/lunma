@@ -4,8 +4,12 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'ReviewerRail',
   group: 'Composite',
-  controls: {
-    max: { type: 'number', default: 4, description: 'Avatars shown before the +N overflow badge.' },
+  controlOverrides: {
+    max: { description: 'Avatars shown before the +N overflow badge.' },
+  },
+  excludeControls: {
+    reviewers:
+      'Array prop — no meaningful scalar control; the preview passes a fixed reviewer set.',
   },
 });
 </script>
@@ -22,7 +26,7 @@ const { source }: { source: string } = $props();
 
 <Story {meta} {source}>
   {#snippet preview(args: Args)}
-    <ReviewerRail reviewers={REVIEWERS} max={args.max as number} ariaLabel="Reviewers" />
+    <ReviewerRail reviewers={REVIEWERS} max={args.max as number} ariaLabel={(args.ariaLabel as string) || 'Reviewers'} />
   {/snippet}
   {#snippet examples()}
     <Variant label="all approved">

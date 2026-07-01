@@ -4,9 +4,9 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'Diffstat',
   group: 'Atoms',
-  controls: {
-    additions: { type: 'number', default: 128, description: 'Additions count.' },
-    deletions: { type: 'number', default: 84, description: 'Deletions count.' },
+  controlOverrides: {
+    additions: { default: 128, description: 'Additions count.' },
+    deletions: { default: 84, description: 'Deletions count.' },
   },
 });
 </script>

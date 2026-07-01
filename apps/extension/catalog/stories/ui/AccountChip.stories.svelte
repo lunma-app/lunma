@@ -4,49 +4,36 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'AccountChip',
   group: 'Composite',
-  controls: {
-    provider: {
-      type: 'select',
-      options: ['github', 'gitlab', 'bitbucket', 'jira', 'rss'],
-      default: 'github',
-      typeLabel: 'LensProvider',
-      description: 'Account provider (drives the glyph).',
-    },
-    label: {
-      type: 'text',
-      default: 'octocat',
-      description: 'Identity text (account name or host).',
-    },
-    status: {
-      type: 'select',
-      options: ['connected', 'browser-session', 'needs-token', 'signed-out', 'public'],
-      default: 'connected',
-      typeLabel: 'AccountStatus',
-      description: 'Auth status (pip + word).',
-    },
-    bare: { type: 'boolean', default: false, description: 'Drop the filled background.' },
+  controlOverrides: {
+    label: { default: 'octocat', description: 'Identity text (account name or host).' },
+    bare: { description: 'Drop the filled background.' },
+  },
+  excludeControls: {
+    provider:
+      'LensProvider is an imported type alias, not an inline string-literal union — not mechanically derivable (syntactic-only parsing).',
+    status:
+      'AccountStatus is an imported type alias, not an inline string-literal union — not mechanically derivable (syntactic-only parsing).',
+    title: 'Passthrough tooltip/accessible title — not meaningful to fiddle with here.',
+    testid: 'data-testid passthrough — not meaningful to fiddle with here.',
   },
 });
 </script>
 
 <script lang="ts">
 import AccountChip from '@/ui/AccountChip.svelte';
-import type { LensProvider } from '@/shared/types';
 import type { Args } from '../../lib/controls';
 import Story from '../../lib/Story.svelte';
 import Variant from '../../lib/Variant.svelte';
 
 const { source }: { source: string } = $props();
-
-type Status = 'connected' | 'browser-session' | 'needs-token' | 'signed-out' | 'public';
 </script>
 
 <Story {meta} {source}>
   {#snippet preview(args: Args)}
     <AccountChip
-      provider={args.provider as LensProvider}
+      provider="github"
       label={args.label as string}
-      status={args.status as Status}
+      status="connected"
       bare={args.bare as boolean}
     />
   {/snippet}

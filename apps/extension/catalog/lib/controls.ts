@@ -1,8 +1,10 @@
-// Live-controls schema (component-catalog v2). A story declares, in its `meta`,
-// a `controls` map describing the props the catalog renders editable inputs for
-// — driving an `Args` object bound to a live preview — and doubling as the API
-// table source (prop · type · default · description). Svelte 5 exposes no
-// runtime prop metadata, so this schema is hand-authored per story.
+// Live-controls schema (component-catalog v2, derive-catalog-controls-from-props).
+// `ControlDef`/`Controls` are the shape produced by `derive-controls.ts` parsing a
+// primitive's own `Props` interface, then merged (in `registry.ts`'s
+// `resolveControls`) with a story's `meta.controlOverrides`/`excludeControls` —
+// not authored from scratch per story. The merged result drives an `Args` object
+// bound to a live preview, and doubles as the API table source (prop · type ·
+// default · description).
 
 /** The input widget the catalog renders for a prop. */
 export type ControlType = 'boolean' | 'text' | 'number' | 'select';

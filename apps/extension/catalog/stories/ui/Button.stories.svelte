@@ -4,23 +4,17 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'Button',
   group: 'Atoms',
-  controls: {
-    variant: {
-      type: 'select',
-      options: ['primary', 'secondary', 'ghost'],
-      default: 'secondary',
-      typeLabel: "'primary' | 'secondary' | 'ghost'",
-      description: 'Style variant.',
-    },
-    size: {
-      type: 'select',
-      options: ['sm', 'md'],
-      default: 'md',
-      typeLabel: "'sm' | 'md'",
-      description: 'Control density.',
-    },
-    disabled: { type: 'boolean', default: false, description: 'Disabled state.' },
-    label: { type: 'text', default: 'Save changes', description: 'Button content.' },
+  controlOverrides: {
+    variant: { description: 'Style variant.' },
+    size: { description: 'Control density.' },
+    disabled: { description: 'Disabled state.' },
+  },
+  excludeControls: {
+    onclick: 'Callback prop — no meaningful live control.',
+    children:
+      'Snippet prop — button content is rendered by the preview snippet below, not a control.',
+    title: 'Passthrough HTML title attribute — not meaningful to fiddle with here.',
+    testid: 'data-testid passthrough — not meaningful to fiddle with here.',
   },
 });
 </script>
@@ -43,7 +37,7 @@ const { source }: { source: string } = $props();
       disabled={args.disabled as boolean}
       onclick={noop}
     >
-      {args.label}
+      Save changes
     </Button>
   {/snippet}
   {#snippet examples()}

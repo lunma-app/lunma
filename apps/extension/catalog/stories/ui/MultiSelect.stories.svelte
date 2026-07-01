@@ -4,13 +4,20 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'MultiSelect',
   group: 'Form',
-  controls: {
+  controlOverrides: {
     label: {
-      type: 'text',
       default: 'All feeds',
       description: 'Closed-trigger summary (parent-computed from the selection).',
     },
-    ariaLabel: { type: 'text', default: 'Filter by feed', description: 'Accessible name.' },
+    ariaLabel: { default: 'Filter by feed', description: 'Accessible name.' },
+  },
+  excludeControls: {
+    options: 'Array prop — no meaningful scalar control; the preview passes a fixed option list.',
+    values:
+      'Array prop — no meaningful scalar control; the preview binds it to live selection state below.',
+    onchange: 'Callback prop — the preview binds it back to the selection state below.',
+    leading: 'Snippet prop — see the "leading snippet" example below.',
+    testid: 'data-testid passthrough — not meaningful to fiddle with here.',
   },
 });
 </script>
@@ -63,9 +70,13 @@ let leadPicked = $state<string[]>(['verge']);
         values={picked}
         onchange={(v) => (picked = v)}
         label={summary}
+        mode={args.mode as 'dropdown' | 'inline'}
+        variant={args.variant as 'field' | 'chip'}
+        searchThreshold={args.searchThreshold as number}
+        searchPlaceholder={(args.searchPlaceholder as string) || undefined}
         ariaLabel={args.ariaLabel as string}
-        clearLabel="Clear"
-        selectAllLabel="Select all"
+        clearLabel={(args.clearLabel as string) || 'Clear'}
+        selectAllLabel={(args.selectAllLabel as string) || 'Select all'}
       />
     </div>
   {/snippet}

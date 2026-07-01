@@ -4,20 +4,25 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'Chip',
   group: 'Atoms',
-  controls: {
-    label: { type: 'text', default: 'Drafts', description: 'Token text.' },
+  controlOverrides: {
+    label: { default: 'Drafts', description: 'Token text.' },
     tone: {
-      type: 'select',
-      options: ['neutral', 'accent'],
-      default: 'neutral',
-      typeLabel: "'neutral' | 'accent'",
-      description: 'Background tone.',
+      description: 'Background tone. Ignored when a hue-tinted chip sets `hue` (see Examples).',
     },
-    selected: {
-      type: 'boolean',
-      default: false,
-      description: 'Toggle pressed state (toggle mode).',
-    },
+    selected: { description: 'Toggle pressed state (toggle mode).' },
+    disabled: { description: 'Disables the toggle pill.' },
+  },
+  excludeControls: {
+    onRemove: 'Callback prop — see the "removable" example below.',
+    onToggle:
+      'Callback prop — this playground is always in toggle mode; see the static-chip examples below.',
+    testid: 'data-testid passthrough — not meaningful to fiddle with here.',
+    hue: 'Only relevant to the static (non-toggle) chip this playground doesn\'t render — see the hue-tinted Examples below. Also unsafe as a naive number control: 0 is a real hue, not "unset".',
+    size: "Only relevant to the static (non-toggle) chip this playground doesn't render — see the hue-tinted Examples below.",
+    iconUrl:
+      'Only relevant to the static (non-toggle) chip this playground doesn\'t render — see the "with icon" example below.',
+    removeLabel:
+      'Only relevant with onRemove, which this playground doesn\'t demonstrate — see the "removable" example below.',
   },
 });
 </script>
@@ -38,6 +43,7 @@ const { source }: { source: string } = $props();
       label={args.label as string}
       tone={args.tone as 'neutral' | 'accent'}
       selected={args.selected as boolean}
+      disabled={args.disabled as boolean}
       onToggle={() => (args.selected = !args.selected)}
     />
   {/snippet}

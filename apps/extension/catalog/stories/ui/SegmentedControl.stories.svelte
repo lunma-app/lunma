@@ -4,20 +4,17 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'SegmentedControl',
   group: 'Form',
-  controls: {
-    value: {
-      type: 'select',
-      options: ['subtle', 'standard', 'vivid'],
-      default: 'vivid',
-      typeLabel: 'string',
-      description: 'Selected value (`options` is an array prop).',
-    },
-    block: { type: 'boolean', default: false, description: 'Full-width equal segments.' },
-    ariaLabel: {
-      type: 'text',
-      default: 'Colour intensity',
-      description: 'Radio-group accessible name.',
-    },
+  controlOverrides: {
+    block: { description: 'Full-width equal segments.' },
+    ariaLabel: { default: 'Colour intensity', description: 'Radio-group accessible name.' },
+  },
+  excludeControls: {
+    name: 'Must stay unique per control instance on the page — not meaningful as a freeform control.',
+    options: 'Array prop — no meaningful scalar control; the preview passes a fixed option list.',
+    value:
+      'Only valid when it matches one of `options` — a naive free-text control would let a reviewer put the preview into an invalid state (mirrors the Select.value precedent). See the Examples below for each value.',
+    onchange:
+      'Callback prop — the preview binds it back to local playground state (see `value` above for why `value` itself is excluded).',
   },
 });
 </script>
@@ -41,6 +38,8 @@ const themeOptions = [
   { value: 'light', label: 'Light' },
   { value: 'dark', label: 'Dark' },
 ];
+
+let playgroundValue = $state('vivid');
 </script>
 
 <Story {meta} {source}>
@@ -50,8 +49,8 @@ const themeOptions = [
         name="story-playground"
         ariaLabel={args.ariaLabel as string}
         options={tintOptions}
-        value={args.value as string}
-        onchange={(v) => (args.value = v)}
+        value={playgroundValue}
+        onchange={(v) => (playgroundValue = v)}
         block={args.block as boolean}
       />
     </div>

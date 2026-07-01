@@ -1,9 +1,26 @@
 <script module lang="ts">
 import { defineStory } from '../../lib/story';
 
-// ResultList's props are arrays/callbacks (no scalar props to expose), so this
-// story shows representative examples + source; the array IS the matrix.
-export const meta = defineStory({ title: 'ResultList', group: 'Composite' });
+// ResultList's only scalar props (listboxId/ariaLabel) have no live preview to
+// bind to here — this story shows representative examples + source, the array
+// IS the matrix — so both are excluded rather than left as inert controls.
+export const meta = defineStory({
+  title: 'ResultList',
+  group: 'Composite',
+  excludeControls: {
+    listboxId: 'No live preview in this story to bind an id control to — see the Examples below.',
+    ariaLabel:
+      'No live preview in this story to bind an ariaLabel control to — see the Examples below.',
+    results: 'Array prop — no meaningful scalar control; the preview passes a fixed result list.',
+    onact: 'Callback prop — no meaningful live control.',
+    onescape: 'Callback prop — no meaningful live control.',
+    faviconSrc: 'Callback prop — no meaningful live control.',
+    alreadyOpen: 'Callback prop — no meaningful live control.',
+    onready: 'Callback prop — no meaningful live control.',
+    onactivedescendant: 'Callback prop — no meaningful live control.',
+    onfocuschange: 'Callback prop — no meaningful live control.',
+  },
+});
 </script>
 
 <script lang="ts">

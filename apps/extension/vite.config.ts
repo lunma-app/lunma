@@ -66,7 +66,10 @@ export default defineConfig(({ mode }) => ({
   test: {
     environment: 'jsdom',
     globals: true,
-    include: ['src/**/*.test.ts'],
+    // catalog/**/*.test.ts: the derive-catalog-controls-from-props drift guard
+    // (catalog/lib/derive-controls.test.ts) must run under `pnpm verify`, per
+    // that change's spec — a deviation from its Impact list, agreed in-session.
+    include: ['src/**/*.test.ts', 'catalog/**/*.test.ts'],
     setupFiles: ['./vitest.setup.ts'],
     server: {
       deps: {

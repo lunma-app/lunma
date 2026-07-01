@@ -9,6 +9,10 @@ apps/extension/public/fonts/
 apps/extension/catalog/public/fonts/
 apps/site/static/fonts/
 
+# Catalog controls derived from src/ui Props interfaces at config-load time —
+# never committed, regenerated on every `catalog`/`catalog:build` run.
+apps/extension/catalog/lib/derived-controls.generated.ts
+
 .devbox/
 .svelte-kit/
 .vite/

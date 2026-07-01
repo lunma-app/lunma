@@ -4,32 +4,27 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'ResultRow',
   group: 'Composite',
-  controls: {
-    title: {
-      type: 'text',
-      default: 'svelte/svelte · Pull Request #14201',
-      description: 'Result title.',
-    },
+  controlOverrides: {
+    title: { default: 'svelte/svelte · Pull Request #14201', description: 'Result title.' },
     url: {
-      type: 'text',
       default: 'https://github.com/sveltejs/svelte/pull/14201',
       description: 'Result URL (dimmed).',
     },
-    source: {
-      type: 'select',
-      options: ['tab', 'saved', 'lens', 'bookmark', 'history', 'websearch', 'navigate'],
-      default: 'tab',
-      typeLabel: 'ResultSource',
-      description: 'Provider (drives the badge).',
-    },
-    selected: { type: 'boolean', default: false, description: 'Roving keyboard selection.' },
-    alreadyOpen: { type: 'boolean', default: false, description: 'Tab-dedup "already open" line.' },
+    selected: { description: 'Roving keyboard selection.' },
+    alreadyOpen: { description: 'Tab-dedup "already open" line.' },
+  },
+  excludeControls: {
+    source:
+      'ResultSource is an imported type alias, not an inline string-literal union — not mechanically derivable (syntactic-only parsing). See the per-source Examples below.',
+    id: 'Stable DOM id for aria-activedescendant wiring — not meaningful to fiddle with here.',
+    tabindex: 'Roving-tabindex wiring — not meaningful to fiddle with in an isolated preview.',
+    onclick: 'Callback prop — no meaningful live control.',
+    onhover: 'Callback prop — no meaningful live control.',
   },
 });
 </script>
 
 <script lang="ts">
-import type { ResultSource } from '@/shared/launcher-contract';
 import ResultRow from '@/ui/ResultRow.svelte';
 import type { Args } from '../../lib/controls';
 import { favicon, noop } from '../../lib/mock';
@@ -45,10 +40,12 @@ const { source }: { source: string } = $props();
       <ResultRow
         title={args.title as string}
         url={args.url as string}
-        source={args.source as ResultSource}
-        faviconSrc={favicon('github.com')}
+        source="tab"
+        faviconSrc={(args.faviconSrc as string) || favicon('github.com')}
         selected={args.selected as boolean}
         alreadyOpen={args.alreadyOpen as boolean}
+        spaceName={(args.spaceName as string) || undefined}
+        spaceColor={(args.spaceColor as string) || undefined}
         onclick={noop}
       />
     </div>

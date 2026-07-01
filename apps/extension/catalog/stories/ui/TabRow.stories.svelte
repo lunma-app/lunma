@@ -4,16 +4,19 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'TabRow',
   group: 'Composite',
-  controls: {
-    title: {
-      type: 'text',
-      default: 'svelte/svelte · Pull Request #14201',
-      description: 'Tab title.',
-    },
-    active: { type: 'boolean', default: false, description: 'Active-tab Space-wash treatment.' },
-    loading: { type: 'boolean', default: false, description: 'Favicon → spinner.' },
-    drifted: { type: 'boolean', default: false, description: 'Tab wandered off home.' },
-    meta: { type: 'text', default: '', description: 'Right-edge metadata (e.g. archived age).' },
+  controlOverrides: {
+    title: { default: 'svelte/svelte · Pull Request #14201', description: 'Tab title.' },
+    active: { description: 'Active-tab Space-wash treatment.' },
+    loading: { description: 'Favicon → spinner.' },
+    drifted: { description: 'Tab wandered off home.' },
+    meta: { description: 'Right-edge metadata (e.g. archived age).' },
+  },
+  excludeControls: {
+    onGoHome: 'Callback prop — no meaningful live control.',
+    onclick: 'Callback prop — no meaningful live control.',
+    trailing: 'Snippet prop — see the "with meta + trailing close" example below.',
+    oncommitName: 'Callback prop — no meaningful live control.',
+    oncancelName: 'Callback prop — no meaningful live control.',
   },
 });
 </script>
@@ -38,13 +41,17 @@ const { source }: { source: string } = $props();
     <div style="width: 18rem">
       <TabRow
         title={args.title as string}
-        faviconSrc={favicon('github.com')}
+        faviconSrc={(args.faviconSrc as string) || favicon('github.com')}
+        faviconFallbackSrc={(args.faviconFallbackSrc as string) || undefined}
         active={args.active as boolean}
         loading={args.loading as boolean}
         drifted={args.drifted as boolean}
-        homeHost="github.com"
+        homeHost={(args.homeHost as string) || 'github.com'}
         onGoHome={noop}
         meta={(args.meta as string) || undefined}
+        trailingVisible={args.trailingVisible as boolean}
+        editing={args.editing as boolean}
+        renameAllowEmpty={args.renameAllowEmpty as boolean}
         onclick={noop}
       />
     </div>

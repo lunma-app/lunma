@@ -4,10 +4,15 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'RowButton',
   group: 'Atoms',
-  controls: {
-    icon: { type: 'text', default: 'plus', description: 'Leading Lucide icon name.' },
-    label: { type: 'text', default: 'New tab', description: 'Row label.' },
-    disabled: { type: 'boolean', default: false, description: 'Disabled state.' },
+  controlOverrides: {
+    icon: { default: 'plus', description: 'Leading Lucide icon name.' },
+    label: { default: 'New tab', description: 'Row label.' },
+    disabled: { description: 'Disabled state.' },
+  },
+  excludeControls: {
+    onclick: 'Callback prop — no meaningful live control.',
+    ariaCurrent:
+      'Unsafe as a naive select default: the neutral state is "absent", not one of the literal options — a naive control would default to a real value ("page"), misrepresenting the common case. See the "current" example below.',
   },
 });
 </script>
@@ -29,6 +34,7 @@ const { source }: { source: string } = $props();
         icon={args.icon as string}
         label={args.label as string}
         disabled={args.disabled as boolean}
+        title={(args.title as string) || undefined}
         onclick={noop}
       />
     </div>

@@ -4,11 +4,15 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'IconButton',
   group: 'Atoms',
-  controls: {
-    icon: { type: 'text', default: 'settings', description: 'Any Lucide icon name.' },
-    ariaLabel: { type: 'text', default: 'Settings', description: 'Accessible name.' },
-    size: { type: 'number', default: 16, description: 'Icon size in px.' },
-    disabled: { type: 'boolean', default: false, description: 'Disabled state.' },
+  controlOverrides: {
+    icon: { default: 'settings', description: 'Any Lucide icon name.' },
+    ariaLabel: { default: 'Settings', description: 'Accessible name.' },
+    size: { default: 16, description: 'Icon size in px.' },
+    disabled: { description: 'Disabled state.' },
+  },
+  excludeControls: {
+    onclick: 'Callback prop — no meaningful live control.',
+    testid: 'data-testid passthrough — not meaningful to fiddle with here.',
   },
 });
 </script>
@@ -28,7 +32,10 @@ const { source }: { source: string } = $props();
     <IconButton
       icon={args.icon as string}
       ariaLabel={args.ariaLabel as string}
+      title={(args.title as string) || undefined}
+      variant={args.variant as 'ghost'}
       size={args.size as number}
+      type={args.type as 'button' | 'submit'}
       disabled={args.disabled as boolean}
       onclick={noop}
     />
