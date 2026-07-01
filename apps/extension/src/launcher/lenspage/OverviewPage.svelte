@@ -259,23 +259,25 @@ const empty = $derived(
         </button>
         {#if open}
           <div class="sec-body">
-            {#if visRepos.length > 0}
+            {#if visRepos.length > 1}
               <div class="scope-filter" data-testid="change-scope-filter">
                 {#if visRepos.length <= CHIP_THRESHOLD}
                   {#each visRepos as repo (repo)}
-                    <Chip
-                      label={repo}
-                      onToggle={() => toggleRepo(repo)}
-                      selected={(filter.repos ?? []).includes(repo)}
-                      testid="repo-chip"
-                    />
+                    <span class="scope-chip" title={repo}>
+                      <Chip
+                        label={repo}
+                        onToggle={() => toggleRepo(repo)}
+                        selected={(filter.repos ?? []).includes(repo)}
+                        testid="repo-chip"
+                      />
+                    </span>
                   {/each}
                 {:else}
                   <div class="scope-picker">
                     <MultiSelect
                       options={repoOptions}
                       values={filter.repos ?? []}
-                      onchange={(vals) => setFilter({ ...filter, repos: vals })}
+                      onchange={(vals) => setFilter({ ...filter, repos: vals.length >= visRepos.length ? [] : vals })}
                       label={repoTriggerLabel}
                       ariaLabel={m.launcher_lensFilterByRepo()}
                       clearLabel={m.launcher_lensClearFilter()}
@@ -339,23 +341,25 @@ const empty = $derived(
         </button>
         {#if open}
           <div class="sec-body">
-            {#if visProjects.length > 0}
+            {#if visProjects.length > 1}
               <div class="scope-filter" data-testid="issue-scope-filter">
                 {#if visProjects.length <= CHIP_THRESHOLD}
                   {#each visProjects as project (project)}
-                    <Chip
-                      label={project}
-                      onToggle={() => toggleProject(project)}
-                      selected={(filter.projects ?? []).includes(project)}
-                      testid="project-chip"
-                    />
+                    <span class="scope-chip" title={project}>
+                      <Chip
+                        label={project}
+                        onToggle={() => toggleProject(project)}
+                        selected={(filter.projects ?? []).includes(project)}
+                        testid="project-chip"
+                      />
+                    </span>
                   {/each}
                 {:else}
                   <div class="scope-picker">
                     <MultiSelect
                       options={projectOptions}
                       values={filter.projects ?? []}
-                      onchange={(vals) => setFilter({ ...filter, projects: vals })}
+                      onchange={(vals) => setFilter({ ...filter, projects: vals.length >= visProjects.length ? [] : vals })}
                       label={projectTriggerLabel}
                       ariaLabel={m.launcher_lensFilterByProject()}
                       clearLabel={m.launcher_lensClearFilter()}
@@ -426,23 +430,25 @@ const empty = $derived(
       {#if open}
         <div class="sec-body">
           <div class="filter-row article-controls">
-            {#if visFeeds.length > 0}
+            {#if visFeeds.length > 1}
               <div class="scope-filter" data-testid="article-scope-filter">
                 {#if visFeeds.length <= CHIP_THRESHOLD}
                   {#each visFeeds as feed (feed)}
-                    <Chip
-                      label={feed}
-                      onToggle={() => toggleFeed(feed)}
-                      selected={(filter.feeds ?? []).includes(feed)}
-                      testid="feed-chip"
-                    />
+                    <span class="scope-chip" title={feed}>
+                      <Chip
+                        label={feed}
+                        onToggle={() => toggleFeed(feed)}
+                        selected={(filter.feeds ?? []).includes(feed)}
+                        testid="feed-chip"
+                      />
+                    </span>
                   {/each}
                 {:else}
                   <div class="scope-picker">
                     <MultiSelect
                       options={feedOptions}
                       values={filter.feeds ?? []}
-                      onchange={(vals) => setFilter({ ...filter, feeds: vals })}
+                      onchange={(vals) => setFilter({ ...filter, feeds: vals.length >= visFeeds.length ? [] : vals })}
                       label={feedTriggerLabel}
                       ariaLabel={m.launcher_lensFilterByFeed()}
                       clearLabel={m.launcher_lensClearFilter()}
@@ -783,6 +789,14 @@ const empty = $derived(
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-1);
+  }
+  /* Bounds a single toggle chip's rendered width (2-5 count range) so a long
+     repo/project/feed value truncates with an ellipsis instead of stretching the
+     row; the wrapping span (not Chip.svelte) carries the cap and the title
+     tooltip, since Chip is a shared primitive used elsewhere with short labels. */
+  .scope-chip {
+    display: inline-flex;
+    max-width: 16rem;
   }
   /* The overflow multi-select is a compact dropdown, not a full-width bar — cap it
      (and its popover, which tracks the trigger width) so a short "N selected"
