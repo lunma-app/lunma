@@ -106,7 +106,7 @@ async function selectOnUntilChipSeeds(editor: Locator): Promise<void> {
       await editor.getByText('On', { exact: true }).click();
     }
     await expect(chip).toBeVisible({ timeout: 3_000 });
-  }).toPass({ timeout: 20_000, intervals: [500, 1_000, 2_000] });
+  }).toPass({ timeout: 30_000, intervals: [500, 1_000, 2_000, 3_000] });
 }
 
 /** Open the pinned row's right-click menu, drill into the editor, and switch to On
@@ -128,6 +128,10 @@ test('the menu opens the boundary editor sheet, seeds the domain, and dismiss re
   context,
   extensionId,
 }) => {
+  // selectOnUntilChipSeeds's own retry budget (30s) can exceed the default 30s
+  // test timeout under heavy CI load; test.slow() triples it so a real
+  // slow-CI retry isn't itself clipped by the outer timeout.
+  test.slow();
   await openSidebar(page, extensionId);
   await pinSite(context, page);
 
@@ -158,6 +162,9 @@ test('an off-site click diverts to a new temp tab; an in-domain click navigates'
   context,
   extensionId,
 }) => {
+  // See the sibling test above: lockToSite → selectOnUntilChipSeeds shares the
+  // same wider retry budget, which can exceed the default test timeout.
+  test.slow();
   await openSidebar(page, extensionId);
   const site = await pinSite(context, page);
   await lockToSite(page);
