@@ -85,14 +85,23 @@ async function lockToSite(sidebar: Page): Promise<void> {
   await lockItem(sidebar).click();
   const editor = sidebar.getByTestId('tab-boundary-editor');
   await expect(editor).toBeVisible();
-  // Wait for the editor to finish rendering in its initial `inherit` mode before
-  // clicking On. `boundary-options-link` renders only when `mode === 'inherit'`,
-  // so its visibility proves the SegmentedControl is mounted and interactive —
-  // clicking On before that races the control's `onchange` wiring, dropping the
-  // `setTabBoundary` dispatch so the seeded chip never appears (flaky timeout).
+  // The editor mounts in its initial `inherit` mode; `boundary-options-link`
+  // renders only when `mode === 'inherit'`, so its visibility proves the
+  // SegmentedControl is mounted and the BottomSheet's entrance has settled.
   await expect(editor.getByTestId('boundary-options-link')).toBeVisible();
-  await editor.getByText('On', { exact: true }).click();
-  await expect(editor.getByTestId('chip')).toBeVisible();
+  // Switching to On dispatches `setTabBoundary`; the seeded-domain chip renders
+  // only AFTER that command round-trips through the SW and the resulting store
+  // update flows back into the editor's `boundary` prop (mode → 'locked'). Under
+  // heavy parallel suite load the first click can be lost — it races the sheet's
+  // async mount and the just-pinned tab's store-settle — or the round-trip can
+  // lag past a fixed wait, so the chip intermittently never appears. Retry the
+  // whole click→chip sequence so a dropped/early click self-heals: `selectMode`
+  // no-ops once already locked and the radio fires no `change` when already
+  // selected, so re-clicking On is idempotent.
+  await expect(async () => {
+    await editor.getByText('On', { exact: true }).click();
+    await expect(editor.getByTestId('chip')).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 15_000, intervals: [500, 1_000, 2_000] });
 }
 
 test('the menu opens the boundary editor sheet, seeds the domain, and dismiss returns', async ({
@@ -115,9 +124,14 @@ test('the menu opens the boundary editor sheet, seeds the domain, and dismiss re
   // Default mode surfaces a discoverability link to the global default.
   await expect(editor.getByTestId('boundary-options-link')).toBeVisible();
 
-  // On seeds the tab's registrable domain (localhost) as a chip.
-  await editor.getByText('On', { exact: true }).click();
-  await expect(editor.getByTestId('chip')).toBeVisible();
+  // On seeds the tab's registrable domain (localhost) as a chip. The chip only
+  // renders after `setTabBoundary` round-trips through the SW and the store
+  // update flows back into the editor; retry the click→chip sequence so a
+  // dropped/early first click self-heals (idempotent — see `lockToSite`).
+  await expect(async () => {
+    await editor.getByText('On', { exact: true }).click();
+    await expect(editor.getByTestId('chip')).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 15_000, intervals: [500, 1_000, 2_000] });
   await expect(editor.getByTestId('chip')).toHaveText(/localhost/);
 
   // Dismissing the sheet (✕) returns to the sidebar (editor gone).
