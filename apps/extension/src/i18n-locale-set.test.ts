@@ -34,10 +34,22 @@ const messageCatalogLocales = (): string[] =>
 
 // Native manifest catalogs are `_locales/{locale}/messages.json`; Chrome uses
 // underscore locale codes, so map them back to the hyphen form for comparison.
-const manifestCatalogLocales = (): string[] =>
-  readdirSync(fromPackageRoot('public/_locales'), { withFileTypes: true })
+// Chrome's own manifest-locale enum has no bare `pt` (only `pt_BR`/`pt_PT`), so
+// the region-neutral `pt` app locale fans out to both directories on disk —
+// fold them back to `pt` here so the app-level locale SET still compares as
+// one entry (their byte-identity is asserted separately below).
+const MANIFEST_LOCALE_ALIASES: Record<string, string> = {
+  'pt-BR': 'pt',
+  'pt-PT': 'pt',
+};
+
+const manifestCatalogLocales = (): string[] => {
+  const names = readdirSync(fromPackageRoot('public/_locales'), { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name.replace('_', '-'));
+    .map((entry) => entry.name.replace('_', '-'))
+    .map((name) => MANIFEST_LOCALE_ALIASES[name] ?? name);
+  return [...new Set(names)];
+};
 
 describe('supported-locale set is single-sourced', () => {
   test('matches the expected nine locales', () => {
@@ -58,5 +70,11 @@ describe('supported-locale set is single-sourced', () => {
 
   test('manifest _locales directories equal the expected set', () => {
     expect(sorted(manifestCatalogLocales())).toEqual(EXPECTED);
+  });
+
+  test('pt_BR and pt_PT manifest catalogs stay byte-identical', () => {
+    const ptBr = readFileSync(fromPackageRoot('public/_locales/pt_BR/messages.json'), 'utf-8');
+    const ptPt = readFileSync(fromPackageRoot('public/_locales/pt_PT/messages.json'), 'utf-8');
+    expect(ptBr).toEqual(ptPt);
   });
 });

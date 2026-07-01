@@ -781,10 +781,18 @@ manifest, so `public/manifest.json` declares `default_locale: "en"` and
 references `description`, `action.default_title`, and the two command
 descriptions as `__MSG_*__` placeholders, resolved from
 `public/_locales/{locale}/messages.json` (Chrome uses underscore locale codes —
-`zh_CN`; region-neutral `pt` has no hyphen). crxjs passes `public/` through
-verbatim. Brand `name` /
+`zh_CN`). crxjs passes `public/` through verbatim. Brand `name` /
 `short_name` ("Lunma") stay literal. A parity test (`src/i18n-parity.test.ts`)
 guards both the Paraglide and `_locales` catalogs for key-completeness.
+Chrome's own manifest-locale enum has no bare `pt` (only `pt_BR`/`pt_PT`), so a
+directory literally named `pt` is invisible to the Chrome Web Store's
+supported-languages listing even though `chrome.i18n` resolves it fine at
+runtime. Portuguese is therefore the one locale that fans out to **two**
+`_locales` directories on disk — `public/_locales/pt_BR/` and
+`public/_locales/pt_PT/`, byte-identical copies of the same region-neutral
+copy (`src/i18n-locale-set.test.ts` asserts they stay identical). This is
+Store-metadata only: the app-level locale set, the resolver, and
+`SupportedLocale` still carry the single region-neutral `pt` locale.
 
 **Rendering contract (surfaces).** Every user-facing string in the sidebar,
 launcher (new-tab + lens pages), and options surfaces renders through a Paraglide

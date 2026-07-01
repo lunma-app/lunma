@@ -65,9 +65,13 @@ describe('Native manifest catalogs (_locales/{locale}/messages.json)', () => {
   const { baseLocale, locales } = loadProject();
 
   // Chrome `_locales` subdirectories use underscore locale codes (`zh_CN`), not
-  // the BCP-47 hyphens Paraglide uses — map before resolving paths. Region-neutral
-  // codes without a hyphen (`pt`) map to themselves.
-  const chromeDir = (locale: string): string => locale.replace('-', '_');
+  // the BCP-47 hyphens Paraglide uses — map before resolving paths. Chrome has no
+  // bare `pt` in its manifest-locale enum, so the region-neutral `pt` app locale
+  // ships as both `pt_BR` and `pt_PT` on disk (byte-identical, asserted in
+  // i18n-locale-set.test.ts); this parity check only needs to read one of them.
+  const CHROME_DIR_OVERRIDES: Record<string, string> = { pt: 'pt_PT' };
+  const chromeDir = (locale: string): string =>
+    CHROME_DIR_OVERRIDES[locale] ?? locale.replace('-', '_');
 
   type ChromeMessage = { message?: unknown };
   const readMessages = (locale: string): Record<string, ChromeMessage> =>
