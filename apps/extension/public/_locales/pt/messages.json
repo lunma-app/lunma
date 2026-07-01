@@ -1,6 +1,6 @@
 {
   "extDescription": {
-    "message": "Separadores verticais e Spaces por projeto para o Chrome, com pastas inteligentes e um launcher rápido.",
+    "message": "Separadores verticais e Espaços por projeto para o Chrome, com pastas inteligentes e um launcher rápido.",
     "description": "Chrome Web Store / extension listing description."
   },
   "actionDefaultTitle": {
@@ -8,7 +8,7 @@
     "description": "Tooltip on the toolbar action button."
   },
   "commandPinActiveTab": {
-    "message": "Fixar o separador ativo no Space atual",
+    "message": "Fixar o separador ativo no Espaço atual",
     "description": "Keyboard-shortcut description for the pin-active-tab command."
   },
   "commandToggleLauncher": {
