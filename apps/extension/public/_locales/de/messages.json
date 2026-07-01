@@ -1,6 +1,6 @@
 {
   "extDescription": {
-    "message": "Vertikale Tabs und projektbezogene Spaces für Chrome, mit Smart-Ordnern und einem schnellen Launcher.",
+    "message": "Vertikale Tabs und projektbezogene Räume für Chrome, mit Smart-Ordnern und einem schnellen Launcher.",
     "description": "Chrome Web Store / extension listing description."
   },
   "actionDefaultTitle": {
@@ -8,7 +8,7 @@
     "description": "Tooltip on the toolbar action button."
   },
   "commandPinActiveTab": {
-    "message": "Aktiven Tab im aktuellen Space anheften",
+    "message": "Aktiven Tab im aktuellen Raum anheften",
     "description": "Keyboard-shortcut description for the pin-active-tab command."
   },
   "commandToggleLauncher": {

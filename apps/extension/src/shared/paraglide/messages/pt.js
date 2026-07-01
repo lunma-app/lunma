@@ -343,11 +343,11 @@ export const sidebar_newlens1 = /** @type {(inputs: Sidebar_Newlens1Inputs) => L
 };
 
 export const sidebar_editspace1 = /** @type {(inputs: Sidebar_Editspace1Inputs) => LocalizedString} */ () => {
-	return /** @type {LocalizedString} */ (`Editar Space…`)
+	return /** @type {LocalizedString} */ (`Editar Espaço…`)
 };
 
 export const sidebar_newspace1 = /** @type {(inputs: Sidebar_Newspace1Inputs) => LocalizedString} */ () => {
-	return /** @type {LocalizedString} */ (`Novo Space…`)
+	return /** @type {LocalizedString} */ (`Novo Espaço…`)
 };
 
 export const sidebar_closealltemptabs3 = /** @type {(inputs: Sidebar_Closealltemptabs3Inputs) => LocalizedString} */ () => {
@@ -537,11 +537,11 @@ export const sidebar_locktositetitle3 = /** @type {(inputs: Sidebar_Locktositeti
 };
 
 export const sidebar_spaceeditortitlenew3 = /** @type {(inputs: Sidebar_Spaceeditortitlenew3Inputs) => LocalizedString} */ () => {
-	return /** @type {LocalizedString} */ (`Novo Space`)
+	return /** @type {LocalizedString} */ (`Novo Espaço`)
 };
 
 export const sidebar_spaceeditortitleedit3 = /** @type {(inputs: Sidebar_Spaceeditortitleedit3Inputs) => LocalizedString} */ () => {
-	return /** @type {LocalizedString} */ (`Editar Space`)
+	return /** @type {LocalizedString} */ (`Editar Espaço`)
 };
 
 export const sidebar_spacename1 = /** @type {(inputs: Sidebar_Spacename1Inputs) => LocalizedString} */ () => {
@@ -553,7 +553,7 @@ export const sidebar_spacenameplaceholder2 = /** @type {(inputs: Sidebar_Spacena
 };
 
 export const sidebar_spaceduplicate1 = /** @type {(inputs: Sidebar_Spaceduplicate1Inputs) => LocalizedString} */ (i) => {
-	return /** @type {LocalizedString} */ (`Já existe um Space com o nome "${i?.name}".`)
+	return /** @type {LocalizedString} */ (`Já existe um Espaço com o nome "${i?.name}".`)
 };
 
 export const sidebar_spacecolor1 = /** @type {(inputs: Sidebar_Spacecolor1Inputs) => LocalizedString} */ () => {
@@ -569,11 +569,11 @@ export const sidebar_spaceautoarchive2 = /** @type {(inputs: Sidebar_Spaceautoar
 };
 
 export const sidebar_autoarchivecreatehelp3 = /** @type {(inputs: Sidebar_Autoarchivecreatehelp3Inputs) => LocalizedString} */ () => {
-	return /** @type {LocalizedString} */ (`Herdar a definição global ou definir a política de separadores inativos deste Space.`)
+	return /** @type {LocalizedString} */ (`Herdar a definição global ou definir a política de separadores inativos deste Espaço.`)
 };
 
 export const sidebar_autoarchiveedithelp3 = /** @type {(inputs: Sidebar_Autoarchiveedithelp3Inputs) => LocalizedString} */ () => {
-	return /** @type {LocalizedString} */ (`Substituir quando os separadores inativos deste Space são arquivados.`)
+	return /** @type {LocalizedString} */ (`Substituir quando os separadores inativos deste Espaço são arquivados.`)
 };
 
 export const sidebar_autoarchivemodeinherit3 = /** @type {(inputs: Sidebar_Autoarchivemodeinherit3Inputs) => LocalizedString} */ () => {
@@ -597,15 +597,15 @@ export const sidebar_minutesidlelabel2 = /** @type {(inputs: Sidebar_Minutesidle
 };
 
 export const sidebar_deletespaceconfirm2 = /** @type {(inputs: Sidebar_Deletespaceconfirm2Inputs) => LocalizedString} */ () => {
-	return /** @type {LocalizedString} */ (`Tem a certeza? Isto irá remover o Space e desafixar todos os seus separadores.`)
+	return /** @type {LocalizedString} */ (`Tem a certeza? Isto irá remover o Espaço e desafixar todos os seus separadores.`)
 };
 
 export const sidebar_deletespacebutton2 = /** @type {(inputs: Sidebar_Deletespacebutton2Inputs) => LocalizedString} */ () => {
-	return /** @type {LocalizedString} */ (`Eliminar Space…`)
+	return /** @type {LocalizedString} */ (`Eliminar Espaço…`)
 };
 
 export const sidebar_spaceeditorconfirmcreate3 = /** @type {(inputs: Sidebar_Spaceeditorconfirmcreate3Inputs) => LocalizedString} */ () => {
-	return /** @type {LocalizedString} */ (`Criar Space`)
+	return /** @type {LocalizedString} */ (`Criar Espaço`)
 };
 
 export const sidebar_spaceeditorconfirmsave3 = /** @type {(inputs: Sidebar_Spaceeditorconfirmsave3Inputs) => LocalizedString} */ () => {
@@ -621,7 +621,7 @@ export const sidebar_spacetooltipactivate2 = /** @type {(inputs: Sidebar_Spaceto
 };
 
 export const sidebar_addspace1 = /** @type {(inputs: Sidebar_Addspace1Inputs) => LocalizedString} */ () => {
-	return /** @type {LocalizedString} */ (`Novo Space`)
+	return /** @type {LocalizedString} */ (`Novo Espaço`)
 };
 
 export const sidebar_openoptions1 = /** @type {(inputs: Sidebar_Openoptions1Inputs) => LocalizedString} */ () => {
@@ -837,7 +837,7 @@ export const options_customkeywordcollision2 = /** @type {(inputs: Options_Custo
 };
 
 export const options_backupdescription1 = /** @type {(inputs: Options_Backupdescription1Inputs) => LocalizedString} */ () => {
-	return /** @type {LocalizedString} */ (`Mova os seus Spaces para outra máquina ou guarde uma cópia.`)
+	return /** @type {LocalizedString} */ (`Mova os seus Espaços para outra máquina ou guarde uma cópia.`)
 };
 
 export const options_includesettingsdescription2 = /** @type {(inputs: Options_Includesettingsdescription2Inputs) => LocalizedString} */ () => {
@@ -1131,7 +1131,7 @@ export const options_label_launcherscope1 = /** @type {(inputs: Options_Label_La
 };
 
 export const options_desc_launcherscope1 = /** @type {(inputs: Options_Desc_Launcherscope1Inputs) => LocalizedString} */ () => {
-	return /** @type {LocalizedString} */ (`Como o launcher classifica itens de outros Spaces`)
+	return /** @type {LocalizedString} */ (`Como o launcher classifica itens de outros Espaços`)
 };
 
 export const options_label_density = /** @type {(inputs: Options_Label_DensityInputs) => LocalizedString} */ () => {
@@ -1147,7 +1147,7 @@ export const options_label_tint = /** @type {(inputs: Options_Label_TintInputs) 
 };
 
 export const options_desc_tint = /** @type {(inputs: Options_Desc_TintInputs) => LocalizedString} */ () => {
-	return /** @type {LocalizedString} */ (`O quanto a cor do Space ativo preenche o espaço de trabalho`)
+	return /** @type {LocalizedString} */ (`O quanto a cor do Espaço ativo preenche o espaço de trabalho`)
 };
 
 export const options_label_theme = /** @type {(inputs: Options_Label_ThemeInputs) => LocalizedString} */ () => {
@@ -1179,7 +1179,7 @@ export const options_label_dedupnewtabnavigations3 = /** @type {(inputs: Options
 };
 
 export const options_desc_dedupnewtabnavigations3 = /** @type {(inputs: Options_Desc_Dedupnewtabnavigations3Inputs) => LocalizedString} */ () => {
-	return /** @type {LocalizedString} */ (`Quando abre um novo separador e navega para uma página já aberta neste Space, muda para ela em vez de abrir uma duplicada`)
+	return /** @type {LocalizedString} */ (`Quando abre um novo separador e navega para uma página já aberta neste Espaço, muda para ela em vez de abrir uma duplicada`)
 };
 
 export const options_label_pinnedtabboundarydefault3 = /** @type {(inputs: Options_Label_Pinnedtabboundarydefault3Inputs) => LocalizedString} */ () => {
@@ -1327,7 +1327,7 @@ export const sidebar_lenswillshow2 = /** @type {(inputs: Sidebar_Lenswillshow2In
 };
 
 export const sidebar_spacecolorlabel2 = /** @type {(inputs: Sidebar_Spacecolorlabel2Inputs) => LocalizedString} */ () => {
-	return /** @type {LocalizedString} */ (`Cor do Space`)
+	return /** @type {LocalizedString} */ (`Cor do Espaço`)
 };
 
 export const sidebar_boundarychangedefault2 = /** @type {(inputs: Sidebar_Boundarychangedefault2Inputs) => LocalizedString} */ () => {
@@ -1553,15 +1553,15 @@ export const options_engine_custom = /** @type {(inputs: Options_Engine_CustomIn
 };
 
 export const options_scope_global = /** @type {(inputs: Options_Scope_GlobalInputs) => LocalizedString} */ () => {
-	return /** @type {LocalizedString} */ (`Todos os Spaces`)
+	return /** @type {LocalizedString} */ (`Todos os Espaços`)
 };
 
 export const options_scope_prefercurrent1 = /** @type {(inputs: Options_Scope_Prefercurrent1Inputs) => LocalizedString} */ () => {
-	return /** @type {LocalizedString} */ (`Preferir Space atual`)
+	return /** @type {LocalizedString} */ (`Preferir Espaço atual`)
 };
 
 export const options_scope_currentonly1 = /** @type {(inputs: Options_Scope_Currentonly1Inputs) => LocalizedString} */ () => {
-	return /** @type {LocalizedString} */ (`Apenas Space atual`)
+	return /** @type {LocalizedString} */ (`Apenas Espaço atual`)
 };
 
 export const options_density_compact = /** @type {(inputs: Options_Density_CompactInputs) => LocalizedString} */ () => {
