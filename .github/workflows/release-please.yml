@@ -54,7 +54,7 @@ jobs:
       # Everything below runs ONLY when a release was just cut, so ordinary
       # pushes (which merely update the Release PR) do no build work.
       - if: ${{ steps.release.outputs['apps/extension--release_created'] == 'true' }}
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@v7
       - if: ${{ steps.release.outputs['apps/extension--release_created'] == 'true' }}
         uses: actions/setup-node@v6
         with:
@@ -65,7 +65,7 @@ jobs:
         id: pnpm-store
         run: echo "dir=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
       - if: ${{ steps.release.outputs['apps/extension--release_created'] == 'true' }}
-        uses: actions/cache@v5.0.5
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ steps.pnpm-store.outputs.dir }}
           key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
