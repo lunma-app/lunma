@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.1](https://github.com/lunma-app/lunma/compare/v0.4.0...v0.4.1) (2026-07-01)
+
+
+### Features
+
+* **i18n:** rename pt-PT locale to region-neutral pt ([88669a9](https://github.com/lunma-app/lunma/commit/88669a9d518d5017b1868cb969b6255f7c28d236))
+
+
+### Bug Fixes
+
+* **e2e:** de-flake boundary lockToSite chip wait ([ba56817](https://github.com/lunma-app/lunma/commit/ba568176b61c47255881a8cb19e8564bca9ff350))
+* **e2e:** heal dropped-dispatch and swallowed-contextmenu flakes ([4577d73](https://github.com/lunma-app/lunma/commit/4577d736e454b7964185eb6c79e24988f701ad1b))
+* **i18n:** localize the "Space" term in de and pt catalogs ([549ddd7](https://github.com/lunma-app/lunma/commit/549ddd77cbcb7064066354d0ab3edc35feaf3df6))
+
 ## [0.4.0](https://github.com/lunma-app/lunma/compare/v0.3.1...v0.4.0) (2026-07-01)
 
 
