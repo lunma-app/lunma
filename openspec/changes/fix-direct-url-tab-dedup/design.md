@@ -305,3 +305,38 @@ guesswork entirely: it showed the doc-based pass's assumption about the
 more fundamental problem than the one flagged case (context-menu "open in
 new tab") — see Decision 1 for the resolution (drop the gate; unscoped
 dedup with the `duplicateTab` exclusion).
+
+## Addendum: `about:blank` exclusion (CI-caught, post-implementation)
+
+CI's `e2e` job caught a real gap the unit-test suite missed: `resolvedUrl =
+tab.url || tab.pendingUrl` treated `about:blank` as a normal, matchable
+destination URL. `isNewTabUrl` (the existing `isHome` guard) does **not**
+match literal `about:blank` — it only matches Lunma's/Chrome's actual
+new-tab-override URLs — so a plain blank tab (any `chrome.tabs.create()` or
+`ctx.newPage()`-style call with no `url`, or an explicit
+`{url: 'about:blank'}`) reached the new dedup check. A second blank tab
+would find the first one already tracked at the identical `about:blank`
+"URL" and collapse into it.
+
+This reproduced deterministically (not flaky) on every fresh browser launch
+in CI, cascading into six failing e2e specs across three files —
+`_persist.spec.ts`/`_persist2.spec.ts` (their own `ctx.newPage()` call was
+silently closed out from under Playwright immediately after a fresh
+extension load, since Chrome's own initial blank tab was already tracked),
+`boundary.spec.ts` (same mechanism via `pinSite`'s `context.newPage()`),
+and `pin-temp-into-folder.spec.ts` (its `createTempTab` helper explicitly
+creates `{url: 'about:blank'}` tabs in a loop, expecting 4 distinct tabs
+but getting 2 after 3 of them collapsed into the first). Confirmed via a
+local repro (a throwaway Playwright script loading the real built
+extension) before and after the fix. This is a real production regression,
+not just a test artifact: repeatedly opening a new blank tab (Ctrl+T) in
+the shipped extension would have silently stopped creating new tabs after
+the first.
+
+**Fix:** added an explicit `resolvedUrl !== 'about:blank'` exclusion
+alongside the existing `duplicateTab` exclusion in `tabs.onCreated`
+(`chrome-tabs.ts`) — `about:blank` is Chrome's placeholder for "not yet
+navigated," never a real destination a dedup should apply to. Covered by a
+new unit test (`coordinator.handlers.test.ts`: "about:blank is never
+deduped") and implicitly by the six previously-failing e2e specs, all of
+which now pass locally and were the trigger for finding this.

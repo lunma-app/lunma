@@ -90,6 +90,14 @@
       — NOT done in this session (no interactive Chrome available in this
       shell-only environment); left for a follow-up manual pass before
       release.
+- [x] 4.3 CI's `e2e` job (a real Playwright-driven Chromium loading the built
+      extension) caught a real gap: `about:blank` was treated as a matchable
+      URL, collapsing every second blank tab into the first — see design.md's
+      "`about:blank` exclusion" addendum. Fixed (`resolvedUrl !==
+      'about:blank'` in `chrome-tabs.ts`), covered by a new unit test, and
+      confirmed against all 6 previously-failing e2e specs plus the full
+      `pnpm test:e2e` suite locally (17/17 passing, 1 pre-existing unrelated
+      skip) and `pnpm verify` at the workspace root.
 
 ## 5. Docs and artifact sync
 

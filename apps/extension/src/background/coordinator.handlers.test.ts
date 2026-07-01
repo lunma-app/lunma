@@ -1875,6 +1875,21 @@ describe('Coordinator handlers: onCreated-time direct-URL dedup (tab-dedup)', ()
     expect(chromeStub.tabs.update).not.toHaveBeenCalledWith(42, { active: true });
   });
 
+  test('about:blank is never deduped — a second blank tab is created/tracked normally', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    seedOnCreatedDedup(store, 'about:blank');
+    coordinator.enqueue(tabCreated(99, 100, 'about:blank'));
+    await coordinator.idle();
+    // about:blank is Chrome's placeholder for "not yet navigated" — not a real
+    // destination — so a second blank tab must NOT collapse into the first,
+    // unlike every other URL this suite exercises.
+    expect(chromeStub.tabs.update).not.toHaveBeenCalled();
+    expect(chromeStub.tabs.remove).not.toHaveBeenCalled();
+    expect(chromeStub.runtime.sendMessage).not.toHaveBeenCalled();
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([99, 42]);
+  });
+
   test('dedupNewTabNavigations off → created/tracked normally even when the URL is already open', async () => {
     const chromeStub = installSavedTabChromeStub();
     const { coordinator, store } = makeCoordinator();

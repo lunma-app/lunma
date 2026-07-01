@@ -59,9 +59,18 @@ export function chromeTabHandlers(): Pick<
         // an exact match). `duplicateTab` records the source's (windowId, url) via
         // `markPendingDuplicateTab` BEFORE calling `chrome.tabs.duplicate`;
         // `consumePendingDuplicateTab` here recognises and consumes that record.
+        //
+        // `about:blank` is excluded too: it is Chrome's placeholder for "not yet
+        // navigated" (any freshly-blank tab reports it, including Ctrl+T, a tab
+        // opened with no `url`, or a tool creating one for later use), not a
+        // destination a user is deliberately reopening. `isNewTabUrl` does not
+        // match it — that only covers Lunma's/Chrome's actual new-tab-override
+        // URLs — so without this it collapses every second blank tab into the
+        // first, defeating "open a new blank tab" entirely.
         const resolvedUrl = tab.url || tab.pendingUrl;
         if (
           resolvedUrl &&
+          resolvedUrl !== 'about:blank' &&
           ctx.dedupNewTabNavigations() &&
           !consumePendingDuplicateTab(tab.windowId, resolvedUrl)
         ) {
