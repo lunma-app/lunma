@@ -87,6 +87,17 @@ let leadPicked = $state<string[]>(['verge']);
         />
       </div>
     </Variant>
+    <Variant label="chip variant">
+      <MultiSelect
+        {options}
+        values={['hn']}
+        onchange={noop}
+        label="All feeds"
+        ariaLabel="Filter by feed"
+        variant="chip"
+        clearLabel="Clear"
+      />
+    </Variant>
     <Variant label="searchable (past threshold)">
       <div style="width: 16rem">
         <MultiSelect

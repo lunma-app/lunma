@@ -281,6 +281,7 @@ const empty = $derived(
                       clearLabel={m.launcher_lensClearFilter()}
                       selectAllLabel={m.common_selectAll()}
                       searchPlaceholder={m.launcher_lensScopeSearch()}
+                      variant="chip"
                       testid="repo-select"
                     />
                   </div>
@@ -360,6 +361,7 @@ const empty = $derived(
                       clearLabel={m.launcher_lensClearFilter()}
                       selectAllLabel={m.common_selectAll()}
                       searchPlaceholder={m.launcher_lensScopeSearch()}
+                      variant="chip"
                       testid="project-select"
                     />
                   </div>
@@ -446,18 +448,17 @@ const empty = $derived(
                       clearLabel={m.launcher_lensClearFilter()}
                       selectAllLabel={m.common_selectAll()}
                       searchPlaceholder={m.launcher_lensScopeSearch()}
+                      variant="chip"
                       testid="feed-select"
                     />
                   </div>
                 {/if}
               </div>
             {/if}
-            <span class="controls-right">
-              <button class="chip-btn" class:on={unreadOnly} type="button" onclick={toggleUnreadFilter}>{m.launcher_lensUnread({ count: unreadCount })}</button>
-              <span class="seg" role="group" aria-label={m.launcher_lensArticleLayout()}>
-                <button class="seg-btn" class:on={articleView === 'grid'} type="button" onclick={() => setArticleLayout('grid')}>{m.launcher_lensGrid()}</button>
-                <button class="seg-btn" class:on={articleView === 'list'} type="button" onclick={() => setArticleLayout('list')}>{m.launcher_lensList()}</button>
-              </span>
+            <button class="chip-btn" class:on={unreadOnly} type="button" onclick={toggleUnreadFilter}>{m.launcher_lensUnread({ count: unreadCount })}</button>
+            <span class="seg" role="group" aria-label={m.launcher_lensArticleLayout()}>
+              <button class="seg-btn" class:on={articleView === 'grid'} type="button" onclick={() => setArticleLayout('grid')}>{m.launcher_lensGrid()}</button>
+              <button class="seg-btn" class:on={articleView === 'list'} type="button" onclick={() => setArticleLayout('list')}>{m.launcher_lensList()}</button>
             </span>
           </div>
 
@@ -819,11 +820,13 @@ const empty = $derived(
     outline: var(--focus-width) solid var(--focus-color);
     outline-offset: var(--focus-offset);
   }
-  .article-controls .controls-right {
-    margin-left: auto;
-    display: inline-flex;
-    align-items: center;
+  /* Filters (feed scope + Unread) cluster on the left; the layout toggle is a
+     different kind of control, so it's pushed to the right. */
+  .article-controls {
     gap: 8px;
+  }
+  .article-controls .seg {
+    margin-left: auto;
   }
   .seg {
     display: inline-flex;
