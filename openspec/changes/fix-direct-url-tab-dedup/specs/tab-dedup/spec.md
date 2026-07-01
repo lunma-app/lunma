@@ -70,6 +70,16 @@ unchanged.
   lens-page URL
 - **THEN** this onCreated-time dedup check SHALL NOT run
 
+#### Scenario: A blank tab is excluded from this check
+
+- **GIVEN** a tab already exists at `about:blank` in the active Space
+- **WHEN** a second tab is created with `url: 'about:blank'` (or no `url`,
+  which Chrome reports as `about:blank`)
+- **THEN** this onCreated-time dedup check SHALL NOT run — `about:blank` is
+  Chrome's placeholder for "not yet navigated," not a real destination —
+  and the new tab SHALL be tracked/grouped normally, never focused/closed
+  against the existing blank tab
+
 #### Scenario: dedupNewTabNavigations disabled — tab is created normally
 
 - **GIVEN** `dedupNewTabNavigations` is `false`
