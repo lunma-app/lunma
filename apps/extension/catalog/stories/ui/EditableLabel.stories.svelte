@@ -4,15 +4,16 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'EditableLabel',
   group: 'Form',
-  controls: {
-    value: { type: 'text', default: 'Work', description: 'Current text / draft seed.' },
-    editing: { type: 'boolean', default: false, description: 'Parent-owned edit mode.' },
-    placeholder: { type: 'text', default: 'Name…', description: 'Input placeholder.' },
-    allowEmpty: {
-      type: 'boolean',
-      default: false,
-      description: 'Treat an empty commit as commit("").',
-    },
+  controlOverrides: {
+    value: { default: 'Work', description: 'Current text / draft seed.' },
+    editing: { description: 'Parent-owned edit mode.' },
+    placeholder: { default: 'Name…', description: 'Input placeholder.' },
+    allowEmpty: { description: 'Treat an empty commit as commit("").' },
+  },
+  excludeControls: {
+    oncommit: 'Callback prop — no meaningful live control.',
+    oncancel: 'Callback prop — no meaningful live control.',
+    testid: 'data-testid passthrough — not meaningful to fiddle with here.',
   },
 });
 </script>
@@ -40,7 +41,7 @@ const { source }: { source: string } = $props();
           args.editing = false;
         }}
         oncancel={() => (args.editing = false)}
-        ariaLabel="Space name"
+        ariaLabel={(args.ariaLabel as string) || 'Space name'}
       />
     </div>
   {/snippet}

@@ -4,10 +4,9 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'SettingText',
   group: 'Atoms',
-  controls: {
-    label: { type: 'text', default: 'Colour intensity', description: 'Setting label.' },
+  controlOverrides: {
+    label: { default: 'Colour intensity', description: 'Setting label.' },
     description: {
-      type: 'text',
       default: "How strongly the active Space's hue washes the workspace.",
       description: 'Optional secondary description.',
     },

@@ -4,23 +4,14 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'Avatar',
   group: 'Atoms',
-  controls: {
-    initials: { type: 'text', default: 'AK', description: '1–2 character initials.' },
-    size: {
-      type: 'select',
-      options: ['sm', 'md'],
-      default: 'md',
-      typeLabel: "'sm' | 'md'",
-      description: 'Disc geometry.',
-    },
-    ring: {
-      type: 'select',
-      options: ['none', 'approved', 'changes', 'pending'],
-      default: 'none',
-      typeLabel: "'approved' | 'changes' | 'pending' | 'none'",
-      description: 'Verdict ring tint.',
-    },
-    title: { type: 'text', default: 'Ada Kale', description: 'Tooltip / accessible label.' },
+  controlOverrides: {
+    initials: { default: 'AK', description: '1–2 character initials.' },
+    size: { description: 'Disc geometry.' },
+    ring: { description: 'Verdict ring tint.' },
+    title: { default: 'Ada Kale', description: 'Tooltip / accessible label.' },
+  },
+  excludeControls: {
+    testid: 'data-testid passthrough — not meaningful to fiddle with here.',
   },
 });
 </script>

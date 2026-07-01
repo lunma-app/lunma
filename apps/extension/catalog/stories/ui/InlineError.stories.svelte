@@ -4,12 +4,12 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'InlineError',
   group: 'Layout',
-  controls: {
-    message: {
-      type: 'text',
-      default: "That token didn't work.",
-      description: 'Error message text.',
-    },
+  controlOverrides: {
+    message: { default: "That token didn't work.", description: 'Error message text.' },
+  },
+  excludeControls: {
+    id: 'Only meaningful wired to a real field\'s aria-describedby — see the "associated" example below.',
+    testid: 'data-testid passthrough — not meaningful to fiddle with here.',
   },
 });
 </script>

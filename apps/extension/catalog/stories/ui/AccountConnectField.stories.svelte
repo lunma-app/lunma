@@ -4,25 +4,16 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'AccountConnectField',
   group: 'Composite',
-  controls: {
-    host: {
-      type: 'text',
-      default: 'github.com',
-      description: 'Account host (labels / aria target).',
-    },
-    requirement: {
-      type: 'select',
-      options: ['required', 'optional'],
-      default: 'required',
-      typeLabel: "'required' | 'optional'",
-      description: 'Token necessity.',
-    },
-    hasToken: {
-      type: 'boolean',
-      default: false,
-      description: 'Whether a token is stored (collapses the field).',
-    },
-    error: { type: 'text', default: '', description: 'Error message to render (empty = none).' },
+  controlOverrides: {
+    host: { default: 'github.com' },
+    hasToken: { description: 'Whether a token is stored (collapses the field).' },
+    error: { description: 'Error message to render (empty = none).' },
+  },
+  excludeControls: {
+    onConnect: 'Callback prop — no meaningful live control.',
+    onReplace: 'Callback prop — no meaningful live control.',
+    onCancel: 'Callback prop — no meaningful live control.',
+    testid: 'data-testid passthrough — not meaningful to fiddle with here.',
   },
 });
 </script>
@@ -47,6 +38,7 @@ const { source }: { source: string } = $props();
         onConnect={noop}
         onReplace={noop}
         error={(args.error as string) || undefined}
+        helpUrl={(args.helpUrl as string) || undefined}
       />
     </div>
   {/snippet}

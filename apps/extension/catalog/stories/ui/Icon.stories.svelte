@@ -4,11 +4,11 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'Icon',
   group: 'Atoms',
-  controls: {
-    name: { type: 'text', default: 'star', description: 'Any Lucide icon name.' },
-    size: { type: 'number', default: 24, description: 'Icon size in px.' },
-    color: { type: 'text', default: 'currentColor', description: 'CSS colour (token or literal).' },
-    label: { type: 'text', default: 'star', description: 'Accessible label (sets role="img").' },
+  controlOverrides: {
+    name: { default: 'star', description: 'Any Lucide icon name.' },
+    size: { default: 24, description: 'Icon size in px.' },
+    color: { default: 'currentColor', description: 'CSS colour (token or literal).' },
+    label: { default: 'star', description: 'Accessible label (sets role="img").' },
   },
 });
 </script>

@@ -4,14 +4,14 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'Toast',
   group: 'Composite',
-  controls: {
-    message: { type: 'text', default: 'Space archived.', description: 'Status line text.' },
-    actionLabel: {
-      type: 'text',
-      default: '',
-      description: 'Optional action button label (empty = none).',
-    },
-    duration: { type: 'number', default: 6000, description: 'Auto-dismiss delay (ms).' },
+  controlOverrides: {
+    message: { default: 'Space archived.', description: 'Status line text.' },
+    actionLabel: { description: 'Optional action button label (empty = none).' },
+    duration: { default: 6000, description: 'Auto-dismiss delay (ms).' },
+  },
+  excludeControls: {
+    onAction: 'Callback prop — no meaningful live control.',
+    onDismiss: 'Callback prop — the preview binds it back to local playground state.',
   },
 });
 </script>

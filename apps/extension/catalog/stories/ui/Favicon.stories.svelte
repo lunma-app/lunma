@@ -4,14 +4,13 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'Favicon',
   group: 'Atoms',
-  controls: {
+  controlOverrides: {
     src: {
-      type: 'text',
       default: 'https://www.google.com/s2/favicons?domain=github.com&sz=32',
       description: 'Primary favicon URL.',
     },
-    size: { type: 'number', default: 32, description: 'Square pixel size.' },
-    alt: { type: 'text', default: 'GitHub', description: 'Image alt text.' },
+    size: { default: 32, description: 'Square pixel size.' },
+    alt: { default: 'GitHub', description: 'Image alt text.' },
   },
 });
 </script>
@@ -28,7 +27,12 @@ const { source }: { source: string } = $props();
 
 <Story {meta} {source}>
   {#snippet preview(args: Args)}
-    <Favicon src={args.src as string} size={args.size as number} alt={args.alt as string} />
+    <Favicon
+      src={args.src as string}
+      fallbackSrc={(args.fallbackSrc as string) || undefined}
+      size={args.size as number}
+      alt={args.alt as string}
+    />
   {/snippet}
   {#snippet examples()}
     <Variant label="16px"><Favicon src={favicon('github.com', 16)} size={16} alt="GitHub" /></Variant>

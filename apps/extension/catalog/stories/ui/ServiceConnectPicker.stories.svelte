@@ -1,9 +1,20 @@
 <script module lang="ts">
 import { defineStory } from '../../lib/story';
 
-// All of ServiceConnectPicker's props are callbacks / arrays (no scalar props to
-// expose as controls), so this story shows representative examples + source only.
-export const meta = defineStory({ title: 'ServiceConnectPicker', group: 'Composite' });
+// ServiceConnectPicker's props are callbacks/arrays, plus a non-meaningful
+// testid passthrough — no controls worth a live playground, so this story
+// shows representative examples + source only.
+export const meta = defineStory({
+  title: 'ServiceConnectPicker',
+  group: 'Composite',
+  excludeControls: {
+    testid: 'data-testid passthrough — not meaningful to fiddle with here.',
+    onConnected: 'Callback prop — no meaningful live control.',
+    spaces: 'Array prop — no meaningful scalar control; the preview passes a fixed space list.',
+    onImportFeeds: 'Callback prop — no meaningful live control.',
+    onCancel: 'Callback prop — no meaningful live control.',
+  },
+});
 </script>
 
 <script lang="ts">

@@ -4,41 +4,24 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'LensRow',
   group: 'Composite',
-  controls: {
-    name: { type: 'text', default: 'Review requested', description: 'Lens name (row label).' },
-    icon: {
-      type: 'text',
-      default: 'git-pull-request',
-      description: 'Lens glyph (any Lucide name).',
-    },
-    color: {
-      type: 'select',
-      options: [
-        'red',
-        'orange',
-        'yellow',
-        'green',
-        'teal',
-        'cyan',
-        'blue',
-        'purple',
-        'pink',
-        'gray',
-      ],
-      default: 'purple',
-      typeLabel: 'SpaceColor',
-      description: 'Identity colour tinting the glyph.',
-    },
-    active: { type: 'boolean', default: false, description: 'Active "peek" wash + ring.' },
-    expanded: { type: 'boolean', default: false, description: 'Chevron rotation state.' },
-    busy: { type: 'boolean', default: false, description: 'Spin glyph during refresh.' },
-    badge: { type: 'text', default: '4', description: 'Trailing count badge (empty = none).' },
+  controlOverrides: {
+    name: { default: 'Review requested', description: 'Lens name (row label).' },
+    icon: { default: 'git-pull-request', description: 'Lens glyph (any Lucide name).' },
+    active: { description: 'Active "peek" wash + ring.' },
+    expanded: { description: 'Chevron rotation state.' },
+    busy: { description: 'Spin glyph during refresh.' },
+    badge: { default: '4', description: 'Trailing count badge (empty = none).' },
+  },
+  excludeControls: {
+    color:
+      'SpaceColor is an imported type alias, not an inline string-literal union — not mechanically derivable (syntactic-only parsing). See the coloured Examples below.',
+    onToggle: 'Callback prop — no meaningful live control.',
+    onOpenPage: 'Callback prop — no meaningful live control.',
   },
 });
 </script>
 
 <script lang="ts">
-import type { SpaceColor } from '@/shared/types';
 import LensRow from '@/ui/LensRow.svelte';
 import type { Args } from '../../lib/controls';
 import { LENSES, noop } from '../../lib/mock';
@@ -54,11 +37,13 @@ const { source }: { source: string } = $props();
       <LensRow
         name={args.name as string}
         icon={args.icon as string}
-        color={args.color as SpaceColor}
+        color="purple"
         active={args.active as boolean}
         expanded={args.expanded as boolean}
         busy={args.busy as boolean}
         badge={(args.badge as string) || undefined}
+        ariaLabel={(args.ariaLabel as string) || undefined}
+        openPageLabel={(args.openPageLabel as string) || undefined}
         onToggle={noop}
         onOpenPage={noop}
       />

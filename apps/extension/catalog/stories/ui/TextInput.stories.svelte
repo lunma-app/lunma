@@ -4,19 +4,22 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'TextInput',
   group: 'Form',
-  controls: {
-    label: { type: 'text', default: 'Account name', description: 'Visible label above the field.' },
-    placeholder: { type: 'text', default: 'ghp_…', description: 'Placeholder text.' },
-    value: { type: 'text', default: 'octocat', description: 'Current value (bindable).' },
-    invalid: { type: 'boolean', default: false, description: 'Danger border + aria-invalid.' },
-    required: { type: 'boolean', default: false, description: 'Sets aria-required="true".' },
-    type: {
-      type: 'select',
-      options: ['text', 'password'],
-      default: 'text',
-      typeLabel: "'text' | 'password'",
-      description: 'Input type.',
-    },
+  controlOverrides: {
+    label: { default: 'Account name', description: 'Visible label above the field.' },
+    placeholder: { default: 'ghp_…', description: 'Placeholder text.' },
+    value: { default: 'octocat', description: 'Current value (bindable).' },
+    invalid: { description: 'Danger border + aria-invalid.' },
+    required: { description: 'Sets aria-required="true".' },
+    type: { description: 'Input type.' },
+  },
+  excludeControls: {
+    autofocus:
+      'Stealing page focus on every story mount would hijack the catalog itself — not meaningful to fiddle with here.',
+    describedById:
+      'Only meaningful wired to a real field\'s aria-describedby — see the "required + described error" example below.',
+    testid: 'data-testid passthrough — not meaningful to fiddle with here.',
+    oninput: 'Callback prop — the preview binds it back to the value control above.',
+    onenter: 'Callback prop — no meaningful live control.',
   },
 });
 </script>
@@ -36,10 +39,13 @@ const { source }: { source: string } = $props();
     <div style="width: 18rem">
       <TextInput
         label={args.label as string}
+        ariaLabel={(args.ariaLabel as string) || undefined}
         placeholder={args.placeholder as string}
         value={args.value as string}
         invalid={args.invalid as boolean}
         required={args.required as boolean}
+        autocomplete={(args.autocomplete as string) || undefined}
+        inputmode={args.inputmode as 'text' | 'numeric' | 'decimal'}
         type={args.type as 'text' | 'password'}
         oninput={(v) => (args.value = v)}
       />

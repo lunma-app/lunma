@@ -4,13 +4,16 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'BottomSheet',
   group: 'Composite',
-  controls: {
-    open: { type: 'boolean', default: true, description: 'Controlled open state.' },
-    title: {
-      type: 'text',
-      default: 'Rename Space',
-      description: 'Header title (empty = headerless).',
-    },
+  controlOverrides: {
+    open: { default: true, description: 'Controlled open state.' },
+    title: { default: 'Rename Space', description: 'Header title (empty = headerless).' },
+  },
+  excludeControls: {
+    onClose: 'Callback prop — no meaningful live control.',
+    children: 'Snippet prop — sheet body is rendered by the preview snippet below, not a control.',
+    testid: 'data-testid passthrough — not meaningful to fiddle with here.',
+    portalTo:
+      'A CSS selector for a live DOM ancestor — not meaningful in the isolated catalog preview.',
   },
 });
 </script>
@@ -35,7 +38,7 @@ const { source }: { source: string } = $props();
       <BottomSheet
         open={args.open as boolean}
         title={(args.title as string) || undefined}
-        ariaLabel="Sheet"
+        ariaLabel={(args.ariaLabel as string) || 'Sheet'}
         onClose={() => (args.open = false)}
       >
         <TextInput label="Name" value="Work" />

@@ -4,15 +4,16 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'Select',
   group: 'Form',
-  controls: {
-    value: {
-      type: 'select',
-      options: ['off', '30', '120'],
-      default: '30',
-      typeLabel: 'string',
-      description: 'Selected option value (`options` is an array prop).',
-    },
-    ariaLabel: { type: 'text', default: 'Auto-archive', description: 'Accessible name.' },
+  controlOverrides: {
+    ariaLabel: { default: 'Auto-archive', description: 'Accessible name.' },
+  },
+  excludeControls: {
+    options: 'Array prop — no meaningful scalar control; the preview passes a fixed option list.',
+    value:
+      'Only valid when it matches one of `options` — a naive free-text control would let a reviewer put the preview into an invalid state.',
+    onchange:
+      'Callback prop — the preview binds it back to local playground state (see `value` above for why `value` itself is excluded).',
+    testid: 'data-testid passthrough — not meaningful to fiddle with here.',
   },
 });
 </script>
@@ -35,6 +36,8 @@ const options: SelectOption[] = [
   { value: '120', label: 'After 2 hours' },
   { value: 'custom', label: 'Custom…', disabled: true },
 ];
+
+let playgroundValue = $state('30');
 </script>
 
 <Story {meta} {source}>
@@ -42,8 +45,8 @@ const options: SelectOption[] = [
     <div style="width: 14rem">
       <Select
         {options}
-        value={args.value as string}
-        onchange={(v) => (args.value = v)}
+        value={playgroundValue}
+        onchange={(v) => (playgroundValue = v)}
         ariaLabel={args.ariaLabel as string}
       />
     </div>

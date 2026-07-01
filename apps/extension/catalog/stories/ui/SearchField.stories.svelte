@@ -4,26 +4,35 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'SearchField',
   group: 'Form',
-  controls: {
-    mode: {
-      type: 'select',
-      options: ['input', 'trigger'],
-      default: 'input',
-      typeLabel: "'trigger' | 'input'",
-      description: 'Live field or button.',
-    },
+  controlOverrides: {
     placeholder: {
-      type: 'text',
       default: 'Search tabs, bookmarks…',
       description: 'Placeholder / trigger label.',
     },
-    value: { type: 'text', default: '', description: 'Current value (input mode).' },
+    value: { description: 'Current value (input mode).' },
     ariaLabel: {
-      type: 'text',
       default: 'Search',
       description: 'Accessible name (input falls back to the placeholder when unset).',
     },
-    kbd: { type: 'text', default: '⌥L', description: 'Trailing keyboard hint.' },
+    kbd: { default: '⌥L', description: 'Trailing keyboard hint.' },
+  },
+  excludeControls: {
+    mode: 'SearchFieldMode is an imported type alias, not an inline string-literal union — not mechanically derivable (syntactic-only parsing). See the trigger-mode example below.',
+    leading: 'Snippet prop — see the "engine mode" example below.',
+    leadingIcon:
+      'IconName is an imported type alias, not an inline string-literal union — not mechanically derivable (syntactic-only parsing).',
+    oninput: 'Callback prop — the preview binds it back to the value control above.',
+    onenter: 'Callback prop — no meaningful live control.',
+    onkeydown: 'Callback prop — no meaningful live control.',
+    onclick: 'Callback prop — no meaningful live control.',
+    testid: 'data-testid passthrough — not meaningful to fiddle with here.',
+    autofocus:
+      'Stealing page focus on every story mount would hijack the catalog itself — not meaningful to fiddle with here.',
+    combobox:
+      'Only meaningful paired with `controls`/`expanded`/`activeDescendant` — an all-or-nothing aria-combobox wiring group, not a standalone control.',
+    controls: 'Only meaningful paired with `combobox` — see above.',
+    expanded: 'Only meaningful paired with `combobox` — see above.',
+    activeDescendant: 'Only meaningful paired with `combobox` — see above.',
   },
 });
 </script>
@@ -47,7 +56,7 @@ const { source }: { source: string } = $props();
   {#snippet preview(args: Args)}
     <div style="width: 18rem">
       <SearchField
-        mode={args.mode as 'input' | 'trigger'}
+        mode="input"
         placeholder={args.placeholder as string}
         value={args.value as string}
         ariaLabel={args.ariaLabel as string}

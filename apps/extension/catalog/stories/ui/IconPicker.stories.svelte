@@ -4,8 +4,11 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'IconPicker',
   group: 'Composite',
-  controls: {
-    value: { type: 'text', default: 'house', description: 'Currently-selected icon name.' },
+  controlOverrides: {
+    value: { default: 'house', description: 'Currently-selected icon name.' },
+  },
+  excludeControls: {
+    onselect: 'Callback prop — the preview binds it back to the control below.',
   },
 });
 </script>

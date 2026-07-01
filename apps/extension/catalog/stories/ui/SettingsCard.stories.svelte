@@ -4,18 +4,21 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'SettingsCard',
   group: 'Composite',
-  controls: {
-    heading: {
-      type: 'text',
-      default: 'Appearance',
-      description: 'Card heading (via CardHeading).',
-    },
+  controlOverrides: {
+    heading: { default: 'Appearance', description: 'Card heading (via CardHeading).' },
     description: {
-      type: 'text',
       default: 'How the workspace looks and moves.',
       description: 'Optional muted lead paragraph.',
     },
-    flush: { type: 'boolean', default: false, description: 'Full-bleed body (rows own inset).' },
+    flush: { description: 'Full-bleed body (rows own inset).' },
+  },
+  excludeControls: {
+    id: 'Deep-link anchor id — not meaningful to fiddle with here.',
+    testid: 'data-testid passthrough — not meaningful to fiddle with here.',
+    headingTestid: 'data-testid passthrough — not meaningful to fiddle with here.',
+    actions: 'Snippet prop — see the "heading actions" example below.',
+    children:
+      'Snippet prop — the card body is rendered by the preview snippet below, not a control.',
   },
 });
 </script>

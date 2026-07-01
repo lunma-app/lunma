@@ -1,4 +1,6 @@
 import type { Component } from 'svelte';
+import type { Controls } from './controls';
+import { derivedControls } from './derived-controls.generated';
 import type { StoryMeta } from './story';
 
 /** A single discovered story: its nav metadata plus lazy component + source loaders. */
@@ -32,6 +34,22 @@ const sources = import.meta.glob<string>('../stories/**/*.stories.svelte', {
   query: '?raw',
   import: 'default',
 });
+
+/**
+ * A story's final controls: the primitive's derived-from-`Props` base (keyed
+ * by `meta.title`, which by convention names the primitive), each prop
+ * dropped by `meta.excludeControls` and merged with `meta.controlOverrides`.
+ */
+export function resolveControls(meta: StoryMeta): Controls {
+  const derived = derivedControls[meta.title];
+  if (!derived) return {};
+  const controls: Controls = {};
+  for (const [prop, def] of Object.entries(derived.controls)) {
+    if (meta.excludeControls?.[prop]) continue;
+    controls[prop] = { ...def, ...meta.controlOverrides?.[prop] };
+  }
+  return controls;
+}
 
 /** `…/stories/ui/Button.stories.svelte` → `ui/Button`. A stable nav key. */
 function idFromPath(path: string): string {

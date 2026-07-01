@@ -4,30 +4,23 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'Menu',
   group: 'Composite',
-  controls: {
-    trigger: {
-      type: 'select',
-      options: ['kebab', 'context'],
-      default: 'kebab',
-      typeLabel: "'kebab' | 'context'",
-      description: 'Kebab dropdown or right-click context popover.',
-    },
+  controlOverrides: {
+    trigger: { default: 'kebab', description: 'Kebab dropdown or right-click context popover.' },
     ariaLabel: {
-      type: 'text',
       default: 'Folder actions',
       description: 'Accessible name (trigger + popover), name-only.',
     },
-    icon: {
-      type: 'text',
-      default: 'ellipsis-vertical',
-      description: 'Kebab trigger glyph (trigger=kebab).',
-    },
-    headerKind: {
-      type: 'text',
-      default: '',
-      description: 'Uppercase header eyebrow (empty = none).',
-    },
-    headerTitle: { type: 'text', default: '', description: 'Header title (empty = none).' },
+    icon: { default: 'ellipsis-vertical', description: 'Kebab trigger glyph (trigger=kebab).' },
+    headerKind: { description: 'Uppercase header eyebrow (empty = none).' },
+    headerTitle: { description: 'Header title (empty = none).' },
+  },
+  excludeControls: {
+    items: 'Array prop — no meaningful scalar control; the preview passes a fixed action list.',
+    testid: 'data-testid passthrough — not meaningful to fiddle with here.',
+    onOpenChange: 'Callback prop — no meaningful live control.',
+    open: "Bindable open state — the menu's own trigger already drives open/close interactively.",
+    children:
+      'Snippet prop — the context-menu target is rendered by the preview snippet below, not a control.',
   },
 });
 </script>

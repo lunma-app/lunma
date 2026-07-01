@@ -7,6 +7,7 @@ import Select, { type SelectOption } from '@/ui/Select.svelte';
 import SettingText from '@/ui/SettingText.svelte';
 import TextInput from '@/ui/TextInput.svelte';
 import { type Args, defaultArgs } from './controls';
+import { resolveControls } from './registry';
 import type { StoryMeta } from './story';
 
 interface Props {
@@ -21,7 +22,8 @@ interface Props {
 
 const { meta, source, preview, examples }: Props = $props();
 
-const controlEntries = $derived(Object.entries(meta.controls ?? {}));
+const controls = $derived(resolveControls(meta));
+const controlEntries = $derived(Object.entries(controls));
 const hasControls = $derived(controlEntries.length > 0);
 
 // Live args, seeded from the control defaults. Bound to the controls panel and
@@ -29,7 +31,7 @@ const hasControls = $derived(controlEntries.length > 0);
 // catalog remounts each story via `{#key}`), so capturing the initial value is
 // intentional.
 // svelte-ignore state_referenced_locally
-const args = $state<Args>(defaultArgs(meta.controls));
+const args = $state<Args>(defaultArgs(controls));
 
 function selectOptions(options: readonly string[]): SelectOption[] {
   return options.map((value) => ({ value, label: value }));
