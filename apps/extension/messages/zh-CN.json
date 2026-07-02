@@ -348,6 +348,7 @@
   "launcher_lensAllProjects": "所有项目",
   "launcher_lensAllFeeds": "所有订阅源",
   "launcher_lensScopeSelected": "已选 {count} 项",
+  "launcher_lensNoneSelected": "未选择任何项",
   "launcher_lensScopeSearch": "搜索…",
   "sidebar_lensRoleAuthored": "我创建的",
   "sidebar_lensRoleAssigned": "分配给我的",

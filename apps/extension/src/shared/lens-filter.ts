@@ -8,21 +8,25 @@ export type LensRow = { item: LensItem; host: string; feedName?: string };
  * so repo facets stay host-scoped (the same `owner/repo` slug on two hosts
  * filters independently). An item passes iff BOTH axes pass:
  *
- * - **type:** `entities` empty OR `entityForItem(item) ∈ entities`
- * - **scope:** Changes pass iff `repos` empty OR
- *   `` `${host}/${change.repo}` ∈ repos ``; Tickets pass iff `projects` empty
- *   OR `ticket.project ∈ projects` (a project-less ticket fails a non-empty
- *   `projects` filter — it matches no selected project); Articles pass iff
- *   `feeds` empty OR `row.feedName ∈ feeds`; Other items always pass.
+ * - **type:** `entities` absent OR `entityForItem(item) ∈ entities` (an
+ *   explicit `entities: []` excludes every item)
+ * - **scope:** Changes pass iff `repos` absent OR
+ *   `` `${host}/${change.repo}` ∈ repos ``; Tickets pass iff `projects`
+ *   absent OR `ticket.project ∈ projects` (a project-less ticket fails any
+ *   non-absent `projects` filter, including an explicit `[]`); Articles pass
+ *   iff `feeds` absent OR `row.feedName ∈ feeds`; Other items always pass.
  *
- * When every axis is empty, returns the input unchanged (identity).
+ * An axis that is `undefined` (key absent) imposes no constraint. An axis
+ * present as an explicit `[]` excludes every row on that axis — it is a real
+ * constraint (the empty set), not a synonym for "no constraint". When every
+ * axis is absent, returns the input unchanged (identity).
  */
 export function applyLensFilter(rows: LensRow[], filter: LensFilter): LensRow[] {
   const { entities, repos, projects, feeds } = filter;
-  const hasEntities = (entities?.length ?? 0) > 0;
-  const hasRepos = (repos?.length ?? 0) > 0;
-  const hasProjects = (projects?.length ?? 0) > 0;
-  const hasFeeds = (feeds?.length ?? 0) > 0;
+  const hasEntities = entities !== undefined;
+  const hasRepos = repos !== undefined;
+  const hasProjects = projects !== undefined;
+  const hasFeeds = feeds !== undefined;
   if (!hasEntities && !hasRepos && !hasProjects && !hasFeeds) return rows;
 
   const entitySet = hasEntities ? new Set(entities) : null;

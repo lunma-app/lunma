@@ -132,6 +132,15 @@ function renderOverview(
   };
 }
 
+// The overflow scope pickers' MultiSelect popover content is portaled to
+// `document.body` (bits-ui `Popover.Portal`, fix-lens-scope-filter-clear-semantics)
+// — NOT a descendant of the render `container` — so any query for
+// multi-select-option/-all/-clear must search `document.body`, not `container`.
+// Trigger buttons (feed-select/repo-select/project-select) stay inside `container`.
+function body(container: HTMLElement): HTMLElement {
+  return container.ownerDocument.body;
+}
+
 afterEach(() => cleanup());
 
 describe('OverviewPage', () => {
@@ -382,17 +391,17 @@ describe('OverviewPage', () => {
     const trigger = container.querySelector('[data-testid="feed-select"]') as HTMLButtonElement;
     expect(trigger).not.toBeNull();
     await fireEvent.click(trigger);
-    const options = container.querySelectorAll('[data-testid="multi-select-option"]');
+    const options = body(container).querySelectorAll('[data-testid="multi-select-option"]');
     expect(options.length).toBe(6);
     for (const opt of Array.from(options)) {
       expect(opt.getAttribute('aria-selected')).toBe('true');
     }
     // Redundant with everything already checked, so only Clear is offered.
-    expect(container.querySelector('[data-testid="multi-select-all"]')).toBeNull();
-    expect(container.querySelector('[data-testid="multi-select-clear"]')).not.toBeNull();
+    expect(body(container).querySelector('[data-testid="multi-select-all"]')).toBeNull();
+    expect(body(container).querySelector('[data-testid="multi-select-clear"]')).not.toBeNull();
   });
 
-  test('clicking Select all in the overflow feed picker collapses the filter to []', async () => {
+  test('clicking Select all in the overflow feed picker persists the explicit full feed list', async () => {
     // ARTICLE's feed name (hostOf its baseUrl) must itself be one of the
     // ALREADY-selected feeds, otherwise the active (non-empty) filter would
     // filter the article out entirely and the Articles card — and its scope
@@ -413,20 +422,25 @@ describe('OverviewPage', () => {
     const trigger = container.querySelector('[data-testid="feed-select"]') as HTMLButtonElement;
     expect(trigger).not.toBeNull();
     await fireEvent.click(trigger);
-    const selectAllBtn = container.querySelector(
+    const selectAllBtn = body(container).querySelector(
       '[data-testid="multi-select-all"]',
     ) as HTMLButtonElement;
     expect(selectAllBtn).not.toBeNull();
     await fireEvent.click(selectAllBtn);
-    expect(setFilter).toHaveBeenCalledWith(expect.objectContaining({ feeds: [] }));
+    // Explicit full list, distinct from Clear's `[]`.
+    expect(setFilter).toHaveBeenCalledWith(
+      expect.objectContaining({ feeds: expect.arrayContaining(feeds) }),
+    );
+    const [{ feeds: persisted }] = setFilter.mock.calls.at(-1) as [{ feeds: string[] }];
+    expect(persisted).toHaveLength(feeds.length);
   });
 
-  test('Select all stays visibly checked after the parent echoes the collapsed [] filter back down', async () => {
+  test('Select all stays visibly checked after the parent echoes the persisted full-list filter back down', async () => {
     // Regression: LensPage recomputes a NEW `node` object (same id) from the
-    // store on every setFilter, not just on an actual lens switch. If the
-    // popover's checked state naively resynced from `filter.*` on every such
-    // re-render, the collapsed `[]` storage value would immediately stomp the
-    // "all selected" display the user just produced by clicking Select all.
+    // store on every setFilter, not just on an actual lens switch. The
+    // popover's checked state must not naively resync from `filter.*` on
+    // every such re-render, or the echoed-back persisted value could stomp
+    // the "all selected" display the user just produced by clicking Select all.
     // ARTICLE's feed name (hostOf its baseUrl) must itself be one of the
     // ALREADY-selected feeds, otherwise the active (non-empty) filter would
     // filter the article out entirely and the Articles card — and its scope
@@ -445,25 +459,35 @@ describe('OverviewPage', () => {
     );
     const trigger = container.querySelector('[data-testid="feed-select"]') as HTMLButtonElement;
     await fireEvent.click(trigger);
-    const selectAllBtn = container.querySelector(
+    const selectAllBtn = body(container).querySelector(
       '[data-testid="multi-select-all"]',
     ) as HTMLButtonElement;
     await fireEvent.click(selectAllBtn);
-    expect(setFilter).toHaveBeenCalledWith(expect.objectContaining({ feeds: [] }));
+    expect(setFilter).toHaveBeenCalledWith(
+      expect.objectContaining({ feeds: expect.arrayContaining(feeds) }),
+    );
 
-    await rerender({ node: { ...NODE, filter: { feeds: [] } } });
+    // Echo the persisted explicit full list back down, as the real parent would
+    // (same `node.id`, new `filter` reference — not an actual lens switch).
+    await rerender({ node: { ...NODE, filter: { feeds } } });
 
-    const options = container.querySelectorAll('[data-testid="multi-select-option"]');
+    const options = body(container).querySelectorAll('[data-testid="multi-select-option"]');
     expect(options.length).toBeGreaterThan(0);
     for (const opt of Array.from(options)) {
       expect(opt.getAttribute('aria-selected')).toBe('true');
     }
   });
 
-  test('Clear stays visibly unchecked after the parent echoes the (already empty) filter back down', async () => {
+  test('Clear immediately shows unchecked in the popover before any rerender', async () => {
+    // The ephemeral display-state fix (a prior, separate change): the popover's
+    // checked state comes from local `$state` set directly in `onchange`, so a
+    // Clear click shows unchecked right away without waiting on a `filter.*`
+    // resync (which, post-fix, would unmount the card on the very next render
+    // once `feeds: []` excludes every article — see the end-to-end Clear test
+    // below for that path).
     const feeds = ['rss.com', 'F2', 'F3', 'F4', 'F5', 'F6'];
     const setFilter = vi.fn();
-    const { container, rerender } = renderOverview(
+    const { container } = renderOverview(
       { ...empty(), article: [ARTICLE] },
       vi.fn(),
       vi.fn(),
@@ -472,23 +496,21 @@ describe('OverviewPage', () => {
     );
     const trigger = container.querySelector('[data-testid="feed-select"]') as HTMLButtonElement;
     await fireEvent.click(trigger);
-    const clearBtn = container.querySelector(
+    const clearBtn = body(container).querySelector(
       '[data-testid="multi-select-clear"]',
     ) as HTMLButtonElement;
     expect(clearBtn).not.toBeNull();
     await fireEvent.click(clearBtn);
     expect(setFilter).toHaveBeenCalledWith(expect.objectContaining({ feeds: [] }));
 
-    await rerender({ node: { ...NODE, filter: { feeds: [] } } });
-
-    const options = container.querySelectorAll('[data-testid="multi-select-option"]');
+    const options = body(container).querySelectorAll('[data-testid="multi-select-option"]');
     expect(options.length).toBeGreaterThan(0);
     for (const opt of Array.from(options)) {
       expect(opt.getAttribute('aria-selected')).toBe('false');
     }
   });
 
-  test('manually checking the last of every repo option also collapses the filter to []', async () => {
+  test('manually checking the last of every repo option also persists the explicit full list', async () => {
     // PR's host-qualified repo (github.com/payments-api) must itself be one of the
     // ALREADY-selected repos, otherwise the active (non-empty) filter would filter
     // the PR out entirely and the Changes card — and its scope filter — wouldn't render.
@@ -506,16 +528,29 @@ describe('OverviewPage', () => {
     const trigger = container.querySelector('[data-testid="repo-select"]') as HTMLButtonElement;
     expect(trigger).not.toBeNull();
     await fireEvent.click(trigger);
-    const lastOption = container.querySelector(
+    const lastOption = body(container).querySelector(
       '[data-testid="multi-select-option"][data-value="R6"]',
     ) as HTMLButtonElement;
     expect(lastOption).not.toBeNull();
     await fireEvent.click(lastOption);
-    expect(setFilter).toHaveBeenCalledWith(expect.objectContaining({ repos: [] }));
+    // Explicit full list, identical in effect to Select all — not `[]`.
+    expect(setFilter).toHaveBeenCalledWith(
+      expect.objectContaining({ repos: expect.arrayContaining(repos) }),
+    );
+    const [{ repos: persisted }] = setFilter.mock.calls.at(-1) as [{ repos: string[] }];
+    expect(persisted).toHaveLength(repos.length);
   });
 
-  test('after a collapse to [], a newly-arriving feed still passes the (empty) filter', () => {
-    const secondFeedArticle = tagged(
+  test('a feed arriving after Select all is not retroactively included', () => {
+    // Per design.md Decision 2: Select all persists the explicit list of
+    // every value known at click time; a feed that arrives later is an
+    // unchecked, filtered-out option until the user checks it.
+    const lobstersArticle = tagged(
+      { id: 'a1', title: 'An existing article', url: 'u', excerpt: 'x', publishedAt: 1 },
+      'rss',
+      { name: 'Lobsters' },
+    );
+    const newFeedArticle = tagged(
       {
         id: 'a2',
         title: 'A late arrival from a new feed',
@@ -524,11 +559,13 @@ describe('OverviewPage', () => {
         publishedAt: 2,
       },
       'rss',
-      { sourceId: 'rss-2' },
+      { sourceId: 'rss-2', name: 'A New Feed' },
     );
-    const node: LensNode = { ...NODE, filter: { feeds: [] } };
+    // The filter was persisted as the explicit list of the one then-known
+    // feed ("Lobsters") after a prior Select all.
+    const node: LensNode = { ...NODE, filter: { feeds: ['Lobsters'] } };
     const { container } = renderOverview(
-      { ...empty(), article: [ARTICLE, secondFeedArticle] },
+      { ...empty(), article: [lobstersArticle, newFeedArticle] },
       vi.fn(),
       vi.fn(),
       vi.fn(),
@@ -536,6 +573,64 @@ describe('OverviewPage', () => {
       vi.fn(),
       node,
     );
-    expect(container.querySelectorAll('[data-testid="article-card"]')).toHaveLength(2);
+    // Only the article from the already-persisted "Lobsters" feed passes;
+    // the newly-arrived "A New Feed" article is filtered out.
+    expect(container.querySelectorAll('[data-testid="article-card"]')).toHaveLength(1);
+  });
+
+  test('clicking Clear filters the entity card to zero items end-to-end', async () => {
+    // Drives through the real filteredTagged/applyLensFilter path (setFilter
+    // is mocked, but the rendered item count comes from the actual node.filter
+    // → applyLensFilter pipeline), so this fails if only one half of the fix
+    // (applyLensFilter or the overview's early-return) landed.
+    const feeds = ['rss.com', 'F2', 'F3', 'F4', 'F5', 'F6'];
+    const setFilter = vi.fn();
+    const { container, rerender } = renderOverview(
+      { ...empty(), article: [ARTICLE] },
+      vi.fn(),
+      vi.fn(),
+      setFilter,
+      { entities: ['article'], repos: [], projects: [], feeds },
+    );
+    expect(container.querySelectorAll('[data-testid="article-card"]')).toHaveLength(1);
+    const trigger = container.querySelector('[data-testid="feed-select"]') as HTMLButtonElement;
+    await fireEvent.click(trigger);
+    const clearBtn = body(container).querySelector(
+      '[data-testid="multi-select-clear"]',
+    ) as HTMLButtonElement;
+    expect(clearBtn).not.toBeNull();
+    await fireEvent.click(clearBtn);
+    expect(setFilter).toHaveBeenCalledWith(expect.objectContaining({ feeds: [] }));
+
+    // Echo the persisted `[]` filter back down, as the real parent would.
+    await rerender({ node: { ...NODE, filter: { feeds: [] } } });
+    expect(container.querySelectorAll('[data-testid="article-card"]')).toHaveLength(0);
+    // The card and its picker trigger MUST stay mounted — Clear must not be a
+    // UI dead-end. Zero articles is a valid, undoable state, not a vanished
+    // section: the only way back to the picker is through the card itself.
+    expect(
+      container.querySelector('[data-entity="article"][data-testid="overview-section"]'),
+    ).not.toBeNull();
+    const triggerAfterClear = container.querySelector(
+      '[data-testid="feed-select"]',
+    ) as HTMLButtonElement;
+    expect(triggerAfterClear).not.toBeNull();
+    // The trigger label reads "None selected", not "All feeds" — a cleared
+    // axis (matches nothing) must not read the same as a genuinely unfiltered one.
+    expect(triggerAfterClear.textContent).toContain('None selected');
+    expect(triggerAfterClear.textContent).not.toContain('All feeds');
+  });
+
+  test('an unfiltered feed picker trigger reads "All feeds", distinct from a cleared one', () => {
+    const feeds = ['rss.com', 'F2', 'F3', 'F4', 'F5', 'F6'];
+    const { container } = renderOverview(
+      { ...empty(), article: [ARTICLE] },
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      { entities: ['article'], repos: [], projects: [], feeds },
+    );
+    const trigger = container.querySelector('[data-testid="feed-select"]') as HTMLButtonElement;
+    expect(trigger.textContent).toContain('All feeds');
   });
 });

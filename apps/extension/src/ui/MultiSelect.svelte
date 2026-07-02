@@ -22,7 +22,8 @@ function fuzzyMatch(query: string, text: string): boolean {
 </script>
 
 <script lang="ts">
-import { onDestroy, type Snippet, tick } from 'svelte';
+import { Popover } from 'bits-ui';
+import { type Snippet, tick } from 'svelte';
 import { scrollFade } from './scroll-fade';
 import SearchField from './SearchField.svelte';
 import Surface from './Surface.svelte';
@@ -81,6 +82,11 @@ let open = $state(false);
 let query = $state('');
 let rootEl = $state<HTMLElement>();
 let triggerEl = $state<HTMLButtonElement>();
+// Dropdown mode only: the portaled popover content (bits-ui `Popover.Content`,
+// rendered into `document.body` — NOT a descendant of `rootEl`, so `optionEls()`
+// must search here, not `rootEl`, once the popover is open. Inline mode has no
+// portal; `rootEl` itself holds the options and is used as the fallback.
+let contentEl = $state<HTMLElement | null>(null);
 
 const selectedSet = $derived(new Set(values));
 const selectedCount = $derived(values.length);
@@ -94,29 +100,24 @@ const allSelected = $derived(
 const showSelectAll = $derived(selectAllLabel !== undefined && enabledValues.length > 0 && !allSelected);
 const showClear = $derived(clearLabel !== undefined && selectedCount > 0);
 const showHead = $derived(showSelectAll || showClear);
-const isOpen = $derived(mode === 'inline' || open);
 const visibleOptions = $derived(
   showSearch && query.trim() !== ''
     ? options.filter((o) => fuzzyMatch(query.trim(), `${o.label} ${o.keywords ?? ''}`))
     : options,
 );
 
-onDestroy(removeOutside);
-
-function setOpen(next: boolean): void {
-  if (mode === 'inline' || next === open) return;
-  open = next;
+/** bits-ui `Popover.Root`'s open/close lifecycle hook (dismiss-on-outside-click,
+ * dismiss-on-Escape, and the trigger's own click-to-toggle all come from bits-ui
+ * now — this only owns OUR side effects: reset the search query and hand focus
+ * to the right row/field on open. */
+function handleOpenChange(next: boolean): void {
   if (next) {
     query = '';
-    addOutside();
-    void focusOnOpen();
-  } else {
-    removeOutside();
   }
 }
 
 function close(): void {
-  setOpen(false);
+  open = false;
   triggerEl?.focus();
 }
 
@@ -140,8 +141,9 @@ function clear(): void {
 }
 
 function optionEls(): HTMLButtonElement[] {
-  if (!rootEl) return [];
-  return Array.from(rootEl.querySelectorAll<HTMLButtonElement>('[role="option"]'));
+  const root = contentEl ?? rootEl;
+  if (!root) return [];
+  return Array.from(root.querySelectorAll<HTMLButtonElement>('[role="option"]'));
 }
 
 /** Focus the first ENABLED row at or after `start`, stepping by `step` with
@@ -173,18 +175,28 @@ async function focusOnOpen(): Promise<void> {
   focusEnabledFrom(first, 1);
 }
 
-function onKeydown(event: KeyboardEvent): void {
-  if (!isOpen) {
-    // Closed dropdown + trigger focused: the arrow keys open the list.
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      setOpen(true);
-    }
-    return;
+/** Closed dropdown trigger focused: the arrow keys open the list (bits-ui's
+ * Trigger handles click-to-toggle and Enter/Space itself; this adds the
+ * arrow-key affordance on top). Inline mode has no trigger, so unused there. */
+function onTriggerKeydown(event: KeyboardEvent): void {
+  if (open) return;
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    open = true;
   }
-  // Open: roving keyboard model over the rows. Enter/Space toggle the focused row
-  // via its native button click (list stays open), so they aren't intercepted.
-  // When focus is in the search field, `idx` is -1, so ArrowDown → first row.
+}
+
+/** Roving keyboard model over the option rows — dropdown-open content AND the
+ * always-open inline panel both use this. Enter/Space toggle the focused row via
+ * its native button click (list stays open), so they aren't intercepted here.
+ * When focus is in the search field, `idx` is -1, so ArrowDown → first row.
+ * bits-ui `Popover` also dismisses on Escape/outside-click by itself; Escape is
+ * still handled explicitly here too so focus reliably returns to the trigger
+ * (`close()`) rather than depending on bits-ui's own restore-focus behavior. Tab
+ * explicitly closes as well (matching a plain field, not a focus-trapped dialog:
+ * `trapFocus={false}` on `Popover.Content` lets Tab leave naturally; this just
+ * also collapses the popover as it does). */
+function onListKeydown(event: KeyboardEvent): void {
   const els = optionEls();
   const idx = els.indexOf(document.activeElement as HTMLButtonElement);
   if (event.key === 'Escape') {
@@ -205,19 +217,8 @@ function onKeydown(event: KeyboardEvent): void {
     event.preventDefault();
     focusEnabledFrom(els.length - 1, -1);
   } else if (event.key === 'Tab' && mode === 'dropdown') {
-    setOpen(false); // let focus leave naturally
+    open = false;
   }
-}
-
-// --- outside-click dismissal (dropdown only) ---------------------------------
-function onDocPointerDown(event: PointerEvent): void {
-  if (rootEl && event.target instanceof Node && !rootEl.contains(event.target)) setOpen(false);
-}
-function addOutside(): void {
-  document.addEventListener('pointerdown', onDocPointerDown, true);
-}
-function removeOutside(): void {
-  document.removeEventListener('pointerdown', onDocPointerDown, true);
 }
 </script>
 
@@ -312,58 +313,82 @@ function removeOutside(): void {
   </ul>
 {/snippet}
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="multiselect"
   class:inline={mode === 'inline'}
   class:chip-variant={variant === 'chip'}
   bind:this={rootEl}
-  onkeydown={onKeydown}
   data-testid={mode === 'inline' ? testid : undefined}
 >
   {#if mode === 'dropdown'}
-    <button
-      bind:this={triggerEl}
-      type="button"
-      class="trigger"
-      class:chip={variant === 'chip'}
-      class:open
-      class:active={selectedCount > 0}
-      aria-haspopup="listbox"
-      aria-expanded={open}
-      aria-label={ariaLabel !== undefined ? `${ariaLabel}: ${label}` : label}
-      data-testid={testid}
-      onclick={() => setOpen(!open)}
-    >
-      <!-- The trigger's accessible name folds the field name AND the visible
-           selection summary so the collapsed value reaches AT (a bare `aria-label`
-           would suppress the summary — MS-03). -->
-      <span class="value">{label}</span>
-      <span class="chevron" class:open aria-hidden="true">
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <path d="m6 9 6 6 6-6" />
-        </svg>
-      </span>
-    </button>
+    <Popover.Root bind:open onOpenChange={handleOpenChange}>
+      <Popover.Trigger>
+        {#snippet child({ props })}
+          <button
+            {...props}
+            bind:this={triggerEl}
+            type="button"
+            class="trigger"
+            class:chip={variant === 'chip'}
+            class:open
+            class:active={selectedCount > 0}
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            aria-label={ariaLabel !== undefined ? `${ariaLabel}: ${label}` : label}
+            data-testid={testid}
+            onkeydown={onTriggerKeydown}
+          >
+            <!-- The trigger's accessible name folds the field name AND the visible
+                 selection summary so the collapsed value reaches AT (a bare
+                 `aria-label` would suppress the summary — MS-03). -->
+            <span class="value">{label}</span>
+            <span class="chevron" class:open aria-hidden="true">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </span>
+          </button>
+        {/snippet}
+      </Popover.Trigger>
 
-    {#if open}
-      <div class="popover">
-        <Surface variant="elevated" radius="md">
-          {@render panel()}
-        </Surface>
-      </div>
-    {/if}
+      <!-- Portaled to `document.body` (bits-ui, mirrors Menu.svelte/BottomSheet.svelte)
+           so the popover escapes an owning feature container's `overflow: hidden`
+           (e.g. a rounded card clipped to its own bounds) instead of being clipped
+           whenever that container is shorter than the popover — see
+           fix-lens-scope-filter-clear-semantics, where a lens-overview entity card
+           can legitimately render with zero rows and a still-open scope picker. -->
+      <Popover.Portal>
+        <Popover.Content
+          bind:ref={contentEl}
+          class="ms-popover"
+          side="bottom"
+          align="start"
+          sideOffset={6}
+          trapFocus={false}
+          onkeydown={onListKeydown}
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            void focusOnOpen();
+          }}
+        >
+          <Surface variant="elevated" radius="md">
+            {@render panel()}
+          </Surface>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   {:else}
-    <div class="inline-panel">
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="inline-panel" onkeydown={onListKeydown}>
       {@render panel()}
     </div>
   {/if}
@@ -469,16 +494,27 @@ function removeOutside(): void {
     color: var(--accent);
   }
 
-  .popover {
-    position: absolute;
-    top: calc(100% + 6px);
-    left: 0;
-    /* A definite, comfortable width — at least as wide as the trigger, otherwise
-       ~20rem (viewport-bounded). NOT content-sized: `.list` is a flex-column scroll
-       container, which doesn't propagate its options' width up to a `max-content`
-       ancestor, so the popover collapsed to the trigger width and names truncated to
-       "RTP N…". A fixed width sidesteps that; long labels ellipsise (see `.opt-label`). */
-    width: max(100%, min(20rem, 90vw));
+  /* `:global`, collision-safe name — `class="ms-popover"` is passed as a PROP
+     into bits-ui's `Popover.Content`, which renders the actual DOM div itself
+     (not a literal element in this template), so Svelte's scoped-CSS hash never
+     reaches it and the selector must be global (mirrors `Menu.svelte`'s
+     `:global(.lunma-menu)` for the same reason) — a global class needs a
+     collision-safe name since it's no longer scoped to this component (plain
+     `.popover` would otherwise leak into `Select.svelte`'s own, differently
+     unrelated `.popover` class). Positioning (top/left/fixed-vs-portal
+     placement) is bits-ui `Popover`'s own doing now (side="bottom" align="start"
+     sideOffset={6} on `Popover.Content`, portaled to `document.body` — see the
+     template comment). This class only styles the box itself. */
+  :global(.ms-popover) {
+    /* A definite, comfortable width — at least as wide as the trigger
+       (`--bits-popover-anchor-width`, set by bits-ui from the trigger's measured
+       width now that the popover isn't a same-containing-block sibling anymore),
+       otherwise ~20rem (viewport-bounded). NOT content-sized: `.list` is a
+       flex-column scroll container, which doesn't propagate its options' width up
+       to a `max-content` ancestor, so the popover collapsed to the trigger width
+       and names truncated to "RTP N…". A fixed width sidesteps that; long labels
+       ellipsise (see `.opt-label`). */
+    width: max(var(--bits-popover-anchor-width, 100%), min(20rem, 90vw));
     z-index: var(--z-dropdown);
     animation: ms-in var(--motion-fast) var(--ease-emphasised);
   }
@@ -638,7 +674,7 @@ function removeOutside(): void {
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .popover {
+    :global(.ms-popover) {
       animation: none;
     }
     .chevron {
