@@ -8,6 +8,7 @@ import { TAB_DEDUP_FLASH } from '../../shared/bus';
 import { log } from '../../shared/logger';
 import { isLensPageUrl, isNewTabUrl } from '../../shared/new-tab';
 import { resolveBoundaryAllow } from '../../shared/url-boundary';
+import { clearInitialLoad, isInitialLoad, markInitialLoad } from '../initial-load-tabs';
 import { forgetPageOpenedTab, isPageOpenedTab } from '../page-opened-tabs';
 import { closeTab } from '../tab-groups';
 import { activateSpaceInWindow } from './activation';
@@ -37,6 +38,16 @@ export function chromeTabHandlers(): Pick<
       // adopted into the Temporary list. Treated like `isHome` for adoption.
       const isLensPage = isLensPageUrl(tab.url) || isLensPageUrl(tab.pendingUrl);
       if (!isHome && !isLensPage) {
+        // Redirect-chain tab dedup: mark this tab as still mid-initial-load
+        // regardless of what happens below — a tab that turns out to be a
+        // dedup match gets closed shortly (which cleans this up via
+        // `tabs.onRemoved`), and a tab that gets tracked normally stays
+        // eligible for the `tabs.onUpdated` dedup check below until its
+        // first `status: 'complete'`, covering a tab created at (or later
+        // redirected through) an intermediate URL — e.g. a corporate mail/
+        // security link-rewriter — that only reaches its real destination
+        // after this creation event.
+        if (tab.id !== undefined) markInitialLoad(tab.id);
         // Direct-URL creation dedup (tab-dedup): a tab born with its target URL
         // already populated (`tab.url` or, mid-navigation, `tab.pendingUrl`) never
         // reaches the `tabs.onUpdated` first-navigation dedup path below, because
@@ -163,6 +174,9 @@ export function chromeTabHandlers(): Pick<
       // showing active (lens-overview-peek).
       ctx.store.clearLensPeekForTab(tabId);
       forgetPageOpenedTab(tabId);
+      // Redirect-chain tab dedup: bounded cleanup for a tab that closes (via
+      // dedup or otherwise) before ever reaching `status: 'complete'`.
+      clearInitialLoad(tabId);
       ctx.markDirty();
       // Auto-advance: open the next unread feed item in the same section — but
       // ONLY for items opened from the sidebar reading flow. An item opened from
@@ -187,6 +201,11 @@ export function chromeTabHandlers(): Pick<
       ) {
         return;
       }
+      // Redirect-chain tab dedup: capture BEFORE this event's own `complete`
+      // (if any) clears it below — a hop that both lands on the real
+      // destination AND completes in the same coalesced event must still be
+      // read as "was mid-initial-load" for the eligibility check further down.
+      const wasInitialLoad = isInitialLoad(tabId);
       // Mid-session ownership follow (preserve-user-tab-groups D6): a tab's
       // Chrome group changed — reconcile Space ownership BEFORE the
       // url/status/title/favIconUrl handling below (which is independent of
@@ -213,24 +232,40 @@ export function chromeTabHandlers(): Pick<
       });
       // A home tab that navigated to a real URL stops being a home tab and
       // becomes an ordinary temporary tab (listed + kept). Detect the
-      // transition: an untracked tab (neither temp nor bound) whose new URL is
-      // not a newtab URL — adopt it into the active Space's Temporary list and
-      // ensure it is grouped. Guarded on "untracked" so a normal navigation of
-      // an already-temp/bound tab does not trigger a redundant regroup.
+      // transition: an untracked tab whose new URL is not a newtab URL —
+      // adopt it into the active Space's Temporary list and ensure it is
+      // grouped. A BOUND (pinned) tab is always excluded — its navigation is
+      // never "adopt as temporary," regardless of load state.
+      //
+      // Redirect-chain tab dedup: also re-enter for a tab that IS already
+      // tracked as temporary, as long as it hasn't reached `status: 'complete'`
+      // even once since creation (`wasInitialLoad`) — a tab born at (or
+      // redirected through) an intermediate URL is tracked immediately at
+      // `tabs.onCreated`, which otherwise makes it permanently ineligible for
+      // this dedup check the moment it lands, even though its real
+      // destination hasn't loaded yet. `ctx.store.onTabCreated`/
+      // `ctx.groups.groupNewTab` below are idempotent no-ops for a tab
+      // that's already tracked/grouped, so re-entering here for that case is
+      // safe — only the dedup lookup does new work.
+      const isBound = savedTabIdForBoundTab(ctx.store.state, tabId) !== undefined;
       if (
         changeInfo.url !== undefined &&
         !isNewTabUrl(changeInfo.url) &&
         !isLensPageUrl(changeInfo.url) &&
-        !isTrackedTab(ctx.store.state, tabId)
+        !isBound &&
+        (!isTrackedTab(ctx.store.state, tabId) || wasInitialLoad)
       ) {
         const navigatedUrl = changeInfo.url;
         const windowId = ctx.store.state.liveTabsById[tabId]?.windowId;
         if (windowId !== undefined) {
           // Navigation dedup (navigation-tab-dedup): the address-bar counterpart
-          // to the launcher's `openUrl` dedup. A blank new tab committing its
-          // FIRST real URL that is already open in this window's active Space
-          // focuses the existing tab and closes this one, instead of adopting a
-          // duplicate. Gated by the cached `dedupNewTabNavigations` mirror; reuses
+          // to the launcher's `openUrl` dedup. A tab's navigation to a URL
+          // already open in this window's active Space focuses the existing
+          // tab and closes this one, instead of adopting a duplicate — eligible
+          // either while the tab is still fully untracked (a blank new tab
+          // committing its first real URL) or, per the redirect-chain
+          // eligibility above, anywhere within its initial load chain. Gated by
+          // the cached `dedupNewTabNavigations` mirror; reuses
           // `findTabInActiveSpace` + the `tab-dedup` flash (current window, active
           // Space, exact match — never cross-window/Space). Wrapped in try/catch
           // so any failure (existing tab just closed, focus rejected) falls
@@ -239,7 +274,7 @@ export function chromeTabHandlers(): Pick<
           // exactly like the `openUrl` dedup. The optional tab-to-top promotion
           // below mutates `tempTabIds` directly, so it calls `markDirty` itself.
           if (ctx.dedupNewTabNavigations()) {
-            const found = findTabInActiveSpace(ctx.store.state, windowId, navigatedUrl);
+            const found = findTabInActiveSpace(ctx.store.state, windowId, navigatedUrl, tabId);
             if (found === null) {
               // Diagnostic only (no behavior change) — see the matching log in
               // the onCreated-time dedup check above for what to look for.
@@ -294,6 +329,10 @@ export function chromeTabHandlers(): Pick<
       // broadcast. Re-arming a frame later is harmless; stalling the status
       // broadcast was the bug.
       if (changeInfo.status === 'complete') {
+        // Redirect-chain tab dedup: this tab has now reached its first
+        // completed load — it's no longer within an initial load chain, so a
+        // LATER re-navigation is ordinary browsing, not eligible for dedup.
+        clearInitialLoad(tabId);
         const boundSavedId = savedTabIdForBoundTab(ctx.store.state, tabId);
         const boundSaved = boundSavedId ? ctx.store.state.savedTabs[boundSavedId] : undefined;
         if (

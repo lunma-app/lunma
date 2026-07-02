@@ -93,6 +93,59 @@ describe('findTabInActiveSpace', () => {
     expect(findTabInActiveSpace(state, 100, 'https://example.com/')).toBeNull();
   });
 
+  test('excludeTabId skips a temp tab even when its URL matches', () => {
+    const state = makeState();
+    state.spaces.push({ id: 'sp', name: 'S', color: 'blue', icon: 'star' });
+    state.activeSpaceByWindow[100] = 'sp';
+    state.spaceInstancesByWindow[100] = {
+      sp: { spaceId: 'sp', groupId: 1, tempTabIds: [99, 42], tempTabTitles: {} },
+    };
+    state.liveTabsById[99] = {
+      tabId: 99,
+      windowId: 100,
+      title: 'Navigating',
+      url: 'https://example.com/',
+      active: true,
+      status: 'loading',
+    };
+    state.liveTabsById[42] = {
+      tabId: 42,
+      windowId: 100,
+      title: 'Example',
+      url: 'https://example.com/',
+      active: false,
+      status: 'complete',
+    };
+    // Without excludeTabId, 99 (earlier in tempTabIds) would self-match first.
+    expect(findTabInActiveSpace(state, 100, 'https://example.com/', 99)).toBe(42);
+  });
+
+  test('excludeTabId skips a bound (pinned) tab even when its URL matches', () => {
+    const state = makeState();
+    state.spaces.push({ id: 'sp', name: 'S', color: 'blue', icon: 'star' });
+    state.activeSpaceByWindow[100] = 'sp';
+    state.spaceInstancesByWindow[100] = {
+      sp: { spaceId: 'sp', groupId: 1, tempTabIds: [], tempTabTitles: {} },
+    };
+    state.savedTabs['st-1'] = {
+      id: 'st-1',
+      spaceId: 'sp',
+      title: 'Example',
+      originalURL: 'https://example.com/',
+      currentURL: 'https://example.com/',
+    };
+    state.tabBindings['st-1'] = { 100: 77 };
+    state.liveTabsById[77] = {
+      tabId: 77,
+      windowId: 100,
+      title: 'Example',
+      url: 'https://example.com/',
+      active: true,
+      status: 'complete',
+    };
+    expect(findTabInActiveSpace(state, 100, 'https://example.com/', 77)).toBeNull();
+  });
+
   test('returns null when URL is in a different window', () => {
     const state = makeState();
     state.spaces.push({ id: 'sp', name: 'S', color: 'blue', icon: 'star' });

@@ -90,23 +90,35 @@ export function savedTabIdForBoundTab(state: AppState, tabId: TabId): SavedTabId
  * has `spaceId` equal to the active Space. URL matching is exact — no
  * normalisation, no fragment stripping. Dedup scope: current window, active Space
  * only (not cross-window, not cross-Space).
+ *
+ * `excludeTabId` skips one tab id from the search — needed by the
+ * redirect-chain-eligible navigation-dedup caller (`tabs.onUpdated` in
+ * `chrome-tabs.ts`), where the navigating tab can already be present in
+ * `tempTabIds` (unlike the original untracked-home-tab case). `syncLiveTab`
+ * mirrors the navigated URL into `liveTabsById` for that same tab BEFORE this
+ * lookup runs, so without exclusion a tracked navigating tab would always
+ * self-match its own new URL first — masking a genuinely different tab
+ * already open at that URL.
  */
 export function findTabInActiveSpace(
   state: AppState,
   windowId: WindowId,
   url: string,
+  excludeTabId?: TabId,
 ): TabId | null {
   const activeSpaceId = state.activeSpaceByWindow[windowId];
   if (!activeSpaceId) return null;
 
   const tempTabIds = state.spaceInstancesByWindow[windowId]?.[activeSpaceId]?.tempTabIds ?? [];
   for (const tabId of tempTabIds) {
+    if (tabId === excludeTabId) continue;
     if (state.liveTabsById[tabId]?.url === url) return tabId;
   }
 
   for (const [savedId, slots] of Object.entries(state.tabBindings)) {
     if (state.savedTabs[savedId]?.spaceId !== activeSpaceId) continue;
     const tabId = slots[windowId];
+    if (tabId === excludeTabId) continue;
     if (tabId !== undefined && state.liveTabsById[tabId]?.url === url) return tabId;
   }
 

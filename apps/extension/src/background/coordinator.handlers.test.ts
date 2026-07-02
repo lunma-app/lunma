@@ -10,6 +10,14 @@ import {
   tabUpdated,
   windowCreated,
 } from './coordinator.test-helpers';
+import { resetInitialLoadTabs } from './initial-load-tabs';
+
+// `initial-load-tabs` is a module-level singleton (redirect-chain tab dedup);
+// tests across this file reuse small tab ids (42, 99, …) through REAL
+// `tabs.onCreated`/`tabs.onUpdated` dispatches, and the chrome stubs here
+// don't synthesize a matching `tabs.onRemoved` for a dedup-closed tab — so
+// without a reset, a mark from one test could leak into another's reused id.
+beforeEach(() => resetInitialLoadTabs());
 
 function savedTab(id: string, originalURL: string, currentURL: string | null): SavedTab {
   return { id, spaceId: 'work', title: id, originalURL, currentURL };
@@ -2044,6 +2052,100 @@ describe('Coordinator handlers: onCreated-time direct-URL dedup (tab-dedup)', ()
       type: TAB_DEDUP_FLASH,
       tabId: 42,
     });
+  });
+});
+
+// =====================================================================
+// Redirect-chain tab dedup (initial-load-tabs): a tab born at — or later
+// redirected through — an intermediate URL (a corporate mail/security
+// link-rewriter, an SSO hop, any redirector) is tracked immediately at
+// `tabs.onCreated`, which would otherwise make it permanently ineligible
+// for the ordinary "untracked tab's first navigation" dedup gate the
+// moment it lands. This widens that gate to also cover a TRACKED tab, as
+// long as it hasn't reached `status: 'complete'` even once since creation.
+// =====================================================================
+describe('Coordinator handlers: redirect-chain tab dedup (initial-load-tabs)', () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  function seedExistingTab(store: LunmaStore, url: string): void {
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [42], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[42] = {
+      tabId: 42,
+      windowId: 100,
+      title: 'Example',
+      url,
+      active: false,
+      status: 'complete',
+    };
+  }
+
+  test('a tab created at an intermediate URL is deduped on redirecting, before it ever completes', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    seedExistingTab(store, 'https://example.com/');
+    // Born at a rewriter/interstitial URL — no match yet, tracked normally.
+    coordinator.enqueue(tabCreated(99, 100, 'https://redirect.example/click?u=abc'));
+    await coordinator.idle();
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toContain(99);
+    // It redirects to the real destination — already open as 42 — before
+    // ever reaching `status: 'complete'`.
+    coordinator.enqueue(tabUpdated(99, { url: 'https://example.com/', status: 'loading' }));
+    await coordinator.idle();
+    expect(chromeStub.tabs.update).toHaveBeenCalledWith(42, { active: true });
+    expect(chromeStub.windows.update).toHaveBeenCalledWith(100, { focused: true });
+    expect(chromeStub.tabs.remove).toHaveBeenCalledWith(99);
+    expect(chromeStub.runtime.sendMessage).toHaveBeenCalledWith({
+      type: TAB_DEDUP_FLASH,
+      tabId: 42,
+    });
+  });
+
+  test('once a tab completes its first load, a later re-navigation is not deduped', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    seedExistingTab(store, 'https://example.com/');
+    coordinator.enqueue(tabCreated(99, 100, 'https://redirect.example/click?u=abc'));
+    await coordinator.idle();
+    // Tab 99 completes its FIRST load at an unrelated destination.
+    coordinator.enqueue(tabUpdated(99, { url: 'https://settled.example/', status: 'complete' }));
+    await coordinator.idle();
+    // NOW it navigates (ordinary browsing) to the URL already open as 42 —
+    // no longer eligible, since it already completed once.
+    coordinator.enqueue(tabUpdated(99, { url: 'https://example.com/' }));
+    await coordinator.idle();
+    expect(chromeStub.tabs.update).not.toHaveBeenCalled();
+    expect(chromeStub.tabs.remove).not.toHaveBeenCalled();
+  });
+
+  test('a bound (pinned) tab is never deduped via this path, even mid-initial-load', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    seedExistingTab(store, 'https://example.com/');
+    store.state.savedTabs['st-1'] = savedTab('st-1', 'https://redirect.example/click?u=abc', null);
+    store.state.tabBindings['st-1'] = { 100: 99 };
+    coordinator.enqueue(tabCreated(99, 100, 'https://redirect.example/click?u=abc'));
+    await coordinator.idle();
+    coordinator.enqueue(tabUpdated(99, { url: 'https://example.com/', status: 'loading' }));
+    await coordinator.idle();
+    expect(chromeStub.tabs.update).not.toHaveBeenCalled();
+    expect(chromeStub.tabs.remove).not.toHaveBeenCalled();
+  });
+
+  test('dedupNewTabNavigations off → the redirect-chain path is also disabled', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    coordinator.setDedupNewTabNavigations(false);
+    seedExistingTab(store, 'https://example.com/');
+    coordinator.enqueue(tabCreated(99, 100, 'https://redirect.example/click?u=abc'));
+    await coordinator.idle();
+    coordinator.enqueue(tabUpdated(99, { url: 'https://example.com/', status: 'loading' }));
+    await coordinator.idle();
+    expect(chromeStub.tabs.update).not.toHaveBeenCalled();
+    expect(chromeStub.tabs.remove).not.toHaveBeenCalled();
   });
 });
 
