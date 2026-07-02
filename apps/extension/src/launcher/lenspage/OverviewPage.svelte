@@ -88,13 +88,22 @@ const visFeeds = $derived([...new Set([...facets.feeds, ...(filter.feeds ?? [])]
 // The overflow MultiSelect popovers' checked state is tracked separately from
 // `filter.*` because a full selection is normalized back to `[]` for storage
 // (so future-arriving facets stay auto-included — see the collapse below). If
-// the popover's `values` mirrored `filter.*` directly, that collapse would make
-// "Select all" and "Clear" look identical (both land on `[]`), so neither button
-// would ever visibly do anything. These mirror the user's last explicit action
-// instead, and only resync from `filter.*` when the pinned lens itself changes.
-let reposDisplay = $state<string[]>(untrack(() => filter.repos ?? []));
-let projectsDisplay = $state<string[]>(untrack(() => filter.projects ?? []));
-let feedsDisplay = $state<string[]>(untrack(() => filter.feeds ?? []));
+// the popover's `values` mirrored `filter.*` directly, an empty/unset filter —
+// meaning "no constraint, everything included" — would render as NOTHING
+// checked, and clicking Select all or Clear (both of which store `[]`) could
+// only ever visibly affect one of the two. These mirror the user's last
+// explicit action, defaulting to "everything checked" when unset (matching
+// the unfiltered "All feeds" trigger label), and only resync from `filter.*`
+// when the pinned lens itself changes.
+let reposDisplay = $state<string[]>(
+  untrack(() => (filter.repos?.length ? filter.repos : visRepos)),
+);
+let projectsDisplay = $state<string[]>(
+  untrack(() => (filter.projects?.length ? filter.projects : visProjects)),
+);
+let feedsDisplay = $state<string[]>(
+  untrack(() => (filter.feeds?.length ? filter.feeds : visFeeds)),
+);
 // `node` gets a new reference on every setFilter too (the parent recomputes it
 // from the store), not just on an actual lens switch — so the effect must
 // re-run on every node change but only actually resync when `id` itself
@@ -105,9 +114,9 @@ $effect(() => {
   const id = node.id;
   if (id === untrack(() => lastNodeId)) return;
   lastNodeId = id;
-  reposDisplay = untrack(() => filter.repos ?? []);
-  projectsDisplay = untrack(() => filter.projects ?? []);
-  feedsDisplay = untrack(() => filter.feeds ?? []);
+  reposDisplay = untrack(() => (filter.repos?.length ? filter.repos : visRepos));
+  projectsDisplay = untrack(() => (filter.projects?.length ? filter.projects : visProjects));
+  feedsDisplay = untrack(() => (filter.feeds?.length ? filter.feeds : visFeeds));
 });
 
 // Overflow (>CHIP_THRESHOLD) picker options — no synthetic "all" row; clearing

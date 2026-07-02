@@ -370,14 +370,45 @@ describe('OverviewPage', () => {
     expect(container.querySelector('[data-testid="repo-select"]')).toBeNull();
   });
 
+  test('an unfiltered feed picker shows every option already checked, matching "All feeds"', async () => {
+    const feeds = ['rss.com', 'F2', 'F3', 'F4', 'F5', 'F6'];
+    const { container } = renderOverview(
+      { ...empty(), article: [ARTICLE] },
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      { entities: ['article'], repos: [], projects: [], feeds },
+    );
+    const trigger = container.querySelector('[data-testid="feed-select"]') as HTMLButtonElement;
+    expect(trigger).not.toBeNull();
+    await fireEvent.click(trigger);
+    const options = container.querySelectorAll('[data-testid="multi-select-option"]');
+    expect(options.length).toBe(6);
+    for (const opt of Array.from(options)) {
+      expect(opt.getAttribute('aria-selected')).toBe('true');
+    }
+    // Redundant with everything already checked, so only Clear is offered.
+    expect(container.querySelector('[data-testid="multi-select-all"]')).toBeNull();
+    expect(container.querySelector('[data-testid="multi-select-clear"]')).not.toBeNull();
+  });
+
   test('clicking Select all in the overflow feed picker collapses the filter to []', async () => {
-    const feeds = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6'];
+    // ARTICLE's feed name (hostOf its baseUrl) must itself be one of the
+    // ALREADY-selected feeds, otherwise the active (non-empty) filter would
+    // filter the article out entirely and the Articles card — and its scope
+    // filter — wouldn't render (same reasoning as the repo test below).
+    const feeds = ['rss.com', 'F2', 'F3', 'F4', 'F5', 'F6'];
+    // A partial filter so Select all actually renders (an unfiltered picker
+    // already shows everything checked, with no Select all to click).
+    const node: LensNode = { ...NODE, filter: { feeds: feeds.slice(0, 5) } };
     const { container, setFilter } = renderOverview(
       { ...empty(), article: [ARTICLE] },
       vi.fn(),
       vi.fn(),
       vi.fn(),
       { entities: ['article'], repos: [], projects: [], feeds },
+      vi.fn(),
+      node,
     );
     const trigger = container.querySelector('[data-testid="feed-select"]') as HTMLButtonElement;
     expect(trigger).not.toBeNull();
@@ -396,14 +427,21 @@ describe('OverviewPage', () => {
     // popover's checked state naively resynced from `filter.*` on every such
     // re-render, the collapsed `[]` storage value would immediately stomp the
     // "all selected" display the user just produced by clicking Select all.
-    const feeds = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6'];
+    // ARTICLE's feed name (hostOf its baseUrl) must itself be one of the
+    // ALREADY-selected feeds, otherwise the active (non-empty) filter would
+    // filter the article out entirely and the Articles card — and its scope
+    // filter — wouldn't render (same reasoning as the repo test below).
+    const feeds = ['rss.com', 'F2', 'F3', 'F4', 'F5', 'F6'];
     const setFilter = vi.fn();
+    const node: LensNode = { ...NODE, filter: { feeds: feeds.slice(0, 5) } };
     const { container, rerender } = renderOverview(
       { ...empty(), article: [ARTICLE] },
       vi.fn(),
       vi.fn(),
       setFilter,
       { entities: ['article'], repos: [], projects: [], feeds },
+      vi.fn(),
+      node,
     );
     const trigger = container.querySelector('[data-testid="feed-select"]') as HTMLButtonElement;
     await fireEvent.click(trigger);
@@ -419,6 +457,34 @@ describe('OverviewPage', () => {
     expect(options.length).toBeGreaterThan(0);
     for (const opt of Array.from(options)) {
       expect(opt.getAttribute('aria-selected')).toBe('true');
+    }
+  });
+
+  test('Clear stays visibly unchecked after the parent echoes the (already empty) filter back down', async () => {
+    const feeds = ['rss.com', 'F2', 'F3', 'F4', 'F5', 'F6'];
+    const setFilter = vi.fn();
+    const { container, rerender } = renderOverview(
+      { ...empty(), article: [ARTICLE] },
+      vi.fn(),
+      vi.fn(),
+      setFilter,
+      { entities: ['article'], repos: [], projects: [], feeds },
+    );
+    const trigger = container.querySelector('[data-testid="feed-select"]') as HTMLButtonElement;
+    await fireEvent.click(trigger);
+    const clearBtn = container.querySelector(
+      '[data-testid="multi-select-clear"]',
+    ) as HTMLButtonElement;
+    expect(clearBtn).not.toBeNull();
+    await fireEvent.click(clearBtn);
+    expect(setFilter).toHaveBeenCalledWith(expect.objectContaining({ feeds: [] }));
+
+    await rerender({ node: { ...NODE, filter: { feeds: [] } } });
+
+    const options = container.querySelectorAll('[data-testid="multi-select-option"]');
+    expect(options.length).toBeGreaterThan(0);
+    for (const opt of Array.from(options)) {
+      expect(opt.getAttribute('aria-selected')).toBe('false');
     }
   });
 
