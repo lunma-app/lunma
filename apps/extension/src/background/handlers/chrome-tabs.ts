@@ -75,11 +75,36 @@ export function chromeTabHandlers(): Pick<
           !consumePendingDuplicateTab(tab.windowId, resolvedUrl)
         ) {
           const found = findTabInActiveSpace(ctx.store.state, tab.windowId, resolvedUrl);
+          if (found === null) {
+            // Diagnostic only (no behavior change): logs the exact URL Chrome
+            // reported at creation time whenever a dedup check runs but finds
+            // no match — the fastest way to tell "the URL genuinely isn't open
+            // elsewhere" apart from "a link-rewriting layer (e.g. a corporate
+            // mail/security proxy) changed the URL before it reached us, so the
+            // exact-match lookup can't find the already-open tab." Compare
+            // `resolvedUrl` here against the URL shown in an already-open tab
+            // for the same destination.
+            log.debug('onCreated dedup: no match found, adopting normally', {
+              tabId: tab.id,
+              windowId: tab.windowId,
+              resolvedUrl,
+            });
+          }
           if (found !== null && tab.id !== undefined) {
             try {
               await chrome.tabs.update(found, { active: true });
               await chrome.windows.update(tab.windowId, { focused: true });
               await chrome.tabs.remove(tab.id);
+              // dedup-moves-tab-to-top: promote the reused tab like a fresh one.
+              // This mutates tempTabIds directly (not driven by the tabs.onActivated/
+              // onRemoved this focus/close fires), so it needs its own markDirty.
+              if (ctx.dedupMovesTabToTop()) {
+                const activeSpaceId = ctx.store.state.activeSpaceByWindow[tab.windowId];
+                if (activeSpaceId != null) {
+                  ctx.store.promoteTempTab(tab.windowId, activeSpaceId, found);
+                  ctx.markDirty();
+                }
+              }
               ctx.runSideEffect(async () => {
                 await chrome.runtime.sendMessage({ type: TAB_DEDUP_FLASH, tabId: found });
               });
@@ -209,16 +234,34 @@ export function chromeTabHandlers(): Pick<
           // `findTabInActiveSpace` + the `tab-dedup` flash (current window, active
           // Space, exact match — never cross-window/Space). Wrapped in try/catch
           // so any failure (existing tab just closed, focus rejected) falls
-          // through to normal adoption — a tab is never lost. No `markDirty` on the
-          // hit path: the focus/close fire `tabs.onActivated`/`onRemoved`, which
-          // reconcile state, exactly like the `openUrl` dedup.
+          // through to normal adoption — a tab is never lost. No `markDirty` for the
+          // focus/close itself: `tabs.onActivated`/`onRemoved` reconcile that state,
+          // exactly like the `openUrl` dedup. The optional tab-to-top promotion
+          // below mutates `tempTabIds` directly, so it calls `markDirty` itself.
           if (ctx.dedupNewTabNavigations()) {
             const found = findTabInActiveSpace(ctx.store.state, windowId, navigatedUrl);
+            if (found === null) {
+              // Diagnostic only (no behavior change) — see the matching log in
+              // the onCreated-time dedup check above for what to look for.
+              log.debug('navigation dedup: no match found, adopting normally', {
+                tabId,
+                windowId,
+                navigatedUrl,
+              });
+            }
             if (found !== null && found !== tabId) {
               try {
                 await chrome.tabs.update(found, { active: true });
                 await chrome.windows.update(windowId, { focused: true });
                 await chrome.tabs.remove(tabId);
+                // dedup-moves-tab-to-top: promote the reused tab like a fresh one.
+                if (ctx.dedupMovesTabToTop()) {
+                  const activeSpaceId = ctx.store.state.activeSpaceByWindow[windowId];
+                  if (activeSpaceId != null) {
+                    ctx.store.promoteTempTab(windowId, activeSpaceId, found);
+                    ctx.markDirty();
+                  }
+                }
                 ctx.runSideEffect(async () => {
                   await chrome.runtime.sendMessage({ type: TAB_DEDUP_FLASH, tabId: found });
                 });

@@ -196,6 +196,45 @@ describe('LunmaStore.restoreTempTab', () => {
   });
 });
 
+describe('LunmaStore.promoteTempTab', () => {
+  test('moves a temp tab from the middle to the top', () => {
+    const store = makeStore();
+    const space = seedSpace(store);
+    store.state.spaceInstancesByWindow[100] = {
+      [space.id]: { spaceId: space.id, groupId: 1, tempTabIds: [1, 42, 2], tempTabTitles: {} },
+    };
+    store.promoteTempTab(100, space.id, 42);
+    expect(store.state.spaceInstancesByWindow[100]?.[space.id]?.tempTabIds).toEqual([42, 1, 2]);
+  });
+
+  test('is a no-op when the tab is already at the top', () => {
+    const store = makeStore();
+    const space = seedSpace(store);
+    store.state.spaceInstancesByWindow[100] = {
+      [space.id]: { spaceId: space.id, groupId: 1, tempTabIds: [42, 1, 2], tempTabTitles: {} },
+    };
+    store.promoteTempTab(100, space.id, 42);
+    expect(store.state.spaceInstancesByWindow[100]?.[space.id]?.tempTabIds).toEqual([42, 1, 2]);
+  });
+
+  test('is a no-op when the tab is not a temp tab in that instance (e.g. pinned)', () => {
+    const store = makeStore();
+    const space = seedSpace(store);
+    store.state.spaceInstancesByWindow[100] = {
+      [space.id]: { spaceId: space.id, groupId: 1, tempTabIds: [1, 2], tempTabTitles: {} },
+    };
+    store.promoteTempTab(100, space.id, 77);
+    expect(store.state.spaceInstancesByWindow[100]?.[space.id]?.tempTabIds).toEqual([1, 2]);
+  });
+
+  test('is a no-op when the (window, Space) has no instance', () => {
+    const store = makeStore();
+    const space = seedSpace(store);
+    store.promoteTempTab(999, space.id, 42);
+    expect(store.state.spaceInstancesByWindow[999]).toBeUndefined();
+  });
+});
+
 describe('LunmaStore.onTabCreated order (newest-first)', () => {
   test('new tabs are prepended to tempTabIds', () => {
     const store = makeStore();
@@ -275,25 +314,62 @@ describe('LunmaStore.reorderTemp', () => {
       [space.id]: { spaceId: space.id, groupId: 1, tempTabIds: [1, 2, 3], tempTabTitles: {} },
     };
     store.state.activeSpaceByWindow[100] = space.id;
-    store.reorderTemp(100, [3, 1, 2]);
+    store.reorderTemp(100, space.id, [3, 1, 2]);
     expect(store.state.spaceInstancesByWindow[100]?.[space.id]?.tempTabIds).toEqual([3, 1, 2]);
   });
 
-  test('keeps only currently-present ids and appends any omitted ones', () => {
+  test('keeps only currently-present ids and leaves any omitted one in its current slot', () => {
     const store = makeStore();
     const space = seedSpace(store);
     store.state.spaceInstancesByWindow[100] = {
       [space.id]: { spaceId: space.id, groupId: 1, tempTabIds: [1, 2, 3], tempTabTitles: {} },
     };
     store.state.activeSpaceByWindow[100] = space.id;
-    // 9 is not present (ignored); 3 omitted (appended after the requested order).
-    store.reorderTemp(100, [2, 9, 1]);
+    // 9 is not present (ignored); 3 omitted — its slot (last) is left untouched.
+    store.reorderTemp(100, space.id, [2, 9, 1]);
     expect(store.state.spaceInstancesByWindow[100]?.[space.id]?.tempTabIds).toEqual([2, 1, 3]);
+  });
+
+  test('a tab unshifted to the top after the client snapshot stays on top (race safety)', () => {
+    // Reproduces: client snapshots [1, 2] and drags to reorder to [2, 1], but
+    // before the command drains, a brand-new tab 3 is created and unshifted to
+    // the front by `onTabCreated` — tempTabIds is now [3, 1, 2]. The omitted id
+    // 3 must keep its slot (index 0), not be appended to the bottom.
+    const store = makeStore();
+    const space = seedSpace(store);
+    store.state.spaceInstancesByWindow[100] = {
+      [space.id]: { spaceId: space.id, groupId: 1, tempTabIds: [3, 1, 2], tempTabTitles: {} },
+    };
+    store.state.activeSpaceByWindow[100] = space.id;
+    store.reorderTemp(100, space.id, [2, 1]);
+    expect(store.state.spaceInstancesByWindow[100]?.[space.id]?.tempTabIds).toEqual([3, 2, 1]);
+  });
+
+  test('scoped by spaceId, not the window active Space — a background panel reorders its own instance', () => {
+    const store = makeStore();
+    const active = seedSpace(store, { id: 'active', name: 'Active' });
+    const background = seedSpace(store, { id: 'background', name: 'Background' });
+    store.state.spaceInstancesByWindow[100] = {
+      [active.id]: { spaceId: active.id, groupId: 1, tempTabIds: [10, 20], tempTabTitles: {} },
+      [background.id]: {
+        spaceId: background.id,
+        groupId: 2,
+        tempTabIds: [30, 40],
+        tempTabTitles: {},
+      },
+    };
+    store.state.activeSpaceByWindow[100] = active.id;
+    // Reorder dispatched from the (non-active) background panel.
+    store.reorderTemp(100, background.id, [40, 30]);
+    expect(store.state.spaceInstancesByWindow[100]?.[background.id]?.tempTabIds).toEqual([40, 30]);
+    // The active Space's own order is untouched.
+    expect(store.state.spaceInstancesByWindow[100]?.[active.id]?.tempTabIds).toEqual([10, 20]);
   });
 
   test('is a no-op when the window has no instance', () => {
     const store = makeStore();
-    store.reorderTemp(999, [1, 2]);
+    const space = seedSpace(store);
+    store.reorderTemp(999, space.id, [1, 2]);
     expect(store.state.spaceInstancesByWindow[999]).toBeUndefined();
   });
 });

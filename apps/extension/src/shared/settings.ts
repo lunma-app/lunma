@@ -82,6 +82,14 @@ export interface Settings {
    * when `false`, that navigation produces a duplicate as before. The launcher's
    * `openUrl` dedup is always-on and unaffected by this toggle. */
   dedupNewTabNavigations: boolean;
+  /** When dedup (any of `openUrl`, onCreated-time, or navigation dedup — the
+   * `tab-dedup` capability) focuses an already-open temp tab instead of
+   * creating a duplicate, `true` also moves that tab to the top of the
+   * Temporary list (matching where a brand-new tab lands); `false` leaves it
+   * in its current position, only focusing it. Has no effect when the
+   * deduped tab is pinned (pinned tabs have no position in the Temporary
+   * list to move). */
+  dedupMovesTabToTop: boolean;
   /** Master switch for auto-archive (auto-archive). `true` ⇒ the sweep runs and
    * each Space resolves its effective config; `false` ⇒ nothing is archived,
    * per-Space overrides moot. */
@@ -322,6 +330,15 @@ export const SETTINGS: readonly SettingDeclaration[] = [
     group: 'Tabs',
   },
   {
+    key: 'dedupMovesTabToTop',
+    type: 'toggle',
+    default: true,
+    label: 'Move switched-to tabs to the top',
+    description:
+      'When switching to an already-open tab instead of duplicating it, move it to the top of the Temporary list',
+    group: 'Tabs',
+  },
+  {
     key: 'pinnedTabBoundaryDefault',
     type: 'enum',
     default: 'off',
@@ -392,6 +409,7 @@ export const DEFAULTS: Settings = {
   reduceMotion: false,
   pinnedTabBoundaryDefault: 'off',
   dedupNewTabNavigations: true,
+  dedupMovesTabToTop: true,
   autoArchiveEnabled: true,
   autoArchiveIdleMinutes: 720,
   autoArchiveRetentionDays: 7,

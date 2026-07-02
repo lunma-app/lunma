@@ -268,6 +268,8 @@
   "options_desc_reduceMotion": "Detiene el resplandor flotante y suaviza las transiciones.",
   "options_label_dedupNewTabNavigations": "Cambiar a una pestaña ya abierta",
   "options_desc_dedupNewTabNavigations": "Al abrir una pestaña nueva con una página ya abierta en este espacio, cambia a ella en lugar de duplicarla",
+  "options_label_dedupMovesTabToTop": "Mover al principio las pestañas a las que se cambia",
+  "options_desc_dedupMovesTabToTop": "Al cambiar a una pestaña ya abierta en lugar de duplicarla, la mueve al principio de la lista de pestañas temporales",
   "options_label_pinnedTabBoundaryDefault": "Anclar pestañas fijadas a su sitio",
   "options_desc_pinnedTabBoundaryDefault": "Mantiene los nuevos fijados en su sitio; los enlaces externos se abren en una pestaña nueva",
   "options_label_autoArchiveEnabled": "Archivar pestañas inactivas automáticamente",

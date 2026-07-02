@@ -233,6 +233,9 @@ void bootReady.then(async () => {
   // Seed the navigation-dedup mirror (navigation-tab-dedup) so the tab handler
   // reads the live value synchronously on the drain.
   coordinator.setDedupNewTabNavigations(settings.dedupNewTabNavigations);
+  // Seed the dedup-promotes-to-top mirror (dedup-moves-tab-to-top) so a dedup
+  // focus can decide synchronously whether to also promote the tab.
+  coordinator.setDedupMovesTabToTop(settings.dedupMovesTabToTop);
   await coordinator.refreshBoundTabBoundaries();
 });
 
@@ -359,6 +362,9 @@ watchSettings((settings) => {
   // Push the live navigation-dedup toggle (navigation-tab-dedup) so flipping it
   // takes effect without a reload.
   coordinator.setDedupNewTabNavigations(settings.dedupNewTabNavigations);
+  // Push the live dedup-promotes-to-top toggle (dedup-moves-tab-to-top) so
+  // flipping it takes effect without a reload.
+  coordinator.setDedupMovesTabToTop(settings.dedupMovesTabToTop);
   void coordinator.refreshBoundTabBoundaries();
   void syncAutoArchiveAlarm(settings);
 });

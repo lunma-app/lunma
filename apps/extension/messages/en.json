@@ -268,6 +268,8 @@
   "options_desc_reduceMotion": "Hold the drifting glow and ease transitions.",
   "options_label_dedupNewTabNavigations": "Switch to an already-open tab",
   "options_desc_dedupNewTabNavigations": "When you open a new tab and go to a page that's already open in this space, switch to it instead of opening a duplicate",
+  "options_label_dedupMovesTabToTop": "Move switched-to tabs to the top",
+  "options_desc_dedupMovesTabToTop": "When switching to an already-open tab instead of duplicating it, move it to the top of the temporary tabs list",
   "options_label_pinnedTabBoundaryDefault": "Lock pinned tabs to their site",
   "options_desc_pinnedTabBoundaryDefault": "Keep new pins on their own site or page; off-bounds links open in a new tab",
   "options_label_autoArchiveEnabled": "Auto-archive idle tabs",

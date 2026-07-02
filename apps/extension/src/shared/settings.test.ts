@@ -113,6 +113,7 @@ describe('writeSetting', () => {
       customSearchKeyword: '',
       launcherScope: 'prefer-current-space',
       dedupNewTabNavigations: true,
+      dedupMovesTabToTop: true,
       autoArchiveEnabled: true,
       autoArchiveIdleMinutes: 720,
       autoArchiveRetentionDays: 7,
@@ -138,6 +139,7 @@ describe('writeSetting', () => {
       customSearchKeyword: '',
       launcherScope: 'prefer-current-space',
       dedupNewTabNavigations: true,
+      dedupMovesTabToTop: true,
       autoArchiveEnabled: true,
       autoArchiveIdleMinutes: 720,
       autoArchiveRetentionDays: 7,
@@ -173,6 +175,7 @@ describe('watchSettings', () => {
       customSearchKeyword: '',
       launcherScope: 'prefer-current-space',
       dedupNewTabNavigations: true,
+      dedupMovesTabToTop: true,
       autoArchiveEnabled: true,
       autoArchiveIdleMinutes: 720,
       autoArchiveRetentionDays: 7,
@@ -227,6 +230,7 @@ describe('watchSettings', () => {
       customSearchKeyword: '',
       launcherScope: 'prefer-current-space',
       dedupNewTabNavigations: true,
+      dedupMovesTabToTop: true,
       autoArchiveEnabled: true,
       autoArchiveIdleMinutes: 720,
       autoArchiveRetentionDays: 7,
@@ -284,6 +288,7 @@ describe('tint setting', () => {
       customSearchKeyword: '',
       launcherScope: 'prefer-current-space',
       dedupNewTabNavigations: true,
+      dedupMovesTabToTop: true,
       autoArchiveEnabled: true,
       autoArchiveIdleMinutes: 720,
       autoArchiveRetentionDays: 7,
@@ -513,6 +518,36 @@ describe('dedupNewTabNavigations setting (navigation-tab-dedup)', () => {
   test('writeSetting round-trips the toggle key', async () => {
     await writeSetting('dedupNewTabNavigations', false);
     expect((await readSettings()).dedupNewTabNavigations).toBe(false);
+  });
+});
+
+describe('dedupMovesTabToTop setting (dedup-moves-tab-to-top)', () => {
+  test('defaults to On (true), derived from its declaration', async () => {
+    expect(DEFAULTS.dedupMovesTabToTop).toBe(true);
+    expect((await readSettings()).dedupMovesTabToTop).toBe(true);
+  });
+
+  test('is declared as a toggle in the Tabs group', () => {
+    const decl = SETTINGS.find((d) => d.key === 'dedupMovesTabToTop');
+    expect(decl).toMatchObject({ type: 'toggle', group: 'Tabs', default: true });
+  });
+
+  test('a malformed stored value degrades to the default (true)', async () => {
+    chromeMock.data['lunma.settings'] = { dedupMovesTabToTop: 'yes', density: 'compact' };
+    const settings = await readSettings();
+    expect(settings.dedupMovesTabToTop).toBe(true);
+    // The per-field `.catch` is isolated — the valid sibling still parses.
+    expect(settings.density).toBe('compact');
+  });
+
+  test('reads a valid stored false', async () => {
+    chromeMock.data['lunma.settings'] = { dedupMovesTabToTop: false };
+    expect((await readSettings()).dedupMovesTabToTop).toBe(false);
+  });
+
+  test('writeSetting round-trips the toggle key', async () => {
+    await writeSetting('dedupMovesTabToTop', false);
+    expect((await readSettings()).dedupMovesTabToTop).toBe(false);
   });
 });
 

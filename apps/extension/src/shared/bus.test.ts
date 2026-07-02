@@ -359,7 +359,7 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
     kind: 'openLensItem',
     payload: { spaceId: 'sp', folderId: 'sf', itemId: '42', windowId: 1 },
   },
-  reorderTemp: { kind: 'reorderTemp', payload: { windowId: 1, tabIds: [1, 2, 3] } },
+  reorderTemp: { kind: 'reorderTemp', payload: { windowId: 1, spaceId: 'sp', tabIds: [1, 2, 3] } },
   reorderSpaces: { kind: 'reorderSpaces', payload: { spaceIds: ['a', 'b'] } },
   renameTab: { kind: 'renameTab', payload: { savedTabId: 'st', newName: 'N' } },
   renameTempTab: {
