@@ -606,7 +606,11 @@ const empty = $derived(
       linear-gradient(180deg, oklch(0.62 var(--space-chroma, 0.15) var(--space-h, 62) / 0.1), transparent 60%),
       var(--surface);
     border: 1px solid var(--lens-border);
-    box-shadow: var(--glow-space-soft);
+    /* A neutral elevation lift, not a hue-tinted glow: identity already reads through
+       the border + top wash above, and a coloured blur at this size read as a muddy
+       smudge on the dark substrate (vs. --glow-space-soft used elsewhere, where the
+       glow IS the only hue signal, e.g. the launcher overlay card). */
+    box-shadow: 0 10px 28px -6px oklch(0.04 0 0 / 0.45);
     overflow: hidden;
   }
   .lane-head {
