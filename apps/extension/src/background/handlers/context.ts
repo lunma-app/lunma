@@ -189,6 +189,15 @@ export interface HandlerContext {
    * drain — no per-navigation `readSettings()`. Defaults to `true` until seeded.
    */
   dedupNewTabNavigations(): boolean;
+  /**
+   * Read the cached `dedupMovesTabToTop` setting (dedup-moves-tab-to-top),
+   * pushed by the SW settings watcher onto the coordinator, mirroring
+   * {@link dedupNewTabNavigations}. When `true`, a dedup focus (any of
+   * `openUrl`, onCreated-time, or navigation dedup) also promotes the focused
+   * temp tab to the top of its Temporary list. Defaults to `true` until
+   * seeded.
+   */
+  dedupMovesTabToTop(): boolean;
   readonly groups: GroupOrchestrator;
   readonly boundary: BoundaryController;
 }

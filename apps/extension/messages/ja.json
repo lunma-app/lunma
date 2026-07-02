@@ -264,6 +264,8 @@
   "options_desc_reduceMotion": "漂うグローを抑え、トランジションをシンプルに。",
   "options_label_dedupNewTabNavigations": "既に開いているタブに切り替え",
   "options_desc_dedupNewTabNavigations": "新しいタブを開き、このスペースで既に開いているページに移動すると、重複を開く代わりに切り替えます",
+  "options_label_dedupMovesTabToTop": "切り替え先のタブを先頭に移動",
+  "options_desc_dedupMovesTabToTop": "複製する代わりに既に開いているタブに切り替える際、そのタブを一時タブのリストの先頭に移動します",
   "options_label_pinnedTabBoundaryDefault": "固定タブをサイトにロック",
   "options_desc_pinnedTabBoundaryDefault": "固定タブを自分のサイトまたはページに保持 — 範囲外のリンクは新しいタブで開く",
   "options_label_autoArchiveEnabled": "アイドルタブを自動アーカイブ",

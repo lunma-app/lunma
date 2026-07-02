@@ -264,6 +264,8 @@
   "options_desc_reduceMotion": "停止漂浮光晕并平滑过渡动画",
   "options_label_dedupNewTabNavigations": "切换到已打开的标签页",
   "options_desc_dedupNewTabNavigations": "新建标签页并访问当前空间中已打开的页面时，切换到该页面而非打开副本",
+  "options_label_dedupMovesTabToTop": "将切换到的标签页移到顶部",
+  "options_desc_dedupMovesTabToTop": "切换到已打开的标签页而非创建副本时，将其移动到临时标签页列表的顶部",
   "options_label_pinnedTabBoundaryDefault": "将固定标签页锁定到其站点",
   "options_desc_pinnedTabBoundaryDefault": "固定标签页仅在其站点或页面内跳转；站外链接在新标签页中打开",
   "options_label_autoArchiveEnabled": "自动归档闲置标签页",

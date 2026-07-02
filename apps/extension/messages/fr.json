@@ -268,6 +268,8 @@
   "options_desc_reduceMotion": "Fige la lueur et adoucit les transitions.",
   "options_label_dedupNewTabNavigations": "Basculer vers un onglet déjà ouvert",
   "options_desc_dedupNewTabNavigations": "Quand vous ouvrez un nouvel onglet et naviguez vers une page déjà ouverte dans cet espace, basculez dessus plutôt que d'ouvrir un doublon",
+  "options_label_dedupMovesTabToTop": "Déplacer en haut les onglets réutilisés",
+  "options_desc_dedupMovesTabToTop": "En basculant vers un onglet déjà ouvert plutôt que de le dupliquer, le déplacer en haut de la liste des onglets temporaires",
   "options_label_pinnedTabBoundaryDefault": "Verrouiller les onglets épinglés sur leur site",
   "options_desc_pinnedTabBoundaryDefault": "Gardez les nouveaux épingles sur leur propre site ou page ; les liens externes s'ouvrent dans un nouvel onglet",
   "options_label_autoArchiveEnabled": "Archiver automatiquement les onglets inactifs",

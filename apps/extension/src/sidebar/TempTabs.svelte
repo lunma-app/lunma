@@ -201,7 +201,7 @@ function handleDrop(r: DropResult): void {
     ids.splice(from, 1);
     const insertAt = r.targetIndex > from ? r.targetIndex - 1 : r.targetIndex;
     ids.splice(insertAt, 0, draggedTabId);
-    dispatch({ kind: 'reorderTemp', payload: { windowId, tabIds: ids } });
+    dispatch({ kind: 'reorderTemp', payload: { windowId, spaceId, tabIds: ids } });
   }
 }
 
@@ -247,7 +247,7 @@ function moveTemp(item: TempItem, dir: -1 | 1): void {
   const to = from + dir;
   if (to < 0 || to >= ids.length) return;
   [ids[from], ids[to]] = [ids[to] as TabId, ids[from] as TabId];
-  dispatch({ kind: 'reorderTemp', payload: { windowId, tabIds: ids } });
+  dispatch({ kind: 'reorderTemp', payload: { windowId, spaceId, tabIds: ids } });
 }
 
 /** The right-click action menu for a temporary row: Favorite (non-destructive),

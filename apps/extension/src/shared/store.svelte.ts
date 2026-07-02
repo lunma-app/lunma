@@ -218,7 +218,7 @@ export class LunmaStore {
    * switcher). Mutates the array IN PLACE (splice, like {@link deleteSpace}) so
    * the `$state` proxy and its subscribers survive — never reassigns it. Keeps
    * only ids that currently exist (drops unknown defensively) and appends any
-   * current id the caller omitted (race safety, mirroring {@link reorderTemp});
+   * current id the caller omitted (race safety, mirroring {@link reorderFavorites});
    * a no-op when the resulting order matches the current one. Space order is
    * global — `activeSpaceByWindow` / `spaceInstancesByWindow` are untouched, so
    * reordering never changes the active Space in any window.
@@ -578,24 +578,53 @@ export class LunmaStore {
   }
 
   /**
-   * Replace a window instance's Temporary order with `tabIds` (manual reorder
-   * via drag). Keeps only ids currently temp, in the requested order; any temp
-   * id the caller omitted is appended (race safety). No-op when the window has
-   * no instance.
+   * Reorder a (window, Space) instance's Temporary order per `tabIds` (manual
+   * reorder via drag/Move up/down). Scoped by `spaceId` — not the window's
+   * *active* Space — because every carousel panel renders its own `TempTabs`
+   * and dispatches `reorderTemp` for whichever Space it displays, active or
+   * not (sidebar-pinned-tabs); resolving via the active Space alone silently
+   * dropped reorders issued from a background panel.
+   *
+   * Ids the caller omitted (closed since the client's snapshot, or a tab
+   * `unshift`ed to the front by `onTabCreated` after the snapshot was taken
+   * but before this command drained) keep their CURRENT slot instead of being
+   * appended — appending would shove a just-created tab to the bottom,
+   * violating "new tabs land at the top" (race safety). Only ids present in
+   * both `tabIds` and the current order are reshuffled; everything else stays
+   * put. No-op when the (window, Space) has no instance.
    */
-  reorderTemp(windowId: WindowId, tabIds: TabId[]): void {
-    const instance = this.activeInstance(windowId);
+  reorderTemp(windowId: WindowId, spaceId: SpaceId, tabIds: TabId[]): void {
+    const instance = this.state.spaceInstancesByWindow[windowId]?.[spaceId];
     if (!instance) {
-      log.error('reorderTemp: no instance for window', { windowId });
+      log.error('reorderTemp: no instance', { windowId, spaceId });
       return;
     }
     const current = instance.tempTabIds;
-    const present = new Set(current);
-    const next = tabIds.filter((id) => present.has(id));
-    for (const id of current) {
-      if (!next.includes(id)) next.push(id);
-    }
-    instance.tempTabIds = next;
+    const currentSet = new Set(current);
+    const requestedOrder = tabIds.filter((id) => currentSet.has(id));
+    const requestedSet = new Set(requestedOrder);
+    let cursor = 0;
+    instance.tempTabIds = current.map((id) =>
+      requestedSet.has(id) ? (requestedOrder[cursor++] as TabId) : id,
+    );
+  }
+
+  /**
+   * Move an already-temp tab to the top of its (window, Space) instance's
+   * `tempTabIds` (dedup-moves-tab-to-top). Used when dedup focuses an
+   * existing temp tab instead of creating a duplicate, so the reused tab
+   * lands where a brand-new tab would — matching the "newest/most-recently-
+   * surfaced at the top" invariant. No-op when the tab isn't a temp tab in
+   * that instance (e.g. it's a bound/pinned tab, which has no `tempTabIds`
+   * position) or is already at the top.
+   */
+  promoteTempTab(windowId: WindowId, spaceId: SpaceId, tabId: TabId): void {
+    const instance = this.state.spaceInstancesByWindow[windowId]?.[spaceId];
+    if (!instance) return;
+    const idx = instance.tempTabIds.indexOf(tabId);
+    if (idx <= 0) return;
+    instance.tempTabIds.splice(idx, 1);
+    instance.tempTabIds.unshift(tabId);
   }
 
   /**
@@ -826,8 +855,9 @@ export class LunmaStore {
   /**
    * Replace `faviconRow` with the post-drop order (favicon-row-model). Keeps
    * only ids currently present (drops unknown defensively) and appends any
-   * present id the caller omitted (race safety) — mirrors {@link reorderTemp} /
-   * {@link reorderSpaces}.
+   * present id the caller omitted (race safety) — mirrors {@link reorderSpaces}.
+   * Unlike {@link reorderTemp}, favorites have no "new entry joins at a fixed
+   * end" invariant to protect, so appending omitted ids is safe here.
    */
   reorderFavorites(ids: SavedTabId[]): void {
     const current = this.state.faviconRow;
@@ -1963,18 +1993,6 @@ export class LunmaStore {
       next[tab.id] = entry;
     }
     this.state.liveTabsById = next;
-  }
-
-  /**
-   * The active (window, Space) instance, or `undefined` when the window has no
-   * active Space or that Space has no instance yet. The active Space is
-   * `activeSpaceByWindow[windowId]`; its instance lives at
-   * `spaceInstancesByWindow[windowId][activeSpaceId]`.
-   */
-  private activeInstance(windowId: WindowId): SpaceInstance | undefined {
-    const spaceId = this.state.activeSpaceByWindow[windowId];
-    if (spaceId == null) return undefined;
-    return this.state.spaceInstancesByWindow[windowId]?.[spaceId];
   }
 
   /** Iterate every (window, Space) instance across all windows. */

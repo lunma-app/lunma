@@ -279,7 +279,7 @@ describe('TempTabs', () => {
     await fireEvent.click(menuItem(items, 'move-down'));
     expect(sendMock).toHaveBeenCalledWith({
       kind: 'reorderTemp',
-      payload: { windowId: 100, tabIds: [22, 17, 31] },
+      payload: { windowId: 100, spaceId: 'work', tabIds: [22, 17, 31] },
     });
   });
 
@@ -620,7 +620,7 @@ describe('TempTabs drag dispatch', () => {
 
     expect(sendMock).toHaveBeenCalledWith({
       kind: 'reorderTemp',
-      payload: { windowId: 100, tabIds: [22, 17] },
+      payload: { windowId: 100, spaceId: 'work', tabIds: [22, 17] },
     });
   });
 });

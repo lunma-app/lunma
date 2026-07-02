@@ -1404,7 +1404,10 @@ describe('Coordinator handlers: reorderTemp', () => {
     };
 
     coordinator.enqueue(
-      sidebar({ kind: 'reorderTemp', payload: { windowId: 100, tabIds: [3, 1, 2] } }, 'sess:1'),
+      sidebar(
+        { kind: 'reorderTemp', payload: { windowId: 100, spaceId: 'work', tabIds: [3, 1, 2] } },
+        'sess:1',
+      ),
     );
     await coordinator.idle();
 
@@ -1505,6 +1508,42 @@ describe('Coordinator handlers: openUrl', () => {
       type: TAB_DEDUP_FLASH,
       tabId: 42,
     });
+  });
+
+  test('dedup: promotes the focused temp tab to the top of Temporary (dedup-moves-tab-to-top)', async () => {
+    installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    seedOpenTab(store, 'https://example.com/');
+    // Put tab 42 in the middle of the order, with siblings on either side.
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [1, 42, 2], tempTabTitles: {} },
+    };
+    coordinator.enqueue(
+      sidebar(
+        { kind: 'openUrl', payload: { url: 'https://example.com/', windowId: 100 } },
+        'sess:1',
+      ),
+    );
+    await coordinator.idle();
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([42, 1, 2]);
+  });
+
+  test('dedup: setting off → focuses the tab but leaves its position unchanged', async () => {
+    installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    coordinator.setDedupMovesTabToTop(false);
+    seedOpenTab(store, 'https://example.com/');
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [1, 42, 2], tempTabTitles: {} },
+    };
+    coordinator.enqueue(
+      sidebar(
+        { kind: 'openUrl', payload: { url: 'https://example.com/', windowId: 100 } },
+        'sess:1',
+      ),
+    );
+    await coordinator.idle();
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([1, 42, 2]);
   });
 
   test('dedup: force:true always creates a new tab, never focuses the existing one', async () => {
@@ -1650,6 +1689,32 @@ describe('Coordinator handlers: navigation dedup (navigation-tab-dedup)', () => 
       type: TAB_DEDUP_FLASH,
       tabId: 42,
     });
+  });
+
+  // dedup-moves-tab-to-top — the focused tab is promoted to the top of Temporary.
+  test('promotes the focused temp tab to the top of Temporary', async () => {
+    installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    seedNavDedup(store, 'https://example.com/');
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [1, 42, 2], tempTabTitles: {} },
+    };
+    coordinator.enqueue(tabUpdated(99, { url: 'https://example.com/' }));
+    await coordinator.idle();
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([42, 1, 2]);
+  });
+
+  test('setting off → focuses the tab but leaves its position unchanged', async () => {
+    installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    coordinator.setDedupMovesTabToTop(false);
+    seedNavDedup(store, 'https://example.com/');
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [1, 42, 2], tempTabTitles: {} },
+    };
+    coordinator.enqueue(tabUpdated(99, { url: 'https://example.com/' }));
+    await coordinator.idle();
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([1, 42, 2]);
   });
 
   // 4.2 — no match → adopted normally; no focus/close.
@@ -1799,6 +1864,32 @@ describe('Coordinator handlers: onCreated-time direct-URL dedup (tab-dedup)', ()
     expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([42]);
   });
 
+  // dedup-moves-tab-to-top — the focused tab is promoted to the top of Temporary.
+  test('promotes the focused temp tab to the top of Temporary', async () => {
+    installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    seedOnCreatedDedup(store, 'https://example.com/');
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [1, 42, 2], tempTabTitles: {} },
+    };
+    coordinator.enqueue(tabCreated(99, 100, 'https://example.com/'));
+    await coordinator.idle();
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([42, 1, 2]);
+  });
+
+  test('setting off → focuses the tab but leaves its position unchanged', async () => {
+    installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    coordinator.setDedupMovesTabToTop(false);
+    seedOnCreatedDedup(store, 'https://example.com/');
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [1, 42, 2], tempTabTitles: {} },
+    };
+    coordinator.enqueue(tabCreated(99, 100, 'https://example.com/'));
+    await coordinator.idle();
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([1, 42, 2]);
+  });
+
   test('matching a bound (pinned) saved tab in the active Space → focuses it, closes the new tab', async () => {
     const chromeStub = installSavedTabChromeStub();
     const { coordinator, store } = makeCoordinator();
@@ -1825,6 +1916,9 @@ describe('Coordinator handlers: onCreated-time direct-URL dedup (tab-dedup)', ()
     await coordinator.idle();
     expect(chromeStub.tabs.update).toHaveBeenCalledWith(77, { active: true });
     expect(chromeStub.tabs.remove).toHaveBeenCalledWith(99);
+    // dedup-moves-tab-to-top is a no-op for a pinned tab — it has no tempTabIds
+    // position to move.
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([]);
   });
 
   test('unscoped: a tab created WITH a defined openerTabId is still deduped (accepted behaviour change)', async () => {

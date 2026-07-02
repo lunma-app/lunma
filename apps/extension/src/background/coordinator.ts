@@ -242,6 +242,13 @@ export class Coordinator {
    * to `true` (the setting's declared default) until seeded.
    */
   private dedupNavigations = true;
+  /**
+   * Cached mirror of the `dedupMovesTabToTop` setting (dedup-moves-tab-to-top).
+   * Seeded + updated by the SW's settings watcher via
+   * {@link setDedupMovesTabToTop}, mirroring {@link dedupNavigations}. Defaults
+   * to `true` (the setting's declared default) until seeded.
+   */
+  private dedupPromotesToTop = true;
   private drainPromise: Promise<void> | null = null;
   /** Per-drain ack buffer. Includes both coalesce-time pushes (D5b) and
    * handler-tail pushes. Flushed at end of drain. */
@@ -298,6 +305,7 @@ export class Coordinator {
       // a closure over the mirror, so a settings change pushed after construction
       // is visible to the handler.
       dedupNewTabNavigations: () => this.dedupNavigations,
+      dedupMovesTabToTop: () => this.dedupPromotesToTop,
       groups: this.groups,
       boundary: this.boundary,
     };
@@ -433,6 +441,17 @@ export class Coordinator {
    */
   setDedupNewTabNavigations(value: boolean): void {
     this.dedupNavigations = value;
+  }
+
+  /**
+   * Update the cached `dedupMovesTabToTop` mirror (dedup-moves-tab-to-top). The
+   * SW seeds this from `readSettings()` at boot and calls it again from its
+   * settings watcher when the user flips the toggle, so a dedup focus can
+   * decide synchronously whether to also promote the focused tab to the top
+   * of its Temporary list.
+   */
+  setDedupMovesTabToTop(value: boolean): void {
+    this.dedupPromotesToTop = value;
   }
 
   /**

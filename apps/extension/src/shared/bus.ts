@@ -208,7 +208,7 @@ export type SidebarCommand =
       kind: 'openLensPage';
       payload: { spaceId: SpaceId; folderId: FolderId; windowId: WindowId };
     }
-  | { kind: 'reorderTemp'; payload: { windowId: WindowId; tabIds: TabId[] } }
+  | { kind: 'reorderTemp'; payload: { windowId: WindowId; spaceId: SpaceId; tabIds: TabId[] } }
   | { kind: 'reorderSpaces'; payload: { spaceIds: SpaceId[] } }
   | { kind: 'renameTab'; payload: { savedTabId: SavedTabId; newName: string } }
   | {
@@ -768,7 +768,11 @@ const COMMAND_SCHEMAS = {
   }),
   reorderTemp: z.strictObject({
     kind: z.literal('reorderTemp'),
-    payload: z.strictObject({ windowId: z.number(), tabIds: z.array(z.number()) }),
+    payload: z.strictObject({
+      windowId: z.number(),
+      spaceId: z.string(),
+      tabIds: z.array(z.number()),
+    }),
   }),
   reorderSpaces: z.strictObject({
     kind: z.literal('reorderSpaces'),

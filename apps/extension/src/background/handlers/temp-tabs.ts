@@ -38,8 +38,8 @@ export function tempTabHandlers(): Pick<
       ctx.markDirty();
     },
     reorderTemp: (ctx, event) => {
-      const { windowId, tabIds } = event.payload;
-      ctx.store.reorderTemp(windowId, tabIds);
+      const { windowId, spaceId, tabIds } = event.payload;
+      ctx.store.reorderTemp(windowId, spaceId, tabIds);
       ctx.markDirty();
     },
     // Temp-tab interactions (sidebar-temp-tabs). No direct state mutation —
@@ -204,6 +204,15 @@ export function tempTabHandlers(): Pick<
             await chrome.tabs.update(existingTabId, { active: true });
             await chrome.windows.update(windowId, { focused: true });
             const tabId = existingTabId;
+            // dedup-moves-tab-to-top: promote the reused tab like a fresh one,
+            // when enabled and it's a temp tab (no-op for a bound/pinned tab).
+            if (ctx.dedupMovesTabToTop()) {
+              const activeSpaceId = ctx.store.state.activeSpaceByWindow[windowId];
+              if (activeSpaceId != null) {
+                ctx.store.promoteTempTab(windowId, activeSpaceId, tabId);
+                ctx.markDirty();
+              }
+            }
             ctx.runSideEffect(async () => {
               await chrome.runtime.sendMessage({ type: TAB_DEDUP_FLASH, tabId });
             });

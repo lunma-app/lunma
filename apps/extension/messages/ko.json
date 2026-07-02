@@ -264,6 +264,8 @@
   "options_desc_reduceMotion": "흐르는 글로우와 전환 효과를 줄입니다.",
   "options_label_dedupNewTabNavigations": "이미 열린 탭으로 전환",
   "options_desc_dedupNewTabNavigations": "이 스페이스에 이미 열려 있는 페이지로 새 탭에서 이동하면 중복 열기 대신 해당 탭으로 전환합니다",
+  "options_label_dedupMovesTabToTop": "전환된 탭을 맨 위로 이동",
+  "options_desc_dedupMovesTabToTop": "중복 대신 이미 열려 있는 탭으로 전환할 때 해당 탭을 임시 탭 목록의 맨 위로 이동합니다",
   "options_label_pinnedTabBoundaryDefault": "고정 탭을 해당 사이트에 잠금",
   "options_desc_pinnedTabBoundaryDefault": "새 고정 탭은 해당 사이트나 페이지에 머물고, 범위 밖 링크는 새 탭에서 열립니다",
   "options_label_autoArchiveEnabled": "유휴 탭 자동 보관",

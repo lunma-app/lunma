@@ -268,6 +268,8 @@
   "options_desc_reduceMotion": "Imobilize o brilho flutuante e suavize as transições.",
   "options_label_dedupNewTabNavigations": "Mudar para separador já aberto",
   "options_desc_dedupNewTabNavigations": "Quando abre um novo separador e navega para uma página já aberta neste Espaço, muda para ela em vez de abrir uma duplicada",
+  "options_label_dedupMovesTabToTop": "Mover separadores reutilizados para o topo",
+  "options_desc_dedupMovesTabToTop": "Ao mudar para um separador já aberto em vez de o duplicar, move-o para o topo da lista de separadores temporários",
   "options_label_pinnedTabBoundaryDefault": "Bloquear separadores fixos ao seu site",
   "options_desc_pinnedTabBoundaryDefault": "Mantém novos fixos no próprio site ou página; ligações fora do limite abrem num novo separador",
   "options_label_autoArchiveEnabled": "Arquivar automaticamente separadores inativos",

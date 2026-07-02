@@ -28,6 +28,7 @@ function settings(over: Partial<Settings> = {}): Settings {
     customSearchKeyword: '',
     launcherScope: 'prefer-current-space',
     dedupNewTabNavigations: true,
+    dedupMovesTabToTop: true,
     autoArchiveEnabled: true,
     autoArchiveIdleMinutes: 60,
     autoArchiveRetentionDays: 30,

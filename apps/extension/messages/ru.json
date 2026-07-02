@@ -276,6 +276,8 @@
   "options_desc_reduceMotion": "Убрать плавающее свечение и упростить переходы.",
   "options_label_dedupNewTabNavigations": "Переключиться на уже открытую вкладку",
   "options_desc_dedupNewTabNavigations": "Если при открытии новой вкладки страница уже открыта в этом пространстве — перейти к ней вместо дубликата",
+  "options_label_dedupMovesTabToTop": "Перемещать открытые вкладки наверх",
+  "options_desc_dedupMovesTabToTop": "При переключении на уже открытую вкладку вместо создания дубликата — перемещать её в начало списка временных вкладок",
   "options_label_pinnedTabBoundaryDefault": "Привязать закреплённые вкладки к их сайту",
   "options_desc_pinnedTabBoundaryDefault": "Держать закреплённые вкладки на своём сайте; ссылки на другие сайты открываются в новой вкладке",
   "options_label_autoArchiveEnabled": "Авто-архивировать простаивающие вкладки",
