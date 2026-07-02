@@ -22,6 +22,21 @@
       }
     }
   ],
+  "sidebar_clearedDuplicateTabs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} pestaña duplicada borrada",
+        "countPlural=other": "{count} pestañas duplicadas borradas"
+      }
+    }
+  ],
   "sidebar_lensNoEntriesYet": "Aún no hay entradas.",
   "sidebar_lensAllCaughtUp": "Estás al día.",
   "sidebar_lensNothingHere": "Nada aquí por ahora.",
@@ -94,6 +109,8 @@
   "sidebar_tempMoveDown": "Mover abajo",
   "sidebar_tempDuplicate": "Duplicar",
   "sidebar_tempCloseTab": "Cerrar pestaña",
+  "sidebar_tempClearDuplicates": "Limpiar duplicados",
+  "sidebar_clearMenuLabel": "Opciones de limpieza para {spaceName}",
   "sidebar_archivedTooltip": "Archivado recientemente — abrir en Ajustes",
   "sidebar_archivedLabel": "Archivado recientemente ({count})",
   "sidebar_autoArchiveIsOn": "El archivo automático está activado.",

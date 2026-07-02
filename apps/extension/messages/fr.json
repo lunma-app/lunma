@@ -22,6 +22,21 @@
       }
     }
   ],
+  "sidebar_clearedDuplicateTabs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} onglet en double fermé",
+        "countPlural=other": "{count} onglets en double fermés"
+      }
+    }
+  ],
   "sidebar_lensNoEntriesYet": "Aucune entrée pour l'instant.",
   "sidebar_lensAllCaughtUp": "Tout est à jour.",
   "sidebar_lensNothingHere": "Rien ici pour l'instant.",
@@ -94,6 +109,8 @@
   "sidebar_tempMoveDown": "Déplacer vers le bas",
   "sidebar_tempDuplicate": "Dupliquer",
   "sidebar_tempCloseTab": "Fermer l'onglet",
+  "sidebar_tempClearDuplicates": "Effacer les doublons",
+  "sidebar_clearMenuLabel": "Options d'effacement pour {spaceName}",
   "sidebar_archivedTooltip": "Récemment archivé — ouvrir dans les Paramètres",
   "sidebar_archivedLabel": "Récemment archivé ({count})",
   "sidebar_autoArchiveIsOn": "L'archivage auto est activé.",

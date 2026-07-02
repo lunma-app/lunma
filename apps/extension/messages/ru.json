@@ -24,6 +24,23 @@
       }
     }
   ],
+  "sidebar_clearedDuplicateTabs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Очищена {count} повторяющаяся вкладка",
+        "countPlural=few": "Очищено {count} повторяющиеся вкладки",
+        "countPlural=many": "Очищено {count} повторяющихся вкладок",
+        "countPlural=other": "Очищено {count} повторяющихся вкладок"
+      }
+    }
+  ],
   "sidebar_lensNoEntriesYet": "Записей пока нет.",
   "sidebar_lensAllCaughtUp": "Всё просмотрено.",
   "sidebar_lensNothingHere": "Здесь пока ничего нет.",
@@ -96,6 +113,8 @@
   "sidebar_tempMoveDown": "Вниз",
   "sidebar_tempDuplicate": "Дублировать",
   "sidebar_tempCloseTab": "Закрыть вкладку",
+  "sidebar_tempClearDuplicates": "Очистить дубликаты",
+  "sidebar_clearMenuLabel": "Параметры очистки для {spaceName}",
   "sidebar_archivedTooltip": "Недавно архивировано — откройте настройки",
   "sidebar_archivedLabel": "Недавно архивировано ({count})",
   "sidebar_autoArchiveIsOn": "Авто-архивирование включено.",

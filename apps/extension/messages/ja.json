@@ -21,6 +21,20 @@
       }
     }
   ],
+  "sidebar_clearedDuplicateTabs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=other": "{count} 個の重複タブをクリアしました"
+      }
+    }
+  ],
   "sidebar_lensNoEntriesYet": "まだエントリーがありません。",
   "sidebar_lensAllCaughtUp": "すべて確認済みです。",
   "sidebar_lensNothingHere": "今は何もありません。",
@@ -93,6 +107,8 @@
   "sidebar_tempMoveDown": "下に移動",
   "sidebar_tempDuplicate": "複製",
   "sidebar_tempCloseTab": "タブを閉じる",
+  "sidebar_tempClearDuplicates": "重複をクリア",
+  "sidebar_clearMenuLabel": "{spaceName} のクリアオプション",
   "sidebar_archivedTooltip": "最近アーカイブ — 設定で開く",
   "sidebar_archivedLabel": "最近アーカイブ ({count})",
   "sidebar_autoArchiveIsOn": "自動アーカイブが有効です。",

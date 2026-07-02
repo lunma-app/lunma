@@ -724,6 +724,134 @@ describe('newTab / clearTempTabs commands', () => {
     expect(store.state.activeSpaceByWindow[100]).toBe('work'); // Clear never switches
   });
 
+  test('clearDuplicateTempTabs collapses a two-way duplicate, keeping the earliest tab', async () => {
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push(space('work'));
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [10, 11, 12], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[10] = { ...live(10, 100), url: 'https://a.example/' };
+    store.state.liveTabsById[11] = { ...live(11, 100), url: 'https://b.example/' };
+    store.state.liveTabsById[12] = { ...live(12, 100), url: 'https://a.example/' };
+    for (const id of [10, 11, 12]) chrome.addTab({ id, windowId: 100, groupId: 1 });
+
+    coordinator.enqueue(
+      sidebar({ kind: 'clearDuplicateTempTabs', payload: { windowId: 100 } }, 'c1'),
+    );
+    await coordinator.idle();
+
+    expect(chrome.calls).toContain('tabs.remove:[12]');
+    expect(chrome.tabs.has(10)).toBe(true);
+    expect(chrome.tabs.has(11)).toBe(true);
+  });
+
+  test('clearDuplicateTempTabs collapses a three-way duplicate, keeping only the earliest tab', async () => {
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push(space('work'));
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [10, 11, 12], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[10] = { ...live(10, 100), url: 'https://a.example/' };
+    store.state.liveTabsById[11] = { ...live(11, 100), url: 'https://a.example/' };
+    store.state.liveTabsById[12] = { ...live(12, 100), url: 'https://a.example/' };
+    for (const id of [10, 11, 12]) chrome.addTab({ id, windowId: 100, groupId: 1 });
+
+    coordinator.enqueue(
+      sidebar({ kind: 'clearDuplicateTempTabs', payload: { windowId: 100 } }, 'c1'),
+    );
+    await coordinator.idle();
+
+    expect(chrome.calls).toContain('tabs.remove:[11,12]');
+    expect(chrome.tabs.has(10)).toBe(true);
+  });
+
+  test('clearDuplicateTempTabs is a no-op when no temp tabs share a URL', async () => {
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push(space('work'));
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [10, 11], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[10] = { ...live(10, 100), url: 'https://a.example/' };
+    store.state.liveTabsById[11] = { ...live(11, 100), url: 'https://b.example/' };
+    for (const id of [10, 11]) chrome.addTab({ id, windowId: 100, groupId: 1 });
+
+    coordinator.enqueue(
+      sidebar({ kind: 'clearDuplicateTempTabs', payload: { windowId: 100 } }, 'c1'),
+    );
+    await coordinator.idle();
+
+    expect(chrome.calls.some((c) => c.startsWith('tabs.remove'))).toBe(false);
+    expect(store.state.archivedTabs).toHaveLength(0);
+  });
+
+  test('clearDuplicateTempTabs archives the batch before removing it', async () => {
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push(space('work'));
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [10, 11], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[10] = {
+      tabId: 10,
+      windowId: 100,
+      url: 'https://a.example/',
+      title: 'A',
+      active: false,
+      status: 'complete',
+    };
+    store.state.liveTabsById[11] = {
+      tabId: 11,
+      windowId: 100,
+      url: 'https://a.example/',
+      title: 'A dup',
+      active: false,
+      status: 'complete',
+    };
+    for (const id of [10, 11]) chrome.addTab({ id, windowId: 100, groupId: 1 });
+
+    coordinator.enqueue(
+      sidebar({ kind: 'clearDuplicateTempTabs', payload: { windowId: 100 } }, 'c1'),
+    );
+    await coordinator.idle();
+
+    expect(chrome.calls).toContain('tabs.remove:[11]');
+    expect(store.state.archivedTabs).toHaveLength(1);
+    expect(store.state.archivedTabs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ tabId: 11, url: 'https://a.example/', spaceId: 'work' }),
+      ]),
+    );
+  });
+
+  test('clearDuplicateTempTabs opens the Space home first when the batch would empty the window', async () => {
+    // The kept (earliest) tab 10 is tracked in the store but is no longer a live
+    // browser tab in window 100 (already closed by some other path) — so window
+    // 100's only real chrome tab is the duplicate 11, and removing the batch [11]
+    // would empty the window, triggering the same home-tab guard as clearTempTabs.
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push(space('work'));
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [10, 11], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[10] = { ...live(10, 100), url: 'https://a.example/' };
+    store.state.liveTabsById[11] = { ...live(11, 100), url: 'https://a.example/' };
+    chrome.addTab({ id: 11, windowId: 100, groupId: 1 });
+
+    coordinator.enqueue(
+      sidebar({ kind: 'clearDuplicateTempTabs', payload: { windowId: 100 } }, 'c1'),
+    );
+    await coordinator.idle();
+
+    const createIdx = chrome.calls.findIndex((c) => c.startsWith('tabs.create:100'));
+    const removeIdx = chrome.calls.findIndex((c) => c.startsWith('tabs.remove'));
+    expect(createIdx).toBeGreaterThanOrEqual(0);
+    expect(removeIdx).toBeGreaterThan(createIdx);
+  });
+
   test('newTab on a non-active target Space activates it first, then opens the tab', async () => {
     // A non-centre panel's New Tab targets its own Space. A new tab is focused, so the
     // SW activates that Space first (expand its group, collapse the outgoing) — the

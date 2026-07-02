@@ -22,6 +22,21 @@
       }
     }
   ],
+  "sidebar_clearedDuplicateTabs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} separador duplicado fechado",
+        "countPlural=other": "{count} separadores duplicados fechados"
+      }
+    }
+  ],
   "sidebar_lensNoEntriesYet": "Ainda sem entradas.",
   "sidebar_lensAllCaughtUp": "Está tudo em dia.",
   "sidebar_lensNothingHere": "Nada aqui de momento.",
@@ -94,6 +109,8 @@
   "sidebar_tempMoveDown": "Mover para baixo",
   "sidebar_tempDuplicate": "Duplicar",
   "sidebar_tempCloseTab": "Fechar separador",
+  "sidebar_tempClearDuplicates": "Limpar duplicados",
+  "sidebar_clearMenuLabel": "Opções de limpeza para {spaceName}",
   "sidebar_archivedTooltip": "Arquivado recentemente — abrir nas Definições",
   "sidebar_archivedLabel": "Arquivado recentemente ({count})",
   "sidebar_autoArchiveIsOn": "Arquivo automático ativo.",

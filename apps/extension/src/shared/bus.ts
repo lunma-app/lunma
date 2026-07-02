@@ -219,6 +219,9 @@ export type SidebarCommand =
   | { kind: 'closeTab'; payload: { tabId: TabId } }
   | { kind: 'newTab'; payload: { windowId: WindowId; spaceId?: SpaceId } }
   | { kind: 'clearTempTabs'; payload: { windowId: WindowId; spaceId?: SpaceId } }
+  // Close only the targeted Space's temporary tabs that duplicate another
+  // temporary tab's exact URL, keeping the earliest-listed tab per URL group.
+  | { kind: 'clearDuplicateTempTabs'; payload: { windowId: WindowId; spaceId?: SpaceId } }
   // Undo a just-cleared batch (safety-destructive-actions). Carries `tabId`s, not
   // the SW-generated `archivedAt`: the sidebar knows the cleared `tabId`s locally,
   // whereas `archivedAt` never returns through the (void) bus ack. The coordinator
@@ -312,6 +315,7 @@ export const SIDEBAR_COMMAND_KINDS: ReadonlySet<SidebarCommandKind> = new Set<Si
   'closeTab',
   'newTab',
   'clearTempTabs',
+  'clearDuplicateTempTabs',
   'undoClearTempTabs',
   'openUrl',
   'duplicateTab',
@@ -377,6 +381,7 @@ const _kindExhaustiveness = {
   closeTab: true,
   newTab: true,
   clearTempTabs: true,
+  clearDuplicateTempTabs: true,
   undoClearTempTabs: true,
   openUrl: true,
   duplicateTab: true,
@@ -807,6 +812,10 @@ const COMMAND_SCHEMAS = {
     kind: z.literal('clearTempTabs'),
     payload: z.strictObject({ windowId: z.number(), spaceId: z.string().optional() }),
   }),
+  clearDuplicateTempTabs: z.strictObject({
+    kind: z.literal('clearDuplicateTempTabs'),
+    payload: z.strictObject({ windowId: z.number(), spaceId: z.string().optional() }),
+  }),
   undoClearTempTabs: z.strictObject({
     kind: z.literal('undoClearTempTabs'),
     payload: z.strictObject({ windowId: z.number(), tabIds: z.array(z.number()) }),
@@ -918,6 +927,7 @@ export const SidebarCommandSchema = z.discriminatedUnion('kind', [
   COMMAND_SCHEMAS.closeTab,
   COMMAND_SCHEMAS.newTab,
   COMMAND_SCHEMAS.clearTempTabs,
+  COMMAND_SCHEMAS.clearDuplicateTempTabs,
   COMMAND_SCHEMAS.undoClearTempTabs,
   COMMAND_SCHEMAS.openUrl,
   COMMAND_SCHEMAS.duplicateTab,

@@ -298,6 +298,12 @@ describe('TempTabs', () => {
     expect(sendMock).toHaveBeenCalledWith({ kind: 'duplicateTab', payload: { tabId: 17 } });
   });
 
+  test('the right-click menu Duplicate item renders the copy icon', async () => {
+    const { container } = render(TempTabsHarness, { props: { store: makeStore(), windowId: 100 } });
+    const items = await openRowMenu(container, 0); // first row (tab 17)
+    expect(menuItem(items, 'duplicate').querySelector('[data-icon-name="copy"]')).not.toBeNull();
+  });
+
   test('a tab-dedup-flash message flashes the matching row (and only that row)', async () => {
     const { container } = render(TempTabsHarness, { props: { store: makeStore(), windowId: 100 } });
     flushSync();

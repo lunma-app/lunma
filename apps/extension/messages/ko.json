@@ -21,6 +21,20 @@
       }
     }
   ],
+  "sidebar_clearedDuplicateTabs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=other": "중복 탭 {count}개를 정리했습니다"
+      }
+    }
+  ],
   "sidebar_lensNoEntriesYet": "항목이 없습니다.",
   "sidebar_lensAllCaughtUp": "모두 확인했습니다.",
   "sidebar_lensNothingHere": "지금은 내용이 없습니다.",
@@ -93,6 +107,8 @@
   "sidebar_tempMoveDown": "아래로 이동",
   "sidebar_tempDuplicate": "복제",
   "sidebar_tempCloseTab": "탭 닫기",
+  "sidebar_tempClearDuplicates": "중복 항목 지우기",
+  "sidebar_clearMenuLabel": "{spaceName}의 지우기 옵션",
   "sidebar_archivedTooltip": "최근 보관됨 — 설정에서 열기",
   "sidebar_archivedLabel": "최근 보관됨 ({count})",
   "sidebar_autoArchiveIsOn": "자동 보관이 켜져 있습니다.",

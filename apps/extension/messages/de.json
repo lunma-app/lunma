@@ -22,6 +22,21 @@
       }
     }
   ],
+  "sidebar_clearedDuplicateTabs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} Duplikat-Tab geschlossen",
+        "countPlural=other": "{count} Duplikat-Tabs geschlossen"
+      }
+    }
+  ],
   "sidebar_lensNoEntriesYet": "Noch keine Einträge.",
   "sidebar_lensAllCaughtUp": "Alles gelesen.",
   "sidebar_lensNothingHere": "Gerade nichts hier.",
@@ -94,6 +109,8 @@
   "sidebar_tempMoveDown": "Nach unten",
   "sidebar_tempDuplicate": "Duplizieren",
   "sidebar_tempCloseTab": "Tab schließen",
+  "sidebar_tempClearDuplicates": "Duplikate löschen",
+  "sidebar_clearMenuLabel": "Löschoptionen für {spaceName}",
   "sidebar_archivedTooltip": "Kürzlich archiviert — in den Einstellungen öffnen",
   "sidebar_archivedLabel": "Kürzlich archiviert ({count})",
   "sidebar_autoArchiveIsOn": "Automatisches Archivieren ist aktiv.",

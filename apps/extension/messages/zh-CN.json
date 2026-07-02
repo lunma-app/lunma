@@ -21,6 +21,20 @@
       }
     }
   ],
+  "sidebar_clearedDuplicateTabs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=other": "已清理 {count} 个重复标签页"
+      }
+    }
+  ],
   "sidebar_lensNoEntriesYet": "暂无内容",
   "sidebar_lensAllCaughtUp": "已全部阅完",
   "sidebar_lensNothingHere": "暂时没有内容",
@@ -93,6 +107,8 @@
   "sidebar_tempMoveDown": "下移",
   "sidebar_tempDuplicate": "复制",
   "sidebar_tempCloseTab": "关闭标签页",
+  "sidebar_tempClearDuplicates": "清除重复项",
+  "sidebar_clearMenuLabel": "{spaceName} 的清除选项",
   "sidebar_archivedTooltip": "最近已归档 — 在设置中查看",
   "sidebar_archivedLabel": "最近已归档（{count}）",
   "sidebar_autoArchiveIsOn": "自动归档已开启",
