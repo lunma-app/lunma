@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.4](https://github.com/lunma-app/lunma/compare/v0.4.3...v0.4.4) (2026-07-02)
+
+
+### Bug Fixes
+
+* **background:** dedup direct-URL tab creation, unscoped by gesture ([b66fc7d](https://github.com/lunma-app/lunma/commit/b66fc7dd2d683bc5d2237f086e01b0aef97662f7))
+* **background:** exclude about:blank from onCreated-time tab dedup ([645465e](https://github.com/lunma-app/lunma/commit/645465ea256e35ae8147f9ec9c1af21a8920c977))
+* **catalog:** generate derived-controls.generated.ts for plain vitest too ([3b9023c](https://github.com/lunma-app/lunma/commit/3b9023cd30cc544626cc248cad436ba5636c8297))
+* **catalog:** stop Examples tiles from clipping open popovers ([1eb74d5](https://github.com/lunma-app/lunma/commit/1eb74d5794266a98ef0742dac616028c53243281))
+* **spaces:** drop empty duplicate-named Spaces on read/boot ([5481826](https://github.com/lunma-app/lunma/commit/5481826ddca69adf937970dc778983843d1e04a1))
+
 ## [0.4.3](https://github.com/lunma-app/lunma/compare/v0.4.2...v0.4.3) (2026-07-01)
 
 
