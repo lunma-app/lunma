@@ -24,6 +24,7 @@ import {
 import Aurora from '../ui/Aurora.svelte';
 import Button from '../ui/Button.svelte';
 import Icon from '../ui/Icon.svelte';
+import Menu from '../ui/Menu.svelte';
 import RowButton from '../ui/RowButton.svelte';
 import SearchField from '../ui/SearchField.svelte';
 import { scrollFade } from '../ui/scroll-fade';
@@ -386,6 +387,22 @@ function tempCountFor(space: Space): number {
   return store.state.spaceInstancesByWindow[windowId]?.[space.id]?.tempTabIds.length ?? 0;
 }
 
+/** Whether a Space's temp tabs (in this window) contain any exact-URL duplicate —
+ * drives the "Clear duplicates" kebab item's disabled state (design D6/D2). Exact
+ * string match only, matching findTabInActiveSpace's existing convention. */
+function hasDuplicateTempTabsFor(space: Space): boolean {
+  const tempTabIds = store.state.spaceInstancesByWindow[windowId]?.[space.id]?.tempTabIds ?? [];
+  const seenUrls = new Set<string>();
+  for (const id of tempTabIds) {
+    const live = store.state.liveTabsById[id];
+    if (live?.windowId !== windowId) continue;
+    const url = live.url ?? '';
+    if (seenUrls.has(url)) return true;
+    seenUrls.add(url);
+  }
+  return false;
+}
+
 // Fire-and-forget dispatch (results arrive via the state broadcast) via the
 // shared `dispatch`. New Tab / Clear act on the PANEL's OWN Space (carrying
 // spaceId): every carousel panel is fully live (§9), so nothing toggles
@@ -422,6 +439,36 @@ function onClearTemp(spaceId: SpaceId): void {
 }
 function onUndoClear(tabIds: number[]): void {
   dispatch({ kind: 'undoClearTempTabs', payload: { windowId, tabIds } });
+}
+
+// Clear duplicates (sibling of Clear, design D2/D6): a lower-risk option that
+// closes only the Space's duplicate-URL temp tabs, keeping the earliest-listed
+// tab per URL group. Reuses the same clearedToast/Toast/Undo plumbing as Clear —
+// only the dispatched command and the toast copy differ.
+function onClearDuplicateTemp(spaceId: SpaceId): void {
+  const tempTabIds = store.state.spaceInstancesByWindow[windowId]?.[spaceId]?.tempTabIds ?? [];
+  const idsByUrl = new Map<string, number[]>();
+  for (const id of tempTabIds) {
+    const live = store.state.liveTabsById[id];
+    if (live?.windowId !== windowId) continue;
+    const url = live.url ?? '';
+    const group = idsByUrl.get(url);
+    if (group) group.push(id);
+    else idsByUrl.set(url, [id]);
+  }
+  const tabIds = Array.from(idsByUrl.values()).flatMap((group) => group.slice(1));
+  if (tabIds.length === 0) return;
+  bus
+    .send({ kind: 'clearDuplicateTempTabs', payload: { windowId, spaceId } })
+    .then(() => {
+      clearedToast = {
+        message: m.sidebar_clearedDuplicateTabs({ count: tabIds.length }),
+        tabIds,
+      };
+    })
+    .catch((err: unknown) => {
+      log.debug('App: clearDuplicateTempTabs failed', { err });
+    });
 }
 
 // Recently archived (auto-archive): the chip on the New Tab row opens the options
@@ -651,6 +698,19 @@ function onCancel(): void {
                     >
                       <Icon name="arrow-down" size={12} /> {m.sidebar_clearSearch()}
                     </Button>
+                    <Menu
+                      trigger="kebab"
+                      icon="chevron-down"
+                      ariaLabel={m.sidebar_clearMenuLabel({ spaceName: panel.space.name })}
+                      items={[
+                        {
+                          id: 'clear-duplicates',
+                          label: m.sidebar_tempClearDuplicates(),
+                          disabled: !hasDuplicateTempTabsFor(panel.space),
+                          onSelect: () => onClearDuplicateTemp(panel.space.id),
+                        },
+                      ]}
+                    />
                   </span>
                 </div>
               {:else}

@@ -22,6 +22,21 @@
       }
     }
   ],
+  "sidebar_clearedDuplicateTabs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Cleared {count} duplicate tab",
+        "countPlural=other": "Cleared {count} duplicate tabs"
+      }
+    }
+  ],
   "sidebar_lensNoEntriesYet": "No entries yet.",
   "sidebar_lensAllCaughtUp": "You're all caught up.",
   "sidebar_lensNothingHere": "Nothing here right now.",
@@ -94,6 +109,8 @@
   "sidebar_tempMoveDown": "Move down",
   "sidebar_tempDuplicate": "Duplicate",
   "sidebar_tempCloseTab": "Close tab",
+  "sidebar_tempClearDuplicates": "Clear duplicates",
+  "sidebar_clearMenuLabel": "Clear options for {spaceName}",
   "sidebar_archivedTooltip": "Recently archived — open in Settings",
   "sidebar_archivedLabel": "Recently archived ({count})",
   "sidebar_autoArchiveIsOn": "Auto-archive is on.",

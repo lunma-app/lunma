@@ -161,6 +161,8 @@ export const EventPolicy: Record<PendingEventKind, EventPolicyEntry> = {
   closeTab: {},
   newTab: {},
   clearTempTabs: {},
+  // Per-invocation distinct — each duplicates-only clear collapses its own batch.
+  clearDuplicateTempTabs: {},
   // Per-invocation distinct — an undo restores its own captured batch.
   undoClearTempTabs: {},
   // Per-invocation distinct — each launcher pick opens its own tab.

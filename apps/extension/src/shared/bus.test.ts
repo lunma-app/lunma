@@ -370,6 +370,7 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
   closeTab: { kind: 'closeTab', payload: { tabId: 42 } },
   newTab: { kind: 'newTab', payload: { windowId: 1 } },
   clearTempTabs: { kind: 'clearTempTabs', payload: { windowId: 1 } },
+  clearDuplicateTempTabs: { kind: 'clearDuplicateTempTabs', payload: { windowId: 1 } },
   undoClearTempTabs: { kind: 'undoClearTempTabs', payload: { windowId: 1, tabIds: [1, 2] } },
   openUrl: { kind: 'openUrl', payload: { url: 'https://example.com', windowId: 1 } },
   duplicateTab: { kind: 'duplicateTab', payload: { tabId: 42 } },

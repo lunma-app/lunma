@@ -22,6 +22,7 @@ export function tempTabHandlers(): Pick<
   | 'closeTab'
   | 'newTab'
   | 'clearTempTabs'
+  | 'clearDuplicateTempTabs'
   | 'undoClearTempTabs'
   | 'openUrl'
   | 'duplicateTab'
@@ -146,6 +147,56 @@ export function tempTabHandlers(): Pick<
         log.error('clearTempTabs: survivor check failed', { windowId, err });
       }
       await chrome.tabs.remove(ids);
+    },
+    // Clear duplicates (sibling of clearTempTabs, design D6): close only this
+    // Space's temp tabs that duplicate another temp tab's exact URL, keeping the
+    // earliest-listed tab per URL group. Groups by exact string equality (no
+    // normalisation), matching findTabInActiveSpace's existing convention. A
+    // no-duplicates Space is a true no-op — no archive call, no removal, no
+    // broadcast — otherwise reuses clearTempTabs's archive-then-survivor-check-
+    // then-remove sequence for the resulting batch.
+    clearDuplicateTempTabs: async (ctx, event) => {
+      const { windowId, spaceId: target } = event.payload;
+      const s = ctx.store.state;
+      const spaceId = target ?? s.activeSpaceByWindow[windowId];
+      if (spaceId === null || spaceId === undefined) return;
+      const tempTabIds = s.spaceInstancesByWindow[windowId]?.[spaceId]?.tempTabIds ?? [];
+      const ids = tempTabIds.filter((id) => s.liveTabsById[id]?.windowId === windowId);
+      const seenUrls = new Set<string>();
+      const batch: number[] = [];
+      for (const id of ids) {
+        const url = s.liveTabsById[id]?.url ?? '';
+        if (seenUrls.has(url)) {
+          batch.push(id);
+        } else {
+          seenUrls.add(url);
+        }
+      }
+      if (batch.length === 0) return;
+      const now = Date.now();
+      for (const id of batch) {
+        const live = s.liveTabsById[id];
+        ctx.store.appendArchivedTab({
+          tabId: id,
+          url: live?.url ?? '',
+          title: live?.title ?? '',
+          spaceId,
+          archivedAt: now,
+        });
+      }
+      ctx.store.pruneArchivedTabs(now);
+      ctx.markDirty();
+      try {
+        const all = await chrome.tabs.query({ windowId });
+        const removing = new Set(batch);
+        const survivors = all.filter((t) => t.id !== undefined && !removing.has(t.id));
+        if (survivors.length === 0) {
+          await chrome.tabs.create({ windowId, active: true });
+        }
+      } catch (err) {
+        log.error('clearDuplicateTempTabs: survivor check failed', { windowId, err });
+      }
+      await chrome.tabs.remove(batch);
     },
     // Undo a just-cleared batch (safety-destructive-actions): re-open the cleared
     // tabs in their originating window. The payload carries `tabId`s (the sidebar

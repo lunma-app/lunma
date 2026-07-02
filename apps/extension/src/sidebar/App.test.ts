@@ -283,6 +283,150 @@ describe('App', () => {
     });
   });
 
+  /** Open the divider's "Clear duplicates" kebab (a `Menu`, testid `menu-trigger`
+   * scoped to the divider — distinct from the section-header's own kebab) and
+   * return its rendered items. bits-ui portals to <body> and opens async. */
+  async function openClearDuplicatesMenu(slide: HTMLElement): Promise<HTMLButtonElement[]> {
+    const trigger = slide.querySelector(
+      '[data-testid="divider"] [data-testid="menu-trigger"]',
+    ) as HTMLButtonElement;
+    expect(trigger).not.toBeNull();
+    await fireEvent.pointerDown(trigger);
+    await fireEvent.pointerUp(trigger);
+    await fireEvent.click(trigger);
+    await waitFor(() =>
+      expect(document.querySelectorAll('[data-testid="menu-item"]').length).toBeGreaterThan(0),
+    );
+    return [...document.querySelectorAll('[data-testid="menu-item"]')] as HTMLButtonElement[];
+  }
+
+  test('the Clear-duplicates kebab renders beside Clear whenever Clear renders', async () => {
+    const store = makeStore('blue');
+    store.state.spaceInstancesByWindow[1] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [5], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[5] = {
+      tabId: 5,
+      windowId: 1,
+      title: 'A temp tab',
+      url: 'https://example.com/',
+      active: true,
+      status: 'complete',
+    };
+    const { container } = render(AppHarness, { props: { store, windowId: 1 } });
+    const workSlide = container.querySelector('[data-space-id="work"]') as HTMLElement;
+    expect(
+      workSlide.querySelector('[data-testid="divider"] [data-testid="menu-trigger"]'),
+    ).not.toBeNull();
+  });
+
+  test('the Clear-duplicates item is disabled when the Space has no duplicate temp tabs', async () => {
+    const store = makeStore('blue');
+    store.state.spaceInstancesByWindow[1] = {
+      work: {
+        spaceId: 'work',
+        groupId: 1,
+        tempTabIds: [5, 6],
+        tempTabTitles: {},
+      },
+    };
+    store.state.liveTabsById[5] = {
+      tabId: 5,
+      windowId: 1,
+      title: 'A',
+      url: 'https://a.example/',
+      active: true,
+      status: 'complete',
+    };
+    store.state.liveTabsById[6] = {
+      tabId: 6,
+      windowId: 1,
+      title: 'B',
+      url: 'https://b.example/',
+      active: false,
+      status: 'complete',
+    };
+    const { container } = render(AppHarness, { props: { store, windowId: 1 } });
+    const workSlide = container.querySelector('[data-space-id="work"]') as HTMLElement;
+    const items = await openClearDuplicatesMenu(workSlide);
+    const item = items.find((el) => el.getAttribute('data-menu-id') === 'clear-duplicates');
+    expect(item?.getAttribute('aria-disabled')).toBe('true');
+  });
+
+  test('the Clear-duplicates item is enabled and dispatches clearDuplicateTempTabs when duplicates exist', async () => {
+    const store = makeStore('blue');
+    store.state.spaceInstancesByWindow[1] = {
+      work: {
+        spaceId: 'work',
+        groupId: 1,
+        tempTabIds: [5, 6],
+        tempTabTitles: {},
+      },
+    };
+    store.state.liveTabsById[5] = {
+      tabId: 5,
+      windowId: 1,
+      title: 'A',
+      url: 'https://a.example/',
+      active: true,
+      status: 'complete',
+    };
+    store.state.liveTabsById[6] = {
+      tabId: 6,
+      windowId: 1,
+      title: 'A dup',
+      url: 'https://a.example/',
+      active: false,
+      status: 'complete',
+    };
+    const { container } = render(AppHarness, { props: { store, windowId: 1 } });
+    const workSlide = container.querySelector('[data-space-id="work"]') as HTMLElement;
+    const items = await openClearDuplicatesMenu(workSlide);
+    const item = items.find((el) => el.getAttribute('data-menu-id') === 'clear-duplicates');
+    expect(item?.getAttribute('aria-disabled')).not.toBe('true');
+    await fireEvent.click(item as HTMLButtonElement);
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'clearDuplicateTempTabs',
+      payload: { windowId: 1, spaceId: 'work' },
+    });
+    // Reuses the existing clearedToast/Toast/Undo plumbing — a Toast mounts once
+    // the (mocked, resolved) bus.send settles, and its Undo dispatches the same
+    // undoClearTempTabs command Clear's Undo uses.
+    let toast!: HTMLElement;
+    await waitFor(() => {
+      toast = document.querySelector('.toast') as HTMLElement;
+      expect(toast).not.toBeNull();
+    });
+    expect(toast.textContent).toContain('1');
+    const undoButton = toast.querySelector('button') as HTMLButtonElement;
+    await fireEvent.click(undoButton);
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'undoClearTempTabs',
+      payload: { windowId: 1, tabIds: [6] },
+    });
+  });
+
+  test('the Clear-duplicates kebab trigger has a Space-scoped ariaLabel', async () => {
+    const store = makeStore('blue');
+    store.state.spaceInstancesByWindow[1] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [5], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[5] = {
+      tabId: 5,
+      windowId: 1,
+      title: 'A',
+      url: 'https://a.example/',
+      active: true,
+      status: 'complete',
+    };
+    const { container } = render(AppHarness, { props: { store, windowId: 1 } });
+    const workSlide = container.querySelector('[data-space-id="work"]') as HTMLElement;
+    const trigger = workSlide.querySelector(
+      '[data-testid="divider"] [data-testid="menu-trigger"]',
+    ) as HTMLButtonElement;
+    expect(trigger.getAttribute('aria-label')).toBe('Clear options for Work');
+  });
+
   test('New Tab is live on every slide and targets its own Space (§9 fully-live)', async () => {
     // Reverses the old "active-slide only" rule: the off-centre slide's New Tab is
     // enabled and dispatches newTab carrying THAT slide's Space.

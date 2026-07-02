@@ -286,6 +286,7 @@ function tabMenuItems(item: TempItem): MenuItem[] {
     {
       id: 'duplicate',
       label: m.sidebar_tempDuplicate(),
+      icon: 'copy',
       onSelect: () => duplicateTab(item),
     },
     {
