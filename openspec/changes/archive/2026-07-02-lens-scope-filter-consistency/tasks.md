@@ -18,7 +18,7 @@
 ## 4. Verification
 
 - [x] 4.1 Run `pnpm --filter @lunma/extension verify` and fix any failures introduced by this change.
-- [ ] 4.2 Manually sanity-check in the dev build: a lens with 1 repo (no filter shown), a lens with 2 repos where one has a long name (chip truncates, tooltip shows full value on hover), and a lens with >5 feeds (unchanged `MultiSelect` behavior).
+- [x] 4.2 Manually sanity-check in the dev build: a lens with 1 repo (no filter shown), a lens with 2 repos where one has a long name (chip truncates, tooltip shows full value on hover), and a lens with >5 feeds (unchanged `MultiSelect` behavior).
 
 ## 5. Collapse "select all" to the unfiltered state (overflow `MultiSelect` only)
 
