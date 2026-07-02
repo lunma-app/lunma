@@ -312,22 +312,33 @@ describe('feed read-state (rss-connector design D3)', () => {
     });
   });
 
-  test('setLensFilter with empty arrays clears the filter', () => {
+  test('setLensFilter with an empty object clears the filter (every axis absent)', () => {
     store.addLens('work', feedNode());
     store.setLensFilter('feed-1', { entities: ['change'] });
-    store.setLensFilter('feed-1', { entities: [], repos: [], projects: [] });
+    store.setLensFilter('feed-1', {});
     const node = store.state.pinnedBySpace.work?.[0] as Record<string, unknown> | undefined;
     expect(node?.['filter']).toBeUndefined();
+  });
+
+  test('setLensFilter persists explicit empty arrays as a real constraint, not a clear', () => {
+    // fix-lens-scope-filter-clear-semantics: an axis present as `[]` (e.g. from
+    // a picker's Clear action) means "matches nothing on that axis" and must
+    // survive persistence — it is NOT equivalent to the axis being absent.
+    store.addLens('work', feedNode());
+    store.setLensFilter('feed-1', { entities: [], repos: [], projects: [] });
+    expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({
+      filter: { entities: [], repos: [], projects: [] },
+    });
   });
 
   test('setLensFilter persists a feeds-only filter (feeds counts toward non-empty)', () => {
     store.addLens('work', feedNode());
     store.setLensFilter('feed-1', { feeds: ['The Verge'] });
     expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({ filter: { feeds: ['The Verge'] } });
-    // …and clearing the only feed empties the filter back out.
+    // Clearing the only feed persists an explicit `feeds: []` — matches nothing
+    // on that axis — rather than emptying the filter back out.
     store.setLensFilter('feed-1', { feeds: [] });
-    const node = store.state.pinnedBySpace.work?.[0] as Record<string, unknown> | undefined;
-    expect(node?.['filter']).toBeUndefined();
+    expect(store.state.pinnedBySpace.work?.[0]).toMatchObject({ filter: { feeds: [] } });
   });
 
   test('setLensFilter with unknown folderId is a no-op', () => {

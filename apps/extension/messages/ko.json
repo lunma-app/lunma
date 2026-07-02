@@ -348,6 +348,7 @@
   "launcher_lensAllProjects": "모든 프로젝트",
   "launcher_lensAllFeeds": "모든 피드",
   "launcher_lensScopeSelected": "{count}개 선택됨",
+  "launcher_lensNoneSelected": "선택 항목 없음",
   "launcher_lensScopeSearch": "검색…",
   "sidebar_lensRoleAuthored": "내가 작성",
   "sidebar_lensRoleAssigned": "나에게 할당",

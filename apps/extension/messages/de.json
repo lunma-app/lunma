@@ -353,6 +353,7 @@
   "launcher_lensAllProjects": "Alle Projekte",
   "launcher_lensAllFeeds": "Alle Feeds",
   "launcher_lensScopeSelected": "{count} ausgewählt",
+  "launcher_lensNoneSelected": "Keine ausgewählt",
   "launcher_lensScopeSearch": "Suchen…",
   "sidebar_lensRoleAuthored": "Von mir",
   "sidebar_lensRoleAssigned": "Zugewiesen",

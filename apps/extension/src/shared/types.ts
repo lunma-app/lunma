@@ -138,10 +138,12 @@ export interface SavedTab {
 export type LensEntity = 'change' | 'ticket' | 'article' | 'generic';
 
 /**
- * Per-lens view filter (lens-view-filters). Every axis is optional; an absent
- * or fully-empty filter means "no narrowing" (identical to an unfiltered lens).
- * `repos` holds host-qualified keys (`${host}/${owner}/${repo}`) so the same
- * slug on two hosts never merges into one facet.
+ * Per-lens view filter (lens-view-filters). Every axis is optional. Per axis:
+ * an absent key means "no narrowing" (identical to an unfiltered lens,
+ * including future-arriving facet values); an explicit `[]` means "matches
+ * nothing on this axis" — these two states are NOT equivalent. `repos` holds
+ * host-qualified keys (`${host}/${owner}/${repo}`) so the same slug on two
+ * hosts never merges into one facet.
  */
 export type LensFilter = {
   entities?: LensEntity[] | undefined;

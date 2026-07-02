@@ -363,6 +363,7 @@
   "launcher_lensAllProjects": "Все проекты",
   "launcher_lensAllFeeds": "Все ленты",
   "launcher_lensScopeSelected": "Выбрано: {count}",
+  "launcher_lensNoneSelected": "Ничего не выбрано",
   "launcher_lensScopeSearch": "Поиск…",
   "sidebar_lensRoleAuthored": "Мои",
   "sidebar_lensRoleAssigned": "Назначенные",

@@ -339,11 +339,13 @@ const initial: AppState = {
                                //               articleLayout — global-per-lens persisted Articles-section layout (persist-lens-article-layout).
                                //                 Absent ⇒ 'grid' (first-open default); written via the setLensArticleLayout bus command.
                                //                 Sits beside hideRead/filter as a durable per-lens reading preference.
-                               //               LensFilter = { entities?: LensEntity[]; repos?: string[]; projects?: string[] }
+                               //               LensFilter = { entities?: LensEntity[]; repos?: string[]; projects?: string[]; feeds?: string[] }
                                //               — a global-per-lens persistent view filter (lens-view-filters). entities narrows by
                                //                 item type ('change'|'ticket'|'article'|'generic'); repos narrows Changes by
-                               //                 host-qualified key `${host}/${owner}/${repo}`; projects narrows Issues by project key.
-                               //                 All axes are AND'd; within an axis values are OR'd; absent or empty = identity.
+                               //                 host-qualified key `${host}/${owner}/${repo}`; projects narrows Issues by project key;
+                               //                 feeds narrows Articles by feed name. All axes are AND'd; within an axis values are OR'd.
+                               //                 Per axis: absent = identity (no constraint, incl. future-arriving values); an explicit
+                               //                 `[]` = matches nothing on that axis — these are NOT equivalent (fix-lens-scope-filter-clear-semantics).
                                //                 Applied in both surfaces: overview (applyLensFilter before bucketByEntity) and
                                //                 sidebar (displayItemsForSection before ENTITY_RANK sort and feed windowing).
                                //               LensSourceRef = { sourceId; queries: LensQuery[] }

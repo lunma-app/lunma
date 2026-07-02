@@ -86,24 +86,16 @@ const visProjects = $derived([...new Set([...facets.projects, ...(filter.project
 const visFeeds = $derived([...new Set([...facets.feeds, ...(filter.feeds ?? [])])]);
 
 // The overflow MultiSelect popovers' checked state is tracked separately from
-// `filter.*` because a full selection is normalized back to `[]` for storage
-// (so future-arriving facets stay auto-included — see the collapse below). If
-// the popover's `values` mirrored `filter.*` directly, an empty/unset filter —
-// meaning "no constraint, everything included" — would render as NOTHING
-// checked, and clicking Select all or Clear (both of which store `[]`) could
-// only ever visibly affect one of the two. These mirror the user's last
-// explicit action, defaulting to "everything checked" when unset (matching
-// the unfiltered "All feeds" trigger label), and only resync from `filter.*`
-// when the pinned lens itself changes.
-let reposDisplay = $state<string[]>(
-  untrack(() => (filter.repos?.length ? filter.repos : visRepos)),
-);
-let projectsDisplay = $state<string[]>(
-  untrack(() => (filter.projects?.length ? filter.projects : visProjects)),
-);
-let feedsDisplay = $state<string[]>(
-  untrack(() => (filter.feeds?.length ? filter.feeds : visFeeds)),
-);
+// `filter.*` so a Select-all/Clear click can update the popover immediately
+// via direct assignment in `onchange`, without waiting on a derived re-read.
+// The resync (on lens switch, below) mirrors `filter.*` verbatim via `??`, not
+// `?.length ? … : …` — an absent axis (unfiltered) still defaults to
+// "everything checked" (`visX`), but an explicit `[]` (Clear) must resync to
+// `[]` (nothing checked), not fall back to "everything checked" the way an
+// absent axis does.
+let reposDisplay = $state<string[]>(untrack(() => filter.repos ?? visRepos));
+let projectsDisplay = $state<string[]>(untrack(() => filter.projects ?? visProjects));
+let feedsDisplay = $state<string[]>(untrack(() => filter.feeds ?? visFeeds));
 // `node` gets a new reference on every setFilter too (the parent recomputes it
 // from the store), not just on an actual lens switch — so the effect must
 // re-run on every node change but only actually resync when `id` itself
@@ -114,9 +106,9 @@ $effect(() => {
   const id = node.id;
   if (id === untrack(() => lastNodeId)) return;
   lastNodeId = id;
-  reposDisplay = untrack(() => (filter.repos?.length ? filter.repos : visRepos));
-  projectsDisplay = untrack(() => (filter.projects?.length ? filter.projects : visProjects));
-  feedsDisplay = untrack(() => (filter.feeds?.length ? filter.feeds : visFeeds));
+  reposDisplay = untrack(() => filter.repos ?? visRepos);
+  projectsDisplay = untrack(() => filter.projects ?? visProjects);
+  feedsDisplay = untrack(() => filter.feeds ?? visFeeds);
 });
 
 // Overflow (>CHIP_THRESHOLD) picker options — no synthetic "all" row; clearing
@@ -128,17 +120,18 @@ const projectOptions = $derived<MultiSelectOption[]>(
 const feedOptions = $derived<MultiSelectOption[]>(visFeeds.map((f) => ({ value: f, label: f })));
 
 // Closed-trigger summary for an overflow scope picker: the "All …" label when
-// nothing is picked, the lone name when one is, else an "{n} selected" count.
-function scopeLabel(sel: string[], all: string): string {
-  if (sel.length === 0) return all;
+// the axis is absent (genuinely unfiltered), "None selected" when it's an
+// explicit `[]` (e.g. from Clear — matches nothing, NOT "all"), the lone name
+// when exactly one value is selected, else an "{n} selected" count.
+function scopeLabel(sel: string[] | undefined, all: string): string {
+  if (sel === undefined) return all;
+  if (sel.length === 0) return m.launcher_lensNoneSelected();
   if (sel.length === 1) return sel[0] ?? all;
   return m.launcher_lensScopeSelected({ count: sel.length });
 }
-const repoTriggerLabel = $derived(scopeLabel(filter.repos ?? [], m.launcher_lensAllRepos()));
-const projectTriggerLabel = $derived(
-  scopeLabel(filter.projects ?? [], m.launcher_lensAllProjects()),
-);
-const feedTriggerLabel = $derived(scopeLabel(filter.feeds ?? [], m.launcher_lensAllFeeds()));
+const repoTriggerLabel = $derived(scopeLabel(filter.repos, m.launcher_lensAllRepos()));
+const projectTriggerLabel = $derived(scopeLabel(filter.projects, m.launcher_lensAllProjects()));
+const feedTriggerLabel = $derived(scopeLabel(filter.feeds, m.launcher_lensAllFeeds()));
 
 function toggleRepo(r: string): void {
   const current = filter.repos ?? [];
@@ -162,10 +155,10 @@ function toggleFeed(f: string): void {
 // entity sections reflect exactly what the filter allows.
 const filteredTagged = $derived.by(() => {
   if (
-    !filter.entities?.length &&
-    !filter.repos?.length &&
-    !filter.projects?.length &&
-    !filter.feeds?.length
+    filter.entities === undefined &&
+    filter.repos === undefined &&
+    filter.projects === undefined &&
+    filter.feeds === undefined
   )
     return tagged;
   const rows = tagged.map((t) => ({
@@ -182,6 +175,15 @@ const changes = $derived(byEntity.change);
 const tickets = $derived(byEntity.ticket);
 const articles = $derived(byEntity.article);
 const generic = $derived(byEntity.generic);
+
+// Unfiltered per-entity bucket (pre scope-filter) — gates each card's
+// VISIBILITY, distinct from `byEntity` above (which gates its CONTENTS). A
+// scope filter cleared to `[]` can legitimately zero out `byEntity.change` etc.
+// (fix-lens-scope-filter-clear-semantics); the card must stay mounted in that
+// case (with a zero count) so its own scope picker — the only way to undo
+// Clear — stays reachable. Only an entity type with NO items in the lens at
+// all (independent of any scope filter) hides its card.
+const byEntityAll = $derived(bucketByEntity(tagged));
 
 // "Waiting on you" — the cross-entity actionable set, derived from the filtered
 // items so it honours the active scope filters.
@@ -235,8 +237,13 @@ function toggleUnreadFilter(): void {
   unreadOnly = !unreadOnly;
 }
 
+// True empty state (the lens has no items at all) — independent of any scope
+// filter, so it doesn't fight with a card that's merely filtered to zero.
 const empty = $derived(
-  changes.length === 0 && tickets.length === 0 && articles.length === 0 && generic.length === 0,
+  byEntityAll.change.length === 0 &&
+    byEntityAll.ticket.length === 0 &&
+    byEntityAll.article.length === 0 &&
+    byEntityAll.generic.length === 0,
 );
 </script>
 
@@ -283,7 +290,7 @@ const empty = $derived(
   <!-- Board: Changes | Issues (two-up only when both populated), Articles + Other below. -->
   <div class="board" class:two={boardTwoUp}>
     <!-- Changes -->
-    {#if changes.length > 0}
+    {#if byEntityAll.change.length > 0}
       {@const open = !collapsed.change}
       <section class="card" data-testid="overview-section" data-entity="change">
         <button class="sec-head" type="button" aria-expanded={open} onclick={() => toggle('change')}>
@@ -314,7 +321,7 @@ const empty = $derived(
                       values={reposDisplay}
                       onchange={(vals) => {
                         reposDisplay = vals;
-                        setFilter({ ...filter, repos: vals.length >= visRepos.length ? [] : vals });
+                        setFilter({ ...filter, repos: vals });
                       }}
                       label={repoTriggerLabel}
                       ariaLabel={m.launcher_lensFilterByRepo()}
@@ -368,7 +375,7 @@ const empty = $derived(
     {/if}
 
     <!-- Issues -->
-    {#if tickets.length > 0}
+    {#if byEntityAll.ticket.length > 0}
       {@const open = !collapsed.ticket}
       <section class="card" data-testid="overview-section" data-entity="ticket">
         <button class="sec-head" type="button" aria-expanded={open} onclick={() => toggle('ticket')}>
@@ -399,7 +406,7 @@ const empty = $derived(
                       values={projectsDisplay}
                       onchange={(vals) => {
                         projectsDisplay = vals;
-                        setFilter({ ...filter, projects: vals.length >= visProjects.length ? [] : vals });
+                        setFilter({ ...filter, projects: vals });
                       }}
                       label={projectTriggerLabel}
                       ariaLabel={m.launcher_lensFilterByProject()}
@@ -457,7 +464,7 @@ const empty = $derived(
   </div>
 
   <!-- Articles (full width, beneath the board) -->
-  {#if articles.length > 0}
+  {#if byEntityAll.article.length > 0}
     {@const open = !collapsed.article}
     <section class="card" data-testid="overview-section" data-entity="article">
       <button class="sec-head" type="button" aria-expanded={open} onclick={() => toggle('article')}>
@@ -491,7 +498,7 @@ const empty = $derived(
                       values={feedsDisplay}
                       onchange={(vals) => {
                         feedsDisplay = vals;
-                        setFilter({ ...filter, feeds: vals.length >= visFeeds.length ? [] : vals });
+                        setFilter({ ...filter, feeds: vals });
                       }}
                       label={feedTriggerLabel}
                       ariaLabel={m.launcher_lensFilterByFeed()}
@@ -563,7 +570,7 @@ const empty = $derived(
   {/if}
 
   <!-- Other (untyped fallback, full width) -->
-  {#if generic.length > 0}
+  {#if byEntityAll.generic.length > 0}
     {@const open = !collapsed.generic}
     <section class="card" data-testid="overview-section" data-entity="generic">
       <button class="sec-head" type="button" aria-expanded={open} onclick={() => toggle('generic')}>

@@ -51,19 +51,42 @@ function row(item: LensItem, host = 'github.com', feedName?: string): LensRow {
   return feedName !== undefined ? { item, host, feedName } : { item, host };
 }
 
-describe('applyLensFilter — empty filter short-circuits', () => {
-  const rows = [row(changeItem('o/a')), row(ticketItem('Pay'))];
+describe('applyLensFilter — absent axes short-circuit, explicit [] excludes', () => {
+  const rows = [row(changeItem('o/a')), row(ticketItem('Pay')), row(articleItem())];
+
   test('empty object returns same reference', () => {
     expect(applyLensFilter(rows, {})).toBe(rows);
   });
-  test('all empty arrays returns same reference', () => {
-    expect(applyLensFilter(rows, { entities: [], repos: [], projects: [], feeds: [] })).toBe(rows);
+
+  test('explicit repos: [] excludes every Change while leaving other axes untouched', () => {
+    const result = applyLensFilter(rows, { repos: [] });
+    expect(result).toHaveLength(2);
+    expect(result.some((r) => r.item.change)).toBe(false);
+    expect(result.some((r) => r.item.ticket)).toBe(true);
   });
-  test('empty entities array with populated repos still applies the filter', () => {
+
+  test('explicit projects: [] excludes every Ticket while leaving other axes untouched', () => {
+    const result = applyLensFilter(rows, { projects: [] });
+    expect(result).toHaveLength(2);
+    expect(result.some((r) => r.item.ticket)).toBe(false);
+    expect(result.some((r) => r.item.change)).toBe(true);
+  });
+
+  test('explicit feeds: [] excludes every Article while leaving other axes untouched', () => {
+    const result = applyLensFilter(rows, { feeds: [] });
+    expect(result).toHaveLength(2);
+    expect(result.some((r) => r.item.publishedAt !== undefined)).toBe(false);
+    expect(result.some((r) => r.item.change)).toBe(true);
+  });
+
+  test('explicit entities: [] excludes every row', () => {
+    expect(applyLensFilter(rows, { entities: [] })).toHaveLength(0);
+  });
+
+  test('explicit empty entities array with populated repos still applies both', () => {
     const result = applyLensFilter(rows, { entities: [], repos: ['github.com/o/a'] });
-    // entities empty → all types pass; repos filters Changes
-    expect(result).toHaveLength(2); // ticket also passes (no repo axis for tickets)
-    expect(result.some((r) => r.item.change?.repo === 'o/a')).toBe(true);
+    // entities: [] excludes everything regardless of the repos axis
+    expect(result).toHaveLength(0);
   });
 });
 

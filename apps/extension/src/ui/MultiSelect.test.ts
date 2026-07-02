@@ -3,12 +3,20 @@ import { tick } from 'svelte';
 import { describe, expect, test, vi } from 'vitest';
 import MultiSelectHarness from './MultiSelect.test.harness.svelte';
 
+// Dropdown-mode popover content is portaled to `document.body` (bits-ui
+// `Popover.Portal`, fix-lens-scope-filter-clear-semantics) — NOT a descendant of
+// the render `container` — so every popover-internal query below searches
+// `container.ownerDocument.body` instead. The trigger itself stays inside
+// `container`, which is a subset of `body`, so the same helper works for both.
+function body(container: HTMLElement): HTMLElement {
+  return container.ownerDocument.body;
+}
 function trigger(container: HTMLElement): HTMLButtonElement {
-  return container.querySelector('[data-testid="multi-select"]') as HTMLButtonElement;
+  return body(container).querySelector('[data-testid="multi-select"]') as HTMLButtonElement;
 }
 function options(container: HTMLElement): HTMLButtonElement[] {
   return [
-    ...container.querySelectorAll('[data-testid="multi-select-option"]'),
+    ...body(container).querySelectorAll('[data-testid="multi-select-option"]'),
   ] as HTMLButtonElement[];
 }
 function byValue(container: HTMLElement, value: string): HTMLButtonElement {
@@ -33,9 +41,9 @@ describe('MultiSelect', () => {
     expect(options(container)).toHaveLength(0);
     await fireEvent.click(trigger(container));
     expect(trigger(container).getAttribute('aria-expanded')).toBe('true');
-    expect(container.querySelector('[role="listbox"]')?.getAttribute('aria-multiselectable')).toBe(
-      'true',
-    );
+    expect(
+      body(container).querySelector('[role="listbox"]')?.getAttribute('aria-multiselectable'),
+    ).toBe('true');
     expect(options(container)).toHaveLength(3);
   });
 
@@ -76,7 +84,7 @@ describe('MultiSelect', () => {
       props: { values: ['hn'], onchange },
     });
     await fireEvent.click(trigger(container));
-    const clear = container.querySelector(
+    const clear = body(container).querySelector(
       '[data-testid="multi-select-clear"]',
     ) as HTMLButtonElement;
     expect(clear).not.toBeNull();
@@ -85,7 +93,7 @@ describe('MultiSelect', () => {
 
     await rerender({ values: [], onchange });
     await fireEvent.click(trigger(container));
-    expect(container.querySelector('[data-testid="multi-select-clear"]')).toBeNull();
+    expect(body(container).querySelector('[data-testid="multi-select-clear"]')).toBeNull();
   });
 
   test('a disabled option is not selectable', async () => {
@@ -106,7 +114,7 @@ describe('MultiSelect', () => {
 
   const many = Array.from({ length: 10 }, (_, i) => ({ value: `f${i}`, label: `Feed ${i}` }));
   const search = (c: HTMLElement) =>
-    c.querySelector('[data-testid="multi-select-search"]') as HTMLInputElement | null;
+    body(c).querySelector('[data-testid="multi-select-search"]') as HTMLInputElement | null;
 
   test('no search field renders at or below the threshold', async () => {
     const { container } = render(MultiSelectHarness, { props: {} }); // 3 options, threshold 8
@@ -158,7 +166,7 @@ describe('MultiSelect', () => {
   });
 
   const selectAllBtn = (c: HTMLElement) =>
-    c.querySelector('[data-testid="multi-select-all"]') as HTMLButtonElement | null;
+    body(c).querySelector('[data-testid="multi-select-all"]') as HTMLButtonElement | null;
 
   test('Select all appears only while not every option is selected, and picks all', async () => {
     const onchange = vi.fn();

@@ -348,6 +348,7 @@
   "launcher_lensAllProjects": "すべてのプロジェクト",
   "launcher_lensAllFeeds": "すべてのフィード",
   "launcher_lensScopeSelected": "{count} 件選択中",
+  "launcher_lensNoneSelected": "選択なし",
   "launcher_lensScopeSearch": "検索…",
   "sidebar_lensRoleAuthored": "作成済み",
   "sidebar_lensRoleAssigned": "担当",

@@ -1341,9 +1341,13 @@ export class LunmaStore {
     node.hideRead = hideRead;
   }
 
-  /** Set or clear a lens's persisted view filter (lens-view-filters). An empty
-   * filter (`{}` or every axis empty) clears the field so persisted state stays
-   * canonical. */
+  /** Set or clear a lens's persisted view filter (lens-view-filters). Only a
+   * filter with every axis ABSENT (`{}`, or a key simply not set) clears the
+   * field so persisted state stays canonical — that's the genuinely-unfiltered
+   * state. An axis present as an explicit `[]` is a real constraint ("matches
+   * nothing on that axis", fix-lens-scope-filter-clear-semantics) and is
+   * persisted as-is, not collapsed away: `{ feeds: [] }` (e.g. from Clear) must
+   * survive persistence distinct from an absent `feeds` key. */
   setLensFilter(folderId: FolderId, filter: LensFilter): void {
     const node = this.findLensAnySpace(folderId);
     if (!node) {
@@ -1351,10 +1355,10 @@ export class LunmaStore {
       return;
     }
     const isEmpty =
-      (filter.entities?.length ?? 0) === 0 &&
-      (filter.repos?.length ?? 0) === 0 &&
-      (filter.projects?.length ?? 0) === 0 &&
-      (filter.feeds?.length ?? 0) === 0;
+      filter.entities === undefined &&
+      filter.repos === undefined &&
+      filter.projects === undefined &&
+      filter.feeds === undefined;
     if (isEmpty) {
       delete node.filter;
     } else {
