@@ -81,7 +81,7 @@
       lint:styles, verify:catalog, vitest run) and confirm it passes. — Passed
       (also ran `pnpm verify` at the workspace root: both `@lunma/extension`
       and `@lunma/site` green, 2886 + 23 tests passing).
-- [ ] 4.2 Manually verify (per the `verify` skill, or manual load-unpacked
+- [x] 4.2 Manually verify (per the `verify` skill, or manual load-unpacked
       testing) that opening a URL already open in the active Space from
       outside Chrome, via middle-click, via `target="_blank"`, via
       `window.open`, and via "open in new window" all focus the existing tab
