@@ -351,6 +351,195 @@ describe('reconcileTabGroupsOnBoot — materialization', () => {
   });
 });
 
+describe('reconcileTabGroupsOnBoot — untracked-group protection (preserve-user-tab-groups)', () => {
+  test('the stray-sweep skips a bound member held by an untracked group', async () => {
+    const store = makeStore();
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 77, tempTabIds: [17], tempTabTitles: {} },
+    };
+    // Bound tab 40, owned by "work", currently sits in the user's untracked group 55.
+    store.state.savedTabs['st-1'] = {
+      id: 'st-1',
+      spaceId: 'work',
+      title: 'X',
+      originalURL: 'https://x/',
+      currentURL: 'https://x/',
+    };
+    store.state.tabBindings['st-1'] = { 100: 40 };
+    for (const id of [17, 40]) store.state.liveTabsById[id] = live(id, 100);
+    chrome.addGroup({ id: 77, windowId: 100, collapsed: false, title: 'Work', color: 'blue' });
+    chrome.addTab({ id: 17, windowId: 100, groupId: -1 }); // stray, ungrouped
+    chrome.addGroup({ id: 55, windowId: 100, collapsed: false, title: 'Mine', color: 'orange' });
+    chrome.addTab({ id: 40, windowId: 100, groupId: 55 });
+
+    await reconcileTabGroupsOnBoot(store);
+
+    // Ungrouped member is swept in; the untracked-group member is left alone.
+    expect(chrome.tabs.get(17)?.groupId).toBe(77);
+    expect(chrome.tabs.get(40)?.groupId).toBe(55);
+    expect(chrome.groups.get(55)?.title).toBe('Mine'); // never retitled
+  });
+
+  test('a member currently in another TRACKED group is still swept', async () => {
+    const store = makeStore();
+    store.state.spaces.push(
+      { id: 'work', name: 'Work', color: 'blue', icon: 'star' },
+      { id: 'side', name: 'Side', color: 'red', icon: 'star' },
+    );
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 77, tempTabIds: [18], tempTabTitles: {} },
+      side: { spaceId: 'side', groupId: 9, tempTabIds: [], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[18] = live(18, 100);
+    chrome.addGroup({ id: 77, windowId: 100, collapsed: false, title: 'Work', color: 'blue' });
+    chrome.addGroup({ id: 9, windowId: 100, collapsed: false, title: 'Side', color: 'red' });
+    // Tab 18 is a "work" temp tab but currently sits in "side"'s TRACKED group.
+    chrome.addTab({ id: 18, windowId: 100, groupId: 9 });
+
+    await reconcileTabGroupsOnBoot(store);
+
+    expect(chrome.tabs.get(18)?.groupId).toBe(77); // swept into work's group, not excluded
+  });
+
+  test('a home tab inside an untracked group is not swept, while an ungrouped home tab is', async () => {
+    const store = makeStore();
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 77, tempTabIds: [], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[50] = {
+      tabId: 50,
+      windowId: 100,
+      title: '',
+      url: 'chrome://newtab/',
+      active: true,
+      status: 'complete',
+    };
+    store.state.liveTabsById[51] = {
+      tabId: 51,
+      windowId: 100,
+      title: '',
+      url: 'chrome://newtab/',
+      active: false,
+      status: 'complete',
+    };
+    chrome.addGroup({ id: 77, windowId: 100, collapsed: false, title: 'Work', color: 'blue' });
+    chrome.addTab({ id: 50, windowId: 100, groupId: -1, url: 'chrome://newtab/' }); // ungrouped home
+    chrome.addGroup({ id: 55, windowId: 100, collapsed: false, title: 'Mine', color: 'orange' });
+    chrome.addTab({ id: 51, windowId: 100, groupId: 55, url: 'chrome://newtab/' }); // home in user's group
+
+    await reconcileTabGroupsOnBoot(store);
+
+    expect(chrome.tabs.get(50)?.groupId).toBe(77); // ungrouped home tab swept in
+    expect(chrome.tabs.get(51)?.groupId).toBe(55); // home tab in user's group left alone
+  });
+
+  test('release strips a lingering temp tab in an untracked group after adoption', async () => {
+    const store = makeStore();
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.activeSpaceByWindow[100] = 'work';
+    // Stale state: tab 30 is still listed as a "work" temp tab, but it now lives
+    // in the user's untracked group 55 (e.g. a missed mid-session release event).
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 77, tempTabIds: [30], tempTabTitles: { 30: 'Mine' } },
+    };
+    store.state.liveTabsById[30] = live(30, 100);
+    chrome.addGroup({ id: 77, windowId: 100, collapsed: false, title: 'Work', color: 'blue' });
+    chrome.addGroup({ id: 55, windowId: 100, collapsed: false, title: 'Mine', color: 'orange' });
+    chrome.addTab({ id: 30, windowId: 100, groupId: 55 });
+
+    await reconcileTabGroupsOnBoot(store);
+
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([]);
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabTitles).toEqual({});
+    expect(chrome.tabs.get(30)?.groupId).toBe(55); // never moved
+  });
+
+  test('release runs AFTER adoption — a restored tracked group keeps its members', async () => {
+    const store = makeStore();
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.activeSpaceByWindow[100] = 'work';
+    // Persisted groupId 12 is stale (session-scoped ids reset across "restart");
+    // Chrome restored the same tabs under a NEW group id, 88.
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 12, tempTabIds: [17, 22], tempTabTitles: {} },
+    };
+    for (const id of [17, 22]) store.state.liveTabsById[id] = live(id, 100);
+    chrome.addGroup({ id: 88, windowId: 100, collapsed: false });
+    chrome.addTab({ id: 17, windowId: 100, groupId: 88 });
+    chrome.addTab({ id: 22, windowId: 100, groupId: 88 });
+
+    await reconcileTabGroupsOnBoot(store);
+
+    // Adoption re-binds 88 to "work" on tab-overlap BEFORE release runs, so
+    // release must not treat 88 as untracked and must not strip 17/22.
+    expect(store.state.spaceInstancesByWindow[100]?.work?.groupId).toBe(88);
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([17, 22]);
+  });
+
+  test('full-pass repro: a user group of formerly-tracked tabs survives untouched alongside the Space group', async () => {
+    const store = makeStore();
+    store.state.spaces.push({ id: 'work', name: 'Default', color: 'blue', icon: 'star' });
+    store.state.activeSpaceByWindow[100] = 'work';
+    // The mid-session release already ran (D6) — 30/31 are no longer temp tabs —
+    // but the Space still has its own live group with other tabs.
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 77, tempTabIds: [17], tempTabTitles: {} },
+    };
+    for (const id of [17, 30, 31]) store.state.liveTabsById[id] = live(id, 100);
+    chrome.addGroup({ id: 77, windowId: 100, collapsed: false, title: 'Default', color: 'blue' });
+    chrome.addTab({ id: 17, windowId: 100, groupId: 77 });
+    // The user's own group, same title/colour as the Space's — worst-case collision.
+    chrome.addGroup({ id: 55, windowId: 100, collapsed: false, title: 'Default', color: 'blue' });
+    chrome.addTab({ id: 30, windowId: 100, groupId: 55 });
+    chrome.addTab({ id: 31, windowId: 100, groupId: 55 });
+
+    await reconcileTabGroupsOnBoot(store);
+
+    // Both groups survive, each with its own tabs intact.
+    const groupIds = [...chrome.groups.keys()];
+    expect(groupIds).toContain(77);
+    expect(groupIds).toContain(55);
+    expect(chrome.tabs.get(17)?.groupId).toBe(77);
+    expect(chrome.tabs.get(30)?.groupId).toBe(55);
+    expect(chrome.tabs.get(31)?.groupId).toBe(55);
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([17]);
+  });
+
+  test('a fresh-install same-title group fold is unaffected — release/sweep exclusion are skipped', async () => {
+    // Regression guard (design.md D3 "Implementation-discovered refinement"):
+    // conversion folds two same-titled groups into ONE Space and assigns BOTH
+    // groups' tabs into its tempTabIds; adoption's claim-guard binds only the
+    // first group's id. Without the fresh-install exemption, the second
+    // group would be wrongly treated as the user's own and its tabs stripped
+    // instead of merged — regressing the pre-existing fold behaviour.
+    const store = makeStore();
+    // No persisted Spaces — freshInstall.
+    for (const id of [17, 30]) store.state.liveTabsById[id] = live(id, 100);
+    chrome.addGroup({ id: 77, windowId: 100, collapsed: false, title: 'Work', color: 'blue' });
+    chrome.addGroup({ id: 88, windowId: 100, collapsed: false, title: 'Work', color: 'red' });
+    chrome.addTab({ id: 17, windowId: 100, groupId: 77, active: true });
+    chrome.addTab({ id: 30, windowId: 100, groupId: 88 });
+
+    await reconcileTabGroupsOnBoot(store, true);
+
+    const work = store.state.spaces.find((s) => s.name === 'Work');
+    expect(work).toBeDefined();
+    // Both tabs end up in a single live Chrome group for "Work" — merged, not
+    // stripped or left split across two groups.
+    const finalGroupId = chrome.tabs.get(17)?.groupId;
+    expect(finalGroupId).toBeGreaterThan(0);
+    expect(chrome.tabs.get(30)?.groupId).toBe(finalGroupId);
+    expect(
+      store.state.spaceInstancesByWindow[100]?.[work?.id ?? '']?.tempTabIds.slice().sort(),
+    ).toEqual([17, 30]);
+  });
+});
+
 describe('fromGroupColor', () => {
   test("maps Chrome 'grey' to Lunma 'gray'", () => {
     expect(fromGroupColor('grey')).toBe('gray');

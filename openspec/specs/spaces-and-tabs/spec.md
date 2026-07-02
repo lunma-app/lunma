@@ -878,7 +878,7 @@ The store SHALL expose `syncLiveTab(tab)` (insert/update from `onCreated` / `onU
 
 ### Requirement: Boot adoption of already-open tabs into the temporary list
 
-At service-worker boot, after windows are seeded and before listener registration, Lunma SHALL adopt the tabs already open in each window into that window's active Space as temporary tabs, so the Temporary list reflects what the user already has open rather than staying empty until the next Space switch. For each window with an active Space, Lunma SHALL ensure a `spaceInstance` exists (via `store.ensureSpaceInstance(windowId)`, which creates an empty instance without altering `lastActivatedSpaceId` or `activeSpaceByWindow`) and SHALL run each open tab through `store.onTabCreated`, which skips tabs already bound to a saved tab (rebound earlier in boot) and tabs already tracked. The pass SHALL be idempotent across boots and SHALL reuse the same `chrome.tabs.query({})` result used to rebuild `liveTabsById`.
+At service-worker boot, after windows are seeded and before listener registration, Lunma SHALL adopt the tabs already open in each window into that window's active Space as temporary tabs, so the Temporary list reflects what the user already has open rather than staying empty until the next Space switch. For each window with an active Space, Lunma SHALL ensure a `spaceInstance` exists (via `store.ensureSpaceInstance(windowId)`, which creates an empty instance without altering `lastActivatedSpaceId` or `activeSpaceByWindow`) and SHALL run each open tab through `store.onTabCreated`, which skips tabs already bound to a saved tab (rebound earlier in boot) and tabs already tracked. A tab whose live Chrome `groupId` is ≥ 0 but maps to no Space instance in its window (a live **untracked** — user-created — group) SHALL NOT be adopted: it is skipped like a home tab and stays untracked, so seeding never confiscates a tab out of the user's own group (`ensureSpaceInstance` still runs for its window). The pass SHALL be idempotent across boots and SHALL reuse the same `chrome.tabs.query({})` result used to rebuild `liveTabsById`.
 
 #### Scenario: Existing tabs are adopted as temp tabs at boot
 
@@ -891,6 +891,13 @@ At service-worker boot, after windows are seeded and before listener registratio
 - **GIVEN** tab 17 in window 100 is bound to a saved tab and tab 22 is not
 - **WHEN** boot seeding runs
 - **THEN** `state.spaceInstancesByWindow[100].tempTabIds` SHALL contain 22 and SHALL NOT contain 17
+
+#### Scenario: A tab in a live untracked group is not adopted
+
+- **GIVEN** window 100's active Space is `work`, and open tab 42's live `groupId` is `55`, which no instance in window 100 records
+- **WHEN** boot seeding runs
+- **THEN** tab 42 SHALL NOT be added to any instance's `tempTabIds` (it stays untracked)
+- **AND** window 100 SHALL still get a `spaceInstance` for `work`
 
 #### Scenario: ensureSpaceInstance is a no-op without an active Space
 
@@ -1161,13 +1168,25 @@ A Space's **tab set in a window** (used to build / rebuild its group) SHALL be i
 
 ### Requirement: Boot reconciliation of tab groups
 
-On service-worker boot, after `seedExistingTabs` / `rebuildLiveTabs`, the coordinator boot path SHALL run a one-shot tab-group reconciliation (`reconcileTabGroupsOnBoot`) that **adopts** existing Chrome tab groups into Spaces, **materializes** any missing active-Space group, **ungroups** any global favorite Chrome restored still inside a group, and finally **cleans up** any empty Space left duplicate-named after the above steps. The pass SHALL run before the boot persist + broadcast so the broadcast carries the reconciled `groupId`s and the deduplicated `state.spaces`. Lunma SHALL keep being the source of truth — the pass NEVER deletes a non-empty Space, NEVER converts an untracked (user-created) group into a Space, and (during materialization) NEVER opens a tab or changes tab focus.
+On service-worker boot, after `seedExistingTabs` / `rebuildLiveTabs`, the coordinator boot path SHALL run a one-shot tab-group reconciliation (`reconcileTabGroupsOnBoot`) that **adopts** existing Chrome tab groups into Spaces, **releases** any temp tab held by a live untracked group, **materializes** any missing active-Space group, **ungroups** any global favorite Chrome restored still inside a group, and finally **cleans up** any empty Space left duplicate-named after the above steps. The pass SHALL run before the boot persist + broadcast so the broadcast carries the reconciled `groupId`s and the deduplicated `state.spaces`. Lunma SHALL keep being the source of truth — the pass NEVER deletes a non-empty Space, NEVER converts an untracked (user-created) group into a Space, NEVER moves a tab out of a live untracked group (the user's group keeps its tab membership, not just its identity), and (during materialization) NEVER opens a tab or changes tab focus. Step order SHALL be: convert (fresh install only) → adopt → release → materialize → ungroup-favorites → duplicate cleanup.
+
+**Fresh-install exemption for the release and untracked-group sweep exclusion.** On a boot that runs fresh-install conversion (see Requirement: Fresh-install conversion of Chrome groups into Spaces — `freshInstall` true AND at least one Chrome group exists), the release step and the untracked-group sweep exclusion (below) SHALL both be skipped entirely for that pass. Conversion claims EVERY existing Chrome group that boot (folding it into a Space or minting its own), so no group is "untracked" in the sense those steps mean; skipping preserves conversion's pre-existing group-folding behaviour, under which two same-title groups folded into one Space (see Requirement: Fresh-install conversion of Chrome groups into Spaces) are merged into a single live Chrome group by materialization exactly as before this capability's untracked-group protections existed. Outside a fresh-install-conversion boot (i.e. on every other boot — every restart or idle-unload wake after the first), both steps run as specified below.
+
+#### Scenario: The release step and sweep exclusion are skipped on a fresh-install conversion boot
+
+- **GIVEN** a fresh install where window 100 has two Chrome groups titled "Work" with different colours (see Requirement: Fresh-install conversion of Chrome groups into Spaces, "Same-name groups of different colours fold into one Space") — conversion folds both into one "Work" Space, assigning both groups' member tabs into that Space's `tempTabIds`, but adoption's claim-guard binds only the FIRST group's id as the instance's recorded `groupId`
+- **WHEN** the boot reconciliation runs
+- **THEN** the release step SHALL NOT run for this pass (neither group's tabs are stripped from `tempTabIds`)
+- **AND** materialization SHALL treat the second (unbound) group's tabs as ordinary stray members and merge them into the first group, exactly as it would with the untracked-group exclusion absent
+- **AND** the window SHALL end the pass with exactly ONE live Chrome group for "Work", holding every tab from both original groups
 
 **Adoption.** For each existing Chrome tab group in a window, the pass SHALL try to match it to one of that window's persisted Space instances via the pure `matchGroupToSpace(group, candidates)` function and, on a match, re-bind that instance's `groupId` to the live group id (`recordSpaceGroup`). Matching SHALL score **tab-membership overlap** between the group's current member tab ids and the instance's persisted `tempTabIds` first, and SHALL fall back to **persisted title + colour** (`group.title === space.name` and `group.color === toGroupColor(space.color)`) only to break a zero/tied overlap. Because Space names are unique (see Requirement: Space names are unique), the title fallback resolves to at most one Space. Ties after both signals SHALL break deterministically by `spaces[]` order. A group matching no Space (the user's own group) SHALL be left untouched — never adopted, never retitled. Adoption SHALL perform no `chrome.tabGroups` mutation (state writes only). A **global favorite** (`spaceId === null`) is never a Space instance, so it can never match a group here — its membership is reconciled by the favorite-ungroup step below, not by adoption.
 
 **Claim-guard (single binding per pass).** Within one adoption pass each Space SHALL be claimed by at most **one** group per window: once a Space has been adopted, it SHALL be removed from the candidate set for the window's remaining groups, so no two groups bind to one Space. Complementarily, `store.recordSpaceGroup(windowId, spaceId, groupId)` SHALL clear the `groupId` of any *other* instance in the same window that currently holds the incoming `groupId` (evicting a prior holder), so a single live `groupId` is never shared by two instances.
 
-**Materialization.** After adoption, for each window whose active Space has tabs open in the window but still has `groupId === -1`, the pass SHALL group that Space's window tab set into a new Chrome group, title + recolour it with the Space identity, and `recordSpaceGroup` the new id. It SHALL then collapse the window's other tracked groups (active group expanded) on a **best-effort** basis — a collapse that Chrome refuses (e.g. the restored active tab is inside another group) SHALL be skipped, not retried, and SHALL NOT abort the pass. A Space with no open tabs in the window SHALL be left groupless (a group cannot be empty).
+**Untracked-group tab release.** After adoption (so every Lunma group's restored id is re-bound and "untracked" is decided against live ids) and before materialization, the pass SHALL call the synchronous chrome-free store mutator `store.releaseTabsInUntrackedGroups(tabGroupById)`: for each window, every tab listed in any instance's `tempTabIds` whose live Chrome group (per `tabGroupById`, the boot tab→group map) is ≥ 0 and recorded by **no** instance in that window SHALL be removed from that instance's `tempTabIds` (and `tempTabTitles`). A tab living in the user's own group is the user's, not a Space's temporary tab — this keeps the sidebar honest and keeps stale `tempTabIds` overlap from mis-adopting the user's group on a later restart. Bound (saved) tab records SHALL NOT be modified. The step SHALL be state-only and idempotent.
+
+**Materialization.** After the release step, for each window whose active Space has tabs open in the window but still has `groupId === -1`, the pass SHALL group that Space's window tab set into a new Chrome group, title + recolour it with the Space identity, and `recordSpaceGroup` the new id. When the active Space already has a live group, any member tab not already in it SHALL be swept into it — but **only** members that are ungrouped, in the Space's own dead/stale group, or in another **tracked** group: a member whose current live group (per `tabGroupById`) is an untracked group (not in `trackedGroupIdsForWindow` for the window) SHALL be excluded from the sweep and from a fresh group's initial membership, and left where the user put it. This exclusion applies uniformly to the whole member set — the Space's temp + bound tabs AND every home tab in the window (a home tab held by a user's untracked group SHALL NOT be swept out of it). The pass SHALL then collapse the window's other tracked groups (active group expanded) on a **best-effort** basis — a collapse that Chrome refuses (e.g. the restored active tab is inside another group) SHALL be skipped, not retried, and SHALL NOT abort the pass. A Space with no open tabs in the window SHALL be left groupless (a group cannot be empty).
 
 **Favorite ungroup reconciliation.** After adoption and materialization, the pass SHALL iterate the global favorites — each saved-tab id in `faviconRow` (`savedTabs[id].spaceId === null`) — and, for each window where Chrome restored the favorite's per-window bound tab, look up that tab's group in the boot tab→group map (`tabGroupById`, the same map adoption read from the boot tabs query). When the favorite's bound tab is still grouped (`tabGroupById.get(tabId) >= 0`), the pass SHALL `chrome.tabs.ungroup(tabId)` it, so a favorite that Chrome restored inside its old group is made global again before the next Space switch could collapse it invisible. This is best-effort — a refusal SHALL be swallowed like the other boot group ops and SHALL NOT abort the pass — and bounded by favorite × window count. A favorite whose bound tab Chrome restored already ungrouped (`tabGroupById.get(tabId)` is `-1` or absent) is a no-op.
 
@@ -1187,12 +1206,44 @@ On service-worker boot, after `seedExistingTabs` / `rebuildLiveTabs`, the coordi
 - **THEN** the boot pass SHALL group 17 and 18 into a new Chrome group titled with "work"'s name + colour
 - **AND** `spaceInstancesByWindow[100]["work"].groupId` SHALL be the new group's id
 
-#### Scenario: An untracked user group is never adopted
+#### Scenario: An untracked user group is never adopted and never drained
 
 - **GIVEN** window 100 contains a Chrome group whose members overlap no Space instance's `tempTabIds` and whose title/colour match no Space
 - **WHEN** the boot reconciliation runs
 - **THEN** that group SHALL NOT be adopted, retitled, or recolored
 - **AND** no Space SHALL be created from it
+- **AND** none of its member tabs SHALL be moved into any Space's group (the group survives the pass with its tab membership intact)
+
+#### Scenario: A user's native group built from formerly-tracked tabs survives a restart
+
+- **GIVEN** window 100's active Space "Default" tracked temp tabs 30 and 31, the user grouped them into their own native group (any title/colour — including "Default" in the Space group's own colour), the mid-session `tabs.onUpdated` reconciliation (see Requirement: Mid-session tab-to-group moves reconcile ownership) already released both tabs from "Default"'s `tempTabIds` before the browser is restarted with session restore
+- **WHEN** the boot reconciliation runs
+- **THEN** the user's restored group SHALL still exist after the pass, holding tabs 30 and 31
+- **AND** tabs 30 and 31 SHALL NOT be listed in any instance's `tempTabIds`
+- **AND** the window SHALL end the pass with BOTH groups — the Space's and the user's
+
+<!-- Residual risk (see design.md D2b): if the mid-session release event is lost immediately before a full restart (a narrow race — the SW is killed before its queue drains, not a mid-session idle-unload wake), tabs 30/31 may still be listed in "Default"'s persisted `tempTabIds` at boot, and `matchGroupToSpace`'s overlap scoring could adopt the user's restored group into "Default" instead of leaving it untracked. This is a documented, accepted limitation, not a guarantee this scenario covers. -->
+
+#### Scenario: A temp tab held by an untracked group is released at boot
+
+- **GIVEN** after adoption, window 100's Space "work" `tempTabIds` still lists tab 30, whose live Chrome group is `55` and no instance in window 100 records `55`
+- **WHEN** the release step (`store.releaseTabsInUntrackedGroups(tabGroupById)`) runs
+- **THEN** tab 30 SHALL be removed from `spaceInstancesByWindow[100]["work"].tempTabIds` (and its `tempTabTitles` entry dropped)
+- **AND** a second run of the step SHALL make no further change
+
+#### Scenario: The stray-sweep skips members held by an untracked group
+
+- **GIVEN** window 100's active Space "work" has live group `77`, and its member set includes bound tab 40 whose current live group is untracked group `55`
+- **WHEN** materialization reconciles group `77`
+- **THEN** tab 40 SHALL NOT be moved into group `77` (it stays in group `55`)
+- **AND** ungrouped members and members in dead or other tracked groups SHALL still be swept into `77`
+
+#### Scenario: A home tab inside an untracked group is not swept
+
+- **GIVEN** window 100's active Space "work" has live group `77`, and a home tab (Lunma new-tab page) sits inside untracked group `55`
+- **WHEN** materialization reconciles group `77`
+- **THEN** that home tab SHALL NOT be moved into group `77`
+- **AND** home tabs that are ungrouped SHALL still be swept into `77`
 
 #### Scenario: Boot never opens a tab or steals focus
 
@@ -1976,9 +2027,9 @@ and SHALL NOT be valid drop positions.
 
 On service-worker boot, Lunma SHALL assign each open tab to the correct Space instance by its **live Chrome group membership** and SHALL heal any pre-existing cross-instance overlap, so the per-window ownership-uniqueness invariant (see "Temporary tabs are per-window") holds after boot even when the persisted state violated it.
 
-**Group-aware seeding.** When adopting the tabs already open at boot (`seedExistingTabs` over `chrome.tabs.query`), each open, unbound, non-home tab SHALL be seeded into the Space instance whose recorded `groupId` equals the tab's live Chrome `groupId`. A tab that is ungrouped, or whose Chrome group maps to no Space instance, SHALL fall back to the window's active Space instance (the prior behavior). Seeding SHALL go through the per-window ownership guard, so a tab is seeded into exactly one instance.
+**Group-aware seeding.** When adopting the tabs already open at boot (`seedExistingTabs` over `chrome.tabs.query`), each open, unbound, non-home tab SHALL be seeded into the Space instance whose recorded `groupId` equals the tab's live Chrome `groupId`. A tab that is **ungrouped** SHALL fall back to the window's active Space instance (the prior behavior). A tab whose live Chrome group maps to **no** Space instance in its window SHALL NOT be seeded at all — it is user-owned and stays untracked (see Requirement: Boot adoption of already-open tabs into the temporary list). Seeding SHALL go through the per-window ownership guard, so a tab is seeded into at most one instance.
 
-**Overlap heal.** After seeding and before the boot broadcast, Lunma SHALL reconcile `tempTabIds` across the instances of each window: any tab id present in more than one instance SHALL be kept in its single correct owner — the instance whose `groupId` matches the tab's live Chrome group, else the active instance — and removed from the rest. The reconciliation SHALL be idempotent (a second run finds no duplicates) and SHALL mutate state only (the existing boot broadcast carries the healed state).
+**Overlap heal.** After seeding and before the boot broadcast, Lunma SHALL reconcile `tempTabIds` across the instances of each window: any tab id present in more than one instance SHALL be kept in its single correct owner — the instance whose `groupId` matches the tab's live Chrome group, else the active instance, else (when neither of those holds it) the first instance found to hold it, so the tab is never orphaned — and removed from the rest. The reconciliation SHALL be idempotent (a second run finds no duplicates) and SHALL mutate state only (the existing boot broadcast carries the healed state).
 
 #### Scenario: A grouped tab is seeded into its own Space, not the active one
 
@@ -1987,6 +2038,12 @@ On service-worker boot, Lunma SHALL assign each open tab to the correct Space in
 - **THEN** tab 42 SHALL be seeded into `spaceInstancesByWindow[100]["side"].tempTabIds`
 - **AND** tab 42 SHALL NOT be added to the active "work" instance
 
+#### Scenario: A tab in an unmapped live group is left untracked at seeding
+
+- **GIVEN** at boot window 100's active Space is "work" and open tab 43's live Chrome group is `55`, which no instance in window 100 records
+- **WHEN** `seedExistingTabs` runs
+- **THEN** tab 43 SHALL NOT be seeded into any instance (it SHALL NOT fall back to the active "work" instance)
+
 #### Scenario: Boot heals a tab listed in multiple instances
 
 - **GIVEN** persisted state has tab 42 in `tempTabIds` of both "work" and "side" in window 100, and tab 42's live Chrome group resolves to "side"'s `groupId`
@@ -1994,6 +2051,47 @@ On service-worker boot, Lunma SHALL assign each open tab to the correct Space in
 - **THEN** tab 42 SHALL remain in `spaceInstancesByWindow[100]["side"].tempTabIds`
 - **AND** tab 42 SHALL be removed from `spaceInstancesByWindow[100]["work"].tempTabIds`
 - **AND** a second reconciliation pass SHALL make no further change
+
+#### Scenario: Boot heals a tab owned by neither its grouped nor the active Space by keeping the first holder
+
+- **GIVEN** persisted state has tab 50 in `tempTabIds` of both "side" and "reading" in window 100, window 100's active Space is "work" (neither "side" nor "reading"), and tab 50's live Chrome group resolves to no instance in window 100
+- **WHEN** boot tab-ownership reconciliation runs
+- **THEN** tab 50 SHALL be kept in whichever of "side"/"reading" holds it first (iteration order) and removed from the other, rather than being dropped from both
+
+### Requirement: Mid-session tab-to-group moves reconcile ownership
+
+When a tab's Chrome group membership changes mid-session (`tabs.onUpdated` with a `changeInfo.groupId`), Lunma SHALL reconcile the tab's ownership to follow its live group, via the synchronous chrome-free store mutator `store.onTabGroupIdChanged(tabId, groupId)` called from the `tabs.onUpdated` handler:
+
+- **Moved into a tracked group** (the new `groupId` ≥ 0 is recorded by Space X's instance in the tab's window): the tab SHALL be assigned to Space X (`assignSpaceTabs`-semantics — moved out of any other instance's `tempTabIds` in the window; bound tabs are skipped). An assignment to a Space that already solely owns the tab SHALL be a no-op (no reorder, no churn).
+- **Moved into an untracked group** (the new `groupId` ≥ 0 is recorded by no instance in the tab's window): the tab SHALL be **released** — removed from every instance's `tempTabIds` (and `tempTabTitles`) in its window. The tab is the user's; the Temporary list stops listing it. Its bound (saved-tab) record, if any, SHALL NOT be modified.
+- **Ungrouped** (the new `groupId` is `-1`): no ownership change. Lunma itself ungroups tabs in normal flows (favorite ungroup, Space deletion, group rebuilds); an ungrouped tab's ownership is handled by the existing paths.
+
+The mutator SHALL resolve the tab's window from `state.liveTabsById[tabId]?.windowId`; when the tab is not (yet) mirrored there, the mutator SHALL be a no-op (there is no window-scoped instance set to reconcile). The mutator SHALL be state-only (no Chrome calls) and idempotent for a repeated event with the same `groupId`.
+
+#### Scenario: A temp tab moved into a user's own group is un-tracked
+
+- **GIVEN** tab 30 is a temporary tab of window 100's Space "work", and the user moves it into their own native group `55` (recorded by no instance in window 100)
+- **WHEN** `tabs.onUpdated` fires with `changeInfo.groupId: 55` and the handler calls `store.onTabGroupIdChanged(30, 55)`
+- **THEN** tab 30 SHALL be removed from `spaceInstancesByWindow[100]["work"].tempTabIds` (and its `tempTabTitles` entry dropped)
+- **AND** no Space SHALL be created, renamed, or deleted
+
+#### Scenario: A tab moved into a tracked group is reassigned to that Space
+
+- **GIVEN** window 100's Space "side" has live group `22`, and tab 30 is a temporary tab of Space "work" in window 100
+- **WHEN** `tabs.onUpdated` fires with `changeInfo.groupId: 22`
+- **THEN** tab 30 SHALL move to `spaceInstancesByWindow[100]["side"].tempTabIds` and SHALL be removed from "work"'s
+
+#### Scenario: A groupId change to -1 does not release the tab
+
+- **GIVEN** tab 30 is a temporary tab of window 100's Space "work" and Lunma ungroups it during one of its own flows
+- **WHEN** `tabs.onUpdated` fires with `changeInfo.groupId: -1`
+- **THEN** tab 30 SHALL remain in `spaceInstancesByWindow[100]["work"].tempTabIds`
+
+#### Scenario: A Lunma-initiated regroup is a no-op for an existing member
+
+- **GIVEN** Lunma rebuilt Space "work"'s group as `77` in window 100 and recorded it (`recordSpaceGroup`) before the queued tab events drain, and tab 30 is already solely owned by "work"
+- **WHEN** the echoed `tabs.onUpdated` fires with `changeInfo.groupId: 77`
+- **THEN** `store.onTabGroupIdChanged(30, 77)` SHALL leave "work"'s `tempTabIds` unchanged (same membership, same order)
 
 ### Requirement: Global favicon grid in the sidebar
 
@@ -2155,11 +2253,12 @@ navigates a home tab to a real URL it ceases to be a home tab.
 - **THEN** the boot pass SHALL still create the window's active-Space instance (so later-created tabs are adopted + grouped — the home tab being the only tab SHALL NOT leave the Space untracked)
 - **AND** the boot reconciliation SHALL group that lone home tab into the active Space (the active Space's group materializes from its home tab), rather than leaving an ungrouped home tab
 
-#### Scenario: Boot groups ALL home tabs in the window (none orphaned)
+#### Scenario: Boot groups ALL home tabs in the window except those in a user's group
 
 - **GIVEN** at boot a window with more than one home tab
-- **THEN** the boot reconciliation SHALL group EVERY home tab in the window into the active Space — none SHALL be left ungrouped outside the group
-- **AND** a stray home tab present alongside an already-live active-Space group SHALL be swept into that group
+- **THEN** the boot reconciliation SHALL group every home tab in the window that is ungrouped, in a dead group, or in another **tracked** group into the active Space — none SHALL be left ungrouped outside the group
+- **AND** a stray ungrouped home tab present alongside an already-live active-Space group SHALL be swept into that group
+- **AND** a home tab whose current live group is a live **untracked** (user-created) group SHALL be left in that group, not swept (see Requirement: Boot reconciliation of tab groups)
 
 #### Scenario: A stale persisted group id still materializes at boot
 

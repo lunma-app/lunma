@@ -29,7 +29,13 @@ export function tabCreated(tabId: number, windowId: number, url?: string): Pendi
 
 export function tabUpdated(
   tabId: number,
-  changeInfo: { url?: string; status?: string; title?: string; favIconUrl?: string },
+  changeInfo: {
+    url?: string;
+    status?: string;
+    title?: string;
+    favIconUrl?: string;
+    groupId?: number;
+  },
 ): PendingEvent {
   return {
     source: 'chrome',

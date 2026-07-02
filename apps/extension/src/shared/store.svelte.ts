@@ -403,6 +403,103 @@ export class LunmaStore {
   }
 
   /**
+   * Boot release (preserve-user-tab-groups D5): strip from every instance's
+   * `tempTabIds` (and `tempTabTitles`) any tab whose live Chrome group (per
+   * `tabGroupById`, the same boot tab→group map `reconcileTabGroupsOnBoot`
+   * already built) is a **live untracked** group — a group id ≥ 0 that no
+   * instance in the tab's window records as its `groupId`. A tab sitting in the
+   * user's own group is the user's, not a Space's temporary tab; this keeps
+   * `tempTabIds` honest and keeps stale overlap from mis-adopting the user's
+   * group on a later restart. Bound (saved) tab records are untouched — this
+   * only ever removes ids from `tempTabIds`. Called from
+   * `reconcileTabGroupsOnBoot` AFTER `adoptExistingGroups` (so restored tracked
+   * groups have already re-bound their live ids) and before materialization —
+   * but the CALLER skips this call entirely on a boot pass that just ran
+   * fresh-install conversion (see `reconcileTabGroupsOnBoot`): on that one-time
+   * pass every existing Chrome group is claimed by `convertGroupsToSpaces`
+   * (folded into a Space or minted its own), so there is no "the user's own,
+   * Lunma has never seen it" group to protect — and a claim-guard "loser"
+   * sibling from a same-title fold would otherwise be wrongly treated as
+   * foreign and its already-legitimately-assigned tabs stripped. State-only and
+   * idempotent: a second pass with the same map finds nothing left to release.
+   */
+  releaseTabsInUntrackedGroups(tabGroupById: ReadonlyMap<TabId, number>): void {
+    for (const windowMap of Object.values(this.state.spaceInstancesByWindow)) {
+      if (!windowMap) continue;
+      const trackedGroupIds = new Set<number>();
+      for (const instance of Object.values(windowMap)) {
+        if (instance && instance.groupId >= 0) trackedGroupIds.add(instance.groupId);
+      }
+      for (const instance of Object.values(windowMap)) {
+        if (!instance || instance.tempTabIds.length === 0) continue;
+        instance.tempTabIds = instance.tempTabIds.filter((tabId) => {
+          const liveGroup = tabGroupById.get(tabId) ?? -1;
+          const untracked = liveGroup >= 0 && !trackedGroupIds.has(liveGroup);
+          if (untracked) delete instance.tempTabTitles[tabId];
+          return !untracked;
+        });
+      }
+    }
+  }
+
+  /**
+   * Mid-session ownership follow (preserve-user-tab-groups D6): reconcile a
+   * tab's Space ownership after its live Chrome `groupId` changes
+   * (`tabs.onUpdated`'s `changeInfo.groupId`). Resolves the tab's window from
+   * `liveTabsById` (the mirror every other window-scoped mutator here reads);
+   * a tab not yet mirrored is a no-op — there is no window-scoped instance set
+   * to reconcile.
+   *
+   *  - `groupId` ≥ 0 and **tracked** by some instance in the tab's window →
+   *    the tab is assigned to that Space (`assignSpaceTabs`). Skipped
+   *    (no-op, no reorder) when the target instance already SOLELY owns the
+   *    tab — `assignSpaceTabs` itself always moves its `incoming` ids to the
+   *    front, so this guard is what keeps an already-owned tab's position
+   *    stable across repeated/echoed events.
+   *  - `groupId` ≥ 0 and **untracked** (no instance in the window records it) →
+   *    the tab is released from every instance's `tempTabIds`/`tempTabTitles`
+   *    in its window: the user took the tab into their own group, so the
+   *    sidebar stops listing it. Its bound (saved-tab) record, if any, is left
+   *    untouched.
+   *  - `groupId === -1` (ungrouped) → no-op. Lunma itself ungroups tabs in
+   *    normal flows (favorite ungroup, Space deletion, group rebuilds); an
+   *    ungrouped tab's ownership is handled by those existing paths.
+   *
+   * State-only and idempotent for a repeated event with the same `groupId`.
+   */
+  onTabGroupIdChanged(tabId: TabId, groupId: number): void {
+    const windowId = this.state.liveTabsById[tabId]?.windowId;
+    if (windowId === undefined) return;
+    if (groupId < 0) return; // ungrouped: handled by existing paths, not here
+    const windowMap = this.state.spaceInstancesByWindow[windowId];
+    if (!windowMap) return;
+    let trackedSpaceId: SpaceId | undefined;
+    for (const [spaceId, instance] of Object.entries(windowMap)) {
+      if (instance && instance.groupId === groupId) {
+        trackedSpaceId = spaceId;
+        break;
+      }
+    }
+    if (trackedSpaceId !== undefined) {
+      const alreadySoleOwner =
+        (windowMap[trackedSpaceId]?.tempTabIds.includes(tabId) ?? false) &&
+        Object.entries(windowMap).every(
+          ([spaceId, instance]) =>
+            spaceId === trackedSpaceId || !instance?.tempTabIds.includes(tabId),
+        );
+      if (!alreadySoleOwner) this.assignSpaceTabs(windowId, trackedSpaceId, [tabId]);
+      return;
+    }
+    // Untracked group: release the tab from every instance in this window.
+    for (const instance of Object.values(windowMap)) {
+      if (!instance) continue;
+      const idx = instance.tempTabIds.indexOf(tabId);
+      if (idx !== -1) instance.tempTabIds.splice(idx, 1);
+      delete instance.tempTabTitles[tabId];
+    }
+  }
+
+  /**
    * Hard-remove a Space that has no temporary tabs in any window and no pinned
    * tabs — used by fresh-install conversion to discard the auto-created Default
    * once every open tab has been redistributed into a group-derived Space. Unlike

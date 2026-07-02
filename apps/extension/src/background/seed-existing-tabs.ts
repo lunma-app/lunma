@@ -26,9 +26,19 @@ import type { SpaceId } from '../shared/types';
  * `groupId` maps to a Space instance in its window is seeded into THAT Space —
  * not the active one — so a long-lived tab no longer accumulates into whichever
  * Space happened to be active across restarts (the "two Spaces, one group"
- * root cause). Ungrouped tabs, and tabs whose group maps to no instance, fall
- * back to the window's active Space (the prior behaviour). Either path evicts
- * the tab from sibling instances, so it is seeded into exactly one instance.
+ * root cause). An **ungrouped** tab falls back to the window's active Space
+ * (the prior behaviour). Either path evicts the tab from sibling instances, so
+ * it is seeded into exactly one instance.
+ *
+ * **Untracked-group exclusion** (preserve-user-tab-groups): a tab whose live
+ * `groupId` is ≥ 0 but maps to NO Space instance in its window — a live
+ * user-created Chrome group — is skipped entirely, exactly like a home tab:
+ * it is neither `assignSpaceTabs`-ed nor `onTabCreated`-ed, and stays
+ * untracked. Without this, the tab would fall back to the active Space and the
+ * boot group pass would later drag it out of the user's own group to satisfy
+ * that (wrong) ownership, dissolving the user's group. `ensureSpaceInstance`
+ * still runs for the tab's window regardless, so a window whose only tabs sit
+ * in a user's group still gets an instance for later-created tabs.
  */
 export function seedExistingTabs(
   store: LunmaStore,
@@ -72,16 +82,18 @@ export function seedExistingTabs(
     if (isNewTabUrl(tab.url)) continue; // home tab — grouped on activation, never a temp tab
     // Seed by real group membership: a tab whose live Chrome group maps to a
     // Space instance in this window goes to THAT Space (evicting from siblings
-    // via `assignSpaceTabs`); an ungrouped/unmapped tab falls back to the active
-    // Space (`onTabCreated`, which now applies the same per-window guard).
-    const matched =
-      tab.groupId !== undefined && tab.groupId >= 0
-        ? spaceByGroupByWindow.get(tab.windowId)?.get(tab.groupId)
-        : undefined;
-    if (matched !== undefined) {
-      store.assignSpaceTabs(tab.windowId, matched, [tab.id]);
-    } else {
+    // via `assignSpaceTabs`); an ungrouped tab falls back to the active Space
+    // (`onTabCreated`, which now applies the same per-window guard); a tab
+    // whose live group maps to NO instance (untracked — the user's own group)
+    // is skipped entirely (preserve-user-tab-groups) — it stays untracked
+    // rather than being misassigned to the active Space.
+    const liveGroupId = tab.groupId ?? -1;
+    if (liveGroupId < 0) {
       store.onTabCreated({ id: tab.id, windowId: tab.windowId });
+      continue;
     }
+    const matched = spaceByGroupByWindow.get(tab.windowId)?.get(liveGroupId);
+    if (matched !== undefined) store.assignSpaceTabs(tab.windowId, matched, [tab.id]);
+    // else: live group is untracked (the user's own group) — skip, stays untracked.
   }
 }

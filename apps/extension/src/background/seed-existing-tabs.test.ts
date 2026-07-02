@@ -98,12 +98,40 @@ describe('seedExistingTabs', () => {
     expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([7]);
   });
 
-  test('a tab whose group maps to no instance falls back to the active Space', () => {
+  test("a tab in a live untracked group (the user's own) is not seeded at all", () => {
+    // preserve-user-tab-groups: previously fell back to the active Space, which
+    // let the boot group pass drag the tab out of the user's own group.
     const store = makeStore();
     store.state.spaceInstancesByWindow[100] = {
       work: { spaceId: 'work', groupId: 11, tempTabIds: [], tempTabTitles: {} },
     };
     seedExistingTabs(store, [{ id: 42, windowId: 100, groupId: 999 }]);
-    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([42]);
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([]);
+  });
+
+  test('a window whose only tab is in a live untracked group still gets an instance', () => {
+    const store = new LunmaStore();
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.activeSpaceByWindow[100] = 'work';
+    seedExistingTabs(store, [{ id: 42, windowId: 100, groupId: 999 }]);
+    const instance = store.state.spaceInstancesByWindow[100]?.work;
+    expect(instance).toBeDefined();
+    expect(instance?.tempTabIds).toEqual([]);
+  });
+
+  test('ungrouped and tracked-group tabs are unaffected by the untracked-group exclusion', () => {
+    const store = makeStore(); // "work" is active
+    store.state.spaces.push({ id: 'side', name: 'Side', color: 'red', icon: 'star' });
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 11, tempTabIds: [], tempTabTitles: {} },
+      side: { spaceId: 'side', groupId: 22, tempTabIds: [], tempTabTitles: {} },
+    };
+    seedExistingTabs(store, [
+      { id: 42, windowId: 100, groupId: 22 }, // tracked ("side") — seeded there
+      { id: 7, windowId: 100 }, // ungrouped — falls back to active "work"
+      { id: 99, windowId: 100, groupId: 999 }, // untracked (user's group) — skipped
+    ]);
+    expect(store.state.spaceInstancesByWindow[100]?.side?.tempTabIds).toEqual([42]);
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([7]);
   });
 });

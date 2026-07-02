@@ -1,9 +1,30 @@
 import { describe, expect, test } from 'vitest';
 import { makeStore } from './store.test-helpers';
-import type { SpaceId, SpaceInstance } from './types';
+import type { LiveTab, SavedTab, SpaceId, SpaceInstance } from './types';
 
 function makeInstance(spaceId: SpaceId, groupId: number, tempTabIds: number[]): SpaceInstance {
   return { spaceId, groupId, tempTabIds, tempTabTitles: {} };
+}
+
+function liveTab(partial: Partial<LiveTab> = {}): LiveTab {
+  return {
+    tabId: partial.tabId ?? 42,
+    windowId: partial.windowId ?? 100,
+    title: partial.title ?? 'Example',
+    url: partial.url ?? 'https://example.com/',
+    active: partial.active ?? false,
+    status: partial.status ?? 'complete',
+  };
+}
+
+function savedTab(partial: Partial<SavedTab> = {}): SavedTab {
+  return {
+    id: partial.id ?? 'st-1',
+    spaceId: partial.spaceId ?? 'work',
+    title: partial.title ?? 'GitHub',
+    originalURL: partial.originalURL ?? 'https://github.com/',
+    currentURL: partial.currentURL ?? null,
+  };
 }
 
 describe('LunmaStore.reconcileTabOwnership (prevent-space-group-collapse)', () => {
@@ -126,5 +147,151 @@ describe('LunmaStore.reconcileTabOwnership (prevent-space-group-collapse)', () =
     expect(store.state.spaceInstancesByWindow[100]?.anon?.tempTabIds).toEqual(shared);
     expect(store.state.spaceInstancesByWindow[100]?.anon2?.tempTabIds).toEqual([]);
     expect(store.state.spaceInstancesByWindow[100]?.stars?.tempTabIds).toEqual([]);
+  });
+});
+
+describe('LunmaStore.releaseTabsInUntrackedGroups (preserve-user-tab-groups D5)', () => {
+  test('strips a temp tab whose live group is untracked', () => {
+    const store = makeStore();
+    store.state.spaceInstancesByWindow[100] = {
+      work: makeInstance('work', 11, [30, 31]),
+    };
+    // Tab 30 lives in untracked group 55; tab 31 is ungrouped (-1, absent from the map).
+    store.releaseTabsInUntrackedGroups(new Map([[30, 55]]));
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([31]);
+  });
+
+  test('leaves a tab in a tracked group untouched', () => {
+    const store = makeStore();
+    store.state.spaceInstancesByWindow[100] = {
+      work: makeInstance('work', 11, [30]),
+      side: makeInstance('side', 22, []),
+    };
+    // Tab 30's live group (11) is tracked by "work" itself.
+    store.releaseTabsInUntrackedGroups(new Map([[30, 11]]));
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([30]);
+  });
+
+  test('leaves an ungrouped tab (absent from the map) untouched', () => {
+    const store = makeStore();
+    store.state.spaceInstancesByWindow[100] = { work: makeInstance('work', 11, [30]) };
+    store.releaseTabsInUntrackedGroups(new Map());
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([30]);
+  });
+
+  test('drops the released tab tempTabTitles entry', () => {
+    const store = makeStore();
+    const work = makeInstance('work', 11, [30]);
+    work.tempTabTitles = { 30: 'Renamed' };
+    store.state.spaceInstancesByWindow[100] = { work };
+    store.releaseTabsInUntrackedGroups(new Map([[30, 55]]));
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabTitles).toEqual({});
+  });
+
+  test('is idempotent — a second pass with the same map finds nothing left', () => {
+    const store = makeStore();
+    store.state.spaceInstancesByWindow[100] = { work: makeInstance('work', 11, [30]) };
+    const map = new Map([[30, 55]]);
+    store.releaseTabsInUntrackedGroups(map);
+    store.releaseTabsInUntrackedGroups(map);
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([]);
+  });
+
+  test('scopes release per window — the same Space active in two windows is unaffected across windows', () => {
+    const store = makeStore();
+    store.state.spaceInstancesByWindow[100] = { work: makeInstance('work', 11, [30]) };
+    store.state.spaceInstancesByWindow[200] = { work: makeInstance('work', 33, [99]) };
+    // Tab 30 (window 100) is in an untracked group; tab 99 (window 200) is tracked there.
+    store.releaseTabsInUntrackedGroups(
+      new Map([
+        [30, 55],
+        [99, 33],
+      ]),
+    );
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([]);
+    expect(store.state.spaceInstancesByWindow[200]?.work?.tempTabIds).toEqual([99]);
+  });
+});
+
+describe('LunmaStore.onTabGroupIdChanged (preserve-user-tab-groups D6)', () => {
+  test('releases a temp tab moved into an untracked group', () => {
+    const store = makeStore();
+    store.state.spaceInstancesByWindow[100] = { work: makeInstance('work', 11, [30]) };
+    store.state.liveTabsById[30] = liveTab({ tabId: 30, windowId: 100 });
+    store.onTabGroupIdChanged(30, 55); // 55 is recorded by no instance
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([]);
+  });
+
+  test('drops tempTabTitles for the released tab', () => {
+    const store = makeStore();
+    const work = makeInstance('work', 11, [30]);
+    work.tempTabTitles = { 30: 'Renamed' };
+    store.state.spaceInstancesByWindow[100] = { work };
+    store.state.liveTabsById[30] = liveTab({ tabId: 30, windowId: 100 });
+    store.onTabGroupIdChanged(30, 55);
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabTitles).toEqual({});
+  });
+
+  test('reassigns a tab moved into a tracked group to that Space', () => {
+    const store = makeStore();
+    store.state.spaceInstancesByWindow[100] = {
+      work: makeInstance('work', 11, [30]),
+      side: makeInstance('side', 22, []),
+    };
+    store.state.liveTabsById[30] = liveTab({ tabId: 30, windowId: 100 });
+    store.onTabGroupIdChanged(30, 22); // 22 is "side"'s live group
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([]);
+    expect(store.state.spaceInstancesByWindow[100]?.side?.tempTabIds).toEqual([30]);
+  });
+
+  test('is a no-op (no reorder) when the target Space already solely owns the tab', () => {
+    const store = makeStore();
+    store.state.spaceInstancesByWindow[100] = { work: makeInstance('work', 11, [7, 30]) };
+    store.state.liveTabsById[30] = liveTab({ tabId: 30, windowId: 100 });
+    store.onTabGroupIdChanged(30, 11); // 11 is "work"'s own live group; 30 already owned solely by "work"
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([7, 30]);
+  });
+
+  test('groupId -1 (ungrouped) is a no-op', () => {
+    const store = makeStore();
+    store.state.spaceInstancesByWindow[100] = { work: makeInstance('work', 11, [30]) };
+    store.state.liveTabsById[30] = liveTab({ tabId: 30, windowId: 100 });
+    store.onTabGroupIdChanged(30, -1);
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([30]);
+  });
+
+  test('a bound tab is never released or moved', () => {
+    const store = makeStore();
+    store.state.savedTabs['st-1'] = savedTab({ id: 'st-1', spaceId: 'work' });
+    store.state.tabBindings['st-1'] = { 100: 30 };
+    store.state.spaceInstancesByWindow[100] = {
+      work: makeInstance('work', 11, []),
+      side: makeInstance('side', 22, []),
+    };
+    store.state.liveTabsById[30] = liveTab({ tabId: 30, windowId: 100 });
+    // Bound tab 30 moves into "side"'s tracked group — assignSpaceTabs skips bound
+    // tabs, so it must not appear as a temp tab anywhere, and the binding stands.
+    store.onTabGroupIdChanged(30, 22);
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([]);
+    expect(store.state.spaceInstancesByWindow[100]?.side?.tempTabIds).toEqual([]);
+    expect(store.state.tabBindings['st-1']).toEqual({ 100: 30 });
+  });
+
+  test('is a no-op when the tab is not yet mirrored in liveTabsById', () => {
+    const store = makeStore();
+    store.state.spaceInstancesByWindow[100] = { work: makeInstance('work', 11, [30]) };
+    // Tab 30 has no liveTabsById entry — window cannot be resolved.
+    store.onTabGroupIdChanged(30, 55);
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([30]);
+  });
+
+  test('scopes reconciliation per window — the same Space active in two windows is unaffected across windows', () => {
+    const store = makeStore();
+    store.state.spaceInstancesByWindow[100] = { work: makeInstance('work', 11, [30]) };
+    store.state.spaceInstancesByWindow[200] = { work: makeInstance('work', 33, [99]) };
+    store.state.liveTabsById[30] = liveTab({ tabId: 30, windowId: 100 });
+    store.onTabGroupIdChanged(30, 77); // untracked in window 100
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([]);
+    expect(store.state.spaceInstancesByWindow[200]?.work?.tempTabIds).toEqual([99]);
   });
 });
