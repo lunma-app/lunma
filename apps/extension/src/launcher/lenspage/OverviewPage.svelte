@@ -1,4 +1,5 @@
 <script lang="ts">
+import { untrack } from 'svelte';
 import { PROVIDER_LABEL } from '../../shared/account-ui';
 import { applyLensFilter } from '../../shared/lens-filter';
 import { m } from '../../shared/paraglide/messages';
@@ -83,6 +84,23 @@ const CHIP_THRESHOLD = 5;
 const visRepos = $derived([...new Set([...facets.repos, ...(filter.repos ?? [])])]);
 const visProjects = $derived([...new Set([...facets.projects, ...(filter.projects ?? [])])]);
 const visFeeds = $derived([...new Set([...facets.feeds, ...(filter.feeds ?? [])])]);
+
+// The overflow MultiSelect popovers' checked state is tracked separately from
+// `filter.*` because a full selection is normalized back to `[]` for storage
+// (so future-arriving facets stay auto-included — see the collapse below). If
+// the popover's `values` mirrored `filter.*` directly, that collapse would make
+// "Select all" and "Clear" look identical (both land on `[]`), so neither button
+// would ever visibly do anything. These mirror the user's last explicit action
+// instead, and only resync from `filter.*` when the pinned lens itself changes.
+let reposDisplay = $state<string[]>(untrack(() => filter.repos ?? []));
+let projectsDisplay = $state<string[]>(untrack(() => filter.projects ?? []));
+let feedsDisplay = $state<string[]>(untrack(() => filter.feeds ?? []));
+$effect(() => {
+  node.id;
+  reposDisplay = untrack(() => filter.repos ?? []);
+  projectsDisplay = untrack(() => filter.projects ?? []);
+  feedsDisplay = untrack(() => filter.feeds ?? []);
+});
 
 // Overflow (>CHIP_THRESHOLD) picker options — no synthetic "all" row; clearing
 // is the MultiSelect's own Clear action.
@@ -276,8 +294,11 @@ const empty = $derived(
                   <div class="scope-picker">
                     <MultiSelect
                       options={repoOptions}
-                      values={filter.repos ?? []}
-                      onchange={(vals) => setFilter({ ...filter, repos: vals.length >= visRepos.length ? [] : vals })}
+                      values={reposDisplay}
+                      onchange={(vals) => {
+                        reposDisplay = vals;
+                        setFilter({ ...filter, repos: vals.length >= visRepos.length ? [] : vals });
+                      }}
                       label={repoTriggerLabel}
                       ariaLabel={m.launcher_lensFilterByRepo()}
                       clearLabel={m.launcher_lensClearFilter()}
@@ -358,8 +379,11 @@ const empty = $derived(
                   <div class="scope-picker">
                     <MultiSelect
                       options={projectOptions}
-                      values={filter.projects ?? []}
-                      onchange={(vals) => setFilter({ ...filter, projects: vals.length >= visProjects.length ? [] : vals })}
+                      values={projectsDisplay}
+                      onchange={(vals) => {
+                        projectsDisplay = vals;
+                        setFilter({ ...filter, projects: vals.length >= visProjects.length ? [] : vals });
+                      }}
                       label={projectTriggerLabel}
                       ariaLabel={m.launcher_lensFilterByProject()}
                       clearLabel={m.launcher_lensClearFilter()}
@@ -447,8 +471,11 @@ const empty = $derived(
                   <div class="scope-picker">
                     <MultiSelect
                       options={feedOptions}
-                      values={filter.feeds ?? []}
-                      onchange={(vals) => setFilter({ ...filter, feeds: vals.length >= visFeeds.length ? [] : vals })}
+                      values={feedsDisplay}
+                      onchange={(vals) => {
+                        feedsDisplay = vals;
+                        setFilter({ ...filter, feeds: vals.length >= visFeeds.length ? [] : vals });
+                      }}
                       label={feedTriggerLabel}
                       ariaLabel={m.launcher_lensFilterByFeed()}
                       clearLabel={m.launcher_lensClearFilter()}
