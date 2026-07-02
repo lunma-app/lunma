@@ -49,6 +49,23 @@ export default defineConfig(({ mode }) => ({
       // Emit .d.ts so standalone tsc / svelte-check (run outside Vite) see the
       // runtime's types — the committed-runtime rationale in design D2.
       emitTsDeclarations: true,
+      // Must match `gen:i18n`'s --is-server/--output-structure flags in
+      // apps/extension/package.json exactly — see that script for the
+      // reverse pointer. Left unset, the Vite plugin silently swaps in
+      // `import.meta.env?.SSR ?? typeof window === 'undefined'` on every
+      // config resolution (its own hardcoded default, unrelated to any
+      // option here), which used to disagree with what the `gen:i18n` CLI
+      // wrote when both ran back-to-back — the two producers still emit into
+      // the same directory (this plugin for dev/build/vitest, the CLI via
+      // `postinstall`), so a future edit to one side should prompt checking
+      // the other, even though neither can cause git noise anymore.
+      isServer: "typeof window === 'undefined'",
+      // Must match `gen:i18n` too — see above. Left unset, the plugin's own
+      // default is `NODE_ENV === 'production' ? 'message-modules' :
+      // 'locale-modules'`, which would flip the per-message file layout
+      // between `vitest run`/`svelte-check` (NODE_ENV !== 'production') and
+      // the CLI's always-`message-modules` default.
+      outputStructure: 'message-modules',
     }),
     svelte(),
     crx({ manifest }),
