@@ -157,9 +157,17 @@ export function chromeTabHandlers(): Pick<
         changeInfo.url === undefined &&
         changeInfo.status === undefined &&
         changeInfo.title === undefined &&
-        changeInfo.favIconUrl === undefined
+        changeInfo.favIconUrl === undefined &&
+        changeInfo.groupId === undefined
       ) {
         return;
+      }
+      // Mid-session ownership follow (preserve-user-tab-groups D6): a tab's
+      // Chrome group changed — reconcile Space ownership BEFORE the
+      // url/status/title/favIconUrl handling below (which is independent of
+      // this and may itself run in the same coalesced event).
+      if (changeInfo.groupId !== undefined) {
+        ctx.store.onTabGroupIdChanged(tabId, changeInfo.groupId);
       }
       // Saved-tab binding / activity tracking only cares about url + status.
       if (changeInfo.url !== undefined || changeInfo.status !== undefined) {

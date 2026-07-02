@@ -29,13 +29,24 @@ import {
  *  1. **Adopts** each restored group into the Space it most likely belongs to —
  *     re-binding that instance's `groupId` to the live id (state-only) instead of
  *     leaving a stale id that triggers a duplicate rebuild on next activation.
- *  2. **Materializes** each window's active Space group when it has open tabs but
+ *  2. **Releases** (preserve-user-tab-groups D5) any temp tab still listed in
+ *     `tempTabIds` whose live group is a live **untracked** (user-created) group —
+ *     state only, after adoption so restored tracked groups have already
+ *     re-bound their ids. Skipped on a boot that just ran fresh-install
+ *     conversion (every existing group was just claimed by it — nothing is
+ *     "untracked" yet to protect).
+ *  3. **Materializes** each window's active Space group when it has open tabs but
  *     still no live group, so the strip reflects the active Space from load (no
- *     "ungrouped until first `Cmd+T`" gap), then best-effort declutters.
+ *     "ungrouped until first `Cmd+T`" gap), then best-effort declutters — the
+ *     sweep excludes any member whose live group is untracked (D3), so a
+ *     user-created group is never drained to fill a Space's group. Also skipped
+ *     on a fresh-install conversion boot, for the same reason as (2).
  *
  * Lunma stays the source of truth: the pass NEVER deletes a Space, NEVER converts
- * an untracked (user-created) group into a Space, and (during materialization)
- * NEVER opens a tab or changes tab focus.
+ * an untracked (user-created) group into a Space, NEVER moves a tab OUT of a live
+ * untracked group (the user's group keeps its tab membership, not just its
+ * identity — preserve-user-tab-groups), and (during materialization) NEVER opens
+ * a tab or changes tab focus.
  */
 
 /** Plain-data view of a Chrome tab group, for the pure matcher. */
@@ -341,20 +352,37 @@ function trackedGroupIdsForWindow(store: LunmaStore, windowId: WindowId): number
  *  - **Stale persisted groupId (B):** the persisted `groupId` is resolved against
  *    Chrome; an id that no longer resolves is treated as "no live group" (and
  *    reset to `-1`), so a stale id never skips materialization.
- *  - **Live group exists:** any member tab not already in that group (a stray
- *    ungrouped home tab, a tab in a dead group) is swept into it — members
- *    already in the group are left untouched (no churn / reorder).
- *  - **No live group:** the membership is grouped into a fresh group, titled +
- *    recoloured, expanded, and the window's other tracked groups collapsed.
+ *  - **Untracked-group exclusion (D3, preserve-user-tab-groups):** UNLESS
+ *    `skipUntrackedExclusion` is set (the caller passes `true` only on a boot
+ *    pass that just ran fresh-install conversion — see
+ *    `reconcileTabGroupsOnBoot`), a member whose current live group (per
+ *    `tabGroupById`) is a live **untracked** group — not in
+ *    `trackedGroupIdsForWindow` — is excluded from both the sweep and a fresh
+ *    group's initial membership. It is left exactly where the user put it; the
+ *    pass never drains a user-created group to fill a Space's group. On a
+ *    fresh-install pass every existing group was just claimed by
+ *    `convertGroupsToSpaces` (folded or minted its own Space), so there is no
+ *    "the user's own, Lunma has never seen it" group to protect — and a
+ *    claim-guard "loser" sibling from a same-title fold (its tabs already
+ *    legitimately assigned by conversion) must still be mergeable, exactly
+ *    like the pre-existing fold behaviour.
+ *  - **Live group exists:** any remaining member not already in that group (a
+ *    stray ungrouped home tab, a tab in a dead group, a tab in another TRACKED
+ *    group) is swept into it — members already in the group are left untouched
+ *    (no churn / reorder).
+ *  - **No live group:** the (untracked-excluded) membership is grouped into a
+ *    fresh group, titled + recoloured, expanded, and the window's other tracked
+ *    groups collapsed.
  *
  * NEVER opens a tab and NEVER changes focus — an empty active Space (no tabs and
  * no home tab) stays groupless. `tabGroupById` maps each live tab id to its
  * current Chrome groupId (from the boot tabs query) for the no-churn membership
- * check.
+ * check and the untracked-group exclusion.
  */
 async function materializeActiveGroups(
   store: LunmaStore,
   tabGroupById: Map<TabId, number>,
+  skipUntrackedExclusion = false,
 ): Promise<void> {
   for (const [windowIdStr, spaceId] of Object.entries(store.state.activeSpaceByWindow)) {
     if (spaceId === null || spaceId === undefined) continue;
@@ -369,17 +397,27 @@ async function materializeActiveGroups(
       store.recordSpaceGroup(windowId, spaceId, -1); // drop the stale id
     }
 
-    // (A) Membership: the Space's real tabs PLUS every home tab in the window.
+    // (A) Membership: the Space's real tabs PLUS every home tab in the window,
+    // EXCLUDING any tab whose live group is a live untracked (user-created)
+    // group — D3: never drag a member out of the user's own group.
+    const trackedGroupIds = new Set(trackedGroupIdsForWindow(store, windowId));
+    const isInUntrackedGroup = (id: TabId): boolean => {
+      if (skipUntrackedExclusion) return false;
+      const liveGroupId = tabGroupById.get(id) ?? -1;
+      return liveGroupId >= 0 && !trackedGroupIds.has(liveGroupId);
+    };
     const members = [
       ...new Set([
         ...spaceWindowTabSet(store, windowId, spaceId),
         ...homeTabIdsInWindow(store, windowId),
       ]),
-    ];
+    ].filter((id) => !isInUntrackedGroup(id));
 
     if (live) {
       // Sweep only members NOT already in the live group (stray home tabs / tabs
-      // left in a dead group) — leave existing members untouched to avoid churn.
+      // left in a dead group / tabs in another tracked group) — leave existing
+      // members untouched to avoid churn. Untracked-group members are already
+      // excluded from `members` above.
       const stray = members.filter((id) => (tabGroupById.get(id) ?? -1) !== live.id);
       if (stray.length > 0) await ensureGroupForSpace(windowId, stray, live.id);
       continue;
@@ -473,10 +511,23 @@ function cleanUpDuplicateSpaces(store: LunmaStore): void {
  * `seedExistingTabs` / `rebuildLiveTabs`, before the boot persist + broadcast).
  * Queries Chrome's existing groups + tabs once, then:
  *   - on a **fresh install** (`freshInstall` — no Spaces were loaded from
- *     storage), converts each existing Chrome group into a Space (D7) so the
- *     user's groups show up as Spaces rather than collapsing into one Default;
+ *     storage — AND at least one Chrome group exists, `convertedThisBoot`),
+ *     converts each existing Chrome group into a Space (D7) so the user's
+ *     groups show up as Spaces rather than collapsing into one Default;
  *   - **adopts** restored groups into their Spaces (re-binds session-scoped ids);
- *   - **materializes** any still-missing active-Space group;
+ *   - **releases** (D5, preserve-user-tab-groups) any temp tab still listed in
+ *     `tempTabIds` whose live group is untracked (the user's own group) — after
+ *     adoption, so tracked groups' re-bound ids are already settled. **Skipped
+ *     on `convertedThisBoot`**: conversion just claimed EVERY existing group
+ *     (folded or minted), so there is no foreign group left to protect against,
+ *     and a same-title fold's claim-guard "loser" sibling (its tabs already
+ *     legitimately assigned by conversion) must stay releasable-into, not be
+ *     mistaken for the user's own;
+ *   - **materializes** any still-missing active-Space group, excluding
+ *     untracked-group members from the sweep (D3) — **also skipped on
+ *     `convertedThisBoot`**, same reasoning, so a same-title fold's second
+ *     physical group is still merged into the first exactly as before this
+ *     change;
  *   - **ungroups** any global favorite (`spaceId === null`) Chrome restored still
  *     inside a group, so it is global again before a Space switch can hide it
  *     (favicon-row-model D4);
@@ -485,9 +536,11 @@ function cleanUpDuplicateSpaces(store: LunmaStore): void {
  *     escaped this boot's fresh-install fold or a prior boot's adoption is
  *     still caught before the broadcast.
  * Order matters: convert (mint Spaces + assign tabs) → adopt (re-bind) →
- * materialize → ungroup-favorites → duplicate cleanup, so a restored group is
- * reused rather than duplicated, favorites end ungrouped, and any still-empty
- * duplicate is gone before the Space groups are settled and broadcast.
+ * release (strip untracked-group tabs from tempTabIds, non-conversion boots
+ * only) → materialize → ungroup-favorites → duplicate cleanup, so a restored
+ * group is reused rather than duplicated, state is honest before materialization
+ * sweeps, favorites end ungrouped, and any still-empty duplicate is gone before
+ * the Space groups are settled and broadcast.
  */
 export async function reconcileTabGroupsOnBoot(
   store: LunmaStore,
@@ -513,7 +566,13 @@ export async function reconcileTabGroupsOnBoot(
     else tabsByGroup.set(tab.groupId, [tab.id]);
   }
 
-  if (freshInstall && groups.length > 0) {
+  // Fresh-install conversion claims EVERY existing Chrome group (folded into a
+  // Space or minted its own — D7), so on that one-time pass there is no
+  // "untracked, the user's own" group left to protect: the D3/D5 exclusions
+  // are skipped entirely for it (preserve-user-tab-groups — see
+  // `materializeActiveGroups`'s and `releaseTabsInUntrackedGroups`'s docs).
+  const convertedThisBoot = freshInstall && groups.length > 0;
+  if (convertedThisBoot) {
     const activeTabByWindow: ActiveTabByWindow = {};
     for (const tab of tabs) {
       if (tab.active && tab.windowId !== undefined) {
@@ -524,7 +583,8 @@ export async function reconcileTabGroupsOnBoot(
   }
 
   adoptExistingGroups(store, groups, tabsByGroup);
-  await materializeActiveGroups(store, tabGroupById);
+  if (!convertedThisBoot) store.releaseTabsInUntrackedGroups(tabGroupById);
+  await materializeActiveGroups(store, tabGroupById, convertedThisBoot);
   await ungroupRestoredFavorites(store, tabGroupById);
   cleanUpDuplicateSpaces(store);
 }

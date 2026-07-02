@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { LiveTab, Space, SpaceColor } from '../shared/types';
 import type { PendingEvent } from './coordinator';
-import { makeCoordinator, sidebar, tabActivated, tabCreated } from './coordinator.test-helpers';
+import {
+  makeCoordinator,
+  sidebar,
+  tabActivated,
+  tabCreated,
+  tabUpdated,
+} from './coordinator.test-helpers';
 import { installTabGroupsChrome, type TabGroupsController } from './tab-groups.test-helpers';
 
 function space(id: string, name = id, color: SpaceColor = 'blue'): Space {
@@ -878,6 +884,77 @@ describe('tab-group lifecycle hints (non-destructive)', () => {
     // The Space is in trash and no instance holds 42 → forgetSpaceGroup no-ops.
     expect(store.state.spaces.find((s) => s.id === 'work')).toBeUndefined();
     expect(store.state.trash.work).toBeDefined();
+  });
+});
+
+describe('mid-session tabs.onUpdated groupId reconciliation (preserve-user-tab-groups D6)', () => {
+  test('a temp tab moved into an untracked group is released', async () => {
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push(space('work'));
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 11, tempTabIds: [30], tempTabTitles: { 30: 'Mine' } },
+    };
+    store.state.liveTabsById[30] = live(30, 100);
+
+    coordinator.enqueue(tabUpdated(30, { groupId: 55 })); // 55 is untracked
+
+    await coordinator.idle();
+
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([]);
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabTitles).toEqual({});
+  });
+
+  test('a tab moved into a tracked group reassigns to that Space', async () => {
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push(space('work'), space('side'));
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 11, tempTabIds: [30], tempTabTitles: {} },
+      side: { spaceId: 'side', groupId: 22, tempTabIds: [], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[30] = live(30, 100);
+
+    coordinator.enqueue(tabUpdated(30, { groupId: 22 })); // 22 is "side"'s live group
+
+    await coordinator.idle();
+
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([]);
+    expect(store.state.spaceInstancesByWindow[100]?.side?.tempTabIds).toEqual([30]);
+  });
+
+  test('groupId: -1 (ungrouped) is a no-op for ownership', async () => {
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push(space('work'));
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 11, tempTabIds: [30], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[30] = live(30, 100);
+
+    coordinator.enqueue(tabUpdated(30, { groupId: -1 }));
+
+    await coordinator.idle();
+
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([30]);
+  });
+
+  test('a groupId-only event does not trigger navigation-dedup / home-tab-adoption paths', async () => {
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push(space('work'));
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 11, tempTabIds: [30], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[30] = live(30, 100);
+    const onTabCreatedSpy = vi.spyOn(store, 'onTabCreated');
+
+    coordinator.enqueue(tabUpdated(30, { groupId: 55 })); // no url in the payload
+
+    await coordinator.idle();
+
+    // The url-navigation adoption branch is guarded on `changeInfo.url !== undefined`
+    // — a groupId-only event must not fall through to it.
+    expect(onTabCreatedSpy).not.toHaveBeenCalled();
+    expect(chrome.calls.some((c) => c.startsWith('tabs.group'))).toBe(false);
+    expect(chrome.calls.some((c) => c.startsWith('tabs.remove'))).toBe(false);
   });
 });
 

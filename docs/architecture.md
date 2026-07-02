@@ -588,9 +588,15 @@ new tabs, and `onTabCreated` needs the window to already have a `spaceInstance`,
 so without this pass the Temporary list would stay empty until the next Space
 switch. It calls `store.ensureSpaceInstance(windowId)` (creates an empty
 instance for the active Space without touching `lastActivatedSpaceId`), then
-`store.onTabCreated(...)` per open tab. It skips bound, duplicate, and home tabs
-(`isNewTabUrl(tab.url)`, since a home tab is never a temporary tab), and shares
-the single `chrome.tabs.query({})` result with `rebuildLiveTabs`.
+per open tab: a tab whose live Chrome group maps to a tracked Space instance is
+seeded into THAT Space (`assignSpaceTabs`); an ungrouped tab falls back to the
+active Space (`onTabCreated`); and a tab whose live group maps to **no**
+instance — a live **untracked**, user-created group — is skipped entirely
+(preserve-user-tab-groups), exactly like a home tab, so it stays untracked
+rather than being misassigned to the active Space (which the boot group pass
+would then drag out of the user's own group). It skips bound, duplicate, and
+home tabs (`isNewTabUrl(tab.url)`, since a home tab is never a temporary tab),
+and shares the single `chrome.tabs.query({})` result with `rebuildLiveTabs`.
 
 ### Boot group reconciliation
 
@@ -617,13 +623,34 @@ captured before `ensureAtLeastOneSpace` mints the Default.
    `store.recordSpaceGroup` (state only, no `chrome.tabGroups` call, so it never
    fights Chrome's restored layout). A group matching no Space (the user's own)
    is left untouched.
-3. **Materialize.** For each window's active Space that has open tabs but still
+3. **Release (preserve-user-tab-groups).** After adoption (so restored tracked
+   groups have already re-bound their live ids) and before materialization,
+   `store.releaseTabsInUntrackedGroups(tabGroupById)` strips from every
+   instance's `tempTabIds` any tab whose live Chrome group is a live untracked
+   (user-created) group — a tab sitting in the user's own group is the user's,
+   not a Space's temporary tab. Skipped entirely on a boot that just ran
+   fresh-install conversion (see step 1): conversion claims EVERY existing
+   Chrome group that boot, so nothing is "untracked" yet to protect, and
+   skipping preserves conversion's pre-existing same-title group-fold merge
+   behaviour.
+4. **Materialize.** For each window's active Space that has open tabs but still
    `groupId === -1`, group the Space's window tab set via the `tab-groups.ts`
    helpers, title and recolour it, and best-effort collapse the window's other
-   tracked groups.
+   tracked groups. The stray-sweep of an existing live group EXCLUDES any
+   member whose current live group is a live untracked group (same exception
+   for a fresh-install-conversion boot as step 3) — Lunma never drains a
+   user-created group to fill a Space's group; the confirmed empirical bug this
+   closes was exactly that drain happening on every boot.
 
 Boot never opens a tab and never changes focus. An empty active Space stays
-groupless until its first tab.
+groupless until its first tab. Mid-session, the mirror of this protection lives
+in `tabs.onUpdated`: a `changeInfo.groupId` change calls
+`store.onTabGroupIdChanged(tabId, groupId)`, which assigns the tab to whichever
+Space's instance records that `groupId` (tracked) or releases it from every
+instance's `tempTabIds` in its window (untracked — the user just took it into
+their own group) — so `tempTabIds` never lags reality, and a later restart
+never re-derives ownership from stale data (see `preserve-user-tab-groups`
+design.md D2b for the one narrow accepted residual race).
 
 ### Registered Chrome listeners
 
@@ -641,6 +668,10 @@ The registered listeners are `tabs.onCreated`, `tabs.onRemoved`,
   focused tab.
 - **`tabs.onCreated` / `tabs.onUpdated`** also feed `syncLiveTab`, and
   `tabs.onRemoved` feeds `removeLiveTab`, to maintain `liveTabsById`.
+  `tabs.onUpdated`'s `changeInfo.groupId` (preserve-user-tab-groups D6) drives
+  `store.onTabGroupIdChanged`, reconciling Space ownership the moment a tab's
+  live Chrome group changes mid-session (see "Boot group reconciliation"
+  above).
 - **`tabGroups.onRemoved` / `tabGroups.onUpdated`** are non-destructive lifecycle
   hints. `onRemoved` for a Lunma-tracked group calls
   `store.forgetSpaceGroup(groupId)`, which resets the instance to
