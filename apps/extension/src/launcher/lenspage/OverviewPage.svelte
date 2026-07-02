@@ -95,8 +95,16 @@ const visFeeds = $derived([...new Set([...facets.feeds, ...(filter.feeds ?? [])]
 let reposDisplay = $state<string[]>(untrack(() => filter.repos ?? []));
 let projectsDisplay = $state<string[]>(untrack(() => filter.projects ?? []));
 let feedsDisplay = $state<string[]>(untrack(() => filter.feeds ?? []));
+// `node` gets a new reference on every setFilter too (the parent recomputes it
+// from the store), not just on an actual lens switch — so the effect must
+// re-run on every node change but only actually resync when `id` itself
+// differs, or a Select-all/Clear click would immediately get stomped by the
+// resync it just triggered.
+let lastNodeId = untrack(() => node.id);
 $effect(() => {
-  node.id;
+  const id = node.id;
+  if (id === untrack(() => lastNodeId)) return;
+  lastNodeId = id;
   reposDisplay = untrack(() => filter.repos ?? []);
   projectsDisplay = untrack(() => filter.projects ?? []);
   feedsDisplay = untrack(() => filter.feeds ?? []);

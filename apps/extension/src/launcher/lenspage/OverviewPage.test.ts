@@ -390,6 +390,38 @@ describe('OverviewPage', () => {
     expect(setFilter).toHaveBeenCalledWith(expect.objectContaining({ feeds: [] }));
   });
 
+  test('Select all stays visibly checked after the parent echoes the collapsed [] filter back down', async () => {
+    // Regression: LensPage recomputes a NEW `node` object (same id) from the
+    // store on every setFilter, not just on an actual lens switch. If the
+    // popover's checked state naively resynced from `filter.*` on every such
+    // re-render, the collapsed `[]` storage value would immediately stomp the
+    // "all selected" display the user just produced by clicking Select all.
+    const feeds = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6'];
+    const setFilter = vi.fn();
+    const { container, rerender } = renderOverview(
+      { ...empty(), article: [ARTICLE] },
+      vi.fn(),
+      vi.fn(),
+      setFilter,
+      { entities: ['article'], repos: [], projects: [], feeds },
+    );
+    const trigger = container.querySelector('[data-testid="feed-select"]') as HTMLButtonElement;
+    await fireEvent.click(trigger);
+    const selectAllBtn = container.querySelector(
+      '[data-testid="multi-select-all"]',
+    ) as HTMLButtonElement;
+    await fireEvent.click(selectAllBtn);
+    expect(setFilter).toHaveBeenCalledWith(expect.objectContaining({ feeds: [] }));
+
+    await rerender({ node: { ...NODE, filter: { feeds: [] } } });
+
+    const options = container.querySelectorAll('[data-testid="multi-select-option"]');
+    expect(options.length).toBeGreaterThan(0);
+    for (const opt of Array.from(options)) {
+      expect(opt.getAttribute('aria-selected')).toBe('true');
+    }
+  });
+
   test('manually checking the last of every repo option also collapses the filter to []', async () => {
     // PR's host-qualified repo (github.com/payments-api) must itself be one of the
     // ALREADY-selected repos, otherwise the active (non-empty) filter would filter
