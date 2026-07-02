@@ -25,7 +25,7 @@ lunma/                              # pnpm workspace root (private)
 │  │  ├─ src/
 │  │  │  ├─ shared/                 # cross-surface: types · schemas (+migrations) · store.svelte.ts · messages · settings · onboarding · logger · lens-filter.ts · i18n.ts (SW-safe locale resolver)
 │  │  │  │  ├─ chrome/              # thin typed wrappers over chrome.* APIs
-│  │  │  │  └─ paraglide/           # generated Paraglide runtime (committed, Biome-excluded; `pnpm gen:i18n`)
+│  │  │  │  └─ paraglide/           # generated Paraglide runtime (gitignored, Biome-excluded; paraglideVitePlugin/postinstall)
 │  │  │  ├─ ui/                     # cross-surface primitives (build primitives, compose features)
 │  │  │  │  ├─ Button.svelte        # …+ Icon · Tooltip · Kbd · SegmentedControl · TabRow · Menu (trigger: kebab|context)
 │  │  │  │  ├─ SettingsCard.svelte  # …+ CardHeading · SettingText · InlineError (the shared options-card chrome)
@@ -776,17 +776,18 @@ mechanism for the manifest. Two independent catalogs, one resolver.
 
 **Message catalog + generated runtime.** UI strings live in per-locale
 `apps/extension/messages/{locale}.json` (`en` is the source of truth), *outside*
-`src/` so they stay out of the TypeScript/Biome/Stylelint globs. `pnpm gen:i18n`
-(`paraglide-js compile`, prepended to `dev`/`build` like `gen:icons`) compiles
-them into `apps/extension/src/shared/paraglide/` — **committed and
-Biome-excluded**, mirroring the `src/ui/icon-loaders.generated.ts` precedent so
-standalone `tsc`/`svelte-check` (which run outside Vite) see its `.d.ts`. Living
-under `shared/`, the generated runtime imports nothing from other layers, so the
-import DAG stays legal. The supported-locale *set* exists once in
-`project.inlang/settings.json` and flows to the generated `locales` constant,
-from which `SupportedLocale` (in `shared/settings.ts`) derives — a `shared →
-shared` edge, no cycle; a parity test (`src/i18n-locale-set.test.ts`) asserts the
-three never drift.
+`src/` so they stay out of the TypeScript/Biome/Stylelint globs. They compile
+into `apps/extension/src/shared/paraglide/` — **gitignored and
+Biome-excluded**: `paraglideVitePlugin` (in `vite.config.ts`) regenerates it
+automatically for `dev`/`build`/`vitest`, and a `postinstall` hook
+(`pnpm gen:i18n`, wrapping `paraglide-js compile`) seeds it once after
+`pnpm install` so standalone `tsc`/`svelte-check` (which run outside Vite) see
+its `.d.ts` without a manual step. Living under `shared/`, the generated
+runtime imports nothing from other layers, so the import DAG stays legal. The
+supported-locale *set* exists once in `project.inlang/settings.json` and flows
+to the generated `locales` constant, from which `SupportedLocale` (in
+`shared/settings.ts`) derives — a `shared → shared` edge, no cycle; a parity
+test (`src/i18n-locale-set.test.ts`) asserts the three never drift.
 
 **The SW-safe locale resolver (`shared/i18n.ts`).** This module is the single
 source of truth for locale *state*; surfaces never call the generated runtime's
