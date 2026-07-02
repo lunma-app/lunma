@@ -4,6 +4,7 @@ import { crx } from '@crxjs/vite-plugin';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig } from 'vitest/config';
+import { generateDerivedControls } from './catalog/lib/generate-derived-controls';
 import manifest from './public/manifest.json' with { type: 'json' };
 
 // The two brand faces live once in the @lunma/tokens package (its `fonts/` dir
@@ -20,6 +21,14 @@ mkdirSync(fontsDest, { recursive: true });
 for (const file of ['MonaSans-Variable.woff2', 'InstrumentSerif-Regular.woff2']) {
   copyFileSync(fontsSrc + file, fontsDest + file);
 }
+
+// `catalog/lib/registry.ts` — reached transitively from `catalog/**/*.test.ts`
+// (below) via `Story.svelte`, which nearly every `*.stories.svelte` renders —
+// statically imports the gitignored `derived-controls.generated.ts`. Only
+// `vite.catalog.config.ts`'s dev server/build regenerates that file, but this
+// config's own `vitest run` also needs it to exist, so generate it here too
+// (derive-catalog-controls-from-props OpenSpec change).
+generateDerivedControls();
 
 const aliases = {
   '@': new URL('./src', import.meta.url).pathname,
