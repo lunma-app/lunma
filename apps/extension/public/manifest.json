@@ -3,7 +3,7 @@
   "default_locale": "en",
   "name": "Lunma",
   "short_name": "Lunma",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "__MSG_extDescription__",
   "minimum_chrome_version": "123",
   "permissions": [
