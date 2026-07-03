@@ -30,13 +30,35 @@
       "Bash(find *)",
       "Bash(grep *)"
     ],
+    "ask": [
+      "Edit(./.github/workflows/**)",
+      "Write(./.github/workflows/**)"
+    ],
     "deny": [
       "Read(./.env)",
       "Read(./.env.*)",
       "Edit(./.env)",
       "Edit(./.env.*)",
       "Write(./.env)",
-      "Write(./.env.*)"
+      "Write(./.env.*)",
+      "Edit(./pnpm-lock.yaml)",
+      "Write(./pnpm-lock.yaml)",
+      "Edit(./apps/extension/src/ui/icon-loaders.generated.ts)",
+      "Write(./apps/extension/src/ui/icon-loaders.generated.ts)",
+      "Edit(./apps/extension/src/shared/paraglide/**)",
+      "Write(./apps/extension/src/shared/paraglide/**)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push origin --force*)",
+      "Bash(git push origin -f*)",
+      "Bash(git push origin +*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean -f*)",
+      "Bash(git commit --amend*)",
+      "Bash(git commit --no-verify*)",
+      "Bash(git commit -n *)",
+      "Bash(rm -rf *)",
+      "Bash(sudo *)"
     ]
   },
   "hooks": {

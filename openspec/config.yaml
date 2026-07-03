@@ -190,3 +190,15 @@ rules:
       adding tasks, splitting tasks) require user agreement and a
       `tasks.md` edit. Do not silently work around the published
       task list.
+    - Drift-resolution protocol. When apply-time work discovers that
+      an artifact and reality disagree — the artifact describes
+      something wrong, the implementation genuinely needs to differ,
+      or already-written code has silently diverged — never resolve
+      it silently in either direction. Raise it via AskUserQuestion
+      with exactly three options: (a) update the artifact(s) to match
+      the intended implementation, (b) update the implementation to
+      match the artifact, or (c) accept the divergence and document
+      it as a known, deliberate exception. Whichever is chosen,
+      record the decision and its rationale in the change's
+      `design.md` Decisions log in the same change — the log is the
+      audit trail for why code and original artifacts differ.

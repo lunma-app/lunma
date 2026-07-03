@@ -16,6 +16,11 @@ paths:
 - Keep `tasks.md` checkboxes current as you implement. Any deviation from
   proposal/design/specs requires user agreement AND same-change updates to the
   artifact plus any affected `docs/` file (CLAUDE.md deviation policy).
+- Drift found at apply time (artifact wrong, implementation must differ, or
+  code already diverged) is resolved via AskUserQuestion with three options:
+  update the artifact, update the implementation, or accept + document the
+  divergence. The chosen resolution and its rationale are logged in the
+  change's `design.md` Decisions log in the same change.
 - The OpenSpec workflow runs through the `openspec-*` skills, which drive the
   `openspec` CLI (install it globally: `npm i -g @fission-ai/openspec` — see
   CONTRIBUTING.md).
