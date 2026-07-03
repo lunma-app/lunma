@@ -4,6 +4,7 @@
 // bound window (D5). Verbatim moves of the former coordinator closures.
 
 import { log } from '../../shared/logger';
+import { setTabNativePinned } from '../tab-groups';
 import type { HandlersMap } from './context';
 import { spaceExists } from './queries';
 
@@ -43,7 +44,7 @@ export function favoriteHandlers(): Pick<
       ctx.store.bindSavedTab(id, windowId, tabId, liveTab.url);
       ctx.markDirty();
       // The favorite stays OPEN but must be ungrouped (global) — D3/D5.
-      await ctx.groups.ensureFavoriteUngrouped(tabId);
+      await ctx.groups.ensureFavoriteNativePinned(tabId);
     },
     // Decouple a pinned tab into a favorite: store moves the record from its
     // Space's pinned tree to faviconRow; coordinator ungroups its live tab in
@@ -59,7 +60,7 @@ export function favoriteHandlers(): Pick<
       ctx.store.moveSavedTabToFavorites(savedTabId);
       ctx.markDirty();
       for (const tabId of boundTabIds) {
-        await ctx.groups.ensureFavoriteUngrouped(tabId);
+        await ctx.groups.ensureFavoriteNativePinned(tabId);
       }
     },
     // Couple a favorite to a Space (the active Space, supplied by the sidebar):
@@ -82,6 +83,8 @@ export function favoriteHandlers(): Pick<
       ctx.store.moveSavedTabToSpace(savedTabId, spaceId, target);
       ctx.markDirty();
       for (const [windowIdStr, tabId] of boundByWindow) {
+        // Chrome refuses to group a natively pinned tab — unpin first.
+        await setTabNativePinned(tabId, false);
         await ctx.groups.addTabToSpaceGroup(Number(windowIdStr), spaceId, tabId);
       }
     },

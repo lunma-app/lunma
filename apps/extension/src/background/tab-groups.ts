@@ -124,7 +124,7 @@ export async function ensureGroupForSpace(
  * (`groupId === -1`). Best-effort like the other wrappers — a Chrome refusal
  * (a stale/closed tab, or one already ungrouped) is swallowed, never thrown.
  * Idempotent: ungrouping an already-ungrouped tab is a cheap no-op. Fronted by
- * the coordinator's `ensureFavoriteUngrouped`, which is the single path that
+ * the coordinator's `ensureFavoriteNativePinned`, which is the single path that
  * enforces "a bound `spaceId === null` favorite's live tab is ungrouped".
  */
 export async function ungroupTabs(tabId: TabId): Promise<void> {
@@ -136,22 +136,17 @@ export async function ungroupTabs(tabId: TabId): Promise<void> {
 }
 
 /**
- * Park a tab at the start of its window's tab strip (`index: 0`), the
- * conventional favorites zone (sidebar-favicon-row D10). Pairs with
- * {@link ungroupTabs} in the coordinator's `ensureFavoriteUngrouped`: ungrouping
- * alone leaves the now-global tab sitting WHERE it was — immediately adjacent to
- * its former Space group's contiguous span — so a later Space switch that
- * collapses that group reads as sweeping the favorite under the collapse (it
- * appears to "disappear"). Moving it to the strip start puts it unambiguously
- * OUTSIDE every group, so no collapse can ever hide it. Chrome clamps `index: 0`
- * to just after any natively-pinned tabs. Best-effort — a refusal (stale/closed
- * tab) is swallowed, never thrown.
+ * Set a tab's native (tab-strip) pinned state. A natively pinned tab renders
+ * icon-only at the strip start and can never be a member of a Chrome tab group,
+ * which is what keeps a favorite's live tab visible across every Space switch.
+ * Best-effort like {@link ungroupTabs} — a refusal (stale/closed tab) is
+ * swallowed, never thrown. Idempotent: re-pinning a pinned tab is a no-op.
  */
-export async function moveTabToStripStart(tabId: TabId): Promise<void> {
+export async function setTabNativePinned(tabId: TabId, pinned: boolean): Promise<void> {
   try {
-    await chrome.tabs.move(tabId, { index: 0 });
+    await chrome.tabs.update(tabId, { pinned });
   } catch (err) {
-    log.debug('moveTabToStripStart: move refused (stale/closed)', { tabId, err });
+    log.debug('setTabNativePinned: update refused (stale/closed)', { tabId, pinned, err });
   }
 }
 
@@ -164,7 +159,7 @@ export async function moveTabToStripStart(tabId: TabId): Promise<void> {
  * a concurrent path already removed it — so `chrome.tabs.remove` rejects with
  * `No tab with id: N`. That is the *desired* end-state, not an error: swallow it
  * at `debug`, never let it bubble to the coordinator's `SIDE_EFFECT_FAILED`.
- * Mirrors {@link ungroupTabs} / {@link moveTabToStripStart}.
+ * Mirrors {@link ungroupTabs} / {@link setTabNativePinned}.
  */
 export async function closeTab(tabId: TabId): Promise<void> {
   try {

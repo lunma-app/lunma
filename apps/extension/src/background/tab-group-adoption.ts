@@ -12,8 +12,8 @@ import {
   collapseOtherTrackedGroups,
   ensureGroupForSpace,
   expandGroup,
-  moveTabToStripStart,
   resolveGroup,
+  setTabNativePinned,
   toGroupColor,
   ungroupTabs,
   updateGroupTitleColor,
@@ -446,20 +446,22 @@ async function materializeActiveGroups(
 }
 
 /**
- * Ungroup global favorites that Chrome restored still inside a group
- * (favicon-row-model D4 / Q2). After adoption + materialization, for
- * each favorite (`faviconRow` → `savedTabs[id].spaceId === null`) and each window
- * where its per-window bound tab is still grouped at boot
- * (`tabGroupById.get(tabId) >= 0`, the same boot tab→group map adoption read), the
- * pass ungroups that tab so the favorite is global again before the next Space
- * switch could collapse it **invisible**. Best-effort (a refusal is swallowed by
- * `ungroupTabs`) and bounded by favorite × window count. A favorite whose bound
- * tab Chrome restored already ungrouped (`tabGroupById.get(tabId)` is `-1` or
- * absent) is a no-op.
+ * Reconcile global favorites' restored bound tabs to the favorite invariant
+ * (favicon-row-model D4 / Q2, pin-favorites-natively): ungrouped AND natively
+ * pinned. After adoption + materialization, for each favorite (`faviconRow` →
+ * `savedTabs[id].spaceId === null`) and each window where its per-window bound
+ * tab was restored, the pass ungroups the tab when it is still grouped
+ * (`tabGroupById.get(tabId) >= 0`, the same boot tab→group map adoption read)
+ * and natively pins it when it is unpinned (per `tabPinnedById`, from the same
+ * boot tabs query) — the latter also converges favorites created before native
+ * pinning existed, with no data migration. Best-effort (refusals are swallowed
+ * by the wrappers) and bounded by favorite × window count. A favorite whose
+ * bound tab Chrome restored already ungrouped and pinned is a no-op.
  */
-async function ungroupRestoredFavorites(
+async function reconcileRestoredFavorites(
   store: LunmaStore,
   tabGroupById: Map<TabId, number>,
+  tabPinnedById: Map<TabId, boolean>,
 ): Promise<void> {
   const s = store.state;
   for (const savedTabId of s.faviconRow) {
@@ -470,10 +472,10 @@ async function ungroupRestoredFavorites(
     for (const tabId of Object.values(slots)) {
       if ((tabGroupById.get(tabId) ?? -1) >= 0) {
         await ungroupTabs(tabId);
-        // Park at the strip start too (design D10), so a favorite Chrome restored
-        // inside a group is global AND outside every group's span — otherwise the
-        // first post-restart Space switch would collapse it invisible.
-        await moveTabToStripStart(tabId);
+      }
+      // A tab absent from the boot query was not restored — leave it alone.
+      if (tabPinnedById.get(tabId) === false) {
+        await setTabNativePinned(tabId, true);
       }
     }
   }
@@ -481,7 +483,7 @@ async function ungroupRestoredFavorites(
 
 /**
  * Duplicate-Space cleanup (D9 / spec `spaces-and-tabs` "Boot reconciliation of
- * tab groups"): after adoption/materialization/favorite-ungroup, group
+ * tab groups"): after adoption/materialization/favorite reconciliation, group
  * `store.state.spaces` into normalized-name collision groups and, for each
  * group, partition members via `isSpaceEmpty` exactly as the load-path
  * self-heal (`dedupePersistedState`) does. Every member the resolution marks
@@ -557,9 +559,11 @@ export async function reconcileTabGroupsOnBoot(
 
   const tabsByGroup = new Map<number, TabId[]>();
   const tabGroupById = new Map<TabId, number>();
+  const tabPinnedById = new Map<TabId, boolean>();
   for (const tab of tabs) {
     if (tab.id === undefined) continue;
     tabGroupById.set(tab.id, tab.groupId ?? -1);
+    tabPinnedById.set(tab.id, tab.pinned === true);
     if (tab.groupId === undefined || tab.groupId < 0) continue;
     const list = tabsByGroup.get(tab.groupId);
     if (list) list.push(tab.id);
@@ -585,6 +589,6 @@ export async function reconcileTabGroupsOnBoot(
   adoptExistingGroups(store, groups, tabsByGroup);
   if (!convertedThisBoot) store.releaseTabsInUntrackedGroups(tabGroupById);
   await materializeActiveGroups(store, tabGroupById, convertedThisBoot);
-  await ungroupRestoredFavorites(store, tabGroupById);
+  await reconcileRestoredFavorites(store, tabGroupById, tabPinnedById);
   cleanUpDuplicateSpaces(store);
 }

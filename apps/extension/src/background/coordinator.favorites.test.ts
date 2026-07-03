@@ -52,10 +52,10 @@ describe('Coordinator handler: favoriteTab (mint a global favorite)', () => {
     expect(chrome.tabs.get(42)?.groupId).toBe(-1);
     expect(chrome.tabs.has(42)).toBe(true);
     expect(chrome.calls).toContain('tabs.ungroup:[42]');
-    // …and PARKED at the tab-strip start (D10) so a later Space switch that
-    // collapses its old group can never sweep it invisible.
-    expect(chrome.calls).toContain('tabs.move:42->0');
-    expect(chrome.tabs.get(42)?.index).toBe(0);
+    // …and NATIVELY PINNED so it renders icon-only at the strip start and no
+    // Space switch can ever sweep it invisible.
+    expect(chrome.calls).toContain('tabs.update:pinned=true:42');
+    expect(chrome.tabs.get(42)?.pinned).toBe(true);
   });
 
   test('is a no-op on a tab already bound to any saved tab (idempotent)', async () => {
@@ -133,12 +133,14 @@ describe('Coordinator handler: favoriteSavedTab (decouple)', () => {
     expect(store.state.pinnedBySpace.work).toEqual([]);
     expect(chrome.tabs.get(42)?.groupId).toBe(-1);
     expect(chrome.tabs.get(77)?.groupId).toBe(-1);
-    // Both bound tabs are parked at their window's strip start (D10).
-    expect(chrome.calls).toContain('tabs.move:42->0');
-    expect(chrome.calls).toContain('tabs.move:77->0');
+    // Both bound tabs are natively pinned in their own window.
+    expect(chrome.calls).toContain('tabs.update:pinned=true:42');
+    expect(chrome.calls).toContain('tabs.update:pinned=true:77');
+    expect(chrome.tabs.get(42)?.pinned).toBe(true);
+    expect(chrome.tabs.get(77)?.pinned).toBe(true);
   });
 
-  test('a favorited tab stays ungrouped AND parked across a subsequent Space switch', async () => {
+  test('a favorited tab stays ungrouped AND natively pinned across a subsequent Space switch', async () => {
     // Reproduces the reported "favorite disappears when switching space": after
     // favoriting, switching to another Space must NOT re-group or strand the tab.
     const { coordinator, store } = makeCoordinator();
@@ -159,10 +161,10 @@ describe('Coordinator handler: favoriteSavedTab (decouple)', () => {
     );
     await coordinator.idle();
 
-    // The favorite's tab is global (ungrouped) and parked at the strip start, so
+    // The favorite's tab is global (ungrouped) and natively pinned, so
     // collapsing the outgoing "work" group leaves it untouched and visible.
     expect(chrome.tabs.get(42)?.groupId).toBe(-1);
-    expect(chrome.tabs.get(42)?.index).toBe(0);
+    expect(chrome.tabs.get(42)?.pinned).toBe(true);
     expect(chrome.tabs.has(42)).toBe(true);
   });
 
@@ -261,8 +263,8 @@ describe('Coordinator handler: pinSavedTab (couple)', () => {
     store.state.liveTabsById[77] = live(77, 200);
     chrome.addGroup({ id: 1, windowId: 100 });
     chrome.addGroup({ id: 2, windowId: 200 });
-    chrome.addTab({ id: 42, windowId: 100, groupId: -1 });
-    chrome.addTab({ id: 77, windowId: 200, groupId: -1 });
+    chrome.addTab({ id: 42, windowId: 100, groupId: -1, pinned: true });
+    chrome.addTab({ id: 77, windowId: 200, groupId: -1, pinned: true });
 
     coordinator.enqueue(
       sidebar({ kind: 'pinSavedTab', payload: { savedTabId: 'f1', spaceId: 'work' } }, 'c1'),
@@ -274,6 +276,87 @@ describe('Coordinator handler: pinSavedTab (couple)', () => {
     expect(store.state.pinnedBySpace.work).toEqual([{ kind: 'tab', id: 'f1' }]);
     expect(chrome.tabs.get(42)?.groupId).toBe(1);
     expect(chrome.tabs.get(77)?.groupId).toBe(2);
+    // Each bound tab is natively UNPINNED before it joins its Space group —
+    // Chrome refuses to group a natively pinned tab.
+    expect(chrome.tabs.get(42)?.pinned).toBe(false);
+    expect(chrome.tabs.get(77)?.pinned).toBe(false);
+    expect(chrome.calls.indexOf('tabs.update:pinned=false:42')).toBeLessThan(
+      chrome.calls.findIndex((c) => c.startsWith('tabs.group:[42]')),
+    );
+  });
+});
+
+describe('Coordinator handler: unpinTab on a favorite (remove to Temporary)', () => {
+  test('natively unpins each bound tab before it returns to Temporary', async () => {
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push(space('work'));
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.activeSpaceByWindow[200] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [], tempTabTitles: {} },
+    };
+    store.state.spaceInstancesByWindow[200] = {
+      work: { spaceId: 'work', groupId: 2, tempTabIds: [], tempTabTitles: {} },
+    };
+    store.state.savedTabs.f1 = {
+      id: 'f1',
+      spaceId: null,
+      title: 'GH',
+      originalURL: 'https://github.com/',
+      currentURL: 'https://github.com/',
+    };
+    store.state.faviconRow = ['f1'];
+    store.state.tabBindings.f1 = { 100: 42, 200: 77 };
+    store.state.liveTabsById[42] = live(42, 100);
+    store.state.liveTabsById[77] = live(77, 200);
+    chrome.addTab({ id: 42, windowId: 100, groupId: -1, pinned: true });
+    chrome.addTab({ id: 77, windowId: 200, groupId: -1, pinned: true });
+
+    coordinator.enqueue(
+      sidebar({ kind: 'unpinTab', payload: { savedTabId: 'f1', windowId: 100 } }, 'c1'),
+    );
+    await coordinator.idle();
+
+    expect(store.state.savedTabs.f1).toBeUndefined();
+    expect(store.state.faviconRow).toEqual([]);
+    // Each ex-favorite tab regains a normal full-size tab in its own window…
+    expect(chrome.tabs.get(42)?.pinned).toBe(false);
+    expect(chrome.tabs.get(77)?.pinned).toBe(false);
+    // …and returns to that window's Temporary, still open.
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([42]);
+    expect(store.state.spaceInstancesByWindow[200]?.work?.tempTabIds).toEqual([77]);
+    expect(chrome.tabs.has(42)).toBe(true);
+    expect(chrome.tabs.has(77)).toBe(true);
+  });
+
+  test('a coupled (non-favorite) saved tab is not natively unpinned on unpin', async () => {
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push(space('work'));
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [], tempTabTitles: {} },
+    };
+    store.state.savedTabs.t1 = {
+      id: 't1',
+      spaceId: 'work',
+      title: 'GH',
+      originalURL: 'https://github.com/',
+      currentURL: 'https://github.com/',
+    };
+    store.state.tabBindings.t1 = { 100: 42 };
+    store.setPinned('work', [{ kind: 'tab', id: 't1' }]);
+    store.state.liveTabsById[42] = live(42, 100);
+    chrome.addGroup({ id: 1, windowId: 100 });
+    chrome.addTab({ id: 42, windowId: 100, groupId: 1 });
+
+    coordinator.enqueue(
+      sidebar({ kind: 'unpinTab', payload: { savedTabId: 't1', windowId: 100 } }, 'c1'),
+    );
+    await coordinator.idle();
+
+    expect(store.state.savedTabs.t1).toBeUndefined();
+    // No native pin state was ever set — and none is touched on the coupled path.
+    expect(chrome.calls.some((c) => c.startsWith('tabs.update:pinned'))).toBe(false);
   });
 });
 
@@ -317,8 +400,10 @@ describe('Coordinator handler: openSavedTab for a favorite', () => {
 
     const newTabId = store.state.tabBindings.fav?.[100];
     expect(newTabId).toBeDefined();
-    // The favorite's freshly-opened tab is ungrouped (global), never in group 1.
+    // The favorite's freshly-opened tab is ungrouped (global), never in group 1,
+    // and natively pinned.
     expect(chrome.tabs.get(newTabId as number)?.groupId).toBe(-1);
+    expect(chrome.tabs.get(newTabId as number)?.pinned).toBe(true);
     // No tabs.group call adopted the favorite into a Space group.
     expect(chrome.calls.some((c) => c.startsWith('tabs.group'))).toBe(false);
   });
@@ -326,7 +411,7 @@ describe('Coordinator handler: openSavedTab for a favorite', () => {
   // In-place open (newtab-hearth, spaces-and-tabs rule 2b): a favorite activated on
   // the home navigates the home's OWN tab via `replaceTabId`. The navigated tab —
   // which already sits inside the active Space's group from new-tab grouping — is
-  // ungrouped + parked so the favorite invariant holds regardless of prior membership.
+  // ungrouped + natively pinned so the favorite invariant holds regardless of prior membership.
   test('opening a favorite in place ungroups the navigated home tab (no new tab)', async () => {
     const { coordinator, store } = makeCoordinator();
     store.state.spaces.push(space('work'));
@@ -360,11 +445,11 @@ describe('Coordinator handler: openSavedTab for a favorite', () => {
     expect(store.state.tabBindings.fav).toEqual({ 100: 42 });
     expect(chrome.calls).toContain('tabs.update:url:42');
     expect(chrome.calls.some((c) => c.startsWith('tabs.create'))).toBe(false);
-    // The navigated home tab ends ungrouped (global) and parked at the strip start,
+    // The navigated home tab ends ungrouped (global) and natively pinned,
     // a member of no Space group despite its prior G_work membership.
     expect(chrome.tabs.get(42)?.groupId).toBe(-1);
     expect(chrome.calls).toContain('tabs.ungroup:[42]');
-    expect(chrome.calls).toContain('tabs.move:42->0');
+    expect(chrome.calls).toContain('tabs.update:pinned=true:42');
   });
 });
 

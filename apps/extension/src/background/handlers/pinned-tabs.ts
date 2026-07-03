@@ -3,7 +3,7 @@
 // moves of the former coordinator closures.
 
 import { log } from '../../shared/logger';
-import { closeTab } from '../tab-groups';
+import { closeTab, setTabNativePinned } from '../tab-groups';
 import { activateSpaceInWindow } from './activation';
 import type { HandlersMap } from './context';
 import { spaceExists } from './queries';
@@ -94,7 +94,7 @@ export function pinnedTabHandlers(): Pick<
       // navigated in place (newtab-hearth, spaces-and-tabs rule 2b): the navigated
       // tab takes the created tab's grouping role. This matters on the in-place
       // path because the home tab may ALREADY sit inside the active Space's group
-      // (grouped on creation, rule 2) — `ensureFavoriteUngrouped`'s ungroup + park
+      // (grouped on creation, rule 2) — `ensureFavoriteNativePinned`'s ungroup + native pin
       // establishes the favorite invariant regardless of that prior membership.
       if (saved.spaceId === null) {
         // A global favorite (favicon-row-model D3/D8): leave its live
@@ -106,7 +106,7 @@ export function pinnedTabHandlers(): Pick<
         // needs NO hardening (design D9): `groupNewTab` early-returns for any
         // tab not in `tempTabIds`, and this bound favorite never is, so no new
         // drain race exists.
-        await ctx.groups.ensureFavoriteUngrouped(tabId);
+        await ctx.groups.ensureFavoriteNativePinned(tabId);
       } else {
         // A pinned/saved tab belongs to its Space. If that Space is not the
         // window's active one (e.g. a cross-Space open from the launcher),
@@ -282,7 +282,7 @@ export function pinnedTabHandlers(): Pick<
       }
       ctx.markDirty();
     },
-    unpinTab: (ctx, event) => {
+    unpinTab: async (ctx, event) => {
       const { savedTabId } = event.payload;
       const saved = ctx.store.state.savedTabs[savedTabId];
       if (!saved) {
@@ -299,6 +299,7 @@ export function pinnedTabHandlers(): Pick<
       // families (the pinned tree AND `faviconRow`, design D6), so the favorite
       // path is fully handled there; only a coupled tab needs the explicit
       // `removePinned`.
+      const wasFavorite = saved.spaceId === null;
       if (saved.spaceId !== null) {
         ctx.store.removePinned(saved.spaceId, savedTabId);
       }
@@ -306,6 +307,9 @@ export function pinnedTabHandlers(): Pick<
       // Restore each tab (no chrome.tabs.remove). Must run after removeSavedTab
       // so the binding is gone and restoreTempTab sees each tab as unbound.
       for (const [windowIdStr, tabId] of boundByWindow) {
+        // An ex-favorite's tab was natively pinned; unpin it so it regains a
+        // normal full-size tab back in Temporary.
+        if (wasFavorite) await setTabNativePinned(tabId, false);
         ctx.store.restoreTempTab(Number(windowIdStr), tabId);
       }
       ctx.markDirty();

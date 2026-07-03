@@ -799,7 +799,7 @@ describe('reconcileTabGroupsOnBoot — fresh-install conversion', () => {
   });
 });
 
-describe('reconcileTabGroupsOnBoot — favorite ungroup reconciliation (D4)', () => {
+describe('reconcileTabGroupsOnBoot — favorite reconciliation: ungroup + native pin (D4)', () => {
   test('a favorite restored still grouped is ungrouped at boot', async () => {
     const store = makeStore();
     store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
@@ -825,14 +825,17 @@ describe('reconcileTabGroupsOnBoot — favorite ungroup reconciliation (D4)', ()
 
     await reconcileTabGroupsOnBoot(store);
 
-    // The favorite's tab is ungrouped; the Space group + its real member survive.
+    // The favorite's tab is ungrouped AND natively pinned; the Space group +
+    // its real member survive.
     expect(chrome.tabs.get(42)?.groupId).toBe(-1);
     expect(chrome.calls).toContain('tabs.ungroup:[42]');
+    expect(chrome.calls).toContain('tabs.update:pinned=true:42');
+    expect(chrome.tabs.get(42)?.pinned).toBe(true);
     expect(store.state.spaceInstancesByWindow[100]?.work?.groupId).toBe(77);
     expect(chrome.tabs.get(17)?.groupId).toBe(77);
   });
 
-  test('a favorite restored already ungrouped is a no-op', async () => {
+  test('a favorite restored ungrouped but unpinned is natively pinned at boot (pre-existing-user convergence)', async () => {
     const store = makeStore();
     store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
     store.state.activeSpaceByWindow[100] = 'work';
@@ -851,11 +854,41 @@ describe('reconcileTabGroupsOnBoot — favorite ungroup reconciliation (D4)', ()
     for (const id of [17, 43]) store.state.liveTabsById[id] = live(id, 100);
     chrome.addGroup({ id: 77, windowId: 100, collapsed: false });
     chrome.addTab({ id: 17, windowId: 100, groupId: 77 });
-    chrome.addTab({ id: 43, windowId: 100, groupId: -1 }); // favorite already global
+    chrome.addTab({ id: 43, windowId: 100, groupId: -1, pinned: false });
+
+    await reconcileTabGroupsOnBoot(store);
+
+    // No ungroup needed, but the favorite converges to natively pinned.
+    expect(chrome.calls.some((c) => c === 'tabs.ungroup:[43]')).toBe(false);
+    expect(chrome.calls).toContain('tabs.update:pinned=true:43');
+    expect(chrome.tabs.get(43)?.pinned).toBe(true);
+  });
+
+  test('a favorite restored already ungrouped and pinned is a no-op', async () => {
+    const store = makeStore();
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 77, tempTabIds: [17], tempTabTitles: {} },
+    };
+    store.state.savedTabs.fav = {
+      id: 'fav',
+      spaceId: null,
+      title: 'GitHub',
+      originalURL: 'https://github.com/',
+      currentURL: 'https://github.com/',
+    };
+    store.state.tabBindings.fav = { 100: 43 };
+    store.state.faviconRow = ['fav'];
+    for (const id of [17, 43]) store.state.liveTabsById[id] = live(id, 100);
+    chrome.addGroup({ id: 77, windowId: 100, collapsed: false });
+    chrome.addTab({ id: 17, windowId: 100, groupId: 77 });
+    chrome.addTab({ id: 43, windowId: 100, groupId: -1, pinned: true }); // already global + pinned
 
     await reconcileTabGroupsOnBoot(store);
 
     expect(chrome.calls.some((c) => c === 'tabs.ungroup:[43]')).toBe(false);
+    expect(chrome.calls.some((c) => c.startsWith('tabs.update:pinned'))).toBe(false);
     expect(chrome.tabs.get(43)?.groupId).toBe(-1);
   });
 });

@@ -23,8 +23,10 @@ export interface FakeTab {
   /** Live URL — used by the authoritative home-tab query (`isNewTabUrl`). A
    * URL-less `tabs.create` lands on the new-tab page, so `create` defaults it. */
   url?: string;
-  /** Strip position — set by `tabs.move` (favorite parking, D10). */
+  /** Strip position — set by `tabs.move`. */
   index?: number;
+  /** Native tab-strip pin — set by `tabs.update` (favorite native pinning). */
+  pinned?: boolean;
 }
 
 export interface TabGroupsController {
@@ -129,23 +131,31 @@ export function installTabGroupsChrome(): TabGroupsController {
         ctrl.calls.push(`tabs.move:${tabId}->${props.index}`);
         return { ...tab };
       }),
-      update: vi.fn(async (tabId: number, props: { active?: boolean; url?: string }) => {
-        const tab = ctrl.tabs.get(tabId);
-        // A missing tab rejects — the in-place open's stale-`replaceTabId` path
-        // (newtab-hearth) relies on this to fall back to the create path.
-        if (!tab) throw new Error(`No tab with id: ${tabId}`);
-        if (props.url !== undefined) {
-          tab.url = props.url;
-          ctrl.calls.push(`tabs.update:url:${tabId}`);
-        }
-        if (props.active) {
-          for (const t of ctrl.tabs.values()) {
-            if (t.windowId === tab.windowId) t.active = t.id === tabId;
+      update: vi.fn(
+        async (tabId: number, props: { active?: boolean; url?: string; pinned?: boolean }) => {
+          const tab = ctrl.tabs.get(tabId);
+          // A missing tab rejects — the in-place open's stale-`replaceTabId` path
+          // (newtab-hearth) relies on this to fall back to the create path.
+          if (!tab) throw new Error(`No tab with id: ${tabId}`);
+          if (props.url !== undefined) {
+            tab.url = props.url;
+            ctrl.calls.push(`tabs.update:url:${tabId}`);
           }
-          ctrl.calls.push(`tabs.update:active:${tabId}`);
-        }
-        return { ...tab };
-      }),
+          if (props.pinned !== undefined) {
+            tab.pinned = props.pinned;
+            // Chrome never allows a pinned tab inside a tab group.
+            if (props.pinned) tab.groupId = NO_GROUP;
+            ctrl.calls.push(`tabs.update:pinned=${props.pinned}:${tabId}`);
+          }
+          if (props.active) {
+            for (const t of ctrl.tabs.values()) {
+              if (t.windowId === tab.windowId) t.active = t.id === tabId;
+            }
+            ctrl.calls.push(`tabs.update:active:${tabId}`);
+          }
+          return { ...tab };
+        },
+      ),
       create: vi.fn(async (props: { windowId?: number; url?: string; active?: boolean }) => {
         const id = nextTabId++;
         const windowId = props.windowId ?? 0;
