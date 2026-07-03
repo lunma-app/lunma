@@ -195,7 +195,7 @@ rules:
       something wrong, the implementation genuinely needs to differ,
       or already-written code has silently diverged — never resolve
       it silently in either direction. Raise it via AskUserQuestion
-      with exactly three options: (a) update the artifact(s) to match
+      with exactly three options — (a) update the artifact(s) to match
       the intended implementation, (b) update the implementation to
       match the artifact, or (c) accept the divergence and document
       it as a known, deliberate exception. Whichever is chosen,
