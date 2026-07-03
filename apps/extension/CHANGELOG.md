@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.4.4](https://github.com/lunma-app/lunma/compare/v0.4.3...v0.4.4) (2026-07-03)
+
+
+### Bug Fixes
+
+* **background:** dedup direct-URL tab creation, unscoped by gesture ([b66fc7d](https://github.com/lunma-app/lunma/commit/b66fc7dd2d683bc5d2237f086e01b0aef97662f7))
+* **background:** exclude about:blank from onCreated-time tab dedup ([645465e](https://github.com/lunma-app/lunma/commit/645465ea256e35ae8147f9ec9c1af21a8920c977))
+* **background:** stop draining user-created tab groups ([9c9d328](https://github.com/lunma-app/lunma/commit/9c9d32802eb8d88870f3f86df94684f68c5bceab))
+* **catalog:** generate derived-controls.generated.ts for plain vitest too ([3b9023c](https://github.com/lunma-app/lunma/commit/3b9023cd30cc544626cc248cad436ba5636c8297))
+* **catalog:** stop Examples tiles from clipping open popovers ([1eb74d5](https://github.com/lunma-app/lunma/commit/1eb74d5794266a98ef0742dac616028c53243281))
+* **launcher:** default scope pickers to all-checked, not none ([fb5d8e3](https://github.com/lunma-app/lunma/commit/fb5d8e37d0b8d97c6913a4691089ddb93f52264e))
+* **launcher:** fix select-all/clear feedback in scope pickers ([59f7777](https://github.com/lunma-app/lunma/commit/59f77772d9a26eafe9451be15d61308ab5641553))
+* **launcher:** make an empty scope filter mean "match nothing" ([2249ec4](https://github.com/lunma-app/lunma/commit/2249ec4a7ec7b5a64d34fba73c6a4cd2df9dccbe))
+* **launcher:** stop node re-renders from stomping scope-picker state ([0171a71](https://github.com/lunma-app/lunma/commit/0171a719f89306f042f72536d52f59df12686643))
+* **launcher:** use neutral shadow for waiting-on-you lane ([db93d4e](https://github.com/lunma-app/lunma/commit/db93d4e776745cbabd972dc81e524e26d8472bfe))
+* **spaces:** drop empty duplicate-named Spaces on read/boot ([5481826](https://github.com/lunma-app/lunma/commit/5481826ddca69adf937970dc778983843d1e04a1))
+
 ## [0.4.3](https://github.com/lunma-app/lunma/compare/v0.4.2...v0.4.3) (2026-07-01)
 
 

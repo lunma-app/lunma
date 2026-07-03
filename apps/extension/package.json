@@ -1,6 +1,6 @@
 {
   "name": "@lunma/extension",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "license": "Apache-2.0",
   "private": true,
   "description": "Lunma: spatial tab and bookmark management for Chrome (MV3 extension)",
