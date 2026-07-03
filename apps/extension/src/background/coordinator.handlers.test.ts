@@ -2212,6 +2212,45 @@ describe('Coordinator handlers: duplicateTab', () => {
     expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toContain(1000);
   });
 
+  // Regression: a duplicateTab clone is tracked immediately at creation (via
+  // insertTempTabAfter), so it's "tracked but not yet complete" exactly like
+  // a redirect-chain tab — the redirect-chain-tab-dedup widening (which makes
+  // onUpdated dedup-eligible for ANY tracked-but-not-yet-complete tab, not just
+  // fully untracked ones) must not catch a duplicate's clone on a later
+  // onUpdated event, or it self-matches its own still-open source (excluded
+  // from matching ITSELF via excludeTabId, but not from matching the SOURCE)
+  // and gets dedup-collapsed — the clone closes, the source gets promoted to
+  // the top via dedupMovesTabToTop, and "Duplicate" silently does nothing.
+  test('the clone is never dedup-collapsed into its source by a later onUpdated event', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [42], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[42] = {
+      tabId: 42,
+      windowId: 100,
+      title: 'Example',
+      url: 'https://example.com/',
+      active: true,
+      status: 'complete',
+    };
+    coordinator.enqueue(sidebar({ kind: 'duplicateTab', payload: { tabId: 42 } }, 'sess:1'));
+    await coordinator.idle();
+    coordinator.enqueue(tabCreated(1000, 100, 'https://example.com/'));
+    await coordinator.idle();
+    // A later onUpdated event for the clone still carrying its (unchanged)
+    // URL — e.g. a coalesced "confirmation" update Chrome fires while the
+    // duplicate finishes restoring — before it ever reaches `status: 'complete'`.
+    coordinator.enqueue(tabUpdated(1000, { url: 'https://example.com/', status: 'loading' }));
+    await coordinator.idle();
+    expect(chromeStub.tabs.update).not.toHaveBeenCalledWith(42, { active: true });
+    expect(chromeStub.tabs.remove).not.toHaveBeenCalledWith(1000);
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([42, 1000]);
+  });
+
   // duplicate-tab-adjacent-placement: the clone lands immediately after its
   // source, not at the ordinary newest-first top of Temporary.
   test('the clone is inserted immediately after its source in tempTabIds', async () => {
