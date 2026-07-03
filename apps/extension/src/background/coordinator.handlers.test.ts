@@ -2212,6 +2212,58 @@ describe('Coordinator handlers: duplicateTab', () => {
     expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toContain(1000);
   });
 
+  // duplicate-tab-adjacent-placement: the clone lands immediately after its
+  // source, not at the ordinary newest-first top of Temporary.
+  test('the clone is inserted immediately after its source in tempTabIds', async () => {
+    installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [1, 42, 2], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[42] = {
+      tabId: 42,
+      windowId: 100,
+      title: 'Example',
+      url: 'https://example.com/',
+      active: true,
+      status: 'complete',
+    };
+    coordinator.enqueue(sidebar({ kind: 'duplicateTab', payload: { tabId: 42 } }, 'sess:1'));
+    await coordinator.idle();
+    coordinator.enqueue(tabCreated(1000, 100, 'https://example.com/'));
+    await coordinator.idle();
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([1, 42, 1000, 2]);
+  });
+
+  test('falls back to top-of-list when the source has been closed by the time the clone lands', async () => {
+    installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [42, 2], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[42] = {
+      tabId: 42,
+      windowId: 100,
+      title: 'Example',
+      url: 'https://example.com/',
+      active: true,
+      status: 'complete',
+    };
+    coordinator.enqueue(sidebar({ kind: 'duplicateTab', payload: { tabId: 42 } }, 'sess:1'));
+    await coordinator.idle();
+    // Source closes before the clone's tabs.onCreated fires.
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [2], tempTabTitles: {} },
+    };
+    coordinator.enqueue(tabCreated(1000, 100, 'https://example.com/'));
+    await coordinator.idle();
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([1000, 2]);
+  });
+
   test('the pending-duplicate record is consumed once — a later unrelated tab at the same URL is deduped normally', async () => {
     const chromeStub = installSavedTabChromeStub();
     const { coordinator, store } = makeCoordinator();
@@ -2235,11 +2287,13 @@ describe('Coordinator handlers: duplicateTab', () => {
     await coordinator.idle();
 
     // A second, unrelated tab created at the same URL afterwards has no
-    // leftover record protecting it — it IS deduped, matching the active
-    // Space's newest-first tempTabIds order (tab 1000, tracked most recently).
+    // leftover record protecting it — it IS deduped, matching whichever tab
+    // findTabInActiveSpace hits first (tempTabIds is [42, 1000]: the clone
+    // was inserted right after its source — duplicate-tab-adjacent-placement
+    // — not at the top, so 42 iterates first).
     coordinator.enqueue(tabCreated(1001, 100, 'https://example.com/'));
     await coordinator.idle();
-    expect(chromeStub.tabs.update).toHaveBeenCalledWith(1000, { active: true });
+    expect(chromeStub.tabs.update).toHaveBeenCalledWith(42, { active: true });
     expect(chromeStub.tabs.remove).toHaveBeenCalledWith(1001);
   });
 });
