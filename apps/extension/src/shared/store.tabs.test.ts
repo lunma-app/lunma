@@ -249,6 +249,87 @@ describe('LunmaStore.onTabCreated order (newest-first)', () => {
   });
 });
 
+describe('LunmaStore.insertTempTabAfter (duplicate-tab-adjacent-placement)', () => {
+  test('inserts the tab immediately after afterTabId', () => {
+    const store = makeStore();
+    const space = seedSpace(store);
+    store.state.spaceInstancesByWindow[100] = {
+      [space.id]: { spaceId: space.id, groupId: 1, tempTabIds: [1, 42, 2], tempTabTitles: {} },
+    };
+    store.state.activeSpaceByWindow[100] = space.id;
+    store.insertTempTabAfter(100, 42, 1000);
+    expect(store.state.spaceInstancesByWindow[100]?.[space.id]?.tempTabIds).toEqual([
+      1, 42, 1000, 2,
+    ]);
+  });
+
+  test('inserts after the last tab when afterTabId is at the end', () => {
+    const store = makeStore();
+    const space = seedSpace(store);
+    store.state.spaceInstancesByWindow[100] = {
+      [space.id]: { spaceId: space.id, groupId: 1, tempTabIds: [1, 42], tempTabTitles: {} },
+    };
+    store.state.activeSpaceByWindow[100] = space.id;
+    store.insertTempTabAfter(100, 42, 1000);
+    expect(store.state.spaceInstancesByWindow[100]?.[space.id]?.tempTabIds).toEqual([1, 42, 1000]);
+  });
+
+  test('falls back to unshift (top of list) when afterTabId is not present', () => {
+    const store = makeStore();
+    const space = seedSpace(store);
+    store.state.spaceInstancesByWindow[100] = {
+      [space.id]: { spaceId: space.id, groupId: 1, tempTabIds: [1, 2], tempTabTitles: {} },
+    };
+    store.state.activeSpaceByWindow[100] = space.id;
+    store.insertTempTabAfter(100, 999, 1000);
+    expect(store.state.spaceInstancesByWindow[100]?.[space.id]?.tempTabIds).toEqual([1000, 1, 2]);
+  });
+
+  test('is idempotent when the tab is already present', () => {
+    const store = makeStore();
+    const space = seedSpace(store);
+    store.state.spaceInstancesByWindow[100] = {
+      [space.id]: { spaceId: space.id, groupId: 1, tempTabIds: [1, 42, 2], tempTabTitles: {} },
+    };
+    store.state.activeSpaceByWindow[100] = space.id;
+    store.insertTempTabAfter(100, 1, 42);
+    expect(store.state.spaceInstancesByWindow[100]?.[space.id]?.tempTabIds).toEqual([1, 42, 2]);
+  });
+
+  test('is a no-op for a bound tab', () => {
+    const store = makeStore();
+    const space = seedSpace(store);
+    store.state.spaceInstancesByWindow[100] = {
+      [space.id]: { spaceId: space.id, groupId: 1, tempTabIds: [1, 2], tempTabTitles: {} },
+    };
+    store.state.activeSpaceByWindow[100] = space.id;
+    store.state.savedTabs['st-1'] = savedTab({ currentURL: 'https://github.com/' });
+    store.state.tabBindings['st-1'] = { 100: 1000 };
+    store.insertTempTabAfter(100, 1, 1000);
+    expect(store.state.spaceInstancesByWindow[100]?.[space.id]?.tempTabIds).toEqual([1, 2]);
+  });
+
+  test('is a no-op when the window has no instance', () => {
+    const store = makeStore();
+    store.insertTempTabAfter(999, 1, 1000);
+    expect(store.state.spaceInstancesByWindow[999]).toBeUndefined();
+  });
+
+  test('evicts the tab from a sibling instance in the same window first', () => {
+    const store = makeStore();
+    const work = seedSpace(store, { id: 'work', name: 'Work' });
+    const side = seedSpace(store, { id: 'side', name: 'Side' });
+    store.state.spaceInstancesByWindow[100] = {
+      [work.id]: { spaceId: work.id, groupId: 11, tempTabIds: [1], tempTabTitles: {} },
+      [side.id]: { spaceId: side.id, groupId: 22, tempTabIds: [42], tempTabTitles: {} },
+    };
+    store.state.activeSpaceByWindow[100] = work.id;
+    store.insertTempTabAfter(100, 1, 42);
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([1, 42]);
+    expect(store.state.spaceInstancesByWindow[100]?.side?.tempTabIds).toEqual([]);
+  });
+});
+
 describe('LunmaStore per-window ownership guard (prevent-space-group-collapse)', () => {
   test('onTabCreated claims the tab from a sibling instance in the same window', () => {
     const store = makeStore();

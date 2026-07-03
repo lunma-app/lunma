@@ -67,9 +67,13 @@ export function chromeTabHandlers(): Pick<
         // `duplicateTab` handler in temp-tabs.ts) must never be caught here — it's
         // the deliberate "give me a second tab of this page" action, and its clone's
         // URL is by definition identical to its still-open source tab's URL (always
-        // an exact match). `duplicateTab` records the source's (windowId, url) via
-        // `markPendingDuplicateTab` BEFORE calling `chrome.tabs.duplicate`;
-        // `consumePendingDuplicateTab` here recognises and consumes that record.
+        // an exact match). `duplicateTab` records the source's (windowId, url,
+        // tabId) via `markPendingDuplicateTab` BEFORE calling `chrome.tabs.duplicate`;
+        // `consumePendingDuplicateTab` here recognises and consumes that record,
+        // returning the SOURCE tab's id — consumed unconditionally (not gated on
+        // `dedupNewTabNavigations`, unlike the dedup lookup below), since a
+        // duplicate's placement (see `duplicateSourceTabId` below) is a separate
+        // concern from whether dedup itself is enabled.
         //
         // `about:blank` is excluded too: it is Chrome's placeholder for "not yet
         // navigated" (any freshly-blank tab reports it, including Ctrl+T, a tab
@@ -79,11 +83,14 @@ export function chromeTabHandlers(): Pick<
         // URLs — so without this it collapses every second blank tab into the
         // first, defeating "open a new blank tab" entirely.
         const resolvedUrl = tab.url || tab.pendingUrl;
+        const duplicateSourceTabId = resolvedUrl
+          ? consumePendingDuplicateTab(tab.windowId, resolvedUrl)
+          : null;
         if (
+          duplicateSourceTabId === null &&
           resolvedUrl &&
           resolvedUrl !== 'about:blank' &&
-          ctx.dedupNewTabNavigations() &&
-          !consumePendingDuplicateTab(tab.windowId, resolvedUrl)
+          ctx.dedupNewTabNavigations()
         ) {
           const found = findTabInActiveSpace(ctx.store.state, tab.windowId, resolvedUrl);
           if (found === null) {
@@ -129,7 +136,14 @@ export function chromeTabHandlers(): Pick<
             }
           }
         }
-        ctx.store.onTabCreated({ id: tab.id, windowId: tab.windowId });
+        // duplicate-tab-adjacent-placement: a duplicateTab clone is inserted
+        // immediately after its source instead of the ordinary newest-first
+        // top-of-list every other new tab gets.
+        if (duplicateSourceTabId !== null && tab.id !== undefined) {
+          ctx.store.insertTempTabAfter(tab.windowId, duplicateSourceTabId, tab.id);
+        } else {
+          ctx.store.onTabCreated({ id: tab.id, windowId: tab.windowId });
+        }
       }
       ctx.store.syncLiveTab({
         id: tab.id,

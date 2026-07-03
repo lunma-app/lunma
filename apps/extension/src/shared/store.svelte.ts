@@ -578,6 +578,33 @@ export class LunmaStore {
   }
 
   /**
+   * Insert a freshly-created tab immediately after `afterTabId` in the
+   * window's active Space instance (duplicate-tab-adjacent-placement) —
+   * `duplicateTab`'s clone lands next to its source instead of the ordinary
+   * newest-first top-of-list `onTabCreated` gives every other new tab.
+   * Falls back to `onTabCreated`'s normal top-of-list placement when
+   * `afterTabId` isn't present in the instance (e.g. the source was closed
+   * or moved to another Space between the duplicate being issued and the
+   * clone landing). Same guards as `onTabCreated`: no-op for a bound tab or
+   * one already present; claims the tab from any sibling instance first.
+   */
+  insertTempTabAfter(windowId: WindowId, afterTabId: TabId, tabId: TabId): void {
+    const spaceId = this.state.activeSpaceByWindow[windowId];
+    if (spaceId == null) return;
+    const instance = this.state.spaceInstancesByWindow[windowId]?.[spaceId];
+    if (!instance) return;
+    if (this.isBound(tabId)) return;
+    if (instance.tempTabIds.includes(tabId)) return;
+    this.claimTabForInstance(windowId, spaceId, tabId);
+    const idx = instance.tempTabIds.indexOf(afterTabId);
+    if (idx === -1) {
+      instance.tempTabIds.unshift(tabId);
+    } else {
+      instance.tempTabIds.splice(idx + 1, 0, tabId);
+    }
+  }
+
+  /**
    * Reorder a (window, Space) instance's Temporary order per `tabIds` (manual
    * reorder via drag/Move up/down). Scoped by `spaceId` — not the window's
    * *active* Space — because every carousel panel renders its own `TempTabs`
