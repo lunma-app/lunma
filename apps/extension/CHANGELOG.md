@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.5](https://github.com/lunma-app/lunma/compare/v0.4.4...v0.4.5) (2026-07-03)
+
+
+### Bug Fixes
+
+* **background:** dedup a tab redirected through an interstitial ([95928d0](https://github.com/lunma-app/lunma/commit/95928d0462daba513b48a57d7816d1fe2ce6f786))
+* **background:** exclude about:blank from the navigation dedup path ([a3338a4](https://github.com/lunma-app/lunma/commit/a3338a4423bc0a1484881ccb99c8c83231fa9d8b))
+* **background:** fix temp-tab ordering and dedup reuse position ([c25657b](https://github.com/lunma-app/lunma/commit/c25657b96bdb6464003182f1185111aba4d98568))
+* **background:** place duplicated tabs next to their source ([48783a4](https://github.com/lunma-app/lunma/commit/48783a4f2b3144ac206cd96a8cad499fc82032ff))
+* **background:** stop duplicate clones being dedup-collapsed ([0d71cbd](https://github.com/lunma-app/lunma/commit/0d71cbd1db435e3c25999b25cc61082f6dc583fb))
+* **sidebar:** add duplicate icon and clear-duplicates action ([ec34483](https://github.com/lunma-app/lunma/commit/ec3448333614cd6db041ef923f5c9381d4cbaa10))
+
 ## [0.4.4](https://github.com/lunma-app/lunma/compare/v0.4.3...v0.4.4) (2026-07-03)
 
 
