@@ -321,6 +321,22 @@ that tab entirely, falling through to adoption — identical to
 adopted (see "duplicateTab command handler duplicates the tab via Chrome
 API" below).
 
+This exclusion SHALL extend for the clone's entire initial-load window, not
+only the single `tabs.onCreated` check: immediately after the clone is
+placed (see "duplicateTab command handler duplicates the tab via Chrome
+API"), its redirect-chain-tab-dedup eligibility (the "A blank new tab
+navigating to an already-open URL is deduplicated" requirement's
+`initial-load` tracking) SHALL be cleared, so no LATER `tabs.onUpdated`
+event for the clone can be evaluated by that check either. Without this, a
+clone — tracked immediately at creation and therefore "tracked but not yet
+`complete`," exactly the condition that requirement's widened eligibility
+targets — would self-exclude only from matching ITSELF (via that
+requirement's `excludeTabId` guard) but could still match its own
+still-open SOURCE on a later URL-carrying `tabs.onUpdated` event (e.g. a
+coalesced "confirmation" update while the duplicate finishes restoring,
+before ever reaching `status: 'complete'`), silently dedup-collapsing the
+clone and undoing "Duplicate" entirely.
+
 Pending records SHALL be scoped to the current service-worker session
 (in-memory, not persisted) and SHALL expire after a bounded TTL so a
 `chrome.tabs.duplicate` call that fails before creating a tab cannot leave a
@@ -353,6 +369,13 @@ URL.
 - **THEN** the pending-duplicate record SHALL still be consumed (returning source tab id 42)
 - **AND** the clone SHALL still be placed adjacent to its source (see "duplicateTab command handler duplicates the tab via Chrome API" below) — placement does not depend on this setting
 
+#### Scenario: The clone is never dedup-collapsed by a later onUpdated event
+
+- **GIVEN** `duplicateTab { tabId: 42 }` has produced its clone, already placed adjacent to tab 42
+- **WHEN** a later `tabs.onUpdated` event fires for the clone carrying `changeInfo.url` equal to its (unchanged) URL, before the clone ever reaches `status: 'complete'`
+- **THEN** the redirect-chain-tab-dedup check SHALL NOT run for the clone (its initial-load eligibility was cleared at placement)
+- **AND** the clone SHALL NOT be focused/closed against tab 42, and tab 42 SHALL NOT be promoted
+
 ### Requirement: duplicateTab command handler duplicates the tab via Chrome API
 
 The `duplicateTab` coordinator handler SHALL record the source tab's
@@ -366,11 +389,16 @@ The resulting cloned tab's `tabs.onCreated` event SHALL consume the pending
 record (unaffected by the onCreated-time dedup check, which is skipped for
 this tab) and insert the clone immediately after its source tab in the
 active Space's `tempTabIds` (`LunmaStore.insertTempTabAfter`) — NOT at the
-ordinary newest-first top-of-list every other new tab gets. If the source
-tab is no longer present in the instance's `tempTabIds` by the time the
-clone's `tabs.onCreated` fires (e.g. closed in the window between the
-duplicate being issued and the clone landing), the clone SHALL fall back to
-the ordinary top-of-list placement instead of being lost.
+ordinary newest-first top-of-list every other new tab gets. Immediately
+after placement, the clone's initial-load eligibility for the
+redirect-chain-tab-dedup check SHALL be cleared (see "duplicateTab-created
+tabs are excluded from onCreated-time dedup"), so it is permanently exempt
+from that check for the rest of its lifetime, not only at this one
+`tabs.onCreated` event. If the source tab is no longer present in the
+instance's `tempTabIds` by the time the clone's `tabs.onCreated` fires (e.g.
+closed in the window between the duplicate being issued and the clone
+landing), the clone SHALL fall back to the ordinary top-of-list placement
+instead of being lost.
 
 If `chrome.tabs.duplicate` rejects (tab no longer exists), the handler SHALL
 throw so the sidebar's `bus.send` promise rejects with an error, and no

@@ -141,6 +141,18 @@ export function chromeTabHandlers(): Pick<
         // top-of-list every other new tab gets.
         if (duplicateSourceTabId !== null && tab.id !== undefined) {
           ctx.store.insertTempTabAfter(tab.windowId, duplicateSourceTabId, tab.id);
+          // A duplicate's clone is tracked immediately — "tracked but not yet
+          // `complete`," the exact condition the redirect-chain-tab-dedup
+          // widening above makes eligible for the `tabs.onUpdated` dedup
+          // check. Left marked, a later onUpdated event for the clone (e.g.
+          // Chrome re-confirming its URL while it finishes restoring) would
+          // find its still-open SOURCE as a match (excludeTabId only skips
+          // the clone matching ITSELF, not its source) and dedup-collapse
+          // the clone — silently undoing "Duplicate." A clone is a
+          // deliberate, permanent second tab, never a redirect-chain hop;
+          // clearing this immediately exempts it for good, the same way a
+          // bound/pinned tab already is.
+          clearInitialLoad(tab.id);
         } else {
           ctx.store.onTabCreated({ id: tab.id, windowId: tab.windowId });
         }
