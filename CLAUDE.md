@@ -15,6 +15,30 @@ Target architecture lives in [docs/tech-stack.md](docs/tech-stack.md) and
 [openspec/changes/](openspec/changes/). Code, docs, and OpenSpec artifacts stay
 in lockstep — neither leads the other silently.
 
+## Working posture
+
+- **Engineer for correctness, not effort.** Two failure modes, both banned: doing
+  the lazy thing (silent `try/catch`, special-casing the failing input, disabling
+  a test, `--no-verify`, or `SKIP_VERIFY=1` to dodge a red gate — the hook
+  sanctions `SKIP_VERIFY=1` only for knowingly-WIP commits, never to claim work
+  done, and `--no-verify` never, since it also skips the archive guard;
+  downgrading a dependency to dodge a peer conflict) and doing the over-engineered thing (speculative abstraction,
+  config for a case that doesn't exist, scaffolding no named change consumes). If
+  the correct fix is bigger than the task, say so and surface it — don't ship a
+  workaround silently. Three discipline skills back this: `test-driven-development`,
+  `systematic-debugging`, `verification-before-completion`.
+- **Ask before assuming.** Surface a non-trivial assumption before building on it —
+  one short question beats a confident wrong guess (per the deviation policy below).
+- **Only touch docs a consumer would miss without.** Before editing `CLAUDE.md`,
+  `docs/`, or a README proactively, apply the test "who reads this, and would they
+  fail without the edit?" — route overflow to an ADR, a `design.md` decision log, or
+  a one-line code comment. This gates *discretionary* doc edits; it does **not**
+  relax the deviation-and-drift policy — an agreed deviation still mandates the
+  same-change artifact/doc/spec updates listed below.
+- **Mark unverified claims `[inferred]`.** When you reconstruct undocumented
+  behaviour rather than reading it from code/specs, label it `[inferred]` so a
+  future reader knows it's a reconstruction, not a verified fact.
+
 ## Architecture (one-way import DAG)
 
 The extension's `apps/extension/src/` layers and who may import whom — enforced
