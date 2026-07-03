@@ -2147,6 +2147,27 @@ describe('Coordinator handlers: redirect-chain tab dedup (initial-load-tabs)', (
     expect(chromeStub.tabs.update).not.toHaveBeenCalled();
     expect(chromeStub.tabs.remove).not.toHaveBeenCalled();
   });
+
+  test('about:blank is never deduped mid-initial-load — a second blank tab survives', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    // An existing blank tab is already open in the active Space.
+    seedExistingTab(store, 'about:blank');
+    // A fresh blank tab (Ctrl+T, window.open, a test's newPage): tracked at
+    // creation — the onCreated dedup already excludes about:blank — and still
+    // mid-initial-load, so the widened onUpdated gate applies to it.
+    coordinator.enqueue(tabCreated(99, 100, 'about:blank'));
+    await coordinator.idle();
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toContain(99);
+    // Chrome re-reports the blank URL via onUpdated before the tab ever
+    // completes. about:blank is "not yet navigated", not a destination —
+    // deduping it would collapse every second blank tab into the first.
+    coordinator.enqueue(tabUpdated(99, { url: 'about:blank', status: 'loading' }));
+    await coordinator.idle();
+    expect(chromeStub.tabs.update).not.toHaveBeenCalled();
+    expect(chromeStub.tabs.remove).not.toHaveBeenCalled();
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toContain(99);
+  });
 });
 
 describe('Coordinator handlers: duplicateTab', () => {

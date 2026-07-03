@@ -299,7 +299,14 @@ export function chromeTabHandlers(): Pick<
           // focus/close itself: `tabs.onActivated`/`onRemoved` reconcile that state,
           // exactly like the `openUrl` dedup. The optional tab-to-top promotion
           // below mutates `tempTabIds` directly, so it calls `markDirty` itself.
-          if (ctx.dedupNewTabNavigations()) {
+          //
+          // `about:blank` is excluded for the same reason as the onCreated-time
+          // check above: it is "not yet navigated", not a destination. The
+          // redirect-chain widening made TRACKED fresh tabs eligible here, and
+          // Chrome re-reports `about:blank` via onUpdated for a new tab before
+          // its first real commit — deduping on it collapses every second
+          // blank tab into the first (and closes pages mid-`goto` under test).
+          if (navigatedUrl !== 'about:blank' && ctx.dedupNewTabNavigations()) {
             const found = findTabInActiveSpace(ctx.store.state, windowId, navigatedUrl, tabId);
             if (found === null) {
               // Diagnostic only (no behavior change) — see the matching log in
