@@ -36,5 +36,5 @@
 ## 6. Verification
 
 - [x] 6.1 Run `pnpm verify` at the workspace root; fix any `tsc`/Biome/svelte-check/stylelint/vitest failures.
-- [ ] 6.2 Manually exercise both features in the built extension: confirm the Duplicate menu item shows the `copy` icon, and confirm Clear duplicates collapses a manually-created duplicate-URL group correctly (keeping the earliest tab), including Undo.
-- [ ] 6.3 Confirm no regression to the existing single-click "Clear" (clear-all) behavior.
+- [x] 6.2 Manually exercise both features in the built extension: confirm the Duplicate menu item shows the `copy` icon, and confirm Clear duplicates collapses a manually-created duplicate-URL group correctly (keeping the earliest tab), including Undo.
+- [x] 6.3 Confirm no regression to the existing single-click "Clear" (clear-all) behavior.

@@ -1419,6 +1419,8 @@ Clear SHALL be rendered on any panel whose Space has ≥1 temporary tab open in 
 
 **Every panel fully live.** On the single-track carousel every Space panel is pre-rendered with its own Space's content, and its actions are live — a switch is a pure transform with no per-panel mount or interactivity toggle at commit (the spike model). New Tab SHALL be enabled on every slide and target its own Space; Clear SHALL render on any slide whose Space has temporary tabs and target its own Space. This supersedes the former "active-slide only" rule, under which a non-centre slide's New Tab was disabled and its Clear was not rendered.
 
+**Clear duplicates (sibling action).** Each panel rendering Clear SHALL also render a `Menu` (`trigger="kebab"`, `icon="chevron-down"`) immediately beside the Clear button, containing a single "Clear duplicates" action — see the "Clear duplicates temporary-tab action" requirement below for its full behaviour. This kebab menu SHALL render whenever Clear renders (i.e. the Space has ≥1 temporary tab), independent of whether any duplicates currently exist — the "Clear duplicates" item itself is what reflects duplicate-presence via its disabled state.
+
 #### Scenario: New Tab dispatches newTab carrying the panel's Space
 
 - **WHEN** the user clicks the New Tab row on the panel for Space "work" in window 100
@@ -1481,6 +1483,11 @@ Clear SHALL be rendered on any panel whose Space has ≥1 temporary tab open in 
 - **THEN** its New Tab row SHALL be enabled (NOT disabled)
 - **AND** activating it SHALL dispatch `newTab` carrying that slide's `spaceId`
 - **AND** its Clear action SHALL be rendered when that Space has temporary tabs (targeting that Space)
+
+#### Scenario: The Clear-duplicates kebab menu renders alongside Clear
+
+- **GIVEN** a panel's Space has ≥1 temporary tab open (Clear is rendered)
+- **THEN** the panel SHALL also render the "Clear duplicates" kebab menu beside Clear
 
 ### Requirement: undoClearTempTabs restores a batch of archived tabs
 
@@ -2431,3 +2438,113 @@ The window-type predicate SHALL be a single source of truth in the background la
 - **WHEN** a `'normal'` Chrome window is opened (or is already open at boot)
 - **THEN** it SHALL be seeded into `activeSpaceByWindow` and managed exactly as before this change (no behavior change for normal windows)
 
+### Requirement: Clear duplicates temporary-tab action
+
+Each carousel panel that renders Clear SHALL also expose a **Clear duplicates**
+action, reachable via a `Menu` (`trigger="kebab"`) rendered beside the Clear
+button, carrying that panel's `spaceId`. Unlike Clear (which closes every
+temporary tab in the Space), Clear duplicates SHALL close only the temporary
+tabs that duplicate another temporary tab's exact URL within that Space's
+window instance, leaving all other temporary tabs open.
+
+Activating "Clear duplicates" SHALL dispatch `bus.send({ kind:
+'clearDuplicateTempTabs', payload: { windowId, spaceId } })`.
+
+The coordinator's `clearDuplicateTempTabs` handler SHALL:
+
+1. Resolve the target Space's temporary tabs still open in `windowId` (the
+   same `tempTabIds` source `clearTempTabs` reads), and group them by their
+   live tab's URL using **exact string equality** — no normalisation, no
+   fragment stripping (matching `findTabInActiveSpace`'s existing convention).
+2. For every group containing more than one tab, keep the tab that appears
+   **first** in the Space instance's `tempTabIds` order (the earliest-listed
+   tab) and collect every other tab in that group into the closing batch. A
+   URL with only one tab open contributes nothing to the batch.
+3. If the resulting batch is empty (no duplicate URLs currently exist in the
+   Space), the handler SHALL be a no-op — it SHALL NOT archive, remove any
+   tab, or broadcast a state update.
+4. Otherwise, follow the same archive-then-remove sequence `clearTempTabs`
+   uses: insert each batched tab into `archivedTabs` (one shared
+   `archivedAt`) BEFORE calling `chrome.tabs.remove`; if the batch would
+   leave the window with no tabs, open the Space home first (identical
+   "keep the window alive" guard as Clear); broadcast the updated state
+   after archiving.
+
+The "Clear duplicates" menu item SHALL render **disabled** (not hidden) when
+the target Space currently has no duplicate temporary-tab URLs open — it
+remains visible and discoverable at all times the kebab menu is shown, but is
+inert when there is nothing to collapse.
+
+Undo for a "Clear duplicates" batch SHALL reuse the existing
+`undoClearTempTabs` command and handler unchanged: the sidebar SHALL mount the
+same `Toast` primitive used for Clear, showing "Cleared N duplicate tabs —
+Undo" (a distinct message from Clear's "Cleared N tabs — Undo"), and its Undo
+action SHALL dispatch `bus.send({ kind: 'undoClearTempTabs', payload: {
+windowId, tabIds } })` carrying the batch's `tabId`s, identically to Clear's
+Undo.
+
+#### Scenario: Clear duplicates dispatches clearDuplicateTempTabs carrying the panel's Space
+
+- **WHEN** the user activates "Clear duplicates" for Space "work" in window 100
+- **THEN** the sidebar SHALL call `bus.send({ kind: 'clearDuplicateTempTabs', payload: { windowId: 100, spaceId: 'work' } })`
+
+#### Scenario: Duplicate groups collapse to their earliest-listed tab
+
+- **GIVEN** Space "work" in window 100 has temporary tabs, in list order, `[10 → https://a.example/, 11 → https://b.example/, 12 → https://a.example/]`
+- **WHEN** the coordinator processes `clearDuplicateTempTabs` for window 100 / Space "work"
+- **THEN** tab `12` SHALL be archived and closed (it duplicates `10`'s URL and appears later)
+- **AND** tabs `10` and `11` SHALL remain open and untouched
+
+#### Scenario: A three-way duplicate keeps only the earliest tab
+
+- **GIVEN** Space "work" has temporary tabs, in list order, `[10 → https://a.example/, 11 → https://a.example/, 12 → https://a.example/]`
+- **WHEN** the coordinator processes `clearDuplicateTempTabs`
+- **THEN** tab `10` SHALL survive and tabs `11` and `12` SHALL be archived and closed
+
+#### Scenario: No duplicates present — the handler is a no-op
+
+- **GIVEN** Space "work" has temporary tabs with no two sharing the same exact URL
+- **WHEN** the coordinator processes `clearDuplicateTempTabs` for that Space
+- **THEN** no tab SHALL be archived or removed, and no state broadcast SHALL be emitted
+
+#### Scenario: Clear duplicates archives before removing
+
+- **GIVEN** a duplicate group resolves to a closing batch of tabs `[12, 15]`
+- **WHEN** the coordinator processes `clearDuplicateTempTabs`
+- **THEN** tabs `12` and `15` SHALL be inserted into `archivedTabs` (one shared `archivedAt`) BEFORE `chrome.tabs.remove` is called
+
+#### Scenario: Clear duplicates keeps the window alive when the batch would empty it
+
+- **GIVEN** the duplicate-closing batch would leave window 100 with no tabs
+- **WHEN** the coordinator processes `clearDuplicateTempTabs`
+- **THEN** it SHALL open a home tab BEFORE removing the batched tabs, so the window survives
+
+#### Scenario: The menu item is disabled when no duplicates exist
+
+- **GIVEN** a Space's temporary tabs contain no duplicate URLs
+- **THEN** the "Clear duplicates" menu item SHALL render disabled
+- **AND** the kebab menu itself SHALL still render (only the item is disabled, not hidden)
+
+#### Scenario: The menu item is enabled when duplicates exist
+
+- **GIVEN** a Space's temporary tabs contain at least one URL open more than once
+- **THEN** the "Clear duplicates" menu item SHALL render enabled
+
+#### Scenario: Undo restores a Clear-duplicates batch via the existing command
+
+- **GIVEN** "Clear duplicates" closed tabs `[12, 15]` in window 100
+- **WHEN** the user activates Undo on the resulting Toast
+- **THEN** the sidebar SHALL call `bus.send({ kind: 'undoClearTempTabs', payload: { windowId: 100, tabIds: [12, 15] } })`
+- **AND** the coordinator SHALL restore both tabs via the existing `undoClearTempTabs` handler, unmodified
+
+#### Scenario: Duplicate detection does not cross Spaces or windows
+
+- **GIVEN** `https://a.example/` is open as a temporary tab in Space "work" and also, separately, in Space "side" (or in a different window)
+- **WHEN** the coordinator processes `clearDuplicateTempTabs` for Space "work" in window 100
+- **THEN** only tabs within Space "work"'s window-100 instance are considered — the tab in Space "side" (or the other window) SHALL NOT be archived or closed
+
+#### Scenario: Pinned tabs are never considered or touched
+
+- **GIVEN** a pinned (saved) tab is bound in window 100 at the same URL as an open temporary tab in the same Space
+- **WHEN** the coordinator processes `clearDuplicateTempTabs` for that Space
+- **THEN** the pinned tab SHALL NOT be archived, closed, or counted toward any duplicate group — only entries in `tempTabIds` participate
