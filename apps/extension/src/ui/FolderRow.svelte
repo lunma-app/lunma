@@ -472,7 +472,9 @@ function onMenuOpenChange(open: boolean): void {
     padding: var(--space-1) var(--space-2);
     border-radius: var(--r-pill);
     background: var(--surface-2);
-    color: var(--text-faint);
+    /* Informative count on `--surface-2` → `--text-dim` (AA 4.5:1 floor), not the
+       decorative-only `--text-faint` (3:1) which failed on this backing. */
+    color: var(--text-dim);
     font: var(--weight-medium) var(--text-2xs) / 1 var(--font-sans);
     pointer-events: none;
     transition: opacity var(--motion-fast) var(--ease-standard);

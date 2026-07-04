@@ -329,12 +329,15 @@ function choose(icon: IconName, index: number): void {
    * outline. Cleaner and more "premium" than a 1px ring. */
   .tile.selected {
     background: oklch(from var(--accent) l c h / 0.16);
-    color: var(--accent-text);
+    /* Accent glyph on a soft accent WASH (a plain surface, not a solid accent
+       fill), so `--accent-label` — the AA-tuned accent-on-surface token — not the
+       frozen `--accent-text`/`--accent` fill hue. */
+    color: var(--accent-label);
     border-color: oklch(from var(--accent) l c h / 0.5);
   }
   .tile.selected:hover {
     background: oklch(from var(--accent) l c h / 0.24);
-    color: var(--accent-text);
+    color: var(--accent-label);
   }
 
   .empty,

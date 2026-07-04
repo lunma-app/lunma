@@ -1,10 +1,11 @@
 <script lang="ts">
 /**
  * An inline `role="alert"` error box carrying the shared danger styling — a
- * faint danger-tinted fill + hairline border + danger ink. Byte-identical across
- * the Backup & restore and Feed subscriptions cards before this primitive homed
- * it. Token-only (the danger hue is the shared `--danger` token, mixed via
- * `color-mix` so it reads on every Space hue).
+ * faint `--danger-soft` fill + hairline border + legible `--danger-text` ink.
+ * Byte-identical across the Backup & restore and Feed subscriptions cards before
+ * this primitive homed it. Token-only (the destructive roles are the shared
+ * `--danger-soft`/`--danger-text` tokens, so the label stays AA on its own tint
+ * across every Space hue).
  */
 interface Props {
   /** The error message. */
@@ -27,9 +28,12 @@ const { message, id, testid }: Props = $props();
     margin: var(--space-3) 0 0;
     padding: var(--space-2) var(--space-3);
     border-radius: var(--r-md);
-    background: color-mix(in oklch, var(--danger) 10%, transparent);
+    /* Danger label on its own danger tint: the shared `--danger-soft` wash + the
+       legible `--danger-text` ink (AA over the wash), not a per-primitive
+       `color-mix(--danger …)` self-tint below the text floor. */
+    background: var(--danger-soft);
     border: 1px solid color-mix(in oklch, var(--danger) 25%, transparent);
     font: var(--weight-regular) var(--text-sm) / 1.45 var(--font-sans);
-    color: var(--danger);
+    color: var(--danger-text);
   }
 </style>

@@ -22,7 +22,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parse, rgb, wcagContrast } from 'culori';
 import { describe, expect, test } from 'vitest';
-import { colourToOklch, colourToOn } from '../shared/space-hue';
+import { colourToHue, colourToOklch, colourToOn } from '../shared/space-hue';
 import type { SpaceColor } from '../shared/types';
 
 const TOKENS_PATH = resolve(process.cwd(), '../../packages/tokens/tokens.css');
@@ -879,6 +879,222 @@ describe('reading folder read-row title — muted over the Space wash (WCAG AA p
       const wash = over(toRgba(`oklch(${L} ${CHROMA} ${HUE} / ${washA1})`), substrate);
       const muted = toRgba(resolveOklch(rootToken('--text-muted')));
       expect(wcagContrast(col(muted), col(wash))).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+});
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * catalog-contrast-tokens — the three new colour-role tokens and the DS-04/DS-05
+ * consumer pairs. Each is gated in BOTH the dark `:root` and the
+ * `[data-theme='light']` block so a lightness drift can't slip past in either
+ * theme. Shared compositing helpers (`toRgba`/`over`/`col`) mirror the pattern
+ * the immersive-surface blocks above use.
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+interface Rgba {
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+}
+/** Parse an OKLCH expr to clamped sRGB + alpha, substituting `--space-h` to the
+ * given hue (and the warm-hue axis vars) but KEEPING any `/ alpha` so translucent
+ * washes composite. */
+function toRgbaHue(expr: string, hue = 60): string {
+  return expr
+    .replace(/var\(--base-hue\)/g, String(hue))
+    .replace(/var\(--ds-warm-h\)/g, String(hue))
+    .replace(/var\(--ds-warm-amt\)/g, '1')
+    .replace(/var\(--space-h(?:,\s*[\d.]+)?\)/g, String(hue))
+    .replace(/var\(--space-chroma(?:,\s*[\d.]+)?\)/g, '0.15');
+}
+function parseRgba(expr: string, hue = 60): Rgba {
+  const c = parse(evalMath(toRgbaHue(expr, hue)));
+  if (!c) throw new Error(`culori failed to parse '${expr}'`);
+  const r = rgb(c);
+  const clamp = (n: number): number => Math.min(1, Math.max(0, n));
+  return { r: clamp(r.r), g: clamp(r.g), b: clamp(r.b), a: c.alpha ?? 1 };
+}
+function compose(fg: Rgba, bg: Rgba): Rgba {
+  const a = fg.a;
+  return {
+    r: fg.r * a + bg.r * (1 - a),
+    g: fg.g * a + bg.g * (1 - a),
+    b: fg.b * a + bg.b * (1 - a),
+    a: 1,
+  };
+}
+function asColor(c: Rgba): { mode: 'rgb'; r: number; g: number; b: number } {
+  return { mode: 'rgb', r: c.r, g: c.g, b: c.b };
+}
+function ratioRgba(fg: Rgba, bg: Rgba): number {
+  return wcagContrast(asColor(fg), asColor(bg));
+}
+
+const THEMES = [
+  ['dark', readTokens()],
+  ['light', readLightTokens()],
+] as const;
+
+/** The nine canonical Space hues — `--accent-label` and the re-rolled palette
+ * foregrounds follow the active Space hue, so they are swept across every hue
+ * (worst case: the lightest, yellow ≈ 98, and the deepest, blue ≈ 252). */
+const SPACE_HUES = SPACE_COLORS.map((c) => colourToHue(c));
+
+/**
+ * `--accent-label` (accent-coloured text/glyph on a plain surface) — the
+ * IconPicker glyph, the MultiSelect Select-all/Clear action text, and the
+ * MultiSelect/Select selected check use it. It follows `--space-h`, so it MUST
+ * clear AA Normal (4.5:1) on `--surface`/`--surface-2`/`--bg` for EVERY Space
+ * hue, in both themes.
+ */
+describe('--accent-label follows the Space hue — WCAG AA across the palette (both themes)', () => {
+  for (const [theme, toks] of THEMES) {
+    describe(theme, () => {
+      function need(name: string): string {
+        const v = toks.get(name);
+        if (!v) throw new Error(`tokens.css ${theme} block missing ${name}`);
+        return v;
+      }
+      for (const bg of ['--surface', '--surface-2', '--bg']) {
+        for (const hue of SPACE_HUES) {
+          test(`--accent-label @hue ${hue} vs ${bg} >= 4.5:1`, () => {
+            expect(contrast2(need('--accent-label'), need(bg), hue)).toBeGreaterThanOrEqual(4.5);
+          });
+        }
+      }
+    });
+  }
+});
+
+/** Hue-aware contrast: resolve both exprs at the same swept Space hue. */
+function contrast2(fgExpr: string, bgExpr: string, hue: number): number {
+  const fg = parse(resolveOklch(fgExpr, hue));
+  const bg = parse(resolveOklch(bgExpr, hue));
+  if (!fg || !bg) throw new Error('culori failed to parse');
+  return wcagContrast(fg, bg);
+}
+
+/**
+ * `--danger-text` (the legible destructive label, distinct from the `--danger`
+ * graphic hue and the `--danger-soft` wash) — the InlineError body and the Menu
+ * danger item. It MUST clear AA Normal (4.5:1) both bare on `--surface`/
+ * `--bg-elev` AND composited over the `--danger-soft` wash on `--bg-elev`, in
+ * both themes.
+ */
+describe('--danger-text stays AA on surfaces and over its own wash (both themes)', () => {
+  for (const [theme, toks] of THEMES) {
+    describe(theme, () => {
+      function need(name: string): string {
+        const v = toks.get(name);
+        if (!v) throw new Error(`tokens.css ${theme} block missing ${name}`);
+        return v;
+      }
+      for (const bg of ['--surface', '--bg-elev']) {
+        test(`--danger-text vs ${bg} >= 4.5:1`, () => {
+          expect(contrast(need('--danger-text'), need(bg))).toBeGreaterThanOrEqual(4.5);
+        });
+      }
+      test('--danger-text over --danger-soft wash on --bg-elev >= 4.5:1', () => {
+        const wash = compose(parseRgba(need('--danger-soft')), parseRgba(need('--bg-elev')));
+        expect(ratioRgba(parseRgba(need('--danger-text')), wash)).toBeGreaterThanOrEqual(4.5);
+      });
+    });
+  }
+});
+
+/**
+ * `--status-neutral` (a neutral/pending status colour in the status family, NOT
+ * the type-scale `--text-dim`) — the Avatar pending verdict ring AND its `clock`
+ * glyph fill. Both are non-text UI marks, so the floor is the 3:1 non-text
+ * minimum on `--surface`/`--surface-2`, in both themes.
+ */
+describe('--status-neutral meets the 3:1 non-text floor as ring + glyph (both themes)', () => {
+  for (const [theme, toks] of THEMES) {
+    describe(theme, () => {
+      function need(name: string): string {
+        const v = toks.get(name);
+        if (!v) throw new Error(`tokens.css ${theme} block missing ${name}`);
+        return v;
+      }
+      for (const bg of ['--surface', '--surface-2']) {
+        test(`--status-neutral vs ${bg} >= 3:1`, () => {
+          expect(contrast(need('--status-neutral'), need(bg))).toBeGreaterThanOrEqual(3);
+        });
+      }
+    });
+  }
+});
+
+/**
+ * DS-04 informative text on its actual failing backing. Two consumers:
+ *  - the `FolderRow` count badge, retargeted `--text-faint` → `--text-dim`, on
+ *    `--surface-2` (AA Normal 4.5:1);
+ *  - the `TabRow` `.meta` line (`--text-dim`) composited over the
+ *    `--space-c-soft` hover/active wash — a distinct backing the opaque-surface
+ *    floor does not cover. The wash is `oklch(--space-l --space-chroma --space-h
+ *    / 0.16)` (light caps the lightness at `min(--space-l, 0.55)`), swept across
+ *    every Space hue over the row substrates the tab list actually sits on
+ *    (`--surface`/`--bg` ≈ `--atm-bg`).
+ */
+describe('DS-04 informative metadata on its failing backing (both themes)', () => {
+  for (const [theme, toks] of THEMES) {
+    const isLight = theme === 'light';
+    describe(theme, () => {
+      function need(name: string): string {
+        const v = toks.get(name);
+        if (!v) throw new Error(`tokens.css ${theme} block missing ${name}`);
+        return v;
+      }
+      test('FolderRow count (`--text-dim`) vs --surface-2 >= 4.5:1', () => {
+        expect(contrast(need('--text-dim'), need('--surface-2'))).toBeGreaterThanOrEqual(4.5);
+      });
+      for (const color of SPACE_COLORS) {
+        const { l, c, h } = colourToOklch(color);
+        const washL = isLight ? Math.min(l, 0.55) : l;
+        for (const bg of ['--surface', '--bg']) {
+          test(`TabRow .meta (\`--text-dim\`) over the ${color} --space-c-soft wash on ${bg} >= 4.5:1`, () => {
+            const wash = compose(
+              parseRgba(`oklch(${washL} ${c} ${h} / 0.16)`),
+              parseRgba(resolveOklch(need(bg), h)),
+            );
+            expect(
+              ratioRgba(parseRgba(resolveOklch(need('--text-dim'))), wash),
+            ).toBeGreaterThanOrEqual(4.5);
+          });
+        }
+      }
+    });
+  }
+});
+
+/**
+ * DS-05 — a per-Space palette hue re-rolled directly as a foreground glyph
+ * (`LensRow`) or selection ring (`ColorSwatch`), capped in light theme by a
+ * lightness floor. The light-theme cap is `min(<raw L>, 0.50)`; the glyph
+ * consumes the capped lightness, the ring consumes `capped + 0.04` (its existing
+ * `+0.04` lift). Floors: glyph AA Normal 4.5:1, ring 3:1 non-text, on the light
+ * `--surface` for every Space hue. NOTE: this recomputes `min()` in JS and so
+ * only pins the CAP VALUE — that the CSS cap actually APPLIES (a self-reference
+ * cycle would blank the colour instead) is verified in the manual catalog pass
+ * (tasks 7.3 / 10.3), not here.
+ */
+describe('DS-05 re-rolled per-Space glyph + ring capped on the light surface', () => {
+  const light = readLightTokens();
+  const CAP = 0.5;
+  function surf(): string {
+    const v = light.get('--surface');
+    if (!v) throw new Error('tokens.css light block missing --surface');
+    return resolveOklch(v);
+  }
+  for (const color of SPACE_COLORS) {
+    const { l, c, h } = colourToOklch(color);
+    const capped = Math.min(l, CAP);
+    test(`${color} glyph (\`min(L, 0.50)\`) vs light --surface >= 4.5:1`, () => {
+      expect(contrast(`oklch(${capped} ${c} ${h})`, surf())).toBeGreaterThanOrEqual(4.5);
+    });
+    test(`${color} ring (\`min(L, 0.50) + 0.04\`) vs light --surface >= 3:1`, () => {
+      expect(contrast(`oklch(${capped + 0.04} ${c} ${h})`, surf())).toBeGreaterThanOrEqual(3);
     });
   }
 });
