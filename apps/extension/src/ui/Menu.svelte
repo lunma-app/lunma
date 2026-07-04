@@ -321,16 +321,18 @@ function triggerPointerDown(props: Record<string, unknown>, event: PointerEvent)
     color: var(--text-faint);
   }
 
+  /* Danger item: the legible `--danger-text` label over the shared `--danger-soft`
+     wash on hover, not a per-primitive `color-mix(--danger …)` self-tint. */
   :global(.lunma-menu-item.danger) {
-    color: var(--danger);
+    color: var(--danger-text);
   }
   :global(.lunma-menu-item.danger:hover),
   :global(.lunma-menu-item.danger[data-highlighted]) {
-    background: color-mix(in oklch, var(--danger) 16%, var(--surface-2));
-    color: var(--danger);
+    background: var(--danger-soft);
+    color: var(--danger-text);
   }
   :global(.lunma-menu-item.danger .leading) {
-    color: var(--danger);
+    color: var(--danger-text);
   }
 
   :global(.lunma-menu-item.disabled),

@@ -75,7 +75,9 @@ const toggleLabel = $derived(badge !== undefined ? `${baseLabel}, ${badge}` : ba
   class:active
   data-testid="lens-row"
   aria-current={active ? 'true' : undefined}
-  style:--lens-c={`oklch(${ok.l} ${ok.c} ${ok.h})`}
+  style:--lens-l={String(ok.l)}
+  style:--lens-chroma={String(ok.c)}
+  style:--lens-hue={String(ok.h)}
   style:--lens-fill={fill}
   style:--lens-ring={ring}
 >
@@ -125,6 +127,12 @@ const toggleLabel = $derived(badge !== undefined ? `${baseLabel}, ${badge}` : ba
 
 <style>
   .lens-row {
+    /* Leading-glyph lightness, derived from the raw inline `--lens-l` under a
+       SEPARATE name (never `--lens-l: min(var(--lens-l), …)` — a custom-property
+       self-reference cycle blanks the colour). Capped in light theme so a light
+       Space hue clears the 4.5:1 glyph floor on the near-white surface; the dark
+       glyph is untouched. The wash (`--lens-fill`/`--lens-ring`) keeps the raw hue. */
+    --glyph-l: var(--lens-l);
     position: relative;
     display: flex;
     align-items: center;
@@ -137,6 +145,9 @@ const toggleLabel = $derived(badge !== undefined ? `${baseLabel}, ${badge}` : ba
     border-radius: var(--r-lg);
     color: var(--text-2);
     transition: background var(--motion-fast) var(--ease-standard);
+  }
+  :global([data-theme='light']) .lens-row {
+    --glyph-l: min(var(--lens-l), 0.5);
   }
   /* Hover mirrors the selected wash (the same `--lens-fill`) but WITHOUT the inset
      ring — the ring is reserved for the active "peek". `.lens-row.active` below is
@@ -187,7 +198,7 @@ const toggleLabel = $derived(badge !== undefined ? `${baseLabel}, ${badge}` : ba
     justify-content: center;
     width: var(--favicon-size);
     height: var(--favicon-size);
-    color: var(--lens-c);
+    color: oklch(var(--glyph-l) var(--lens-chroma) var(--lens-hue));
   }
   .tile-mark,
   .tile-caret {

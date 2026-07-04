@@ -108,7 +108,9 @@ function handleClick(): void {
   .btn[data-variant='secondary'] {
     background: transparent;
     color: var(--text-2);
-    border: 1px solid var(--border);
+    /* Idle boundary of a standalone control: `--border-strong` clears the 3:1
+       non-text minimum (WCAG 1.4.11), not the decorative `--border`. */
+    border: 1px solid var(--border-strong);
   }
   .btn[data-variant='secondary']:hover:not(:disabled) {
     background: var(--surface-2);

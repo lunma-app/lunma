@@ -355,7 +355,10 @@ function removeOutside(): void {
     align-items: center;
     justify-content: center;
     width: 16px;
-    color: var(--accent);
+    /* The selected-option check sits on the `--accent-soft` row wash (a plain
+       surface, not a solid accent fill), so `--accent-label`, not the `--accent`
+       fill hue. */
+    color: var(--accent-label);
   }
   .opt-label {
     flex: 1 1 auto;

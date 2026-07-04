@@ -11,7 +11,7 @@ interface Props {
   /** Disc geometry. `sm` for the reviewer rail, `md` for the row author. */
   size?: 'sm' | 'md' | undefined;
   /** Optional verdict/status ring tint: `approved` → `--success`, `changes` →
-   * `--danger`, `pending` → `--text-dim`, `none` (default) → no ring. */
+   * `--danger`, `pending` → `--status-neutral`, `none` (default) → no ring. */
   ring?: 'approved' | 'changes' | 'pending' | 'none' | undefined;
   /** Tooltip / accessible label (the person's name). When set the disc is a
    * labelled `img`; otherwise it is decorative (the name shows in text nearby). */
@@ -87,7 +87,9 @@ const badgeIconSize = $derived(size === 'sm' ? 8 : 10);
     box-shadow: 0 0 0 2px var(--danger);
   }
   .avatar[data-ring='pending'] {
-    box-shadow: 0 0 0 2px var(--text-dim);
+    /* A status signal, so `--status-neutral` (status family), not the type-scale
+       `--text-dim` — a type retune can't silently shift the pending colour. */
+    box-shadow: 0 0 0 2px var(--status-neutral);
   }
 
   /* Non-colour verdict cue (AVATAR-01): a corner badge whose glyph SHAPE
@@ -120,6 +122,6 @@ const badgeIconSize = $derived(size === 'sm' ? 8 : 10);
     color: var(--danger);
   }
   .verdict-badge[data-verdict='pending'] {
-    color: var(--text-dim);
+    color: var(--status-neutral);
   }
 </style>

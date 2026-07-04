@@ -136,11 +136,14 @@
   /* Text — the crisp white primary/secondary stay neutral; the dim labels pick
    * up the warm cast to tie back to the substrate. Lightnesses chosen so every
    * level clears WCAG 2 AA (4.5:1) on --surface (text 16.8 · text-2 13.5 ·
-   * muted 7.0 · dim 5.7 · faint 4.7). */
+   * muted 7.0 · dim 6.7 · faint 4.7). `--text-dim` is lifted from 0.650 → 0.690
+   * so informative metadata (TabRow `.meta`) still clears 4.5:1 when composited
+   * over the bright-Space `--space-c-soft` hover/active wash, not only on the
+   * opaque surface (catalog-contrast-tokens). */
   --text: oklch(0.965 0 0);
   --text-2: oklch(0.890 0 0);
   --text-muted: oklch(0.710 0 0);
-  --text-dim: oklch(0.650 calc(var(--ds-warm-amt) * 0.010) var(--ds-warm-h));
+  --text-dim: oklch(0.690 calc(var(--ds-warm-amt) * 0.010) var(--ds-warm-h));
   --text-faint: oklch(0.600 calc(var(--ds-warm-amt) * 0.010) var(--ds-warm-h));
   --text-inverse: oklch(0.135 0 0);
 
@@ -155,6 +158,13 @@
   --accent-soft: oklch(calc(var(--space-l, 0.62) + 0.065) var(--space-chroma, 0.15) var(--space-h) / 0.18);
   --accent-text: oklch(0.965 0.010 var(--space-h));
   --accent-on: var(--space-on);
+  /* Accent-coloured text/glyph drawn ON a plain surface (the IconPicker glyph,
+   * the MultiSelect Select-all/Clear actions, selected checks) — follows the
+   * active Space hue like `--accent`, but its lightness is tuned to clear AA
+   * 4.5:1 on `--surface`/`--surface-2`/`--bg` for EVERY Space hue (pinned by
+   * contrast.test.ts). NOT `--accent-on` (which is ink drawn on a solid accent
+   * fill — different surface, different role). */
+  --accent-label: oklch(0.72 var(--space-chroma, 0.15) var(--space-h));
 
   /* Primary action (warm-substrate redesign) — a FIXED cool-blue role, NOT
    * derived from the active Space. It is the single highest-emphasis control
@@ -211,6 +221,17 @@
   --danger-soft: oklch(0.62 0.16 25 / 0.14);
   --success: oklch(0.720 0.150 150);
   --info: oklch(0.700 0.140 233);
+  /* Legible destructive LABEL text (InlineError body, Menu danger item) — tuned
+   * to clear AA 4.5:1 both bare on `--surface`/`--bg-elev` AND composited over the
+   * `--danger-soft` wash. NOT `--danger` (the graphic hue, verified 4.5:1 only
+   * bare on base surfaces) and NOT `--danger-soft` (the wash itself). */
+  --danger-text: oklch(0.67 0.19 25);
+  /* Neutral/pending status colour — a status-family sibling of `--success`/
+   * `--danger` on the warm hue, for the Avatar pending verdict ring + glyph. Owned
+   * by the status contract, NOT the type scale: distinct from `--text-dim` so a
+   * type-scale retune can't silently shift a status signal. Floor is the 3:1
+   * non-text minimum (ring + glyph, not label text). */
+  --status-neutral: oklch(0.62 0.02 var(--ds-warm-h));
 
   /* Radii — the redesign rounds harder (inputs/buttons sit at 9, nav/cards at
    * 11, panels at 16–18). */
@@ -463,10 +484,12 @@
   --text: oklch(0.225 0.006 var(--ds-warm-h));
   --text-2: oklch(0.340 0.006 var(--ds-warm-h));
   --text-muted: oklch(0.455 0 0);
-  /* `--text-dim` darkened from 0.520 so it clears AA 4.5:1 on every light surface
-   * incl. `--surface-3` (4.62:1) — informative metadata (TabRow `.meta`, Menu kind
-   * label) repoints onto it (harden-ui-accessibility THEME-NEW1). */
-  --text-dim: oklch(0.495 calc(var(--ds-warm-amt) * 0.012) var(--ds-warm-h));
+  /* `--text-dim` darkened to 0.480 so it clears AA 4.5:1 on every light surface
+   * incl. `--surface-3` AND when composited over the bright-Space `--space-c-soft`
+   * hover/active wash (TabRow `.meta`) — informative metadata (TabRow `.meta`,
+   * Menu kind label) repoints onto it (harden-ui-accessibility THEME-NEW1;
+   * lowered from 0.495 in catalog-contrast-tokens for the wash case). */
+  --text-dim: oklch(0.480 calc(var(--ds-warm-amt) * 0.012) var(--ds-warm-h));
   --text-faint: oklch(0.560 calc(var(--ds-warm-amt) * 0.012) var(--ds-warm-h));
   --text-inverse: oklch(0.985 0 0);
 
@@ -482,6 +505,11 @@
   /* Accent pills flip to a dark label on the light field. */
   --accent-text-l: 0.42;
   --accent-fill-a: 0.16;
+  /* Accent-coloured text/glyph on the light field — lightness capped LOW (0.46,
+   * tighter than the dark 0.72) so it clears AA 4.5:1 on the near-white light
+   * `--surface`/`--surface-2`/`--bg` for every Space hue (pinned by
+   * contrast.test.ts). Same role as the dark `--accent-label`. */
+  --accent-label: oklch(0.46 var(--space-chroma, 0.15) var(--space-h));
 
   /* Per-lens hue family on the light field (lens-overview). */
   --lens-soft: oklch(0.62 0.14 var(--lens-h) / 0.14);
@@ -494,6 +522,11 @@
   --rss-soft: oklch(0.62 0.13 40 / 0.12);
   --danger: oklch(0.55 0.20 25);
   --danger-soft: oklch(0.62 0.18 25 / 0.1);
+  /* Destructive label + neutral status, darkened for the light field (same
+   * rationale as `--danger` above). `--danger-text` clears 4.5:1 bare and over the
+   * `--danger-soft` wash; `--status-neutral` clears the 3:1 non-text floor. */
+  --danger-text: oklch(0.49 0.19 25);
+  --status-neutral: oklch(0.55 0.02 var(--ds-warm-h));
 
   /* `--success`/`--warning`/`--info` darkened + saturated for the light field, same
    * rationale as `--danger` above: the dark-tuned brights sat at ~2.1–2.6:1 on the

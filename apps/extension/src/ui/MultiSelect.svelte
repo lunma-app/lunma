@@ -557,7 +557,9 @@ function onListKeydown(event: KeyboardEvent): void {
     padding: 2px var(--space-2);
     border-radius: var(--r-sm);
     background: transparent;
-    color: var(--accent);
+    /* Select-all/Clear action text on a plain popover surface → `--accent-label`
+       (the AA-tuned accent-on-surface token), not the `--accent` fill hue. */
+    color: var(--accent-label);
     font: var(--weight-semibold) var(--text-xs) / 1 var(--font-sans);
     cursor: pointer;
     transition: background var(--motion-fast) var(--ease-standard);
@@ -637,7 +639,9 @@ function onListKeydown(event: KeyboardEvent): void {
     height: 18px;
     border-radius: var(--r-xs, 5px);
     box-shadow: inset 0 0 0 1.5px var(--border-strong);
-    color: var(--accent-text);
+    /* The check is drawn on the solid `--accent` fill (`.box.checked`), so it uses
+       `--accent-on` (theme-flipping ink-on-accent), not the frozen `--accent-text`. */
+    color: var(--accent-on);
     transition:
       background var(--motion-fast) var(--ease-standard),
       box-shadow var(--motion-fast) var(--ease-standard);

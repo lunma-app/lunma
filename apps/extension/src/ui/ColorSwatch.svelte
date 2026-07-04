@@ -56,6 +56,15 @@ const ok = $derived(colourToOklch(color));
     background: transparent;
     cursor: pointer;
     transition: transform var(--motion-fast) var(--ease-standard);
+    /* Selection-ring lightness, derived from the raw `--swatch-l` under a
+       SEPARATE name (never `--swatch-l: min(var(--swatch-l), …)` — a
+       custom-property self-reference cycle blanks the colour). The dot fill keeps
+       the true `--swatch-l`; only the ring is capped in light theme so a light
+       Space hue clears the 3:1 non-text ring floor on the near-white surface. */
+    --dot-l: var(--swatch-l);
+  }
+  :global([data-theme='light']) .swatch {
+    --dot-l: min(var(--swatch-l), 0.5);
   }
 
   /* Comp (Sidebar Redesign §8): a 30px rounded-SQUARE filled with the colour's
@@ -85,7 +94,7 @@ const ok = $derived(colourToOklch(color));
   .swatch.selected .dot {
     box-shadow:
       0 0 0 2px var(--bg-elev),
-      0 0 0 4px oklch(calc(var(--swatch-l) + 0.04) var(--swatch-c) var(--swatch-h));
+      0 0 0 4px oklch(calc(var(--dot-l) + 0.04) var(--swatch-c) var(--swatch-h));
     transform: scale(1);
   }
 </style>

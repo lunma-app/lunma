@@ -121,7 +121,9 @@ function select(next: string): void {
     display: inline-flex;
     margin: 0;
     padding: 2px;
-    border: 1px solid var(--border-soft);
+    /* Track edge of a standalone control: `--border-strong` clears the 3:1
+       non-text minimum (WCAG 1.4.11), not the decorative `--border-soft`. */
+    border: 1px solid var(--border-strong);
     border-radius: var(--r-md);
     background: var(--bg);
   }

@@ -174,7 +174,10 @@ const {
      * box-shadow so toggling never changes the chip's box size. */
     background: transparent;
     color: var(--text-muted);
-    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--text-faint) 28%, transparent);
+    /* Resting toggle ring uses `--border-strong` (the interactive-control
+       boundary token) so it clears the 3:1 non-text minimum (WCAG 1.4.11),
+       not the deliberately sub-floor `color-mix(--text-faint …)`. */
+    box-shadow: inset 0 0 0 1px var(--border-strong);
     transition:
       background var(--motion-fast) var(--ease-standard),
       box-shadow var(--motion-fast) var(--ease-standard),
