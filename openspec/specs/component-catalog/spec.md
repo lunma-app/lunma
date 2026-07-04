@@ -26,66 +26,104 @@ The catalog SHALL discover stories via `import.meta.glob` over `apps/extension/c
 - **WHEN** a new `apps/extension/catalog/stories/ui/<Name>.stories.svelte` exporting a `meta` is added
 - **THEN** it SHALL appear in the catalog navigation under its `group` with no change to `registry.ts` or any central list
 
-### Requirement: Primitives render inside the immersive shell
-
-The catalog shell (`apps/extension/catalog/Catalog.svelte`) SHALL render the selected story inside the Lunma immersive context — the aurora backdrop and frosted-glass recipes from `@lunma/tokens`, scoped to a Space — and SHALL expose toolbar controls for the active Space hue, the colour-intensity tier (`subtle | standard | vivid`), a reduced-motion toggle, and a light/dark theme toggle (reflected onto `<html>` via the shared `applyThemeToDocument` helper so `@lunma/tokens`' `[data-theme="light"]` set applies). The catalog chrome SHALL compose existing `apps/extension/src/ui` primitives rather than re-rolling controls. Because `Aurora.svelte` derives reduced-motion from `matchMedia` (not a prop), the reduced-motion toggle SHALL freeze the backdrop via a `data-force-motion` attribute handled in the catalog stylesheet.
-
-#### Scenario: Intensity and hue toggles drive the immersive model
-
-- **WHEN** the catalog toolbar changes the colour-intensity tier or the Space hue
-- **THEN** the rendered primitives SHALL pick up the corresponding `@lunma/tokens` custom properties (accent/glow/aurora), so a primitive can be inspected from `subtle` to `vivid` in one view
-
-#### Scenario: Reduced-motion toggle freezes animation
-
-- **WHEN** the reduced-motion toggle is enabled
-- **THEN** the aurora backdrop and primitive transitions SHALL stop animating via the catalog's `data-force-motion` handling, without modifying the `Aurora` primitive
-
 ### Requirement: Each component exposes live controls, an API table, and its source
 
-The catalog SHALL render, per story, a component-owned `Story` layout (`apps/extension/catalog/lib/Story.svelte`) whose control panel is built from two sources merged per prop: a **derived base**, produced by `apps/extension/catalog/lib/derive-controls.ts` parsing the corresponding `apps/extension/src/ui/<Name>.svelte`'s `Props` interface (`prop → { type: 'boolean' | 'select' | 'text' | 'number'; default; options?; typeLabel?; description? }`, `typeLabel` from the prop's type text and `description` from its JSDoc comment), and a story-authored `meta.controlOverrides: Record<string, Partial<ControlDef>>` (each entry replaces only the fields it names, not the whole `ControlDef` — `Partial<Controls>` would require every override to supply a complete `ControlDef`) that replaces individual fields of the derived base per prop. When the merged result is non-empty, the catalog SHALL render: a **live preview** of the component bound to editable inputs for those props (the inputs composing existing `apps/extension/src/ui` primitives — `Chip` for booleans, `Select` for enums, `TextInput` for text/number — not re-rolled controls); an **API table** listing each control's prop, type, default, and description; and the curated **examples** matrix. Independently of controls, every story SHALL render a **source view** showing the story file's own raw source (loaded via an `import.meta.glob(..., { query: '?raw' })` in `registry.ts` and passed to the story as a `source` prop). A prop is mechanically derivable only when its type is `boolean`, `number`, `string`, or a union of string-literal types (optionally including `undefined` for an optional prop); a story SHALL opt any prop — derivable or not — out of the live-control panel via `meta.excludeControls: Record<string, string>` (prop name → one-line reason), which the merge step SHALL remove from the derived base before controls are rendered.
+The catalog SHALL render, per story, a component-owned `Story` layout
+(`apps/extension/catalog/lib/Story.svelte`) whose control panel is built from
+**three** sources merged per prop, in precedence order: a story-authored
+`meta.controls: Controls` **floor** (controls the deriver cannot reach, e.g.
+for a primitive whose props are opaque type references), a **derived base**
+produced by `apps/extension/catalog/lib/derive-controls.ts` parsing the
+corresponding `apps/extension/src/ui/<Name>.svelte`'s `Props` interface (a
+derived control of the same name replaces the authored floor wholesale), and a
+story-authored `meta.controlOverrides: Record<string, Partial<ControlDef>>`
+(each entry replaces only the fields it names). `registry.ts`'s
+`resolveControls` SHALL perform this merge keyed by `meta.title` and SHALL NOT
+short-circuit to an empty result when nothing is derived — an opaque primitive
+that declares `meta.controls` SHALL still receive a Playground and API table. A
+prop named in `meta.excludeControls` SHALL be dropped from the merged result
+before rendering. When the merged result is non-empty, the catalog SHALL
+render: a **live preview** bound to plain neutral chrome inputs (a checkbox for
+booleans, a `<select>` for enums, a text input for text/number — styled with
+the `--cat-*` palette, not lunma `src/ui` primitives); an **API table** listing
+each control's prop,
+type, default, and description; a **live Playground code** view reconstructed
+from the component's name (`meta.title`) and the args that differ from their
+defaults (a `true` boolean as a bare attribute; children shown as a `…`
+placeholder); and the curated **examples** matrix, in which each `<Variant>`
+tile SHALL expose a code trigger (composed from an existing `IconButton`
+primitive) that opens a single shared, full-width **code drawer** in the
+`Story.svelte` host showing that variant's exact authored markup, extracted
+verbatim from the story source and highlighted with the catalog's existing
+`shiki` themes. Independently of controls, every story SHALL render a **source
+view** of the whole story file's raw source (via the `?raw` glob).
 
-#### Scenario: Editing a control updates the live preview
+#### Scenario: An opaque primitive gains a Playground via authored controls
 
-- **WHEN** a reviewer changes a control input (e.g. toggles `disabled` or selects a `variant`) for a story whose derived-and-overridden controls are non-empty
-- **THEN** the live preview SHALL re-render the component with the new prop value, and the API table SHALL list that prop with its type and default
+- **WHEN** a story whose primitive derives no controls declares `meta.controls`
+- **THEN** the catalog SHALL render a Playground and API table for those authored controls, rather than an examples-only story
 
-#### Scenario: A component's prop is picked up without story edits
+#### Scenario: A derived control wins over an authored one of the same name
 
-- **WHEN** a `boolean`, `number`, `string`, or string-literal-union prop is added to a `src/ui/<Name>.svelte`'s `Props` interface, and its story does not list it in `excludeControls`
-- **THEN** the catalog SHALL render a control for it in the live preview and list it in the API table, with no edit to the story's `meta.controlOverrides`
+- **WHEN** a story's `meta.controls` declares a prop that is also mechanically derivable from the primitive's `Props`
+- **THEN** the derived control SHALL replace the authored one wholesale, and `meta.controlOverrides` for that prop SHALL still patch only the fields it names
 
-#### Scenario: A non-mechanical prop is excluded with a reason
+#### Scenario: A variant's exact code is viewable in a drawer
 
-- **WHEN** a story lists a prop (e.g. a `Snippet` or callback prop) in `meta.excludeControls` with a reason string
-- **THEN** the catalog SHALL NOT render a control for that prop, and SHALL NOT list it in the API table
+- **WHEN** a reviewer activates the code trigger on an Examples-matrix `<Variant>` tile
+- **THEN** the catalog SHALL open a single full-width drawer in the story host showing that variant's exact authored markup (extracted from the story source, Shiki-highlighted), and activating another tile's trigger SHALL replace the drawer's contents
 
-#### Scenario: The rendered block's source is viewable
+#### Scenario: The Playground shows live code for the current knobs
 
-- **WHEN** a reviewer opens the source panel of any story
-- **THEN** the catalog SHALL display that story file's raw `.stories.svelte` source (via the `?raw` glob), without the story duplicating its own code
+- **WHEN** a reviewer changes a Playground control
+- **THEN** the live Playground code view SHALL update to reflect only the args that differ from their defaults, with children rendered as a `…` placeholder
 
 ### Requirement: A guard fails when a component's props and its story's controls disagree
 
-A vitest test `apps/extension/catalog/lib/derive-controls.test.ts` SHALL fail when, for any `apps/extension/src/ui/<Name>.svelte` primitive, a member of its `Props` interface is neither derivable by `derive-controls.ts` nor listed in the corresponding story's `meta.excludeControls`. The same test SHALL fail when a story's `meta.excludeControls` or `meta.controlOverrides` names a prop that is not a member of the primitive's current `Props` interface (a stale entry left behind by a prop rename or removal). This test SHALL run as part of `vitest run` (and therefore `pnpm verify`), independently of any generated/codegen output — it SHALL call `derive-controls.ts`'s derivation function directly against each primitive's current source.
+A vitest test `apps/extension/catalog/lib/derive-controls.test.ts` SHALL fail
+when, for any `apps/extension/src/ui/<Name>.svelte` primitive, a member of its
+`Props` interface is neither derivable by `derive-controls.ts`, nor listed in
+the corresponding story's `meta.excludeControls`, nor author-declared in the
+story's `meta.controls` (author-declaring a control accounts for a prop the
+deriver cannot reach, exactly as excluding it does). The same test SHALL fail
+when a story's `meta.excludeControls` or `meta.controlOverrides` names a prop
+that is not a member of the primitive's current `Props` interface (a stale
+entry left behind by a prop rename or removal). This test SHALL run as part of
+`vitest run` (and therefore `pnpm verify`), independently of any
+generated/codegen output.
 
-#### Scenario: An unaccounted-for prop fails the gate
+#### Scenario: An author-declared control accounts for an otherwise-unclassified prop
 
-- **WHEN** a `src/ui/<Name>.svelte` primitive's `Props` interface gains a member that `derive-controls.ts` cannot classify, and the corresponding story does not list it in `meta.excludeControls`
-- **THEN** `apps/extension/catalog/lib/derive-controls.test.ts` SHALL fail and `pnpm verify` SHALL exit non-zero
+- **WHEN** a primitive's `Props` member is not mechanically derivable (e.g. an imported/module type alias) and its story surfaces it via `meta.controls`
+- **THEN** `derive-controls.test.ts` SHALL treat that prop as accounted for and SHALL NOT fail for it
 
-#### Scenario: A stale exclusion or override fails the gate
+#### Scenario: An unaccounted-for prop still fails the gate
 
-- **WHEN** a story's `meta.excludeControls` or `meta.controlOverrides` references a prop name that no longer exists on the primitive's `Props` interface
-- **THEN** `apps/extension/catalog/lib/derive-controls.test.ts` SHALL fail and `pnpm verify` SHALL exit non-zero
+- **WHEN** a primitive's `Props` gains a member `derive-controls.ts` cannot classify, and the story lists it in neither `meta.excludeControls` nor `meta.controls`
+- **THEN** `derive-controls.test.ts` SHALL fail and `pnpm verify` SHALL exit non-zero
 
 ### Requirement: The catalog ships nothing in the extension bundle
 
-The catalog SHALL NOT be part of the MV3 build. `public/manifest.json` SHALL NOT reference any catalog file, and `apps/extension/vite.config.ts` `rollupOptions.input` SHALL NOT include a catalog entry. The MV3 build output SHALL be unaffected by the catalog's presence.
+The catalog SHALL NOT be part of the MV3 build: `public/manifest.json` SHALL
+NOT reference any catalog file, and `apps/extension/vite.config.ts`
+`rollupOptions.input` SHALL NOT include a catalog entry. This invariant SHALL
+be enforced by an automated gate — `apps/extension/scripts/assert-catalog-excluded.sh`,
+wired into `verify:catalog` (and therefore `pnpm verify`) as the
+`verify:catalog:build-exclusion` script — which SHALL run one extension
+production build (`pnpm --filter @lunma/extension build`, output `dist/`) and
+SHALL fail when the built `dist/` contains any catalog-engine marker string
+(e.g. `defineStory`, `generateDerivedControls`, `resolveControls`, the catalog
+mount-target message) or any file path matching `*catalog*`.
 
-#### Scenario: The extension build is unchanged by the catalog
+#### Scenario: Catalog code in the build fails the gate
 
-- **WHEN** `pnpm --filter @lunma/extension build` runs with the catalog present
-- **THEN** the produced `dist/` SHALL contain no catalog code and SHALL match what the build produced before the catalog was added (no new chunk attributable to `catalog/`)
+- **WHEN** `pnpm --filter @lunma/extension verify:catalog:build-exclusion` runs and the produced `dist/` contains a catalog-engine marker or a `*catalog*` path
+- **THEN** the script SHALL exit non-zero and `pnpm verify` SHALL fail
+
+#### Scenario: A clean build passes the gate
+
+- **WHEN** the extension builds with the catalog present and no catalog code reaches `dist/`
+- **THEN** `verify:catalog:build-exclusion` SHALL report success and exit zero
 
 ### Requirement: Every primitive is guaranteed a story
 
@@ -104,4 +142,105 @@ The repository SHALL configure a project `.claude` `PostToolUse` hook (matcher `
 
 - **WHEN** an agent edits or creates `apps/extension/src/ui/<Name>.svelte` while no `apps/extension/catalog/stories/ui/<Name>.stories.svelte` exists
 - **THEN** the `PostToolUse` hook SHALL surface a message naming `<Name>` and instructing the author to add or update its catalog story
+
+### Requirement: The catalog chrome is a neutral tool decoupled from lunma's theme
+
+The catalog shell (`apps/extension/catalog/Catalog.svelte`) SHALL render its
+chrome — nav, toolbar, topbar, nav footer, and `Story.svelte`'s panel frames,
+API table, code, and source views — in a bespoke neutral grayscale palette
+(`--cat-*`, defined in `apps/extension/catalog/catalog.css`), using plain
+controls, and SHALL NOT dress the chrome in lunma's aurora/glass/hue treatment,
+lunma's semantic tokens, or `apps/extension/src/ui` primitives — so the tool
+never visually competes with or is mistaken for the primitives it presents. The
+chrome SHALL expose, as plain neutral controls: the active Space hue, the
+colour-intensity tier (`subtle | standard | vivid`), a reduced-motion toggle, a
+**stage-theme** (preview light/dark) control in the topbar beside the selected
+story's title, and a **chrome-theme** (tool light/dark) toggle in the nav
+footer. The catalog SHALL key two independent theme axes on `<html>`:
+`data-cat-theme` (the chrome's `--cat-*` palette) and `data-theme` (the
+preview's lunma tokens, and therefore any body-portalled overlays a previewed
+primitive renders). The Space-hue / colour-intensity / reduced-motion controls
+SHALL apply ONLY to the preview canvas (a `.lunma-space-scope` wrapper carrying
+`--space-*` / `data-tint` / `data-force-motion`), never the chrome. The chrome
+axes (Space hue, colour-intensity, reduced-motion, chrome theme) SHALL persist
+across reloads via a single `localStorage` key, restored on load and validated
+before use (an out-of-range stored Space hue SHALL fall back to the default);
+the stage theme SHALL NOT persist (it reseeds per story). Because
+`Aurora.svelte` derives reduced-motion from `matchMedia` (not a prop), the
+reduced-motion toggle SHALL freeze the backdrop via a `data-force-motion`
+attribute handled in `catalog.css`.
+
+#### Scenario: The chrome carries no lunma theming
+
+- **WHEN** any story is selected at any Space hue, intensity, or stage theme
+- **THEN** the nav, toolbar, topbar, footer, and panel frames SHALL render in the neutral `--cat-*` palette only, with no aurora backdrop, glass blur, Space-hue accent, or lunma `src/ui` primitive in the chrome
+
+#### Scenario: Hue and intensity affect only the preview canvas
+
+- **WHEN** the toolbar changes the colour-intensity tier or the Space hue
+- **THEN** only the preview canvas (and the primitive rendered in it) SHALL pick up the corresponding `@lunma/tokens` custom properties (accent/glow/aurora), so a primitive can be inspected from `subtle` to `vivid` in one view, while the chrome is unaffected
+
+#### Scenario: Reduced-motion toggle freezes animation
+
+- **WHEN** the reduced-motion toggle is enabled
+- **THEN** the preview canvas's aurora backdrop and primitive transitions SHALL stop animating via the catalog's `data-force-motion` handling, without modifying the `Aurora` primitive
+
+#### Scenario: Chrome theme and stage theme are independent, and portals follow the stage
+
+- **WHEN** the chrome theme and the stage theme are set to different values, and a previewed primitive portals an overlay to `<body>` (e.g. `Menu`, `MultiSelect`, `BottomSheet`, `Toast`)
+- **THEN** the chrome SHALL render in the chrome theme (`data-cat-theme`) and the preview AND its portalled overlay SHALL render in the stage theme (`<html data-theme>`) — because both axes live on `<html>`, the overlay is never stranded in the wrong theme
+
+#### Scenario: Chrome axes persist across reloads
+
+- **WHEN** a reviewer sets the Space hue, colour-intensity, reduced-motion, or chrome theme and reloads the catalog
+- **THEN** those four axes SHALL be restored from `localStorage` to their last values, while the stage theme SHALL reset to the selected story's `meta.theme` default
+
+### Requirement: Each story's content pane chooses its own canvas and theme
+
+The catalog SHALL let each `*.stories.svelte` file's `meta` (typed by
+`StoryMeta`, `apps/extension/catalog/lib/story.ts`) declare two optional
+fields: `background: 'neutral' | 'aurora'` (default `'neutral'`) and `theme:
+'light' | 'dark'` (default `'dark'`). `Catalog.svelte` SHALL set a
+`data-canvas` attribute on the preview canvas wrapper (`.cat-canvas`, a
+`.lunma-space-scope` element) from the selected story's `meta.background` (or
+its default), re-evaluated whenever the selection changes, and SHALL set the
+stage theme on `<html data-theme>` from `meta.theme`. When `data-canvas` is
+`'neutral'`, the canvas SHALL render a neutral `--cat-canvas` fill and no
+aurora; when `'aurora'`, the canvas SHALL render an `<Aurora>` backdrop scoped
+to the canvas (NOT the whole tool), with the chrome unaffected either way.
+`Story.svelte`'s `.preview` and `Variant.svelte`'s `.variant` tiles SHALL each
+render a plain neutral card (`--cat-canvas` fill, `--cat-canvas-border` border,
+no backdrop-filter) when an ancestor `.cat-canvas` has `data-canvas='neutral'`,
+and SHALL render a `@lunma/tokens` glass-tile recipe (`--glass-*` fill +
+backdrop blur, on `.variant::before` to avoid trapping child popover z-index)
+when it has `data-canvas='aurora'`. `Catalog.svelte`'s topbar SHALL expose a
+plain stage-theme control, independent of the chrome-theme toggle, seeded from
+the selected story's `meta.theme` on each story-selection change, letting a
+reviewer override the stage theme for the session without editing the story
+file or changing the chrome's own theme.
+
+#### Scenario: A story defaults to a neutral canvas
+
+- **WHEN** a story's `meta` omits `background`
+- **THEN** the preview canvas SHALL render with `data-canvas='neutral'` on a `--cat-canvas` fill, and the Playground preview and every Examples-matrix tile SHALL render as plain `--cat-canvas` cards with no aurora backdrop or glass blur
+
+#### Scenario: A story opts into the aurora canvas
+
+- **WHEN** a story's `meta` sets `background: 'aurora'`
+- **THEN** the preview canvas SHALL render an `<Aurora>` backdrop scoped to itself, and the Playground preview and every Examples-matrix tile SHALL render against that aurora using the glass-tile recipe, while the surrounding chrome stays neutral
+
+#### Scenario: A story's stage theme is independent of the chrome theme
+
+- **WHEN** a story's `meta.theme` is `'light'` and the chrome-theme toggle is `'dark'`
+- **THEN** `<html data-theme>` SHALL be `'light'` (resolving lunma light-theme tokens for the preview and its portalled overlays) while the chrome renders dark via `data-cat-theme='dark'`
+
+#### Scenario: The live stage-theme control overrides the story default for the session
+
+- **WHEN** a reviewer changes the topbar stage-theme control while a story is selected
+- **THEN** `<html data-theme>` SHALL follow the control's value immediately, without editing the story file, and SHALL reset to that story's `meta.theme` the next time the story selection changes
+
+#### Scenario: The chrome stays neutral regardless of the selected story's canvas
+
+- **WHEN** a story with `background: 'aurora'` is selected
+- **THEN** only the preview canvas SHALL show the aurora; the nav, toolbar, topbar, and footer SHALL remain in the neutral `--cat-*` palette
 

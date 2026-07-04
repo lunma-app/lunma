@@ -1,3 +1,8 @@
+## RENAMED Requirements
+
+- FROM: `### Requirement: Primitives render inside the immersive shell`
+- TO: `### Requirement: The catalog chrome is a neutral tool decoupled from lunma's theme`
+
 ## MODIFIED Requirements
 
 ### Requirement: The catalog chrome is a neutral tool decoupled from lunma's theme
