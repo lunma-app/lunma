@@ -28,7 +28,8 @@
     "lint:catalog": "biome check catalog",
     "check:catalog": "svelte-check --tsconfig ./tsconfig.catalog.json",
     "lint:styles:catalog": "stylelint 'catalog/**/*.{svelte,css}'",
-    "verify:catalog": "pnpm typecheck:catalog && pnpm lint:catalog && pnpm check:catalog && pnpm lint:styles:catalog",
+    "verify:catalog:build-exclusion": "bash scripts/assert-catalog-excluded.sh",
+    "verify:catalog": "pnpm typecheck:catalog && pnpm lint:catalog && pnpm check:catalog && pnpm lint:styles:catalog && pnpm verify:catalog:build-exclusion",
     "pack": "pnpm build && cd dist && zip -r ../extension.zip .",
     "verify": "pnpm typecheck && pnpm lint && pnpm check && pnpm lint:styles && pnpm verify:catalog && pnpm test:run"
   },

@@ -3,7 +3,8 @@ import { defineStory } from '../../lib/story';
 
 export const meta = defineStory({
   title: 'Toast',
-  group: 'Composite',
+  group: 'Overlay',
+  background: 'aurora',
   controlOverrides: {
     message: { default: 'Space archived.', description: 'Status line text.' },
     actionLabel: { description: 'Optional action button label (empty = none).' },

@@ -3,7 +3,7 @@ import { defineStory } from '../../lib/story';
 
 export const meta = defineStory({
   title: 'Tooltip',
-  group: 'Atoms',
+  group: 'Overlay',
   controlOverrides: {
     label: { default: 'Saved to this Space', description: 'Tooltip text.' },
     side: { description: 'Tooltip side.' },

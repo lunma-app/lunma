@@ -1,4 +1,4 @@
-import type { ControlDef } from './controls';
+import type { ControlDef, Controls } from './controls';
 
 /**
  * The metadata a `*.stories.svelte` file exports from its `<script module>`
@@ -13,6 +13,18 @@ export interface StoryMeta {
   group: string;
   /** Optional sort weight within the group (lower first); ties fall back to `title`. */
   order?: number;
+  /** The story content pane's backdrop: `'neutral'` (plain card, default) or
+   * `'aurora'` (the immersive glass/aurora shell) — set `'aurora'` only when
+   * the primitive's own visual identity depends on that backdrop. */
+  background?: 'neutral' | 'aurora';
+  /** The story content pane's own light/dark theme (default `'dark'`),
+   * independent of the catalog chrome's theme toggle. */
+  theme?: 'light' | 'dark';
+  /** Author controls the deriver can't reach (a primitive whose props are
+   * opaque type references derive nothing). Merged UNDER derived controls of the
+   * same name — a real derived control wins — then patched by `controlOverrides`.
+   * Lets an otherwise-underivable primitive still show a Playground + API table. */
+  controls?: Controls;
   /** Props to omit from the derived controls panel/API table, one-line reason
    * each (e.g. a `Snippet`/callback prop, or a mechanically-derivable prop
    * that's unsafe as a naive control). */

@@ -3,7 +3,7 @@ import { defineStory } from '../../lib/story';
 
 export const meta = defineStory({
   title: 'BottomSheet',
-  group: 'Composite',
+  group: 'Overlay',
   controlOverrides: {
     open: { default: true, description: 'Controlled open state.' },
     title: { default: 'Rename Space', description: 'Header title (empty = headerless).' },

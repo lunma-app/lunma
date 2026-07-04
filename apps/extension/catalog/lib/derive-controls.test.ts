@@ -173,14 +173,18 @@ describe('derive-controls drift guard', () => {
     for (const { name, source } of primitiveEntries()) {
       const meta = metas.get(name);
       const { controls, unclassified } = deriveControls(source);
+      // A Props member is accounted for when it's derived, excluded, OR
+      // author-declared via meta.controls (the escape hatch for a prop the
+      // deriver can't reach — surfacing it counts, same as excluding it).
       const accountedFor = new Set([
         ...Object.keys(controls),
+        ...(meta?.controls ? Object.keys(meta.controls) : []),
         ...(meta?.excludeControls ? Object.keys(meta.excludeControls) : []),
       ]);
       const missing = unclassified.filter((prop) => !accountedFor.has(prop));
       if (missing.length > 0) {
         failures.push(
-          `${name}: unaccounted-for prop(s) ${missing.join(', ')} — add to meta.excludeControls`,
+          `${name}: unaccounted-for prop(s) ${missing.join(', ')} — add to meta.excludeControls or meta.controls`,
         );
       }
     }

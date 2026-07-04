@@ -1,6 +1,18 @@
-/* Catalog-global styles. The catalog is a dev surface, so this stylesheet only
- * owns the page frame + the reduced-motion freeze; everything inside the stage
- * is a primitive styled from @lunma/tokens. */
+/* Catalog-global styles. The catalog is a dev tool, so its CHROME is a
+ * deliberately quiet, brand-neutral shell (its own `--cat-*` grayscale palette,
+ * NOT lunma's aurora/glass/hue tokens) — the eye should land on each primitive's
+ * own UI, not on the catalog. Only the inner canvas where a primitive actually
+ * renders uses lunma tokens, so it shows the primitive in its real environment.
+ *
+ * Two INDEPENDENT theme axes, each on its own <html> attribute:
+ *   1. CHROME (`--cat-*`) — nav, toolbar, panel frames, API table, code, source.
+ *      Keyed to `data-cat-theme` (the catalog's own light/dark; tool comfort).
+ *   2. CANVAS (lunma tokens) — the stage a primitive renders on, plus its
+ *      portalled overlays. Keyed to `data-theme` (the stage-theme control /
+ *      per-story override). Because `data-theme` lives on <html>, a primitive AND
+ *      its body-portalled overlays (Menu, BottomSheet, Toast) render in the chosen
+ *      mode — a subtree attribute would strand portals in the wrong theme.
+ * The two are fully decoupled: dark tool + light preview, or any combination. */
 
 html,
 body {
@@ -8,66 +20,107 @@ body {
   height: 100%;
 }
 
-/* Default dark; the theme toggle sets `color-scheme` inline on <html> (via
- * applyThemeToDocument), which overrides this. */
-html {
-  color-scheme: dark;
-}
-
-body {
-  background: var(--atm-bg);
-  color: var(--text);
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-}
-
 #app {
   height: 100%;
 }
 
+:root {
+  --cat-bg: #f4f4f5;
+  --cat-surface: #ffffff;
+  --cat-panel: #fafafa;
+  --cat-border: #e4e4e7;
+  --cat-border-strong: #d4d4d8;
+  --cat-text: #18181b;
+  --cat-muted: #71717a;
+  --cat-faint: #a1a1aa;
+  --cat-active: #ececee;
+  /* Canvas: a deliberately NEUTRAL gray stage (not near-white) so a primitive's
+   * own light surfaces read clearly against it. Flips with `data-theme`. */
+  --cat-canvas: #ececef;
+  --cat-canvas-border: #dedee2;
+  --cat-radius: 12px;
+  --cat-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --cat-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Roboto Mono', monospace;
+}
+:root[data-cat-theme='dark'] {
+  --cat-bg: #09090b;
+  --cat-surface: #141416;
+  --cat-panel: #101012;
+  --cat-border: #27272a;
+  --cat-border-strong: #3f3f46;
+  --cat-text: #e4e4e7;
+  --cat-muted: #a1a1aa;
+  --cat-faint: #71717a;
+  --cat-active: #27272a;
+}
+/* Canvas dark tracks the stage-theme axis (`data-theme`), independent of chrome. */
+:root[data-theme='dark'] {
+  --cat-canvas: #131316;
+  --cat-canvas-border: #2a2a2e;
+}
+
+body {
+  background: var(--cat-bg);
+  color: var(--cat-text);
+  font-family: var(--cat-font);
+  -webkit-font-smoothing: antialiased;
+}
+
 /* Reduced-motion freeze (component-catalog R1). `Aurora.svelte` derives its
- * reduced state from `matchMedia`, so a prop cannot force it — the toolbar
- * instead sets `data-force-motion="reduced"` on the scope and we replicate the
- * freeze here. The aurora blobs animate via Svelte-scoped `.aurora .blob`
- * keyframes; from this plain (already-global) stylesheet we re-state the freeze
- * and neutralise primitive transitions. ONE-WAY: this can force reduced-motion
- * ON but cannot defeat an OS `prefers-reduced-motion: reduce` (Aurora hard-codes
- * that media query), so the toggle never turns the full animation back on. */
+ * reduced state from `matchMedia`, so a prop cannot force it — the toolbar sets
+ * `data-force-motion="reduced"` on the preview scope and we replicate the freeze
+ * here. ONE-WAY: forces reduced-motion ON but cannot defeat an OS
+ * `prefers-reduced-motion: reduce`. */
 [data-force-motion='reduced'] .aurora .blob {
   animation: none;
 }
-
 [data-force-motion='reduced'],
 [data-force-motion='reduced'] * {
   transition-duration: 0.001ms !important;
   animation-duration: 0.001ms !important;
 }
 
-/* Shiki source view. Rules live here (not in Story.svelte) because `{@html}`
- * output isn't reached by Svelte's scoped-style attribute. `defaultColor: false`
- * emits per-token `--shiki-light`/`--shiki-dark` custom properties; pick the pair
- * by the catalog theme (dark is the default; `[data-theme='light']` flips it), so
- * the source view tracks the light/dark toggle with no re-highlight. */
+/* Generated playground-code tokens — chrome (follow `data-cat-theme`), bespoke
+ * grayscale-palette colours, not lunma tokens. */
+.cat-tok-tag,
+.cat-tok-str {
+  color: #147a67;
+}
+.cat-tok-attr {
+  color: #9a5b2a;
+}
+:root[data-cat-theme='dark'] .cat-tok-tag,
+:root[data-cat-theme='dark'] .cat-tok-str {
+  color: #4fc0a8;
+}
+:root[data-cat-theme='dark'] .cat-tok-attr {
+  color: #d0975c;
+}
+
+/* Shiki source/variant-code view (chrome). Rules live here (not in Story.svelte)
+ * because `{@html}` output isn't reached by Svelte's scoped-style attribute.
+ * `defaultColor: false` emits per-token `--shiki-light`/`--shiki-dark`; pick the
+ * pair by the CHROME theme (`data-cat-theme`; light is the default). */
 .shiki {
   margin: 0;
-  padding: var(--space-4);
-  border-radius: var(--r-lg);
-  border: 1px solid var(--border-soft);
+  padding: var(--space-4, 16px);
+  border-radius: var(--cat-radius);
+  border: 1px solid var(--cat-border);
   overflow: auto;
   max-height: 28rem;
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
+  font-family: var(--cat-mono);
+  font-size: 12px;
   line-height: 1.6;
-  color: var(--shiki-dark);
-  background-color: var(--shiki-dark-bg);
-}
-.shiki span {
-  color: var(--shiki-dark);
-}
-[data-theme='light'] .shiki {
   color: var(--shiki-light);
   background-color: var(--shiki-light-bg);
 }
-[data-theme='light'] .shiki span {
+.shiki span {
   color: var(--shiki-light);
+}
+:root[data-cat-theme='dark'] .shiki {
+  color: var(--shiki-dark);
+  background-color: var(--shiki-dark-bg);
+}
+:root[data-cat-theme='dark'] .shiki span {
+  color: var(--shiki-dark);
 }
