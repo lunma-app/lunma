@@ -116,6 +116,14 @@ function hueCss(c: SpaceColor): string {
   return `oklch(${o.l} ${o.c} ${o.h})`;
 }
 
+// The selected swatch's ring reads as a lightened cut of its own hue (mirrors the
+// ColorSwatch primitive's `--swatch-l + 0.04`), so selection stays on-hue rather
+// than a flat neutral outline.
+function ringCss(c: SpaceColor): string {
+  const o = colourToOklch(c);
+  return `oklch(${Math.min(o.l + 0.04, 1)} ${o.c} ${o.h})`;
+}
+
 function select(entry: StoryEntry): void {
   selected = entry;
 }
@@ -203,6 +211,7 @@ function select(entry: StoryEntry): void {
               class="cat-swatch"
               class:on={color === c}
               style:background={hueCss(c)}
+              style:--cat-swatch-ring={ringCss(c)}
               aria-label={c}
               aria-pressed={color === c}
               onclick={() => (color = c)}
@@ -444,7 +453,7 @@ function select(entry: StoryEntry): void {
     cursor: pointer;
   }
   .cat-swatch.on {
-    outline: 2px solid var(--cat-text);
+    outline: 2px solid var(--cat-swatch-ring);
     outline-offset: 1px;
   }
 
