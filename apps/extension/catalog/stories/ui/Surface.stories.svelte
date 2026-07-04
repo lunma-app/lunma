@@ -4,6 +4,7 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'Surface',
   group: 'Layout',
+  background: 'aurora',
   controlOverrides: {
     glow: { description: 'Soft Space-hue glow.' },
     clip: { description: 'overflow:hidden for full-bleed children.' },

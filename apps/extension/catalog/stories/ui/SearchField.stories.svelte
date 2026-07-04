@@ -4,6 +4,7 @@ import { defineStory } from '../../lib/story';
 export const meta = defineStory({
   title: 'SearchField',
   group: 'Form',
+  background: 'aurora',
   controlOverrides: {
     placeholder: {
       default: 'Search tabs, bookmarks…',

@@ -3,7 +3,7 @@ import { defineStory } from '../../lib/story';
 
 export const meta = defineStory({
   title: 'Menu',
-  group: 'Composite',
+  group: 'Overlay',
   controlOverrides: {
     trigger: { default: 'kebab', description: 'Kebab dropdown or right-click context popover.' },
     ariaLabel: {

@@ -36,15 +36,20 @@ const sources = import.meta.glob<string>('../stories/**/*.stories.svelte', {
 });
 
 /**
- * A story's final controls: the primitive's derived-from-`Props` base (keyed
- * by `meta.title`, which by convention names the primitive), each prop
- * dropped by `meta.excludeControls` and merged with `meta.controlOverrides`.
+ * A story's final controls, merged per prop in precedence order: a
+ * story-authored `meta.controls` floor (for a primitive the deriver can't
+ * reach), the primitive's derived-from-`Props` base (keyed by `meta.title`,
+ * which by convention names the primitive — a real derived control of the same
+ * name wins wholesale), each prop dropped by `meta.excludeControls`, then
+ * shallow-patched by `meta.controlOverrides`.
  */
 export function resolveControls(meta: StoryMeta): Controls {
-  const derived = derivedControls[meta.title];
-  if (!derived) return {};
+  const base: Controls = {
+    ...meta.controls,
+    ...(derivedControls[meta.title]?.controls ?? {}),
+  };
   const controls: Controls = {};
-  for (const [prop, def] of Object.entries(derived.controls)) {
+  for (const [prop, def] of Object.entries(base)) {
     if (meta.excludeControls?.[prop]) continue;
     controls[prop] = { ...def, ...meta.controlOverrides?.[prop] };
   }
