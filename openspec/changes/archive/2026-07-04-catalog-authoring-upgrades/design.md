@@ -99,6 +99,19 @@ guard). The per-feature Decisions for the adopted upgrades are in
 
 ## Decisions
 
+- **The chrome-theming requirement is a rename, encoded via `## RENAMED
+  Requirements`.** This change replaces the living requirement `Primitives
+  render inside the immersive shell` with `The catalog chrome is a neutral
+  tool decoupled from lunma's theme` — same subject (the shell's theming
+  model), semantically inverted. Found at archive/apply time: the delta had
+  written it as a same-name `MODIFIED`, which OpenSpec's `specs-apply` cannot
+  resolve (it matches MODIFIED by exact header and aborts on the missing new
+  name). Fixed the delta by adding a `## RENAMED Requirements` FROM→TO pair;
+  the existing MODIFIED block already references the NEW header, which
+  `specs-apply` requires when a rename is present (apply order RENAMED →
+  REMOVED → MODIFIED → ADDED). No implementation or spec-outcome change — the
+  living spec content is identical to the change's intent; this only corrects
+  the delta's encoding.
 - **`background`/`theme` live on `StoryMeta`, not as a separate config file
   or a purely-runtime toggle.** Same shape as `title`/`group`/`order` — a
   story-authored fact about how to present that primitive — discoverable
