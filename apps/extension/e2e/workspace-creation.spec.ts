@@ -1,7 +1,7 @@
-import { fileURLToPath } from 'node:url';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 import { expect, test } from './fixtures';
 
@@ -55,7 +55,9 @@ async function chipSpaceIdByName(
     const chips = Array.from(
       document.querySelectorAll('[data-testid="space-chip"]'),
     ) as HTMLElement[];
-    const chip = chips.find((c) => c.textContent?.includes(name) || c.getAttribute('data-name') === name);
+    const chip = chips.find(
+      (c) => c.textContent?.includes(name) || c.getAttribute('data-name') === name,
+    );
     return chip?.getAttribute('data-space-id') ?? null;
   }, name);
 }
@@ -93,9 +95,7 @@ test('createSpace renders a chip with the correct name and data-space-id', async
   expect(workSpaceId, 'Work space has an id').toBeTruthy();
 
   // The sidebar must render a chip for the new Space and activate it.
-  await expect
-    .poll(() => activeChipSpaceId(page), { timeout: 10_000 })
-    .toBe(workSpaceId);
+  await expect.poll(() => activeChipSpaceId(page), { timeout: 10_000 }).toBe(workSpaceId);
 
   // The chip's data-space-id must match the persisted id.
   const chipId = await chipSpaceIdByName(page, 'Work');
@@ -103,10 +103,7 @@ test('createSpace renders a chip with the correct name and data-space-id', async
 
   // The persisted activeSpaceByWindow must also reflect the new Space.
   await expect
-    .poll(
-      async () => (await readState(page)).activeSpaceByWindow[windowId],
-      { timeout: 10_000 },
-    )
+    .poll(async () => (await readState(page)).activeSpaceByWindow[windowId], { timeout: 10_000 })
     .toBe(workSpaceId);
 });
 
@@ -200,12 +197,13 @@ test('a created Space survives a full browser restart', async () => {
 
   await page1.evaluate(
     ({ type, cmd }) =>
-      chrome.runtime
-        .sendMessage({ type, id: `e2e:restart:create`, cmd })
-        .catch(() => undefined),
+      chrome.runtime.sendMessage({ type, id: `e2e:restart:create`, cmd }).catch(() => undefined),
     {
       type: CMD,
-      cmd: { kind: 'createSpace', payload: { name: 'Garden', color: 'cyan', icon: 'leaf', windowId } },
+      cmd: {
+        kind: 'createSpace',
+        payload: { name: 'Garden', color: 'cyan', icon: 'leaf', windowId },
+      },
     },
   );
 

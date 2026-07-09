@@ -60,10 +60,8 @@ async function dragTo(page: Page, row: Locator, zone: Locator): Promise<void> {
   await page.mouse.up();
 }
 
-const tempRows = (page: Page): Locator =>
-  page.getByTestId('temp-tabs').getByTestId('tab-row');
-const pinnedRows = (page: Page): Locator =>
-  page.getByTestId('pinned-tabs').getByTestId('tab-row');
+const tempRows = (page: Page): Locator => page.getByTestId('temp-tabs').getByTestId('tab-row');
+const pinnedRows = (page: Page): Locator => page.getByTestId('pinned-tabs').getByTestId('tab-row');
 
 test('drag a temp tab into Pinned: it pins, persists, and reorders', async ({
   page,

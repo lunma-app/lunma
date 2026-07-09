@@ -317,7 +317,7 @@ describe('feed read-state (rss-connector design D3)', () => {
     store.setLensFilter('feed-1', { entities: ['change'] });
     store.setLensFilter('feed-1', {});
     const node = store.state.pinnedBySpace.work?.[0] as Record<string, unknown> | undefined;
-    expect(node?.['filter']).toBeUndefined();
+    expect(node?.filter).toBeUndefined();
   });
 
   test('setLensFilter persists explicit empty arrays as a real constraint, not a clear', () => {

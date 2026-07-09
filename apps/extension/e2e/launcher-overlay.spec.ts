@@ -25,7 +25,9 @@ let baseURL: string;
 test.beforeAll(async () => {
   server = createServer((_req, res) => {
     res.writeHead(200, { 'content-type': 'text/html' });
-    res.end('<!doctype html><html><head><title>lunma e2e</title></head><body><h1>lunma e2e</h1></body></html>');
+    res.end(
+      '<!doctype html><html><head><title>lunma e2e</title></head><body><h1>lunma e2e</h1></body></html>',
+    );
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;

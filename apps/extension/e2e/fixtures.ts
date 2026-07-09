@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { type BrowserContext, chromium, test as base } from '@playwright/test';
+import { type BrowserContext, test as base, chromium } from '@playwright/test';
 
 // Loads the built extension (`dist/`) into a fresh persistent Chromium profile
 // and exposes the resolved extension id. Standard Playwright MV3 recipe:
@@ -19,10 +19,7 @@ export const test = base.extend<{
       // MV3 extensions don't load in the default headless shell. Honour
       // PWHEADLESS=new on CI (with xvfb) or run headed locally.
       headless: false,
-      args: [
-        `--disable-extensions-except=${EXTENSION_PATH}`,
-        `--load-extension=${EXTENSION_PATH}`,
-      ],
+      args: [`--disable-extensions-except=${EXTENSION_PATH}`, `--load-extension=${EXTENSION_PATH}`],
     });
     await use(context);
     await context.close();

@@ -91,9 +91,9 @@ test('focusing a cross-Space OPEN tab switches the sidebar to its Space', async 
   await expect
     .poll(
       async () =>
-        (await readState(page)).spaceInstancesByWindow[windowId]?.[homeSpaceId]?.tempTabIds.includes(
-          tabId,
-        ) ?? false,
+        (await readState(page)).spaceInstancesByWindow[windowId]?.[
+          homeSpaceId
+        ]?.tempTabIds.includes(tabId) ?? false,
       { timeout: 15_000 },
     )
     .toBe(true);

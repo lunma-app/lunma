@@ -55,9 +55,15 @@ if (typeof globalThis.IntersectionObserver === 'undefined') {
     readonly root = null;
     readonly rootMargin = '';
     readonly thresholds: readonly number[] = [];
-    observe(): void {}
-    unobserve(): void {}
-    disconnect(): void {}
+    observe(): void {
+      // noop
+    }
+    unobserve(): void {
+      // noop
+    }
+    disconnect(): void {
+      // noop
+    }
     takeRecords(): IntersectionObserverEntry[] {
       return [];
     }

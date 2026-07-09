@@ -96,7 +96,10 @@ function placedIds(nodes: PinNodeSnap[]): string[] {
 function expectNoOrphans(snap: StateSnap): void {
   const placed = placedIds(snap.nodes);
   for (const id of snap.savedIds) {
-    expect(placed.filter((p) => p === id), `savedTab ${id} placed exactly once`).toHaveLength(1);
+    expect(
+      placed.filter((p) => p === id),
+      `savedTab ${id} placed exactly once`,
+    ).toHaveLength(1);
   }
   // And nothing placed that has no record (a dangling tree reference).
   for (const id of placed) {
