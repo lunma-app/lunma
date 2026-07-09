@@ -36,23 +36,24 @@ describe('FolderRow', () => {
     const { container, getByText } = render(FolderRowHarness, { props: base });
     expect(container.querySelector('[data-testid="folder-row"]')).not.toBeNull();
     expect(getByText('Reading')).toBeTruthy();
-    // The glyph (`.glyph`) renders the folder's own icon, distinct from the
-    // chevron. Icon stamps `data-icon-name`, so the glyph carries the passed icon.
-    expect(container.querySelector('.glyph [data-icon-name]')?.getAttribute('data-icon-name')).toBe(
-      'book',
-    );
+    // The glyph (`.glyph`) stacks the folder's own icon (`.glyph-mark`) and a
+    // chevron (`.glyph-caret`) in one slot — the icon at rest, revealed on hover/
+    // focus/open-menu (LensRow's disclosure model). Icon stamps `data-icon-name`.
     expect(
-      container.querySelector('.chevron [data-icon-name]')?.getAttribute('data-icon-name'),
+      container.querySelector('.glyph-mark [data-icon-name]')?.getAttribute('data-icon-name'),
+    ).toBe('book');
+    expect(
+      container.querySelector('.glyph-caret [data-icon-name]')?.getAttribute('data-icon-name'),
     ).toBe('chevron-right');
   });
 
-  test('chevron carries the expanded class only when expanded', () => {
+  test('the glyph carries the expanded class only when expanded', () => {
     const collapsed = render(FolderRowHarness, { props: { ...base, expanded: false } });
-    expect(collapsed.container.querySelector('.chevron.expanded')).toBeNull();
+    expect(collapsed.container.querySelector('.glyph.expanded')).toBeNull();
     expect(collapsed.container.querySelector('.hit')?.getAttribute('aria-expanded')).toBe('false');
 
     const expanded = render(FolderRowHarness, { props: { ...base, expanded: true } });
-    expect(expanded.container.querySelector('.chevron.expanded')).not.toBeNull();
+    expect(expanded.container.querySelector('.glyph.expanded')).not.toBeNull();
     expect(expanded.container.querySelector('.hit')?.getAttribute('aria-expanded')).toBe('true');
   });
 
@@ -80,8 +81,9 @@ describe('FolderRow', () => {
   describe('editing mode (inline rename)', () => {
     test('shows the folder glyph + an editable name field seeded with the name', () => {
       const { container } = render(FolderRowHarness, { props: { ...base, editing: true } });
-      // The folder still reads as a folder: chevron + glyph remain visible.
-      expect(container.querySelector('.glyph [data-icon-name]')).not.toBeNull();
+      // The folder still reads as a folder: the icon stays visible (the chevron
+      // never swaps in during a rename).
+      expect(container.querySelector('.glyph-mark [data-icon-name]')).not.toBeNull();
       // No display button while editing; the name is an input seeded with `name`.
       expect(container.querySelector('.hit')).toBeNull();
       const input = container.querySelector(

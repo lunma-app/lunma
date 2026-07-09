@@ -827,12 +827,16 @@ export function onContextMenu(_e: MouseEvent): void {
       {/if}
     {/each}
 
-    {#each danglingRefs as ref (ref.sourceId)}
-      <div class="removed-row" data-testid="smart-account-removed">
-        <Icon name="unplug" size={16} />
-        <span class="removed-copy">{m.sidebar_lensAccountRemoved()}</span>
+    {#if danglingRefs.length > 0}
+      <div class="section-body">
+        {#each danglingRefs as ref (ref.sourceId)}
+          <div class="removed-row" data-testid="smart-account-removed">
+            <Icon name="unplug" size={16} />
+            <span class="removed-copy">{m.sidebar_lensAccountRemoved()}</span>
+          </div>
+        {/each}
       </div>
-    {/each}
+    {/if}
   </div>
 {/if}
 
@@ -864,21 +868,26 @@ export function onContextMenu(_e: MouseEvent): void {
     display: contents;
   }
 
-  /* The expand body. The comp insets result rows with their own left padding
-   * (`padding-left: 20px`) rather than indenting the container, so the wrapper
-   * stays full-width and the drag geometry reads clean row rects. */
+  /* The expand body. Indents the CONTAINER by `--space-4` — the same amount
+   * FolderRow's `.children` (PinnedTabs.svelte) indents a folder's child tab
+   * rows — so EVERYTHING one level under the lens header (a `LensSectionHeader`,
+   * when present, and the rows below it) steps in exactly as far as a folder's
+   * children, and a section header reads as nested under the lens rather than a
+   * peer of it. */
   .children {
     display: flex;
     flex-direction: column;
-    padding: var(--space-1) 0 var(--space-2);
+    padding: var(--space-1) 0 var(--space-2) var(--space-4);
     animation: smart-open var(--motion-base) var(--ease-emphasised);
   }
 
-  /* Section body wrapper (collapsible-smart-folder-sections). Adds NO padding or
-   * indent — header and rows keep their own padding, so the layout stays flat.
-   * Mirrors `.children`'s column flow and replays the `smart-open` entrance when
-   * a collapsed section is re-expanded (the wrapper is conditionally rendered,
-   * so a fresh mount re-triggers the animation). */
+  /* Section body wrapper (collapsible-smart-folder-sections). Adds no indent of
+   * its own — `.children` already provides it — so a row's own `--space-2` (TabRow's
+   * own left pad) is the only thing stacked on top, landing at the same 24px total
+   * inset to the leading icon as a folder's tab rows. Mirrors `.children`'s column
+   * flow and replays the `smart-open` entrance when a collapsed section is
+   * re-expanded (the wrapper is conditionally rendered, so a fresh mount
+   * re-triggers the animation). */
   .section-body {
     display: flex;
     flex-direction: column;
@@ -892,9 +901,11 @@ export function onContextMenu(_e: MouseEvent): void {
 
   /* Result row (comp §5b/5c result rows). The leading 24px state-coloured tile
    * carries the source disc; the title leads; a hover-revealed dismiss + the
-   * status/unread dot sit in the trailing slot. The left inset (`--space-5`)
-   * lines the tiles up under the lens header's 26px icon tile. Height stays on
-   * `--row-h` so the drag controller reads consistent row rects. */
+   * status/unread dot sit in the trailing slot. The left inset (`--space-2`) is
+   * the row's OWN pad — mirroring TabRow's own `--space-2` left pad inside a
+   * folder — stacked on `.section-body`'s `--space-4` container indent, for the
+   * same 24px total a folder's tab rows get. Height stays on `--row-h` so the
+   * drag controller reads consistent row rects. */
   .result-row {
     appearance: none;
     border: 0;
@@ -905,7 +916,7 @@ export function onContextMenu(_e: MouseEvent): void {
     /* Right inset --space-3 (12px) so the trailing unread/status dot right-aligns
        with the kebab GLYPHS on the headers above (kebab button at 8px row-pad,
        icon inset ~4px → glyph at ~12px). Keeps the whole trailing column plumb. */
-    padding: var(--space-1) var(--space-3) var(--space-1) var(--space-5);
+    padding: var(--space-1) var(--space-3) var(--space-1) var(--space-2);
     display: flex;
     align-items: center;
     gap: var(--space-2);
@@ -1088,7 +1099,7 @@ export function onContextMenu(_e: MouseEvent): void {
     display: flex;
     align-items: center;
     gap: var(--space-1);
-    padding: var(--space-1) var(--space-2) 0 var(--space-5);
+    padding: var(--space-1) var(--space-2) 0 var(--space-2);
     margin-top: var(--space-1);
   }
   .controls-spacer {
@@ -1109,7 +1120,7 @@ export function onContextMenu(_e: MouseEvent): void {
     width: 100%;
     box-sizing: border-box;
     min-height: var(--row-h);
-    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-5);
+    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-2);
     display: flex;
     align-items: center;
     background: transparent;
@@ -1136,7 +1147,7 @@ export function onContextMenu(_e: MouseEvent): void {
     align-items: center;
     gap: var(--space-2);
     margin: 0 0 var(--row-gap);
-    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-5);
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-2);
     color: var(--text-muted);
   }
   .needs-access-copy {
@@ -1153,7 +1164,7 @@ export function onContextMenu(_e: MouseEvent): void {
     flex-direction: column;
     gap: var(--space-2);
     margin: 0 0 var(--row-gap);
-    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-5);
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-2);
   }
   .reconnect-copy {
     margin: 0;
@@ -1168,7 +1179,7 @@ export function onContextMenu(_e: MouseEvent): void {
     align-items: center;
     gap: var(--space-2);
     margin: 0 0 var(--row-gap);
-    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-5);
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-2);
     color: var(--text-muted);
   }
   .removed-copy {
@@ -1181,7 +1192,7 @@ export function onContextMenu(_e: MouseEvent): void {
   /* Empty/error note (comp §5b: `padding:2px 10px 6px 20px;font-size:12px;
    * color:var(--text-faint);font-style:italic`). */
   .note-row {
-    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-5);
+    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-2);
     color: var(--text-faint);
     font: var(--weight-regular) var(--text-sm) / 1.3 var(--font-sans);
     font-style: italic;
@@ -1194,7 +1205,7 @@ export function onContextMenu(_e: MouseEvent): void {
     display: flex;
     align-items: center;
     gap: var(--space-1);
-    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-5);
+    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-2);
     width: 100%;
     border: 0;
     background: transparent;

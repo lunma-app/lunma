@@ -205,11 +205,9 @@ function onMenuOpenChange(open: boolean): void {
   style:--folder-c={`oklch(var(--folder-l, 0.62) var(--folder-chroma, 0.16) ${hue})`}
 >
   {#if editing}
-    <span class="chevron" class:expanded aria-hidden="true">
-      <Icon name="chevron-right" size={12} />
-    </span>
-    <span class="glyph" class:busy aria-hidden="true">
-      <Icon name={icon} size={16} />
+    <span class="glyph" class:busy class:expanded aria-hidden="true">
+      <span class="glyph-mark"><Icon name={icon} size={16} /></span>
+      <span class="glyph-caret"><Icon name="chevron-right" size={16} /></span>
     </span>
     <EditableLabel
       value={name}
@@ -227,11 +225,9 @@ function onMenuOpenChange(open: boolean): void {
       aria-expanded={expanded}
       onclick={onToggle}
     >
-      <span class="chevron" class:expanded aria-hidden="true">
-        <Icon name="chevron-right" size={12} />
-      </span>
-      <span class="glyph" class:busy aria-hidden="true">
-        <Icon name={icon} size={16} />
+      <span class="glyph" class:busy class:expanded aria-hidden="true">
+        <span class="glyph-mark"><Icon name={icon} size={16} /></span>
+        <span class="glyph-caret"><Icon name="chevron-right" size={16} /></span>
       </span>
       <span class="name">{name}</span>
     </button>
@@ -300,17 +296,17 @@ function onMenuOpenChange(open: boolean): void {
 {/if}
 
 <style>
-  /* Columns mirror TabRow: the chevron sits in a leading gutter of width
-   * --space-3 (12px), so the glyph lands at the same x as a tab favicon (12px)
-   * and the name at the same x as a tab title (12 + 16 + 8 = 36px). No left
-   * padding on the row; the chevron gutter provides it. */
+  /* Columns mirror TabRow: the row's own left padding (--space-3, 12px) lands the
+   * glyph at the same x as a tab favicon and the name at the same x as a tab
+   * title (12 + 24 + 8 = 44px) — matching LensRow, which reserves this inset via
+   * padding on its own toggle rather than a dedicated gutter element. */
   .folder-row {
     position: relative;
     display: flex;
     align-items: center;
     width: 100%;
     height: var(--row-h);
-    padding: 0 var(--space-2) 0 0;
+    padding: 0 var(--space-2) 0 var(--space-3);
     /* Redesign rounds the row harder — the nav/card radius (comp's lens rows). */
     border-radius: var(--r-lg);
     color: var(--text-2);
@@ -358,46 +354,17 @@ function onMenuOpenChange(open: boolean): void {
   }
 
 
-  /* Leading gutter — same width as TabRow's left padding, so the glyph aligns
-   * with a tab favicon and the chevron never displaces it. */
-  /* The disclosure chevron is NOT shown at rest (it read as visual noise on
-     every row); it fades in on row hover / focus / open menu. The 12px gutter is
-     kept reserved so the glyph tile never shifts when the chevron appears. */
-  .chevron {
-    flex-shrink: 0;
-    width: var(--space-3);
-    height: 100%;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-dim);
-    opacity: 0;
-    transition:
-      opacity var(--motion-fast) var(--ease-standard),
-      transform var(--motion-base) var(--ease-emphasised);
-  }
-  .folder-row:hover .chevron,
-  .folder-row:focus-within .chevron,
-  .folder-row.menu-open .chevron,
-  .folder-row.editing .chevron {
-    opacity: 1;
-  }
-  .chevron.expanded {
-    transform: rotate(90deg);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .chevron {
-      transition: none;
-    }
-  }
-
   /* The glyph sits in a rounded tile in the folder's own hue — mirrors the comp's
    * lens-header icon tile (a ~24-26px rounded plate, `--space-soft`/`--space-text`)
    * and TabRow's favicon tile, so folders and tabs share one leading-mark anatomy.
-   * The icon inside stays --favicon-size (16px). */
+   * ONE slot (LensRow's disclosure model): the folder's own icon at rest,
+   * crossfading to a chevron on row hover/focus/open-menu — a hard display swap
+   * so the name never shifts. Editing mode is excluded from the swap (`:not(.editing)`)
+   * — the rename input inside the row can itself hold focus, so without the guard
+   * `:focus-within` would swap the icon for the chevron mid-rename. */
   .glyph {
     --glyph-tile: 24px;
+    position: relative;
     flex-shrink: 0;
     width: var(--glyph-tile);
     height: var(--glyph-tile);
@@ -409,16 +376,40 @@ function onMenuOpenChange(open: boolean): void {
     background: color-mix(in oklch, var(--folder-c) 16%, transparent);
     color: var(--folder-c);
   }
-  .glyph :global(svg) {
+  .glyph-mark,
+  .glyph-caret {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .glyph-mark :global(svg),
+  .glyph-caret :global(svg) {
     width: var(--favicon-size);
     height: var(--favicon-size);
   }
+  .glyph-caret {
+    display: none;
+    transition: transform var(--motion-base) var(--ease-emphasised);
+  }
+  .folder-row:not(.editing):hover .glyph-mark,
+  .folder-row:not(.editing):focus-within .glyph-mark,
+  .folder-row.menu-open .glyph-mark {
+    display: none;
+  }
+  .folder-row:not(.editing):hover .glyph-caret,
+  .folder-row:not(.editing):focus-within .glyph-caret,
+  .folder-row.menu-open .glyph-caret {
+    display: inline-flex;
+  }
+  .glyph.expanded .glyph-caret {
+    transform: rotate(90deg);
+  }
 
-  /* In-flight refresh — TabRow's 0.8s-linear spinner cadence. Spins the inner
-   * glyph (not the tile plate) so the rounded tile stays put. Under reduced
-   * motion the indicator holds STATIC at --text-dim (a refresh indicator is
-   * decoration, not information — calmer than FaviconTile's slowed spin). */
-  .glyph.busy :global(svg) {
+  /* In-flight refresh — TabRow's 0.8s-linear spinner cadence. Spins the icon only
+   * (not the chevron), so a refresh never fights the disclosure swap. Under
+   * reduced motion the indicator holds STATIC at --text-dim (a refresh indicator
+   * is decoration, not information — calmer than FaviconTile's slowed spin). */
+  .glyph.busy .glyph-mark :global(svg) {
     animation: folder-row-busy 0.8s linear infinite;
   }
   @keyframes folder-row-busy {
@@ -427,7 +418,10 @@ function onMenuOpenChange(open: boolean): void {
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    .glyph.busy :global(svg) {
+    .glyph-caret {
+      transition: none;
+    }
+    .glyph.busy .glyph-mark :global(svg) {
       animation: none;
     }
     .glyph.busy {

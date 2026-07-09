@@ -84,8 +84,11 @@ const ariaLabel = $derived(
     /* Right inset --space-3 (12px), not --space-2, so the count right-aligns with
        the kebab GLYPHS above (a kebab button sits at 8px row-pad but its icon is
        inset ~4px inside the 24px button → glyph at ~12px). Aligns the whole
-       trailing column. */
-    padding: var(--space-1) var(--space-3) var(--space-1) var(--space-3);
+       trailing column. Left inset --space-2 (8px) mirrors the result rows' own
+       left pad (`Lens.svelte`'s `.result-row`) — both stack on `.children`'s
+       shared --space-4 container indent, landing header and rows at the same
+       24px total inset. */
+    padding: var(--space-1) var(--space-3) var(--space-1) var(--space-2);
     margin-bottom: var(--row-gap);
     /* Match the lens row + result rows: --r-lg pill on the interactive --hover wash. */
     border-radius: var(--r-lg);
