@@ -1,7 +1,7 @@
-import { fileURLToPath } from 'node:url';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { chromium, test } from '@playwright/test';
 
 // preserve-user-tab-groups (task 5.1): mirrors the confirmed empirical repro —
@@ -58,7 +58,10 @@ async function dump(sw: Awaited<ReturnType<typeof launch>>['sw'], spaceId: strin
     const tabs = await chrome.tabs.query({});
     const got = await chrome.storage.local.get('lunma.state');
     const state = (got['lunma.state'] as { state: Record<string, unknown> })?.state as {
-      spaceInstancesByWindow: Record<number, Record<string, { groupId: number; tempTabIds: number[] }>>;
+      spaceInstancesByWindow: Record<
+        number,
+        Record<string, { groupId: number; tempTabIds: number[] }>
+      >;
     };
     const tempTabIds: number[] = [];
     const trackedGroupIds: number[] = [];
@@ -106,7 +109,9 @@ async function runVariant(
     };
     const spaceId = state.activeSpaceByWindow[windowId] as string;
     const space = state.spaces.find((s) => s.id === spaceId);
-    const spaceGroup = (await chrome.tabGroups.query({ windowId })).find((g) => g.title === space?.name);
+    const spaceGroup = (await chrome.tabGroups.query({ windowId })).find(
+      (g) => g.title === space?.name,
+    );
 
     return {
       windowId,
@@ -143,7 +148,9 @@ async function runVariant(
     );
   }
   if (before.groups.length < 2) {
-    throw new Error(`expected two live groups before restart, got ${JSON.stringify(before.groups)}`);
+    throw new Error(
+      `expected two live groups before restart, got ${JSON.stringify(before.groups)}`,
+    );
   }
   await ctx.close();
 
@@ -178,7 +185,9 @@ async function runVariant(
     );
   }
   if (after.tempTabIds.some((id) => userGroupTabs.some((t) => t.id === id))) {
-    throw new Error("a tab in the user's group is still listed as a Space temp tab — state is dishonest");
+    throw new Error(
+      "a tab in the user's group is still listed as a Space temp tab — state is dishonest",
+    );
   }
 }
 

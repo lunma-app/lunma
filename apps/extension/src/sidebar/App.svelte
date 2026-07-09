@@ -40,7 +40,6 @@ import LensEditor from './LensEditor.svelte';
 import { openOptionsAt } from './open-options';
 import PinnedTabs from './PinnedTabs.svelte';
 import SectionHeader from './SectionHeader.svelte';
-// biome-ignore lint/style/useImportType: rendered as a component in the Svelte template (Biome only sees the `typeof` use, not the template).
 import SpaceSwitcher from './SpaceSwitcher.svelte';
 import { sidebarGlares } from './show-glares-state.svelte';
 import { setStore } from './store-context.svelte';

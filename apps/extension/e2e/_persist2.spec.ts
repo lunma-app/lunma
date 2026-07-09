@@ -1,7 +1,7 @@
-import { fileURLToPath } from 'node:url';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { chromium, test } from '@playwright/test';
 
 const EXT = fileURLToPath(new URL('./../dist', import.meta.url));
@@ -24,9 +24,22 @@ test('capture boot load result on restart', async () => {
   const page = await ctx.newPage();
   await page.goto(`chrome-extension://${id}/src/sidebar/index.html`);
   const windowId = await page.evaluate(async () => (await chrome.windows.getCurrent()).id);
-  await page.evaluate((wid) => chrome.runtime.sendMessage({ type: 'lunma/command', id: 'v:1', cmd: { kind: 'createSpace', payload: { name: 'Reading', color: 'blue', icon: 'star', windowId: wid } } }), windowId);
+  await page.evaluate(
+    (wid) =>
+      chrome.runtime.sendMessage({
+        type: 'lunma/command',
+        id: 'v:1',
+        cmd: {
+          kind: 'createSpace',
+          payload: { name: 'Reading', color: 'blue', icon: 'star', windowId: wid },
+        },
+      }),
+    windowId,
+  );
   await new Promise((r) => setTimeout(r, 1500));
-  const raw = await sw.evaluate(async () => JSON.stringify((await chrome.storage.local.get('lunma.state'))['lunma.state']).slice(0, 600));
+  const raw = await sw.evaluate(async () =>
+    JSON.stringify((await chrome.storage.local.get('lunma.state'))['lunma.state']).slice(0, 600),
+  );
   console.log('[persist] RAW stored =', raw);
   await ctx.close();
 

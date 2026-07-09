@@ -1473,7 +1473,7 @@ describe('feed read-state handlers', () => {
     await coordinator.idle();
 
     const stored = store.state.pinnedBySpace.work?.[0] as Record<string, unknown> | undefined;
-    expect(stored?.['filter']).toBeUndefined();
+    expect(stored?.filter).toBeUndefined();
     expect(emitAck).toHaveBeenCalledWith({ type: 'lunma/command-ack', id: 'c2', result: 'ok' });
   });
 

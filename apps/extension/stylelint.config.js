@@ -49,6 +49,7 @@ export default {
             ignoreValues: ['inherit', 'initial', 'unset', 'revert', 'auto'],
             disableFix: true,
             message:
+              // biome-ignore lint/suspicious/noTemplateCurlyInString: ${property} is the plugin's own runtime placeholder, not a JS template literal.
               'Primitive must use a design token for "${property}" ' +
               '(e.g. var(--text-*) / var(--z-*)), not a raw value — see ' +
               'openspec/specs/visual-system/spec.md.',

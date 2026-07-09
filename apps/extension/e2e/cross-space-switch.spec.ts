@@ -90,9 +90,9 @@ test('focusing a cross-Space pinned tab switches the sidebar to its Space', asyn
   await expect
     .poll(
       async () =>
-        (await readState(page)).spaceInstancesByWindow[windowId]?.[homeSpaceId]?.tempTabIds.includes(
-          tabId,
-        ) ?? false,
+        (await readState(page)).spaceInstancesByWindow[windowId]?.[
+          homeSpaceId
+        ]?.tempTabIds.includes(tabId) ?? false,
       { timeout: 15_000 },
     )
     .toBe(true);
@@ -168,9 +168,9 @@ test('opening a DORMANT cross-Space pinned tab switches the sidebar to its Space
   await expect
     .poll(
       async () =>
-        (await readState(page)).spaceInstancesByWindow[windowId]?.[homeSpaceId]?.tempTabIds.includes(
-          tabId,
-        ) ?? false,
+        (await readState(page)).spaceInstancesByWindow[windowId]?.[
+          homeSpaceId
+        ]?.tempTabIds.includes(tabId) ?? false,
       { timeout: 15_000 },
     )
     .toBe(true);
@@ -197,8 +197,11 @@ test('opening a DORMANT cross-Space pinned tab switches the sidebar to its Space
   await expect
     .poll(
       async () =>
-        (await readState(page) as unknown as { tabBindings: Record<string, Record<number, number>> })
-          .tabBindings?.[savedTabId]?.[windowId] === undefined,
+        (
+          (await readState(page)) as unknown as {
+            tabBindings: Record<string, Record<number, number>>;
+          }
+        ).tabBindings?.[savedTabId]?.[windowId] === undefined,
       { timeout: 10_000 },
     )
     .toBe(true);
