@@ -8,7 +8,7 @@ describe('LensRow', () => {
   test('renders the name, the type icon at rest, and a chevron in the same leading slot', () => {
     const { container } = render(LensRowHarness, { props: base });
     expect(container.querySelector('.name')?.textContent).toBe('Feeds');
-    // The leading slot stacks the type icon (at rest) and a chevron (revealed on hover).
+    // The leading slot stacks the type icon (at rest) and a chevron (revealed on hover/focus).
     expect(
       container.querySelector('.tile-mark [data-icon-name]')?.getAttribute('data-icon-name'),
     ).toBe('rss');

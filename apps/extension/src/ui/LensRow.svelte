@@ -8,7 +8,7 @@ import IconButton from './IconButton.svelte';
  * LensRow — the lens "folder" header in the sidebar. Forked from {@link FolderRow}.
  * Interaction model:
  *  - Clicking ANYWHERE on the row toggles expand/collapse (the leading glyph
- *    crossfades type-icon → chevron on hover; the chevron rotates with state).
+ *    crossfades type-icon → chevron on hover/focus; the chevron rotates with state).
  *  - A trailing icon, revealed on hover/focus, OPENS THE LENS OVERVIEW (the page).
  *  - Lens actions live in the right-click context menu (the row carries no kebab).
  * Hover and the active peek share the lens-hue wash (`--lens-fill`); only the
@@ -215,10 +215,15 @@ const toggleLabel = $derived(badge !== undefined ? `${baseLabel}, ${badge}` : ba
     display: none;
     transition: transform var(--motion-base) var(--ease-emphasised);
   }
-  .lens-row:hover .tile-mark {
+  /* Reveal on hover OR keyboard focus (`:has(.toggle:focus-visible)`, matching the
+   * row's own focus-ring selector above) — a keyboard user tabbing to the row sees
+   * the same disclosure cue a mouse-hover gives. */
+  .lens-row:hover .tile-mark,
+  .lens-row:has(.toggle:focus-visible) .tile-mark {
     display: none;
   }
-  .lens-row:hover .tile-caret {
+  .lens-row:hover .tile-caret,
+  .lens-row:has(.toggle:focus-visible) .tile-caret {
     display: inline-flex;
   }
   .tile.expanded .tile-caret {
