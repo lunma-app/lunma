@@ -81,7 +81,7 @@ describe('reconcileLensKinds (sources-redesign D9)', () => {
     );
     const changed = store.reconcileLensKinds();
     expect(changed).toBe(true);
-    expect((store.state.pinnedBySpace.work?.[0] as LensNode).lensKind).toBe('review');
+    expect((store.state.pinnedBySpace.work?.[0] as LensNode | undefined)?.lensKind).toBe('review');
   });
 
   test('a feed-only general lens is left general (no change)', () => {
@@ -91,7 +91,7 @@ describe('reconcileLensKinds (sources-redesign D9)', () => {
     );
     const changed = store.reconcileLensKinds();
     expect(changed).toBe(false);
-    expect((store.state.pinnedBySpace.work?.[0] as LensNode).lensKind).toBe('general');
+    expect((store.state.pinnedBySpace.work?.[0] as LensNode | undefined)?.lensKind).toBe('general');
   });
 
   test('a review lens whose git source was removed flips back to general', () => {
@@ -101,7 +101,7 @@ describe('reconcileLensKinds (sources-redesign D9)', () => {
     );
     const changed = store.reconcileLensKinds();
     expect(changed).toBe(true);
-    expect((store.state.pinnedBySpace.work?.[0] as LensNode).lensKind).toBe('general');
+    expect((store.state.pinnedBySpace.work?.[0] as LensNode | undefined)?.lensKind).toBe('general');
   });
 });
 

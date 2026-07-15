@@ -597,7 +597,7 @@ describe('updateLens handler', () => {
       ),
     );
     await coordinator.idle();
-    expect((store.state.pinnedBySpace.work?.[0] as LensNode).lensKind).toBe('review');
+    expect((store.state.pinnedBySpace.work?.[0] as LensNode | undefined)?.lensKind).toBe('review');
   });
 
   test('sources-redesign: updateLens re-derives general when the last git source is removed', async () => {
@@ -623,7 +623,7 @@ describe('updateLens handler', () => {
       ),
     );
     await coordinator.idle();
-    expect((store.state.pinnedBySpace.work?.[0] as LensNode).lensKind).toBe('general');
+    expect((store.state.pinnedBySpace.work?.[0] as LensNode | undefined)?.lensKind).toBe('general');
   });
 
   test('a source-only edit triggers the immediate refetch through the new connector', async () => {
