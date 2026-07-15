@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.5.0](https://github.com/lunma-app/lunma/compare/v0.4.5...v0.5.0) (2026-07-15)
+
+
+### Features
+
+* **catalog:** hue-match the Space picker selection ring ([075a31c](https://github.com/lunma-app/lunma/commit/075a31c37a7b00f79ce88f46afc93bbe9c2f3510))
+* **catalog:** per-story canvas/theme, author controls, live code, build gate ([f3ba2b8](https://github.com/lunma-app/lunma/commit/f3ba2b86c9bc88716878d5dff2cac2476ac9a957))
+* **extension:** natively pin global favorites' live tabs ([#99](https://github.com/lunma-app/lunma/issues/99)) ([4193a58](https://github.com/lunma-app/lunma/commit/4193a583d97c4eb2fa18847f45f8354ff962696b))
+* **tokens:** add contrast colour-role tokens, fix AA in ui/ ([c5bffdf](https://github.com/lunma-app/lunma/commit/c5bffdf40b872fe0443cc716ef72a02a5afae746))
+
+
+### Bug Fixes
+
+* **logger:** fold log context into the message string ([#94](https://github.com/lunma-app/lunma/issues/94)) ([ebae0ee](https://github.com/lunma-app/lunma/commit/ebae0ee98ad784951ba0f1197351b3aeb6c640e9))
+* **sidebar:** unify FolderRow/LensRow disclosure and indentation ([410c269](https://github.com/lunma-app/lunma/commit/410c2696c8c82365fecad3d1ab83ebb37ffbcd23))
+
 ## [0.4.5](https://github.com/lunma-app/lunma/compare/v0.4.4...v0.4.5) (2026-07-03)
 
 
