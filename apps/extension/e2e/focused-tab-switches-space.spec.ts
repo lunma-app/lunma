@@ -87,7 +87,16 @@ test('focusing a cross-Space OPEN tab switches the sidebar to its Space', async 
         .id as number,
     windowId,
   );
-  // Wait until Lunma tracks the new tab as a temporary tab in Home.
+  // Wait until Home has adopted the new tab AND its initial navigation has
+  // COMPLETED. The `tempTabIds` record lands the instant the store reconciles
+  // `onCreated`, but until Chrome fires `status:'complete'` the tab stays flagged
+  // mid-initial-load — and its still-pending `onUpdated{url}` re-adopts it into
+  // whichever Space is active WHEN THAT EVENT DRAINS. Switching Space (step 3)
+  // before then lets that pending event re-home the tab into the DESTINATION
+  // Space, silently breaking the cross-Space precondition this test depends on.
+  // Gating on `status === 'complete'` (the exact event that clears the flag) is
+  // deterministic: it is enqueued ahead of step 3's switch, so it drains first
+  // and the re-adopt gate is closed by the time the switch lands.
   await expect
     .poll(
       async () =>
@@ -97,11 +106,32 @@ test('focusing a cross-Space OPEN tab switches the sidebar to its Space', async 
       { timeout: 15_000 },
     )
     .toBe(true);
+  await expect
+    .poll(() => page.evaluate((tab) => chrome.tabs.get(tab).then((t) => t.status), tabId), {
+      timeout: 15_000,
+    })
+    .toBe('complete');
 
   // 3. Switch back to the default Space — the open tab now lives in a non-active
   //    Space (the cross-Space precondition).
   await dispatch(page, { kind: 'activateSpace', payload: { windowId, spaceId: defaultSpaceId } });
   await expect.poll(() => activeChipSpaceId(page), { timeout: 10_000 }).toBe(defaultSpaceId);
+  // The chip flips the instant the store's `activeSpaceByWindow` updates, but the
+  // group orchestration that actually re-activates a default-Space tab runs async
+  // afterwards. Until it lands, the Home tab is still the window's ACTIVE tab —
+  // and then step 4's `focusTab` no-ops (activating an already-active tab fires no
+  // `tabs.onActivated`, so the Space-switch handler never runs). Wait until the
+  // Home tab is genuinely backgrounded before driving the feature.
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async (win) => {
+          const [active] = await chrome.tabs.query({ windowId: win, active: true });
+          return active?.id;
+        }, windowId),
+      { timeout: 10_000 },
+    )
+    .not.toBe(tabId);
 
   // 4. THE FEATURE: focus the cross-Space OPEN tab from "the launcher" (its
   //    open-tab result dispatches `focusTab`).
