@@ -1,16 +1,22 @@
 export const meta = {
   name: 'repo-review',
-  description: 'Multi-dimensional engineering review producing ranked actionable items',
+  description: 'Multi-dimensional engineering review with persistent memory: scan 8 dimensions, adversarially triage real-vs-accepted, rank, and remember non-issues + new/recurring/resolved across runs. Humans are asked only for the residue with no automated answer.',
   phases: [
-    { title: 'Load History', detail: 'Read previous review results for comparison' },
+    { title: 'Remember', detail: 'Load persistent review memory + git baseline' },
     { title: 'Scan', detail: 'Parallel review across 8 engineering dimensions' },
-    { title: 'Synthesize', detail: 'Rank and prioritize all findings into an action list' },
-    { title: 'Persist', detail: 'Write results to persistent memory for next run' },
+    { title: 'Triage', detail: 'Adversarially adjudicate each dimension: real vs accepted non-issue' },
+    { title: 'Synthesize', detail: 'Rank verified findings into an action list' },
+    { title: 'Persist', detail: 'Write updated memory (non-issues, open findings, resolved log)' },
   ],
 }
 
 const ROOT = '/Users/emanuel.fonseca/Workspaces/lunma'
-const HISTORY_PATH = `${ROOT}/.claude/repo-review-history.json`
+const HISTORY_PATH = `${ROOT}/.claude/repo-review-history.json` // legacy (pre-memory); migrated once on first memory run, then unused
+const MEMORY_PATH = `${ROOT}/.claude/repo-review-memory.json`
+
+function norm(s) { return String(s).toLowerCase().replace(/[^a-z0-9]/g, '') }
+// Deterministic fingerprint so new/recurring/resolved is set math, not LLM matching.
+function fp(dimension, key) { return dimension + '::' + norm(key) }
 
 const FINDINGS_SCHEMA = {
   type: 'object',
@@ -33,29 +39,69 @@ const FINDINGS_SCHEMA = {
   required: ['findings'],
 }
 
-const HISTORY_SCHEMA = {
+// Adversarial triage output, per dimension: real findings vs accepted non-issues.
+const TRIAGE_SCHEMA = {
   type: 'object',
   properties: {
-    found: { type: 'boolean' },
-    items: {
+    findings: {
       type: 'array',
       items: {
         type: 'object',
         properties: {
-          rank: { type: 'number' },
+          key: { type: 'string' },
           title: { type: 'string' },
-          dimension: { type: 'string' },
-          severity: { type: 'string' },
+          severity: { type: 'string', enum: ['critical', 'high', 'medium', 'low'] },
           location: { type: 'string' },
           action: { type: 'string' },
-          rationale: { type: 'string' },
-          status: { type: 'string' },
+          confidence: { type: 'string', enum: ['high', 'low'] },
         },
-        required: ['title', 'dimension'],
+        required: ['key', 'title', 'severity', 'action'],
+      },
+    },
+    nonIssues: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          key: { type: 'string' },
+          reason: { type: 'string' },
+          contested: { type: 'boolean' },
+        },
+        required: ['key', 'reason'],
+      },
+    },
+    dropped: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { title: { type: 'string' }, reason: { type: 'string' } },
+        required: ['title', 'reason'],
       },
     },
   },
-  required: ['found', 'items'],
+  required: ['findings'],
+}
+
+// Persistent memory (read at start, written at end). Findings are fingerprinted
+// dimension::key so new/recurring/resolved is deterministic set math.
+const MEMORY_SCHEMA = {
+  type: 'object',
+  properties: {
+    found: { type: 'boolean' },
+    headSha: { type: 'string' },
+    memory: {
+      type: 'object',
+      properties: {
+        run: { type: 'number' },
+        headSha: { type: 'string' },
+        nonIssues: { type: 'array', items: { type: 'object', properties: { fp: { type: 'string' }, dimension: { type: 'string' }, key: { type: 'string' }, reason: { type: 'string' }, firstRun: { type: 'number' }, lastRun: { type: 'number' } }, required: ['fp', 'dimension', 'key', 'reason'] } },
+        open: { type: 'array', items: { type: 'object', properties: { fp: { type: 'string' }, dimension: { type: 'string' }, key: { type: 'string' }, title: { type: 'string' }, severity: { type: 'string' }, firstRun: { type: 'number' }, lastRun: { type: 'number' }, runsSeen: { type: 'number' } }, required: ['fp', 'dimension', 'key', 'title', 'severity'] } },
+        resolvedLog: { type: 'array', items: { type: 'object', properties: { fp: { type: 'string' }, dimension: { type: 'string' }, title: { type: 'string' }, resolvedRun: { type: 'number' } }, required: ['fp', 'dimension', 'resolvedRun'] } },
+      },
+      required: ['run', 'nonIssues', 'open', 'resolvedLog'],
+    },
+  },
+  required: ['found', 'headSha', 'memory'],
 }
 
 const SYNTHESIS_SCHEMA = {
@@ -68,30 +114,44 @@ const SYNTHESIS_SCHEMA = {
         properties: {
           rank: { type: 'number' },
           dimension: { type: 'string' },
+          key: { type: 'string' },
           title: { type: 'string' },
           severity: { type: 'string', enum: ['critical', 'high', 'medium', 'low'] },
           location: { type: 'string' },
           action: { type: 'string' },
           rationale: { type: 'string' },
-          status: { type: 'string', enum: ['new', 'recurring', 'skipped'] },
         },
-        required: ['rank', 'dimension', 'title', 'severity', 'action', 'rationale', 'status'],
-      },
-    },
-    resolvedItems: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          title: { type: 'string' },
-          dimension: { type: 'string' },
-          location: { type: 'string' },
-        },
-        required: ['title', 'dimension'],
+        required: ['rank', 'dimension', 'title', 'severity', 'action', 'rationale'],
       },
     },
   },
-  required: ['items', 'resolvedItems'],
+  required: ['items'],
+}
+
+// Known-non-issue suppression injected into scan + triage (built from memory).
+function nonIssuesBlock(memNonIssues) {
+  if (!memNonIssues || !memNonIssues.length) return ''
+  const lines = memNonIssues.map((n) => `- [${n.dimension}] ${n.key ? n.key + ' — ' : ''}${n.reason}`).join('\n')
+  return `KNOWN NON-ISSUES (treat as SETTLED — do NOT raise anything these cover; already adjudicated as deliberate/accepted by a prior run's triage). If you now believe one is WRONG given the current code, do NOT re-raise it as a normal finding — flag it as a nonIssue with contested=true. Otherwise stay silent on them.
+${lines}`
+}
+
+// Adversarial triage of one dimension's raw scan findings.
+function triagePrompt(d, findings, nib) {
+  return `You are ADVERSARIALLY triaging proposed ${d.label} findings for the Lunma Chrome extension (root ${ROOT}). Verify each against the ACTUAL code before accepting it.
+
+${nib}
+
+For each proposed finding decide if it is a REAL issue (correct about the code, genuine impact, not speculative, not a duplicate, not a deliberate/accepted trade-off):
+- KEEP real ones. Give each a stable "key": a short normalized slug of the underlying issue (e.g. "unvalidated-message-bus", "hardcoded-color-in-sidebar") that will be the SAME across runs for the same issue, so it can be matched over time. Set confidence='low' if you are genuinely unsure real-vs-deliberate (a human will adjudicate), else 'high'.
+- MOVE deliberate decisions / accepted trade-offs / out-of-scope into nonIssues with the same "key" + a one-line reason. Set contested=true ONLY when it matches a KNOWN NON-ISSUE you now judge WRONG.
+- DROP speculative / factually-wrong / duplicate ones into dropped (title + reason).
+Default to dropping when a finding is not clearly real — but prefer confidence='low' over dropping when the uncertainty is real-vs-deliberate. Keep it terse: one sentence per field.
+
+Proposed findings:
+${JSON.stringify(findings)}
+
+Return kept findings (key, title, severity, location, action, confidence), nonIssues (key, reason, contested), and dropped.`
 }
 
 const DIMENSIONS = [
@@ -273,29 +333,19 @@ Return findings with specific file paths and concrete optimization actions.`,
   },
 ]
 
-// ── Load History ──────────────────────────────────────────────────────────────
+// ── Remember ──────────────────────────────────────────────────────────────────
 
-phase('Load History')
+phase('Remember')
 
-const historyResult = await agent(
-  `Read the file at path: ${HISTORY_PATH}
-
-If the file exists and contains valid JSON with an "items" array, return:
-  { found: true, items: <the items array> }
-
-If the file does not exist or is unreadable, return:
-  { found: false, items: [] }
-
-Do not create or modify any files. Read only.`,
-  { label: 'Load previous review', phase: 'Load History', schema: HISTORY_SCHEMA }
+const mem = await agent(
+  `Load the persistent review memory. Read the JSON file at ${MEMORY_PATH}. If it exists and is valid JSON, return found=true with its contents in "memory" (fields: run, nonIssues, open, resolvedLog). If it does NOT exist, MIGRATE the legacy history at ${HISTORY_PATH}: if that file exists, seed memory.nonIssues from its items whose status="skipped" — map each to { fp: "<dimension>::<title lowercased, non-alphanumerics stripped>", dimension, key: "<a short slug of its title>", reason: "<its rationale, else its title>" } — and set memory.open=[], memory.resolvedLog=[], run=0. If neither file exists, return found=false and memory={ run:0, nonIssues:[], open:[], resolvedLog:[] }. Also run \`git rev-parse HEAD\` and return the SHA as "headSha" (empty string if it fails). Read only — do not modify any file.`,
+  { label: 'Load memory', phase: 'Remember', schema: MEMORY_SCHEMA }
 )
 
-const previousItems = historyResult?.found ? (historyResult.items ?? []) : []
-const skippedItems = previousItems.filter(i => i.status === 'skipped')
-const activeItems = previousItems.filter(i => i.status !== 'skipped')
-log(previousItems.length > 0
-  ? `Loaded ${previousItems.length} findings from previous review (${skippedItems.length} skipped, carried forward)`
-  : 'No previous review found — this will be the baseline')
+const memory = mem?.memory ?? { run: 0, nonIssues: [], open: [], resolvedLog: [] }
+const headSha = mem?.headSha ?? ''
+const nib = nonIssuesBlock(memory.nonIssues)
+log(`Memory: run ${memory.run ?? 0} · ${(memory.nonIssues ?? []).length} known non-issues · ${(memory.open ?? []).length} open`)
 
 // ── Scan ──────────────────────────────────────────────────────────────────────
 
@@ -304,7 +354,7 @@ log('Scanning across 8 dimensions in parallel...')
 
 const scanResults = await parallel(
   DIMENSIONS.map(d => () =>
-    agent(d.prompt, {
+    agent(d.prompt + (nib ? '\n\n' + nib : ''), {
       label: d.label,
       phase: 'Scan',
       model: d.model,
@@ -315,69 +365,113 @@ const scanResults = await parallel(
 
 const populated = scanResults.filter(Boolean)
 const total = populated.reduce((sum, r) => sum + r.findings.length, 0)
-log(`${total} findings across ${populated.length} dimensions — synthesizing...`)
+log(`${total} findings across ${populated.length} dimensions — triaging...`)
+
+// ── Triage ────────────────────────────────────────────────────────────────────
+// Automated adversarial adjudication (real vs accepted non-issue) — replaces the
+// human "skipped" bottleneck. Per dimension, adaptive model.
+
+phase('Triage')
+
+const triaged = await parallel(
+  populated.map(p => () => {
+    if (!p.findings || !p.findings.length) return Promise.resolve({ dimension: p.dimension, findings: [], nonIssues: [] })
+    const d = DIMENSIONS.find(x => x.key === p.dimension)
+    const esc = p.findings.some(f => f.severity === 'critical' || f.severity === 'high')
+    const model = esc ? 'claude-opus-4-8' : 'claude-sonnet-4-6'
+    return agent(triagePrompt(d, p.findings, nib), { label: `Triage ${p.label}`, phase: 'Triage', model, schema: TRIAGE_SCHEMA })
+      .then(r => r
+        ? { dimension: p.dimension, findings: r.findings ?? [], nonIssues: r.nonIssues ?? [] }
+        : { dimension: p.dimension, findings: [], nonIssues: [] })
+  })
+)
+
+const keptFindings = triaged.flatMap(t => (t.findings ?? []).map(f => ({ ...f, dimension: t.dimension, fp: fp(t.dimension, f.key) })))
+const keptNonIssues = triaged.flatMap(t => (t.nonIssues ?? []).map(n => ({ ...n, dimension: t.dimension, fp: fp(t.dimension, n.key) })))
+log(`${keptFindings.length} verified findings · ${keptNonIssues.length} non-issues after triage`)
+
+// ── Reconcile against memory (deterministic set math) ──────────────────────────
+
+const thisRun = (memory.run ?? 0) + 1
+const memOpen = memory.open ?? []
+const memNI = memory.nonIssues ?? []
+const memOpenFp = new Set(memOpen.map(o => o.fp))
+const memNIFp = new Set(memNI.map(n => n.fp))
+const curFp = new Set(keptFindings.map(f => f.fp))
+
+const conflictFps = new Set(keptFindings.filter(f => memNIFp.has(f.fp)).map(f => f.fp))
+const contested = keptNonIssues.filter(n => n.contested)
+const contestedFps = new Set(contested.map(n => n.fp))
+
+const newCount = keptFindings.filter(f => !memOpenFp.has(f.fp) && !memNIFp.has(f.fp)).length
+const recurringCount = keptFindings.filter(f => memOpenFp.has(f.fp)).length
+const resolved = memOpen.filter(o => !curFp.has(o.fp)).map(o => ({ fp: o.fp, dimension: o.dimension, title: o.title, resolvedRun: thisRun }))
+
+// The ONLY human queue: verify low-confidence, memory-vs-run conflicts, contested non-issues.
+const needsHuman = []
+const seen = new Set()
+for (const f of keptFindings) {
+  if ((f.confidence ?? 'high') === 'low') needsHuman.push({ dimension: f.dimension, why: 'low-confidence', detail: f.title })
+  if (conflictFps.has(f.fp) && !seen.has(f.fp)) { needsHuman.push({ dimension: f.dimension, why: 'conflict (memory: non-issue · this run: real)', detail: f.title }); seen.add(f.fp) }
+}
+for (const n of contested) needsHuman.push({ dimension: n.dimension, why: 'contested non-issue', detail: n.reason })
+
+// Merged non-issues = memory + this run's confirmed, MINUS contested/conflicted (await human).
+const niMap = new Map()
+for (const n of memNI) niMap.set(n.fp, n)
+for (const n of keptNonIssues) {
+  if (n.contested) continue
+  const prev = niMap.get(n.fp)
+  niMap.set(n.fp, { fp: n.fp, dimension: n.dimension, key: n.key, reason: n.reason, firstRun: prev ? prev.firstRun : thisRun, lastRun: thisRun })
+}
+for (const x of contestedFps) niMap.delete(x)
+for (const x of conflictFps) niMap.delete(x)
+const mergedNI = [...niMap.values()]
+
+// Open set = this run's findings, carrying first-seen / runs-seen from memory.
+const openMap = new Map()
+for (const f of keptFindings) {
+  if (openMap.has(f.fp)) continue
+  const prev = memOpen.find(o => o.fp === f.fp)
+  openMap.set(f.fp, { fp: f.fp, dimension: f.dimension, key: f.key, title: f.title, severity: f.severity, firstRun: prev ? prev.firstRun : thisRun, lastRun: thisRun, runsSeen: prev ? (prev.runsSeen ?? 1) + 1 : 1 })
+}
+const newOpen = [...openMap.values()]
+const resolvedLog = (memory.resolvedLog ?? []).concat(resolved).slice(-200)
+log(`${newCount} new · ${recurringCount} recurring · ${resolved.length} resolved · ${mergedNI.length} known non-issues · ${needsHuman.length} need human`)
 
 // ── Synthesize ────────────────────────────────────────────────────────────────
 
 phase('Synthesize')
 
-const synthesis = await agent(
-  `Synthesize these engineering review findings for the Lunma Chrome extension into a single ranked action list.
+const synthesis = keptFindings.length ? await agent(
+  `Rank these VERIFIED engineering findings for the Lunma Chrome extension into a single action list (1 = highest priority). Include EVERY finding — do not drop any.
 
-Current scan findings by dimension:
-${JSON.stringify(populated, null, 2)}
-
-Previously accepted/skipped findings (DO NOT re-raise these):
-${skippedItems.length > 0 ? JSON.stringify(skippedItems.map(i => ({ title: i.title, dimension: i.dimension, location: i.location, rationale: i.rationale })), null, 2) : 'None.'}
-
-Previous open findings (for recurring detection):
-${activeItems.length > 0 ? JSON.stringify(activeItems, null, 2) : 'None — this is the first run, mark all findings as "new".'}
+${JSON.stringify(keptFindings.map(f => ({ dimension: f.dimension, key: f.key, title: f.title, severity: f.severity, location: f.location, action: f.action })), null, 2)}
 
 Rules:
-- Rank ALL current findings (1 = highest priority). Include every finding — do not drop any.
-- Rank by real impact: a critical security finding beats a low visual one regardless of dimension default ordering.
-- Default tiebreaker: security > architecture > type-safety > openspec > testing > visual > performance.
-- 'action' must be concrete: what to change, in which file. One sentence.
-- 'rationale' must say WHY this rank. One sentence.
-- Preserve the original 'location' field when present.
-- 'status': mark 'recurring' if a finding matches a previous open finding; mark 'new' otherwise.
-- SUPPRESSION RULE: if a current scan finding matches a previously-skipped finding (same title or same location), do NOT include it in the output at all. Those trade-offs were reviewed and accepted; surfacing them again is noise. Only override this if the severity has visibly escalated (e.g. a new code path makes an accepted risk exploitable).
-- 'resolvedItems': list findings from the previous open review that do NOT appear in the current scan (i.e. they were fixed). Include title, dimension, and location.`,
-  {
-    label: 'Rank & Synthesize',
-    phase: 'Synthesize',
-    model: 'claude-opus-4-8',
-    schema: SYNTHESIS_SCHEMA,
-  }
-)
-
-const newCount = synthesis?.items?.filter(i => i.status === 'new').length ?? 0
-const recurringCount = synthesis?.items?.filter(i => i.status === 'recurring').length ?? 0
-const resolvedCount = synthesis?.resolvedItems?.length ?? 0
-log(`${newCount} new · ${recurringCount} recurring · ${resolvedCount} resolved since last run`)
+- Rank by real impact: a critical security finding beats a low visual one regardless of dimension.
+- Default tiebreaker: security > architecture > typesafety > openspec > testing > code-quality > visual > performance.
+- 'action' must be concrete: what to change, in which file. One sentence. 'rationale': why this rank. One sentence.
+- Preserve each finding's dimension, key, title, severity, and location.`,
+  { label: 'Rank & Synthesize', phase: 'Synthesize', model: 'claude-opus-4-8', schema: SYNTHESIS_SCHEMA }
+) : { items: [] }
 
 // ── Persist ───────────────────────────────────────────────────────────────────
 
 phase('Persist')
 
-// Merge: current synthesis findings + carried-forward skipped items.
-// Skipped items are never re-ranked; they keep their original rank/rationale
-// and status='skipped' so future runs continue to suppress them.
-const persistedItems = [
-  ...(synthesis?.items ?? []),
-  ...skippedItems,
-]
+const newMemory = { run: thisRun, headSha, nonIssues: mergedNI, open: newOpen, resolvedLog }
 
 await agent(
-  `Write the following JSON to the file at path: ${HISTORY_PATH}
+  `Write the following JSON to the file at path: ${MEMORY_PATH}
 
-Overwrite the file if it exists. Create it if it does not.
+Overwrite the file if it exists. Create it if it does not. Create any parent directory as needed.
 
 Content to write (write exactly this, nothing else):
-${JSON.stringify({ items: persistedItems }, null, 2)}`,
-  { label: 'Persist results', phase: 'Persist' }
+${JSON.stringify(newMemory, null, 2)}`,
+  { label: 'Persist memory', phase: 'Persist' }
 )
 
-log(`Results persisted to ${HISTORY_PATH}`)
+log(`Memory persisted to ${MEMORY_PATH}`)
 
-return synthesis
+return { items: synthesis?.items ?? [], new: newCount, recurring: recurringCount, resolved: resolved.length, needsHuman }
