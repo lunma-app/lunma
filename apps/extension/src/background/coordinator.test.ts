@@ -106,7 +106,7 @@ describe('Coordinator.enqueue', () => {
     coordinator.enqueue(tabCreated(QUEUE_CAP + 1, QUEUE_CAP + 1));
 
     expect(
-      errorSpy.mock.calls.some((c) => typeof c[1] === 'string' && c[1].includes('EVENT_DROPPED')),
+      errorSpy.mock.calls.some((c) => typeof c[0] === 'string' && c[0].includes('EVENT_DROPPED')),
     ).toBe(true);
 
     errorSpy.mockRestore();
@@ -406,7 +406,7 @@ describe('Coordinator.drain', () => {
     expect(persist).toHaveBeenCalledTimes(1);
     expect(broadcast).toHaveBeenCalledTimes(1);
     expect(
-      errorSpy.mock.calls.some((c) => typeof c[1] === 'string' && c[1].includes('HANDLER_THREW')),
+      errorSpy.mock.calls.some((c) => typeof c[0] === 'string' && c[0].includes('HANDLER_THREW')),
     ).toBe(true);
     throwSpy.mockRestore();
     errorSpy.mockRestore();
@@ -680,7 +680,7 @@ describe('Coordinator: sidebar acks', () => {
     expect(flakyAck).toHaveBeenCalledTimes(2);
     expect(
       errSpy.mock.calls.some(
-        (call) => typeof call[1] === 'string' && call[1].includes('ACK_EMIT_FAILED'),
+        (call) => typeof call[0] === 'string' && call[0].includes('ACK_EMIT_FAILED'),
       ),
     ).toBe(true);
     errSpy.mockRestore();
@@ -816,7 +816,7 @@ describe('Coordinator: extra sidebar handlers', () => {
     // The "Receiving end" error is logged at debug, not error. So error-spy
     // should NOT include ACK_EMIT_FAILED for this case.
     expect(
-      errSpy.mock.calls.some((c) => typeof c[1] === 'string' && c[1].includes('ACK_EMIT_FAILED')),
+      errSpy.mock.calls.some((c) => typeof c[0] === 'string' && c[0].includes('ACK_EMIT_FAILED')),
     ).toBe(false);
     errSpy.mockRestore();
   });
@@ -841,7 +841,7 @@ describe('Coordinator: extra sidebar handlers', () => {
     await Promise.resolve();
     await Promise.resolve();
     const acked = errSpy.mock.calls.some(
-      (c) => typeof c[1] === 'string' && c[1].includes('ACK_EMIT_FAILED'),
+      (c) => typeof c[0] === 'string' && c[0].includes('ACK_EMIT_FAILED'),
     );
     expect(acked).toBe(true);
     errSpy.mockRestore();
