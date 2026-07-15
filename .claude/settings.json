@@ -31,22 +31,16 @@
       "Bash(grep *)"
     ],
     "ask": [
-      "Edit(./.github/workflows/**)",
-      "Write(./.github/workflows/**)"
+      "Edit(./.github/workflows/**)"
     ],
     "deny": [
       "Read(./.env)",
       "Read(./.env.*)",
       "Edit(./.env)",
       "Edit(./.env.*)",
-      "Write(./.env)",
-      "Write(./.env.*)",
       "Edit(./pnpm-lock.yaml)",
-      "Write(./pnpm-lock.yaml)",
       "Edit(./apps/extension/src/ui/icon-loaders.generated.ts)",
-      "Write(./apps/extension/src/ui/icon-loaders.generated.ts)",
       "Edit(./apps/extension/src/shared/paraglide/**)",
-      "Write(./apps/extension/src/shared/paraglide/**)",
       "Bash(git push --force*)",
       "Bash(git push -f*)",
       "Bash(git push origin --force*)",
