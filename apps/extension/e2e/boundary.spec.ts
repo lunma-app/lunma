@@ -73,6 +73,25 @@ async function pinSite(context: BrowserContext, sidebar: Page): Promise<Page> {
   await sidebar.bringToFront();
   const siteRow = tempRows(sidebar).filter({ hasText: 'localhost site' }).first();
   await siteRow.waitFor();
+  // Pinning FREEZES the saved tab's `originalURL` from the SW's live-tab mirror
+  // at pin time; the boundary chip is later seeded from it (pageGlob(originalURL)).
+  // The temp row above renders off the tab's TITLE, which populates independently
+  // of its URL — so under slow CI the URL can still be unsynced here, the pin then
+  // captures `originalURL: ''`, and the chip seeds empty and never recovers
+  // (originalURL is immutable post-pin). Gate the drag on the tab's URL being
+  // resolved so the pin captures a real localhost URL. `liveTabsById` isn't
+  // persisted, so this reads Chrome's view; the drag gesture that follows gives
+  // the SW ample time to sync its mirror before the pin dispatch lands.
+  await expect
+    .poll(
+      () =>
+        sidebar.evaluate(async (p) => {
+          const tabs = await chrome.tabs.query({});
+          return tabs.find((t) => t.url?.includes(`localhost:${p}/`))?.url ?? '';
+        }, port),
+      { timeout: 10_000 },
+    )
+    .toContain(`localhost:${port}`);
   await dragTo(sidebar, siteRow, sidebar.getByTestId('pinned-tabs'));
   await expect(pinnedRows(sidebar)).toHaveCount(1);
   return site;
