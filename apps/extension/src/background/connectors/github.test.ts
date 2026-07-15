@@ -258,7 +258,7 @@ describe('fetchRuntime — token-only auth', () => {
       node({ query: 'authored', sourceId: 'acc-a', baseUrl: 'https://github.com' }),
       20,
     );
-    expect((fetchMock.mock.calls[0]?.[1] as RequestInit).headers).toMatchObject({
+    expect((fetchMock.mock.calls[0]?.[1] as RequestInit | undefined)?.headers).toMatchObject({
       Authorization: 'Bearer ghp-a',
     });
     // acc-a's PR pass + issue pass are calls 0 and 1; acc-b's PR pass is call 2.
@@ -266,7 +266,7 @@ describe('fetchRuntime — token-only auth', () => {
       node({ query: 'authored', sourceId: 'acc-b', baseUrl: 'https://github.com' }),
       20,
     );
-    expect((fetchMock.mock.calls[2]?.[1] as RequestInit).headers).toMatchObject({
+    expect((fetchMock.mock.calls[2]?.[1] as RequestInit | undefined)?.headers).toMatchObject({
       Authorization: 'Bearer ghp-b',
     });
   });
