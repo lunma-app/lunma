@@ -17,8 +17,8 @@ import {
   collapseOtherTrackedGroups,
   ensureGroupForSpace,
   expandGroup,
-  moveTabToStripStart,
   resolveGroup,
+  setTabNativePinned,
   ungroupTabs,
   updateGroupTitleColor,
 } from './tab-groups';
@@ -115,18 +115,16 @@ export class GroupOrchestrator {
   }
 
   /**
-   * Enforce the favorite ungroup invariant (favicon-row-model D3): a
-   * bound `spaceId === null` favorite's live tab is left **ungrouped** (global),
-   * so it is never collapsed when other Spaces' groups hide and stays visible
-   * across every Space switch. Idempotent and best-effort.
+   * Enforce the favorite invariant (favicon-row-model D3):
+   * a bound `spaceId === null` favorite's live tab is left **ungrouped** (global)
+   * and **natively pinned** — icon-only at the strip start, structurally outside
+   * every Space group, so no Space switch can collapse it invisible. The explicit
+   * ungroup stays first so group removal is deterministic even when the pin is
+   * refused on a stale tab. Idempotent and best-effort.
    */
-  async ensureFavoriteUngrouped(tabId: TabId): Promise<void> {
+  async ensureFavoriteNativePinned(tabId: TabId): Promise<void> {
     await ungroupTabs(tabId);
-    // Park the now-global tab at the tab-strip start (design D10). Ungrouping
-    // alone leaves it adjacent to its former Space group, so a later Space switch
-    // that collapses that group reads as hiding the favorite ("disappears on
-    // switch"); moving it outside every group keeps it visible across switches.
-    await moveTabToStripStart(tabId);
+    await setTabNativePinned(tabId, true);
   }
 
   /** Every Lunma-tracked (live) group id in `windowId` — the only groups the

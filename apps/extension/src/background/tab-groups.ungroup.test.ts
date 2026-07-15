@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
-import { closeTab, moveTabToStripStart, ungroupTabs } from './tab-groups';
+import { closeTab, setTabNativePinned, ungroupTabs } from './tab-groups';
 
 describe('ungroupTabs (favorite ungroup wrapper, D3)', () => {
   test('ungroups a tab via chrome.tabs.ungroup', async () => {
@@ -21,21 +21,28 @@ describe('ungroupTabs (favorite ungroup wrapper, D3)', () => {
   });
 });
 
-describe('moveTabToStripStart (favorite parking wrapper, sidebar-favicon-row D10)', () => {
-  test('moves a tab to strip index 0 via chrome.tabs.move', async () => {
-    const move = vi.fn(async () => undefined);
-    (globalThis as unknown as { chrome: unknown }).chrome = { tabs: { move } };
-    await expect(moveTabToStripStart(42)).resolves.toBeUndefined();
-    expect(move).toHaveBeenCalledWith(42, { index: 0 });
+describe('setTabNativePinned (favorite native-pin wrapper)', () => {
+  test('pins a tab via chrome.tabs.update', async () => {
+    const update = vi.fn(async () => undefined);
+    (globalThis as unknown as { chrome: unknown }).chrome = { tabs: { update } };
+    await expect(setTabNativePinned(42, true)).resolves.toBeUndefined();
+    expect(update).toHaveBeenCalledWith(42, { pinned: true });
+  });
+
+  test('unpins a tab via chrome.tabs.update', async () => {
+    const update = vi.fn(async () => undefined);
+    (globalThis as unknown as { chrome: unknown }).chrome = { tabs: { update } };
+    await expect(setTabNativePinned(42, false)).resolves.toBeUndefined();
+    expect(update).toHaveBeenCalledWith(42, { pinned: false });
   });
 
   test('swallows a Chrome refusal (best-effort, never throws)', async () => {
-    const move = vi.fn(async () => {
-      throw new Error('Tabs cannot be edited right now (user may be dragging a tab)');
+    const update = vi.fn(async () => {
+      throw new Error('No tab with id: 42.');
     });
-    (globalThis as unknown as { chrome: unknown }).chrome = { tabs: { move } };
-    await expect(moveTabToStripStart(42)).resolves.toBeUndefined();
-    expect(move).toHaveBeenCalledWith(42, { index: 0 });
+    (globalThis as unknown as { chrome: unknown }).chrome = { tabs: { update } };
+    await expect(setTabNativePinned(42, true)).resolves.toBeUndefined();
+    expect(update).toHaveBeenCalledWith(42, { pinned: true });
   });
 });
 
