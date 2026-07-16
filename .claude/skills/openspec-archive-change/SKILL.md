@@ -1,15 +1,30 @@
 ---
 name: openspec-archive-change
 description: Archive a completed change in the experimental workflow. Use when the user wants to finalize and archive a change after implementation is complete.
+allowed-tools: Bash(openspec:*)
 license: MIT
 compatibility: Requires openspec CLI.
 metadata:
   author: openspec
-  version: "1.0"
-  generatedBy: "1.3.1"
+  version: "1.1"
+  generatedBy: "1.6.0"
 ---
 
+> **Local patch — steps 4-6 diverge from the generated upstream skill.** As
+> shipped (verified in 1.3.1 and 1.6.0), this skill never invokes
+> `openspec archive`: it hand-rolls the archive with `mv` and routes spec-syncing
+> to an `openspec-sync-specs` skill its own generator does not produce. Followed
+> literally it archives a change while leaving `openspec/specs/` describing
+> behaviour the code no longer has — and its only escape is hand-editing main
+> specs, which `.claude/rules/openspec-deltas.md` forbids. Upstream:
+> [#863](https://github.com/Fission-AI/OpenSpec/issues/863) (open since Mar 2026),
+> [#913](https://github.com/Fission-AI/OpenSpec/issues/913). Re-running
+> `openspec init --force` reverts this patch; `openspec update` does not. Drop the
+> patch once upstream lands a version that drives the CLI.
+
 Archive a completed change in the experimental workflow.
+
+**Store selection:** If the user names a store (a store is a standalone OpenSpec repo registered on this machine) or the work lives in one, run `openspec store list --json` to discover registered store ids, then pass `--store <id>` on the commands that read or write specs and changes (`new change`, `status`, `instructions`, `list`, `show`, `validate`, `archive`, `doctor`, `context`). Other commands do not take the flag. Hints printed by commands already carry the flag; keep it on follow-ups. Without a store, commands act on the nearest local `openspec/` root.
 
 **Input**: Optionally specify a change name. If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
 
@@ -30,6 +45,7 @@ Archive a completed change in the experimental workflow.
 
    Parse the JSON to understand:
    - `schemaName`: The workflow being used
+   - `planningHome`, `changeRoot`, `artifactPaths`, and `actionContext`: path and scope context
    - `artifacts`: List of artifacts with their status (`done` or other)
 
    **If any artifacts are not `done`:**
@@ -50,46 +66,76 @@ Archive a completed change in the experimental workflow.
 
    **If no tasks file exists:** Proceed without task-related warning.
 
-4. **Assess delta spec sync state**
+4. **Note which capabilities the archive will touch**
 
-   Check for delta specs at `openspec/changes/<name>/specs/`. If none exist, proceed without sync prompt.
+   Use `artifactPaths.specs.existingOutputPaths` from the status JSON to list the
+   delta specs. Name the capabilities so the user knows which main specs the CLI
+   is about to update — this is information, not a decision point. Do NOT compare
+   deltas against main specs by hand and do NOT ask the user whether to "sync":
+   step 5 applies the deltas, and applying them is the whole point of archiving.
 
-   **If delta specs exist:**
-   - Compare each delta spec with its corresponding main spec at `openspec/specs/<capability>/spec.md`
-   - Determine what changes would be applied (adds, modifications, removals, renames)
-   - Show a combined summary before prompting
-
-   **Prompt options:**
-   - If changes needed: "Sync now (recommended)", "Archive without syncing"
-   - If already synced: "Archive now", "Sync anyway", "Cancel"
-
-   If user chooses sync, use Task tool (subagent_type: "general-purpose", prompt: "Use Skill tool to invoke openspec-sync-specs for change '<name>'. Delta spec analysis: <include the analyzed delta spec summary>"). Proceed to archive regardless of choice.
+   A change with no delta specs (infrastructure, tooling, doc-only) archives with
+   `--skip-specs` in step 5.
 
 5. **Perform the archive**
 
-   Create the archive directory if it doesn't exist:
-   ```bash
-   mkdir -p openspec/changes/archive
-   ```
-
-   Generate target name using current date: `YYYY-MM-DD-<change-name>`
-
-   **Check if target already exists:**
-   - If yes: Fail with error, suggest renaming existing archive or using different date
-   - If no: Move the change directory to archive
+   `openspec archive` is the ONLY sanctioned way to update main specs. It applies
+   each delta to `openspec/specs/<capability>/spec.md`, moves the change to
+   `openspec/changes/archive/YYYY-MM-DD-<name>/` (creating the directory and
+   dating the name itself), and validates the result.
 
    ```bash
-   mv openspec/changes/<name> openspec/changes/archive/YYYY-MM-DD-<name>
+   openspec archive <name> -y
    ```
 
-6. **Display summary**
+   For a change with no delta specs:
 
-   Show archive completion summary including:
-   - Change name
-   - Schema that was used
-   - Archive location
-   - Whether specs were synced (if applicable)
-   - Note about any warnings (incomplete artifacts/tasks)
+   ```bash
+   openspec archive <name> -y --skip-specs
+   ```
+
+   Read the output. It reports the applied operations per capability
+   (`+ added, ~ modified, - removed, → renamed`) and the archived directory name.
+
+   **Never** `mv` the change directory by hand, and **never** hand-edit a file
+   under `openspec/specs/` — `CLAUDE.md` and `.claude/rules/openspec-deltas.md`
+   both bind: main specs change ONLY through this command. A raw `mv` archives the
+   change while leaving the main specs describing behaviour the code no longer
+   has, which is exactly the drift the workflow exists to prevent.
+
+   **If the command fails**, report the error and stop. Do not fall back to moving
+   files or editing specs manually.
+
+   **Known 1.6.0 strictness — scenario renames abort the archive.** A `MODIFIED`
+   block that renames a scenario trips:
+
+   > `current spec contains scenario(s) not present in the modified block: "<old name>". Refresh the change spec before archiving to avoid dropping scenarios.`
+
+   The guard exists to catch a real hazard (a `MODIFIED` block that silently drops
+   scenarios), but it cannot tell an intentional rename from an accidental
+   omission, and there is no scenario-level `RENAMED` operation to express the
+   intent. Do NOT work around it by hand-editing specs. Instead: count the
+   scenarios the delta declares against the ones the main spec currently has,
+   report whether anything would actually be lost, and put the call to the user
+   via **AskUserQuestion** (rename the scenario back and re-delta, or archive with
+   an older CLI that lacks the guard). 1.3.1 applies such a rename without
+   complaint, and correctly.
+
+6. **Verify and summarize**
+
+   Confirm the result rather than assuming it:
+
+   ```bash
+   openspec validate --specs --strict
+   openspec list
+   ```
+
+   Validation passes and the archived change no longer appears as active. Then
+   show the summary: change name, schema, archive location, the per-capability
+   operation counts the CLI reported, and any warnings from steps 2-3.
+
+   Leave the result staged or uncommitted per the user's wishes — this skill does
+   not commit.
 
 **Output On Success**
 
@@ -99,7 +145,8 @@ Archive a completed change in the experimental workflow.
 **Change:** <change-name>
 **Schema:** <schema-name>
 **Archived to:** openspec/changes/archive/YYYY-MM-DD-<name>/
-**Specs:** ✓ Synced to main specs (or "No delta specs" or "Sync skipped")
+**Specs:** ✓ <capability>: ~N modified (or "No delta specs (--skip-specs)")
+**Validation:** ✓ openspec validate --specs --strict passed
 
 All artifacts complete. All tasks complete.
 ```
@@ -108,7 +155,10 @@ All artifacts complete. All tasks complete.
 - Always prompt for change selection if not provided
 - Use artifact graph (openspec status --json) for completion checking
 - Don't block archive on warnings - just inform and confirm
-- Preserve .openspec.yaml when moving to archive (it moves with the directory)
-- Show clear summary of what happened
-- If sync is requested, use openspec-sync-specs approach (agent-driven)
-- If delta specs exist, always run the sync assessment and show the combined summary before prompting
+- `openspec archive` does the whole job: applies deltas, dates the directory,
+  moves it (`.openspec.yaml` included), validates. Never reimplement any of that
+  by hand — no `mv`, no `mkdir`, no editing `openspec/specs/`
+- Never hand-edit main specs, even when the CLI is unavailable, the archive
+  aborts, or a step here seems to call for it. Report the blocker and stop
+- Verify with `openspec validate --specs --strict` + `openspec list` before
+  claiming success; report what the CLI actually printed, not what you expected
