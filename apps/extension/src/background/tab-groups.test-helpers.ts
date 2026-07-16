@@ -101,6 +101,15 @@ export function installTabGroupsChrome(): TabGroupsController {
           createProperties?: { windowId?: number };
         }) => {
           const ids = Array.isArray(options.tabIds) ? options.tabIds : [options.tabIds];
+          // Chrome validates the WHOLE batch before grouping anything: one dead
+          // tab id (or a dissolved target group) rejects the entire call and no
+          // tab moves. Faking it leniently hid the stale-id batch poisoning.
+          for (const id of ids) {
+            if (!ctrl.tabs.has(id)) throw new Error(`No tab with id: ${id}`);
+          }
+          if (options.groupId !== undefined && !ctrl.groups.has(options.groupId)) {
+            throw new Error(`No group with id: ${options.groupId}`);
+          }
           let groupId = options.groupId;
           if (groupId === undefined) {
             groupId = nextGroupId++;

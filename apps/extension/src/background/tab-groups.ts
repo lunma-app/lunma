@@ -32,6 +32,16 @@ function isTabBusyError(err: unknown): boolean {
 }
 
 /**
+ * A reference Chrome no longer has — the group was dissolved by a restart / the
+ * user ungrouped it, or the tab closed between the store mirror and this call.
+ * Benign and expected under D4 (the caller rebuilds), so it logs at `debug`.
+ */
+function isStaleReferenceError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /No (tab|group) with id/i.test(msg);
+}
+
+/**
  * Map a Lunma `SpaceColor` to a `chrome.tabGroups.Color`. Nine of the ten
  * `SpaceColor` values are exactly Chrome's group colours (the only spelling
  * difference is Lunma's `gray` vs Chrome's `grey`); the tenth, `teal`, has no
@@ -81,21 +91,42 @@ export async function resolveGroup(
 }
 
 /**
+ * The subset of `tabIds` Chrome actually has open in `windowId`, in the caller's
+ * order. `chrome.tabs.group` validates the WHOLE batch, so a single id the
+ * `liveTabsById` mirror still holds after Chrome closed the tab would reject the
+ * call and strand every live sibling ungrouped. The mirror trails Chrome by
+ * however many drains the tab lifecycle events take to arrive, so we reconcile
+ * against Chrome authoritatively here — same precedent as the orchestrator's
+ * home-tab query. Also drops ids that migrated to another window, which
+ * `tabs.group` would otherwise silently pull into `windowId`.
+ */
+async function liveTabIdsInWindow(windowId: WindowId, tabIds: TabId[]): Promise<TabId[]> {
+  const tabs = await chrome.tabs.query({ windowId });
+  const live = new Set(tabs.map((t) => t.id));
+  return tabIds.filter((id) => live.has(id));
+}
+
+/**
  * Group `tabIds` into a Chrome group: into the existing `groupId` when one is
- * supplied and live, else into a new group created in `windowId`. Returns the
- * resulting group id, or `null` when there is nothing to group / the call
- * failed. A Chrome group cannot be empty, so an empty `tabIds` is a no-op that
- * returns the passed-through `groupId` (or `null`).
+ * supplied and live, else into a new group created in `windowId`. Tab ids Chrome
+ * no longer has (or that moved windows) are dropped rather than failing the
+ * batch. Returns the resulting group id, or `null` when there is nothing to
+ * group / the call failed. A Chrome group cannot be empty, so an empty `tabIds`
+ * — or one where nothing survives reconciliation — is a no-op that returns the
+ * passed-through `groupId` (or `null`).
  */
 export async function ensureGroupForSpace(
   windowId: WindowId,
   tabIds: TabId[],
   groupId?: number,
 ): Promise<number | null> {
-  if (tabIds.length === 0) return groupId !== undefined && groupId !== NO_GROUP ? groupId : null;
+  const passthrough = groupId !== undefined && groupId !== NO_GROUP ? groupId : null;
+  if (tabIds.length === 0) return passthrough;
   try {
+    const ids = await liveTabIdsInWindow(windowId, tabIds);
+    if (ids.length === 0) return passthrough;
     const options: chrome.tabs.GroupOptions = {
-      tabIds: tabIds as [TabId, ...TabId[]],
+      tabIds: ids as [TabId, ...TabId[]],
     };
     if (groupId !== undefined && groupId !== NO_GROUP) {
       options.groupId = groupId;
@@ -106,6 +137,13 @@ export async function ensureGroupForSpace(
   } catch (err) {
     if (isTabBusyError(err)) {
       log.debug('ensureGroupForSpace: deferred (tab busy / user dragging)', {
+        windowId,
+        tabIds,
+        groupId,
+        err,
+      });
+    } else if (isStaleReferenceError(err)) {
+      log.debug('ensureGroupForSpace: stale group/tab (caller rebuilds)', {
         windowId,
         tabIds,
         groupId,
