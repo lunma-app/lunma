@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/lunma-app/lunma/compare/v0.5.0...v0.5.1) (2026-07-16)
+
+
+### Bug Fixes
+
+* **extension:** drop stale tab ids before grouping a Space ([#101](https://github.com/lunma-app/lunma/issues/101)) ([2ae421d](https://github.com/lunma-app/lunma/commit/2ae421d8faa8655dd53474a3e9b8e04a420a77e6))
+
 ## [0.5.0](https://github.com/lunma-app/lunma/compare/v0.4.5...v0.5.0) (2026-07-15)
 
 
