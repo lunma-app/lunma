@@ -817,6 +817,7 @@ interface ActivationChromeStub extends LensesChromeStub {
     update: ReturnType<typeof vi.fn>;
     remove: ReturnType<typeof vi.fn>;
     group: ReturnType<typeof vi.fn>;
+    query: ReturnType<typeof vi.fn>;
   };
   windows: { update: ReturnType<typeof vi.fn> };
   scripting: { executeScript: ReturnType<typeof vi.fn> };
@@ -828,22 +829,30 @@ interface ActivationChromeStub extends LensesChromeStub {
 }
 
 function installActivationChrome(): ActivationChromeStub {
+  // Tabs Chrome "has open" — seeded empty and grown by `create`, so `query`
+  // reports a just-created tab as live the way Chrome does. `ensureGroupForSpace`
+  // reconciles its tab ids against this before grouping (a dead id would
+  // otherwise reject the whole batch), so an empty query means nothing groups.
+  const live: chrome.tabs.Tab[] = [];
   const stub: ActivationChromeStub = {
     ...chromeStub,
     tabs: {
-      create: vi.fn(() =>
-        Promise.resolve({
+      create: vi.fn(() => {
+        const tab = {
           id: 999,
           windowId: 100,
           active: true,
           title: 'MR 42',
           url: 'https://gitlab.example.com/mr/42',
           status: 'complete',
-        } as chrome.tabs.Tab),
-      ),
+        } as chrome.tabs.Tab;
+        live.push(tab);
+        return Promise.resolve(tab);
+      }),
       update: vi.fn(() => Promise.resolve({ id: 7, windowId: 100 } as chrome.tabs.Tab)),
       remove: vi.fn(() => Promise.resolve()),
       group: vi.fn(() => Promise.resolve(55)),
+      query: vi.fn(() => Promise.resolve([...live])),
     },
     windows: { update: vi.fn(() => Promise.resolve({ id: 100 } as chrome.windows.Window)) },
     scripting: { executeScript: vi.fn(() => Promise.resolve([])) },
@@ -1578,12 +1587,24 @@ describe('openLensPage handler (smart-folder-page)', () => {
   const PAGE_BASE = 'chrome-extension://abc/src/launcher/lenspage/index.html';
 
   /** Extend the activation stub with the page handler's extra Chrome surface:
-   * `runtime.getURL` (the page URL) and `tabs.query` (the dedupe lookup). */
+   * `runtime.getURL` (the page URL) and `tabs.query` (the dedupe lookup).
+   * `query` reflects tabs created during the run, as Chrome's does — the page
+   * handler's dedupe lookup and the group reconciliation share its shape
+   * (`{windowId}`), so a fixed list would make a just-created tab read as dead. */
   function installPageChrome(openTabs: chrome.tabs.Tab[]): ActivationChromeStub {
     const stub = installActivationChrome();
-    (stub.tabs as unknown as { query: ReturnType<typeof vi.fn> }).query = vi.fn(
-      async () => openTabs,
+    const live = [...openTabs];
+    const create = stub.tabs.create as unknown as (p: { url?: string }) => Promise<chrome.tabs.Tab>;
+    (stub.tabs as unknown as { create: ReturnType<typeof vi.fn> }).create = vi.fn(
+      async (props: { url?: string }) => {
+        const tab = await create(props);
+        live.push({ ...tab, url: props.url ?? tab.url });
+        return tab;
+      },
     );
+    (stub.tabs as unknown as { query: ReturnType<typeof vi.fn> }).query = vi.fn(async () => [
+      ...live,
+    ]);
     (stub.runtime as unknown as { getURL: (p: string) => string }).getURL = (p) =>
       `chrome-extension://abc/${p}`;
     return stub;
