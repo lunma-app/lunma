@@ -13,14 +13,14 @@ overrides:
 # Shared toolchain versions live here so the two apps' verify gates and compiler
 # behaviour can never silently diverge. Both apps reference these via `catalog:`.
 catalog:
-  '@inlang/paraglide-js': ^2.20.2
+  '@inlang/paraglide-js': ^2.22.0
   '@sveltejs/vite-plugin-svelte': ^7.2.0
   '@types/culori': ^4.0.1
   '@types/node': ^24
   culori: ^4.0.2
   jsdom: ^29.1.1
-  svelte: ^5.56.4
+  svelte: ^5.56.5
   svelte-check: ^4.7.2
   typescript: ^6.0.3
-  vite: ^8.1.2
+  vite: ^8.1.4
   vitest: ^4.1.10
