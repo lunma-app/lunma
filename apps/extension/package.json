@@ -35,7 +35,7 @@
   },
   "dependencies": {
     "@leeoniya/ufuzzy": "1.0.19",
-    "@lucide/svelte": "^1.23.0",
+    "@lucide/svelte": "^1.25.0",
     "@lunma/tokens": "workspace:*",
     "bits-ui": "^2.18.1",
     "saxes": "6.0.0",
@@ -55,7 +55,7 @@
     "jsdom": "catalog:",
     "postcss-html": "^1.8.1",
     "shiki": "^4.3.1",
-    "stylelint": "^17.14.0",
+    "stylelint": "^17.14.1",
     "stylelint-declaration-strict-value": "^1.11.1",
     "svelte": "catalog:",
     "svelte-check": "catalog:",
