@@ -35,7 +35,7 @@
   },
   "dependencies": {
     "@leeoniya/ufuzzy": "1.0.19",
-    "@lucide/svelte": "^1.23.0",
+    "@lucide/svelte": "^1.27.0",
     "@lunma/tokens": "workspace:*",
     "bits-ui": "^2.18.1",
     "saxes": "6.0.0",
@@ -44,7 +44,7 @@
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.7.1",
     "@inlang/paraglide-js": "catalog:",
-    "@playwright/test": "^1.61.1",
+    "@playwright/test": "^1.62.0",
     "@sveltejs/vite-plugin-svelte": "catalog:",
     "@testing-library/svelte": "^5.4.2",
     "@types/chrome": "^0.2.2",
@@ -55,7 +55,7 @@
     "jsdom": "catalog:",
     "postcss-html": "^1.8.1",
     "shiki": "^4.3.1",
-    "stylelint": "^17.14.0",
+    "stylelint": "^17.14.1",
     "stylelint-declaration-strict-value": "^1.11.1",
     "svelte": "catalog:",
     "svelte-check": "catalog:",
