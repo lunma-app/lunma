@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.6.0](https://github.com/lunma-app/lunma/compare/v0.5.1...v0.6.0) (2026-08-25)
+
+
+### Features
+
+* **sidebar:** group temporary tabs by site ([#116](https://github.com/lunma-app/lunma/issues/116)) ([6ec1073](https://github.com/lunma-app/lunma/commit/6ec10739f7b74d54b8e6117a83dfc88123617c7f))
+
+
+### Bug Fixes
+
+* **e2e:** press the row under the pointer, not a stale bounding box ([#120](https://github.com/lunma-app/lunma/issues/120)) ([4aece1f](https://github.com/lunma-app/lunma/commit/4aece1ffc30f9f360c2724db6977a9a1b9ef4d3d))
+* **sidebar:** group every rendered row, and collect browser pages last ([#121](https://github.com/lunma-app/lunma/issues/121)) ([326a98b](https://github.com/lunma-app/lunma/commit/326a98b0ba4ff86d5d6266b2ea9c46608343d0e1))
+
 ## [0.5.1](https://github.com/lunma-app/lunma/compare/v0.5.0...v0.5.1) (2026-07-16)
 
 
