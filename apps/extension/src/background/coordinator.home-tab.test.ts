@@ -32,26 +32,26 @@ beforeEach(() => {
 describe('home tabs (Lunma new-tab page)', () => {
   // Chrome reports `chrome://newtab/`; other Chromium forks report their own
   // internal scheme transiently before the override resolves (Edge → `edge://`).
-  test.each([
-    'chrome://newtab/',
-    'edge://newtab/',
-  ])('a created home tab (%s) is grouped into the active Space but NOT listed as temp', async (newtabUrl) => {
-    const { coordinator, store } = makeCoordinator();
-    store.state.spaces.push(space('work'));
-    store.state.activeSpaceByWindow[100] = 'work';
-    store.state.spaceInstancesByWindow[100] = {
-      work: { spaceId: 'work', groupId: 1, tempTabIds: [], tempTabTitles: {} },
-    };
-    chrome.addGroup({ id: 1, windowId: 100, collapsed: false });
-    chrome.addTab({ id: 50, windowId: 100, groupId: -1 });
+  test.each(['chrome://newtab/', 'edge://newtab/'])(
+    'a created home tab (%s) is grouped into the active Space but NOT listed as temp',
+    async (newtabUrl) => {
+      const { coordinator, store } = makeCoordinator();
+      store.state.spaces.push(space('work'));
+      store.state.activeSpaceByWindow[100] = 'work';
+      store.state.spaceInstancesByWindow[100] = {
+        work: { spaceId: 'work', groupId: 1, tempTabIds: [], tempTabTitles: {} },
+      };
+      chrome.addGroup({ id: 1, windowId: 100, collapsed: false });
+      chrome.addTab({ id: 50, windowId: 100, groupId: -1 });
 
-    coordinator.enqueue(tabCreated(50, 100, newtabUrl));
-    await coordinator.idle();
+      coordinator.enqueue(tabCreated(50, 100, newtabUrl));
+      await coordinator.idle();
 
-    // Grouped (window shows it) but never adopted into the Temporary list.
-    expect(chrome.tabs.get(50)?.groupId).toBe(1);
-    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).not.toContain(50);
-  });
+      // Grouped (window shows it) but never adopted into the Temporary list.
+      expect(chrome.tabs.get(50)?.groupId).toBe(1);
+      expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).not.toContain(50);
+    },
+  );
 
   test('navigating a home tab to a real URL adopts it as a temporary tab', async () => {
     const { coordinator, store } = makeCoordinator();

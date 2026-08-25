@@ -31,7 +31,7 @@ import type { AppState, BackupEnvelope, SpaceColor } from './types';
 // `sources` from embedded `LensSource[]` to `LensSourceRef[]` references — a REAL
 // transformation that extracts the embedded `(provider, baseUrl)` pairs into
 // first-class accounts. Each bump is deliberate: it makes a downgrade detectable.
-export const CURRENT_SCHEMA_VERSION = 17;
+export const CURRENT_SCHEMA_VERSION = 18;
 
 const SpaceInstanceSchema = z.strictObject({
   spaceId: z.string(),
@@ -763,9 +763,16 @@ export const AppStateV17Schema = z.strictObject({
   pinnedBySpace: z.record(z.string(), z.array(PinNodeSchema)),
 });
 
+/**
+ * v18 (remap-renamed-lucide-icons): a structural alias of v17. The v18 migration
+ * only rewrites the VALUES a `Space.icon` / folder `PinNode.icon` may hold — both
+ * already `z.string()` — so no shape changes. This is the CURRENT-version schema.
+ */
+export const AppStateV18Schema = AppStateV17Schema;
+
 export const EnvelopeSchema = z.strictObject({
   schemaVersion: z.number(),
-  state: AppStateV17Schema,
+  state: AppStateV18Schema,
 });
 
 export type AppStateV6 = z.infer<typeof AppStateV6Schema>;
@@ -779,6 +786,7 @@ export type AppStateV14 = z.infer<typeof AppStateV14Schema>;
 export type AppStateV15 = z.infer<typeof AppStateV15Schema>;
 export type AppStateV16 = z.infer<typeof AppStateV16Schema>;
 export type AppStateV17 = z.infer<typeof AppStateV17Schema>;
+export type AppStateV18 = z.infer<typeof AppStateV18Schema>;
 export type Envelope = z.infer<typeof EnvelopeSchema>;
 
 type AssertEqual<A, B> =
