@@ -73,59 +73,18 @@ async function pinSite(context: BrowserContext, sidebar: Page): Promise<Page> {
   await sidebar.bringToFront();
   const siteRow = tempRows(sidebar).filter({ hasText: 'localhost site' }).first();
   await siteRow.waitFor();
-  // Pinning FREEZES the saved tab's `originalURL` from the SW's live-tab mirror
-  // at pin time; the boundary chip is later seeded from it (pageGlob(originalURL)).
-  // The temp row above renders off the tab's TITLE, which populates independently
-  // of its URL — so under slow CI the URL can still be unsynced here, the pin then
-  // captures `originalURL: ''`, and the chip seeds empty and never recovers
-  // (originalURL is immutable post-pin). Gate the drag on the tab's URL being
-  // resolved so the pin captures a real localhost URL. `liveTabsById` isn't
-  // persisted, so this reads Chrome's view; the drag gesture that follows gives
-  // the SW ample time to sync its mirror before the pin dispatch lands.
-  await expect
-    .poll(
-      () =>
-        sidebar.evaluate(async (p) => {
-          const tabs = await chrome.tabs.query({});
-          return tabs.find((t) => t.url?.includes(`localhost:${p}/`))?.url ?? '';
-        }, port),
-      { timeout: 10_000 },
-    )
-    .toContain(`localhost:${port}`);
   await dragTo(sidebar, siteRow, sidebar.getByTestId('pinned-tabs'));
   await expect(pinnedRows(sidebar)).toHaveCount(1);
   return site;
 }
 
-/**
- * Switch the boundary editor to "On" and wait for the seeded-domain chip.
- *
- * The chip renders only after `setTabBoundary` round-trips through the SW and the
- * resulting store update flows back into the editor (mode → 'locked' with a
- * non-empty allow-list). That command is fire-and-forget over the bus with a 10s
- * timeout and NO product-level retry (`TabBoundaryEditor.send` only logs on
- * failure), so under heavy CI load a single dispatch can time out and silently
- * leave the tab unlocked — the seeded chip then never appears.
- *
- * Re-clicking the SAME "On" segment cannot recover that: the SegmentedControl is
- * a group of native radios, and once "On" is checked, clicking its label fires no
- * further `change` event, so no new dispatch goes out (and `select()` guards on
- * the model value too). To force a genuine re-dispatch each retry we bounce off
- * "Default" first, then click "On" again — the second click is always a real
- * state change (model mode is still `inherit` until a dispatch lands), so it
- * re-sends `setTabBoundary`. Gated on the chip's own visibility so a lock that
- * DID land is never toggled back off, and the loop always ends on an "On" click
- * (never a trailing "Default"), so the committed state is locked when it exits.
- */
-async function selectOnUntilChipSeeds(editor: Locator): Promise<void> {
-  const chip = editor.getByTestId('chip');
-  await expect(async () => {
-    if (!(await chip.isVisible())) {
-      await editor.getByText('Default', { exact: true }).click();
-      await editor.getByText('On', { exact: true }).click();
-    }
-    await expect(chip).toBeVisible({ timeout: 3_000 });
-  }).toPass({ timeout: 30_000, intervals: [500, 1_000, 2_000, 3_000] });
+/** Switch the boundary editor to "On" and wait for the seeded-domain chip. One
+ * click is enough: the chip seeds from the saved tab's `originalURL`, which
+ * `pinTab` now resolves authoritatively at mint. If this ever needs a retry
+ * again, that resolution has regressed — do not re-add one. */
+async function selectOnAndAwaitChip(editor: Locator): Promise<void> {
+  await editor.getByText('On', { exact: true }).click();
+  await expect(editor.getByTestId('chip')).toBeVisible();
 }
 
 /** Open the pinned row's right-click menu, drill into the editor, and switch to On
@@ -139,7 +98,7 @@ async function lockToSite(sidebar: Page): Promise<void> {
   // renders only when `mode === 'inherit'`, so its visibility proves the
   // SegmentedControl is mounted and the BottomSheet's entrance has settled.
   await expect(editor.getByTestId('boundary-options-link')).toBeVisible();
-  await selectOnUntilChipSeeds(editor);
+  await selectOnAndAwaitChip(editor);
 }
 
 test('the menu opens the boundary editor sheet, seeds the domain, and dismiss returns', async ({
@@ -168,7 +127,7 @@ test('the menu opens the boundary editor sheet, seeds the domain, and dismiss re
 
   // On seeds the tab's registrable domain (localhost) as a chip (retrying a
   // dropped/timed-out dispatch — see `selectOnUntilChipSeeds`).
-  await selectOnUntilChipSeeds(editor);
+  await selectOnAndAwaitChip(editor);
   await expect(editor.getByTestId('chip')).toHaveText(/localhost/);
 
   // Dismissing the sheet (✕) returns to the sidebar (editor gone).

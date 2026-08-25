@@ -213,7 +213,7 @@ export function pinnedTabHandlers(): Pick<
     },
     // Pinned-tab creation + lifecycle (sidebar-pinned-tabs). Pure
     // orchestration over the store — one coalesced mutation per drain.
-    pinTab: (ctx, event) => {
+    pinTab: async (ctx, event) => {
       const { tabId, windowId, spaceId, targetIndex, placement } = event.payload;
       const liveTab = ctx.store.state.liveTabsById[tabId];
       if (!liveTab) {
@@ -232,13 +232,31 @@ export function pinnedTabHandlers(): Pick<
       // Mint the record FIRST (do NOT bind yet — binding removes the tab from
       // Temporary, and "never orphaned" means we only bind once the record is
       // actually placed somewhere reachable). Design D3.
+      // `originalURL` is FROZEN here and is what the tab's domain boundary later
+      // seeds from, so it must not capture a URL the SW mirror has not filled in
+      // yet: a temp row renders off the tab's TITLE, which arrives independently
+      // of its URL, so a fast pin can reach this point with `url: ''` while Chrome
+      // already knows it. Ask Chrome in that case only — the mirror is right for
+      // virtually every pin, and an unconditional round-trip would add an await to
+      // the hot path for nothing. A failed query still pins (the user asked for
+      // it); an empty URL is honest for a tab that never committed a navigation.
+      let { url, title } = liveTab;
+      if (!url) {
+        try {
+          const fresh = await chrome.tabs.get(tabId);
+          url = fresh.url ?? '';
+          if (!title) title = fresh.title ?? '';
+        } catch (err) {
+          log.debug('pinTab: url resolve failed, minting with the mirror value', { tabId, err });
+        }
+      }
       const id = crypto.randomUUID();
       ctx.store.registerSavedTab({
         id,
         spaceId,
-        title: liveTab.title,
-        originalURL: liveTab.url,
-        currentURL: liveTab.url,
+        title,
+        originalURL: url,
+        currentURL: url,
       });
 
       // Route by placement. Each branch falls back to a top-level insert at
@@ -271,7 +289,7 @@ export function pinnedTabHandlers(): Pick<
           (n.kind === 'tab' && n.id === id) || (n.kind === 'folder' && n.children.includes(id)),
       );
       if (placed) {
-        ctx.store.bindSavedTab(id, windowId, tabId, liveTab.url);
+        ctx.store.bindSavedTab(id, windowId, tabId, url);
       } else {
         log.error('pinTab: record not placed, leaving tab in Temporary', {
           tabId,

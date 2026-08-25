@@ -254,6 +254,7 @@ interface SavedTabChromeStub {
     update: ReturnType<typeof vi.fn>;
     remove: ReturnType<typeof vi.fn>;
     duplicate: ReturnType<typeof vi.fn>;
+    get: ReturnType<typeof vi.fn>;
   };
   windows: { update: ReturnType<typeof vi.fn> };
   runtime: {
@@ -269,6 +270,7 @@ function installSavedTabChromeStub(): SavedTabChromeStub {
       update: vi.fn(() => Promise.resolve({ id: 999, windowId: 100 } as chrome.tabs.Tab)),
       remove: vi.fn(() => Promise.resolve()),
       duplicate: vi.fn(() => Promise.resolve({ id: 1000, windowId: 100 } as chrome.tabs.Tab)),
+      get: vi.fn(() => Promise.resolve({ id: 42, windowId: 100 } as chrome.tabs.Tab)),
     },
     windows: { update: vi.fn(() => Promise.resolve({ id: 100 } as chrome.windows.Window)) },
     runtime: {
@@ -817,6 +819,93 @@ describe('Coordinator handlers: pinTab', () => {
       status: 'complete',
     };
   }
+
+  test('resolves an empty mirror URL from Chrome before minting', async () => {
+    // The SW live-tab mirror lags Chrome: a temp row renders off the TITLE, which
+    // arrives independently of the URL, so a fast pin can see `url: ''` here while
+    // Chrome already knows it. `originalURL` is frozen at mint, so capturing the
+    // empty value would break the tab's boundary seed permanently.
+    const chromeStub = installSavedTabChromeStub();
+    chromeStub.tabs.get.mockResolvedValue({
+      id: 42,
+      windowId: 100,
+      url: 'https://example.com/a',
+      title: 'Example',
+    } as chrome.tabs.Tab);
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [42], tempTabTitles: {} },
+    };
+    seedLiveTab(store, 42, 100, '', 'Example');
+
+    coordinator.enqueue(
+      sidebar(
+        { kind: 'pinTab', payload: { tabId: 42, windowId: 100, spaceId: 'work', targetIndex: 0 } },
+        'sess:1',
+      ),
+    );
+    await coordinator.idle();
+
+    expect(chromeStub.tabs.get).toHaveBeenCalledWith(42);
+    const id = Object.keys(store.state.savedTabs)[0] as string;
+    expect(store.state.savedTabs[id]).toMatchObject({
+      originalURL: 'https://example.com/a',
+      currentURL: 'https://example.com/a',
+    });
+  });
+
+  test('uses a populated mirror URL without querying Chrome', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [42], tempTabTitles: {} },
+    };
+    seedLiveTab(store, 42, 100, 'https://github.com/', 'GitHub');
+
+    coordinator.enqueue(
+      sidebar(
+        { kind: 'pinTab', payload: { tabId: 42, windowId: 100, spaceId: 'work', targetIndex: 0 } },
+        'sess:1',
+      ),
+    );
+    await coordinator.idle();
+
+    expect(chromeStub.tabs.get).not.toHaveBeenCalled();
+    const id = Object.keys(store.state.savedTabs)[0] as string;
+    expect(store.state.savedTabs[id]).toMatchObject({ originalURL: 'https://github.com/' });
+  });
+
+  test('still pins when Chrome cannot supply a URL either', async () => {
+    const chromeStub = installSavedTabChromeStub();
+    chromeStub.tabs.get.mockRejectedValue(new Error('No tab with id: 42'));
+    const { coordinator, store, emitAck } = makeCoordinator();
+    store.state.spaces.push({ id: 'work', name: 'Work', color: 'blue', icon: 'star' });
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [42], tempTabTitles: {} },
+    };
+    seedLiveTab(store, 42, 100, '', 'Pending');
+
+    coordinator.enqueue(
+      sidebar(
+        { kind: 'pinTab', payload: { tabId: 42, windowId: 100, spaceId: 'work', targetIndex: 0 } },
+        'sess:1',
+      ),
+    );
+    await coordinator.idle();
+
+    // The user asked for the pin — a URL-less tab must not lose the action.
+    const ids = Object.keys(store.state.savedTabs);
+    expect(ids).toHaveLength(1);
+    expect(store.state.pinnedBySpace.work).toHaveLength(1);
+    expect(store.state.savedTabs[ids[0] as string]).toMatchObject({ originalURL: '' });
+    expect(emitAck).toHaveBeenCalledWith({
+      type: 'lunma/command-ack',
+      id: 'sess:1',
+      result: 'ok',
+    });
+  });
 
   test('mints a bound SavedTab, places it in pinnedBySpace, one persist+broadcast', async () => {
     const { coordinator, store, persist, broadcast, emitAck } = makeCoordinator();
