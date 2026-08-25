@@ -75,6 +75,18 @@ async function pinSite(context: BrowserContext, sidebar: Page): Promise<Page> {
   await siteRow.waitFor();
   await dragTo(sidebar, siteRow, sidebar.getByTestId('pinned-tabs'));
   await expect(pinnedRows(sidebar)).toHaveCount(1);
+  const probe = await sidebar.evaluate(async () => {
+    const env = (await chrome.storage.local.get('lunma.state'))['lunma.state'] as
+      | { state?: { savedTabs?: Record<string, { originalURL?: string; title?: string }> } }
+      | undefined;
+    const saved = Object.values(env?.state?.savedTabs ?? {});
+    const tabs = await chrome.tabs.query({});
+    return JSON.stringify({
+      saved: saved.map((t) => ({ url: t.originalURL, title: t.title })),
+      chromeUrls: tabs.map((t) => t.url ?? '<none>'),
+    });
+  });
+  console.log('[[PROBE]]', probe);
   return site;
 }
 
