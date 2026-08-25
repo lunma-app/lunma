@@ -104,6 +104,7 @@ export type PendingEvent =
   | SidebarVariant<'newTab'>
   | SidebarVariant<'clearTempTabs'>
   | SidebarVariant<'clearDuplicateTempTabs'>
+  | SidebarVariant<'groupTempTabsBySite'>
   | SidebarVariant<'undoClearTempTabs'>
   | SidebarVariant<'openUrl'>
   | SidebarVariant<'duplicateTab'>

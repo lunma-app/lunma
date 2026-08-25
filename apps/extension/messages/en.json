@@ -417,5 +417,22 @@
   "sidebar_lensRoleReviewing": "Reviewing",
   "sidebar_spaceEditAria": "Edit {name}",
   "sidebar_favDropHint": "Drop to favorite",
-  "sidebar_favDragHint": "Drag a tab up here to favorite it."
+  "sidebar_favDragHint": "Drag a tab up here to favorite it.",
+  "sidebar_tempGroupBySite": "Group by site",
+  "sidebar_undo": "Undo",
+  "sidebar_groupedTabsBySite": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Grouped {count} tab by site",
+        "countPlural=other": "Grouped {count} tabs by site"
+      }
+    }
+  ]
 }

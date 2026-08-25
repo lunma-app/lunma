@@ -1,3 +1,4 @@
+import { clusterIdsByHost } from './cluster-by-host';
 import { deriveLensKind } from './lens-entity';
 import { sourceKey } from './lens-labels';
 import { log } from './logger';
@@ -634,6 +635,36 @@ export class LunmaStore {
     instance.tempTabIds = current.map((id) =>
       requestedSet.has(id) ? (requestedOrder[cursor++] as TabId) : id,
     );
+  }
+
+  /**
+   * Cluster a (window, Space) instance's `tempTabIds` so tabs sharing a URL
+   * hostname are contiguous (see `clusterIdsByHost`). Returns whether the order
+   * actually changed, so the caller knows whether to `markDirty` — the
+   * coordinator gates its broadcast on that flag alone, and an already-clustered
+   * list must not trigger a needless persist + broadcast.
+   *
+   * Only tabs live in THIS window are clustered; every other id (a stale id, or
+   * one whose live tab moved windows) keeps its current slot, reordering only
+   * among the slots the clustered tabs already occupy — the same subset-safe rule
+   * `reorderTemp` applies, so the two paths cannot disagree.
+   *
+   * A missing instance is a silent no-op returning `false`: an absent instance is
+   * a transient state, not a caller error (matching `reorderTemp`).
+   */
+  groupTempTabsBySite(windowId: WindowId, spaceId: SpaceId): boolean {
+    const instance = this.state.spaceInstancesByWindow[windowId]?.[spaceId];
+    if (!instance) return false;
+    const current = instance.tempTabIds;
+    const liveHere = current.filter((id) => this.state.liveTabsById[id]?.windowId === windowId);
+    const clustered = clusterIdsByHost(liveHere, (id) => this.state.liveTabsById[id]?.url);
+    if (clustered.every((id, i) => id === liveHere[i])) return false;
+    const moving = new Set(liveHere);
+    let cursor = 0;
+    instance.tempTabIds = current.map((id) =>
+      moving.has(id) ? (clustered[cursor++] as TabId) : id,
+    );
+    return true;
   }
 
   /**

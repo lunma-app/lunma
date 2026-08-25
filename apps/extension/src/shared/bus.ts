@@ -222,6 +222,9 @@ export type SidebarCommand =
   // Close only the targeted Space's temporary tabs that duplicate another
   // temporary tab's exact URL, keeping the earliest-listed tab per URL group.
   | { kind: 'clearDuplicateTempTabs'; payload: { windowId: WindowId; spaceId?: SpaceId } }
+  // Reorder the targeted Space's temporary tabs so same-hostname tabs are
+  // contiguous. Never closes or opens a tab — a pure reorder of `tempTabIds`.
+  | { kind: 'groupTempTabsBySite'; payload: { windowId: WindowId; spaceId?: SpaceId } }
   // Undo a just-cleared batch (safety-destructive-actions). Carries `tabId`s, not
   // the SW-generated `archivedAt`: the sidebar knows the cleared `tabId`s locally,
   // whereas `archivedAt` never returns through the (void) bus ack. The coordinator
@@ -316,6 +319,7 @@ export const SIDEBAR_COMMAND_KINDS: ReadonlySet<SidebarCommandKind> = new Set<Si
   'newTab',
   'clearTempTabs',
   'clearDuplicateTempTabs',
+  'groupTempTabsBySite',
   'undoClearTempTabs',
   'openUrl',
   'duplicateTab',
@@ -382,6 +386,7 @@ const _kindExhaustiveness = {
   newTab: true,
   clearTempTabs: true,
   clearDuplicateTempTabs: true,
+  groupTempTabsBySite: true,
   undoClearTempTabs: true,
   openUrl: true,
   duplicateTab: true,
@@ -816,6 +821,10 @@ const COMMAND_SCHEMAS = {
     kind: z.literal('clearDuplicateTempTabs'),
     payload: z.strictObject({ windowId: z.number(), spaceId: z.string().optional() }),
   }),
+  groupTempTabsBySite: z.strictObject({
+    kind: z.literal('groupTempTabsBySite'),
+    payload: z.strictObject({ windowId: z.number(), spaceId: z.string().optional() }),
+  }),
   undoClearTempTabs: z.strictObject({
     kind: z.literal('undoClearTempTabs'),
     payload: z.strictObject({ windowId: z.number(), tabIds: z.array(z.number()) }),
@@ -928,6 +937,7 @@ export const SidebarCommandSchema = z.discriminatedUnion('kind', [
   COMMAND_SCHEMAS.newTab,
   COMMAND_SCHEMAS.clearTempTabs,
   COMMAND_SCHEMAS.clearDuplicateTempTabs,
+  COMMAND_SCHEMAS.groupTempTabsBySite,
   COMMAND_SCHEMAS.undoClearTempTabs,
   COMMAND_SCHEMAS.openUrl,
   COMMAND_SCHEMAS.duplicateTab,
