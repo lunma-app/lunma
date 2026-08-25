@@ -408,7 +408,9 @@ function hasDuplicateTempTabsFor(space: Space): boolean {
  * its toast. */
 function liveTempIdsFor(space: Space): number[] {
   const tempTabIds = store.state.spaceInstancesByWindow[windowId]?.[space.id]?.tempTabIds ?? [];
-  return tempTabIds.filter((id) => store.state.liveTabsById[id]?.windowId === windowId);
+  // Same predicate `TempTabs` renders by — a live record, no window check — so the
+  // disabled state and the toast count describe exactly the rows on screen.
+  return tempTabIds.filter((id) => store.state.liveTabsById[id] !== undefined);
 }
 
 /** Whether clustering this Space's temp tabs by hostname would change the order —

@@ -656,10 +656,14 @@ export class LunmaStore {
     const instance = this.state.spaceInstancesByWindow[windowId]?.[spaceId];
     if (!instance) return false;
     const current = instance.tempTabIds;
-    const liveHere = current.filter((id) => this.state.liveTabsById[id]?.windowId === windowId);
-    const clustered = clusterIdsByHost(liveHere, (id) => this.state.liveTabsById[id]?.url);
-    if (clustered.every((id, i) => id === liveHere[i])) return false;
-    const moving = new Set(liveHere);
+    // Match what `TempTabs` RENDERS — every id with a live record, no window
+    // check. Filtering by `windowId` here left any rendered row whose live tab
+    // reports another window pinned in place, acting as an immovable pivot that
+    // split one site's cluster around it.
+    const movable = current.filter((id) => this.state.liveTabsById[id] !== undefined);
+    const clustered = clusterIdsByHost(movable, (id) => this.state.liveTabsById[id]?.url);
+    if (clustered.every((id, i) => id === movable[i])) return false;
+    const moving = new Set(movable);
     let cursor = 0;
     instance.tempTabIds = current.map((id) =>
       moving.has(id) ? (clustered[cursor++] as TabId) : id,

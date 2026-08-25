@@ -38,15 +38,38 @@ describe('clusterIdsByHost', () => {
     expect(clusterIdsByHost(ids, urlOf)).toEqual([1, 3, 2]);
   });
 
-  test('clusters hostless urls together at their first-appearance position', () => {
-    const { ids, urlOf } = fixture(['https://a.com/1', 'blob:xyz', 'https://a.com/2', 'not a url']);
-    expect(clusterIdsByHost(ids, urlOf)).toEqual([1, 3, 2, 4]);
+  test('collects non-http(s) pages into one cluster pinned LAST', () => {
+    const { ids, urlOf } = fixture([
+      'chrome://whats-new/',
+      'https://a.com/1',
+      'chrome://extensions/',
+      'https://a.com/2',
+    ]);
+    // The browser pages leave the middle and land together at the end, keeping
+    // their relative order; the real site closes ranks.
+    expect(clusterIdsByHost(ids, urlOf)).toEqual([2, 4, 1, 3]);
   });
 
-  test('treats a missing url like a hostless one', () => {
+  test('treats extension pages and unparseable urls as browser pages too', () => {
+    const { ids, urlOf } = fixture([
+      'chrome-extension://abc/newtab.html',
+      'https://a.com/1',
+      'blob:xyz',
+      'not a url',
+      'https://a.com/2',
+    ]);
+    expect(clusterIdsByHost(ids, urlOf)).toEqual([2, 5, 1, 3, 4]);
+  });
+
+  test('treats a missing url as a browser page', () => {
     const urlOf = (id: number): string | undefined =>
       id === 2 ? undefined : `https://a.com/${id}`;
     expect(clusterIdsByHost([1, 2, 3], urlOf)).toEqual([1, 3, 2]);
+  });
+
+  test('a list of only browser pages keeps its order', () => {
+    const { ids, urlOf } = fixture(['chrome://extensions/', 'chrome://whats-new/']);
+    expect(clusterIdsByHost(ids, urlOf)).toEqual([1, 2]);
   });
 
   test('is idempotent — an already-clustered list is returned in the same order', () => {
@@ -54,7 +77,7 @@ describe('clusterIdsByHost', () => {
       'https://a.com/1',
       'https://a.com/2',
       'https://b.com/1',
-      'https://c.com/1',
+      'chrome://extensions/',
     ]);
     const once = clusterIdsByHost(ids, urlOf);
     expect(once).toEqual(ids);
