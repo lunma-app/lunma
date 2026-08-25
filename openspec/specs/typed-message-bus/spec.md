@@ -8,7 +8,9 @@ translates it to a `PendingEvent` and rides the same coordinator queue as
 chrome events. The bus is ack-only — promises resolve on successful drain
 or reject on handler throw / timeout / transport failure. Sidebars read
 mutation results off the existing `state-broadcast` channel.
+
 ## Requirements
+
 ### Requirement: Sidebar-facing bus client
 
 A `bus` client SHALL be exported as a singleton from `apps/extension/src/shared/bus.ts` with the shape `bus.send(cmd: SidebarCommand): Promise<void>`. The same module SHALL export a `createBus(transport)` factory used by the singleton and by tests. The sidebar SHALL import `bus` from this module and SHALL NOT call `chrome.runtime.sendMessage` directly for command dispatch.
@@ -408,7 +410,7 @@ The vocabulary SHALL cover, at minimum, these command families:
 - **Pinned-tab and favourites:** `pinTab`, `unpinTab`, `reorderPinned`, `pinSavedTab`, `favoriteTab`, `favoriteSavedTab`, `reorderFavorites`.
 - **Pinned-tab folder:** `createFolder`, `createFolderFromTabs`, `renameFolder`, `setFolderIcon`, `setFolderColor`, `deleteFolder`.
 - **Lens:** `createLens`, `updateLens`, `deleteLens`, `refreshLens` (see Requirement: Lens lifecycle commands), `openLensItem` (see Requirement: Lens-item activation command).
-- **Temporary-tab and navigation:** `reorderTemp`, `focusTab`, `closeTab`, `newTab`, `clearTempTabs`, `undoClearTempTabs`, `clearDuplicateTempTabs`, `renameTempTab`, `openUrl`.
+- **Temporary-tab and navigation:** `reorderTemp`, `focusTab`, `closeTab`, `newTab`, `clearTempTabs`, `undoClearTempTabs`, `clearDuplicateTempTabs`, `groupTempTabsBySite`, `renameTempTab`, `openUrl`.
 - **Archive and auto-archive:** `restoreArchivedTab`, `deleteArchivedTab`, `clearArchivedTabs`, `setSpaceAutoArchive`.
 
 Each variant SHALL carry typed payloads referencing `SpaceId`, `SavedTabId`, `FolderId`, `TabId`, `WindowId`, `IconName`, and `SpaceColor` as appropriate.
@@ -821,3 +823,60 @@ emit a `lunma/command-ack` carrying `{ error }`.
 
 - **WHEN** `chrome.tabs.remove` rejects for `clearDuplicateTempTabs`
 - **THEN** the handler SHALL throw and the coordinator SHALL emit a `lunma/command-ack` carrying `{ error }`
+
+### Requirement: groupTempTabsBySite command
+
+The `SidebarCommand` union SHALL include a `groupTempTabsBySite` kind with
+payload `{ windowId: WindowId; spaceId?: SpaceId }`, mirroring
+`clearDuplicateTempTabs`'s payload shape, registered in `SIDEBAR_COMMAND_KINDS`,
+in the sidebar-origin allowlist, and in `COMMAND_SCHEMAS` as a `z.strictObject`
+whose payload is `z.strictObject({ windowId: z.number(), spaceId: z.string().optional() })`.
+
+The sidebar SHALL dispatch it when the user activates a panel's "Group by site"
+kebab-menu item, carrying that panel's `spaceId`. The coordinator's handler SHALL
+reorder only the targeted Space instance's `tempTabIds` within `windowId` so that
+tabs sharing a hostname are contiguous — see the `spaces-and-tabs` capability's
+"Group temporary tabs by site" requirement for the full clustering rule.
+
+Unlike `clearTempTabs` / `clearDuplicateTempTabs`, this handler SHALL mutate
+`tempTabIds` directly (there is no Chrome event to propagate a pure reorder) and
+SHALL therefore call `markDirty` itself — but ONLY when the store reports the
+order actually changed. `store.groupTempTabsBySite` SHALL return a `boolean` for
+that purpose; the coordinator broadcasts solely on the `markDirty` flag, so a
+`void` return would leave an already-clustered list broadcasting needlessly.
+
+The handler SHALL NOT call `chrome.tabs.remove`, `chrome.tabs.create`, or
+`chrome.tabs.move`, and SHALL NOT touch `archivedTabs` or `liveTabsById`.
+
+A Space that resolves to no instance in `windowId` SHALL be a **silent no-op**
+acked `'ok'`, matching `clearDuplicateTempTabs` (`handlers/temp-tabs.ts`) and
+`store.reorderTemp`, which both return without throwing — an absent instance is
+a transient state, not a caller error. The handler SHALL therefore not throw for
+it. Should the handler throw for any other reason, the coordinator SHALL emit a
+`lunma/command-ack` carrying `{ error }`, per the general ack contract.
+
+#### Scenario: groupTempTabsBySite clusters the targeted Space's temporary tabs
+
+- **GIVEN** window 100's Space `work` has temporary tabs at `a.com/1`, `b.com/1`, `a.com/2`
+- **WHEN** a sidebar dispatches `bus.send({ kind: 'groupTempTabsBySite', payload: { windowId: 100, spaceId: 'work' } })`
+- **THEN** that instance's `tempTabIds` SHALL order the two `a.com` tabs before the `b.com` tab, preserving their relative order
+
+#### Scenario: groupTempTabsBySite is a no-op on an already-clustered list
+
+- **WHEN** the resolved Space's temporary tabs are already contiguous by hostname and `groupTempTabsBySite` is dispatched
+- **THEN** no state SHALL change and no `state-broadcast` SHALL be emitted
+
+#### Scenario: groupTempTabsBySite closes nothing
+
+- **WHEN** `groupTempTabsBySite` runs over a Space with temporary tabs
+- **THEN** no `chrome.tabs.remove` SHALL be called and `archivedTabs` SHALL be unchanged
+
+#### Scenario: A Space with no instance in the window is a silent no-op
+
+- **WHEN** `groupTempTabsBySite` resolves to a Space with no instance in `windowId`
+- **THEN** the handler SHALL leave state untouched, SHALL NOT throw, and the coordinator SHALL ack `'ok'`
+
+#### Scenario: An already-clustered list does not mark the drain dirty
+
+- **WHEN** `groupTempTabsBySite` runs and `store.groupTempTabsBySite` returns `false`
+- **THEN** the handler SHALL NOT call `markDirty` and the drain SHALL emit no `state-broadcast`

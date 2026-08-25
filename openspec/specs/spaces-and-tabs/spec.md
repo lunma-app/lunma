@@ -5,7 +5,9 @@
 Defines the domain model for Lunma Spaces and the per-window tab/group
 instances that materialize them, including identity, storage, lifecycle,
 sync adoption, and soft-delete.
+
 ## Requirements
+
 ### Requirement: Space identity and storage
 
 A Space SHALL be a Lunma-owned record persisted in `chrome.storage.local`, identified by a Lunma-generated id (`crypto.randomUUID()`). A Space SHALL NOT be backed by a Chrome bookmark folder. The Space record SHALL carry `id`, `name`, `color: SpaceColor`, and `icon` (a member of `IconName`, the lucide string-literal union from `apps/extension/src/shared/icon-names.ts`). The Space's order SHALL be its position in `state.spaces[]`; no separate `order` field SHALL exist in storage at any level (Spaces or saved tabs).
@@ -1426,7 +1428,7 @@ Clear SHALL be rendered on any panel whose Space has ≥1 temporary tab open in 
 
 **Every panel fully live.** On the single-track carousel every Space panel is pre-rendered with its own Space's content, and its actions are live — a switch is a pure transform with no per-panel mount or interactivity toggle at commit (the spike model). New Tab SHALL be enabled on every slide and target its own Space; Clear SHALL render on any slide whose Space has temporary tabs and target its own Space. This supersedes the former "active-slide only" rule, under which a non-centre slide's New Tab was disabled and its Clear was not rendered.
 
-**Clear duplicates (sibling action).** Each panel rendering Clear SHALL also render a `Menu` (`trigger="kebab"`, `icon="chevron-down"`) immediately beside the Clear button, containing a single "Clear duplicates" action — see the "Clear duplicates temporary-tab action" requirement below for its full behaviour. This kebab menu SHALL render whenever Clear renders (i.e. the Space has ≥1 temporary tab), independent of whether any duplicates currently exist — the "Clear duplicates" item itself is what reflects duplicate-presence via its disabled state.
+**Tidy actions (sibling menu).** Each panel rendering Clear SHALL also render a `Menu` (`trigger="kebab"`, `icon="chevron-down"`) immediately beside the Clear button, containing exactly two actions in this order: "Clear duplicates" then "Group by site" — see the "Clear duplicates temporary-tab action" and "Group temporary tabs by site" requirements below for their full behaviour. This kebab menu SHALL render whenever Clear renders (i.e. the Space has ≥1 temporary tab), independent of whether either action currently has anything to do — each item reflects its own applicability via its disabled state.
 
 #### Scenario: New Tab dispatches newTab carrying the panel's Space
 
@@ -1464,6 +1466,10 @@ Clear SHALL be rendered on any panel whose Space has ≥1 temporary tab open in 
 - **WHEN** the user clicks that panel's Clear action in window 100 for Space "work"
 - **THEN** the sidebar SHALL call `bus.send({ kind: 'clearTempTabs', payload: { windowId: 100, spaceId: 'work' } })`
 
+**One toast at a time.** Clear, Clear duplicates, and Group by site SHALL share a
+single toast slot: mounting a new toast SHALL replace any toast still showing,
+so no two of these actions' toasts are ever visible simultaneously.
+
 #### Scenario: Clear shows a Toast with Undo
 
 - **GIVEN** the user has just cleared N temporary tabs in Space "work"
@@ -1495,6 +1501,12 @@ Clear SHALL be rendered on any panel whose Space has ≥1 temporary tab open in 
 
 - **GIVEN** a panel's Space has ≥1 temporary tab open (Clear is rendered)
 - **THEN** the panel SHALL also render the "Clear duplicates" kebab menu beside Clear
+
+#### Scenario: The kebab menu carries both tidy actions
+
+- **GIVEN** a Space with ≥1 temporary tab open in the window
+- **WHEN** the panel renders and the user opens the kebab menu beside Clear
+- **THEN** the menu SHALL contain exactly two items, "Clear duplicates" followed by "Group by site"
 
 ### Requirement: undoClearTempTabs restores a batch of archived tabs
 
@@ -2556,3 +2568,142 @@ Undo.
 - **WHEN** the coordinator processes `clearDuplicateTempTabs` for that Space
 - **THEN** the pinned tab SHALL NOT be archived, closed, or counted toward any duplicate group — only entries in `tempTabIds` participate
 
+### Requirement: Group temporary tabs by site
+
+Each carousel panel that renders Clear SHALL also expose a **Group by site**
+action in the same kebab `Menu` as Clear duplicates, carrying that panel's
+`spaceId`. Unlike Clear and Clear duplicates, Group by site SHALL NOT close,
+archive, or open any tab — it SHALL only reorder the Space's window instance's
+`tempTabIds`.
+
+Activating "Group by site" SHALL dispatch `bus.send({ kind:
+'groupTempTabsBySite', payload: { windowId, spaceId } })`.
+
+**Clustering rule.** The coordinator's `groupTempTabsBySite` handler SHALL
+reorder the target Space instance's `tempTabIds` so that tabs sharing a hostname
+are contiguous, by:
+
+1. Resolving the ids the Temporary list actually RENDERS — every id in
+   `tempTabIds` carrying a live-tab record. The set SHALL match `TempTabs`'
+   render predicate exactly and SHALL NOT additionally require the live tab to
+   report `windowId`: a rendered row the rule refuses to move acts as an
+   immovable pivot that splits a site's cluster around it.
+2. Keying each by the hostname of its live tab's URL, as returned by `hostOf`
+   (`apps/extension/src/shared/label-for.ts`) — but ONLY for `http:`/`https:`
+   pages. Every other tab — `chrome://`, `chrome-extension://`, `about:`, a URL
+   that does not parse, or a missing URL — SHALL key to a single shared
+   **browser-pages** cluster. These are not sites; keying them by hostname would
+   scatter singleton clusters (`whats-new`, `extensions`, an extension id)
+   between the real ones.
+3. Ordering the site clusters by **first appearance**: the cluster whose hostname
+   is first seen scanning the current `tempTabIds` order comes first, and so on.
+   The browser-pages cluster SHALL be placed **LAST**, after every site cluster,
+   regardless of where its members first appeared.
+4. Preserving each cluster's **internal relative order** from the current
+   `tempTabIds`.
+5. Leaving every id in `tempTabIds` that carries no live-tab record at all in its
+   CURRENT slot, reordering only among the slots the movable tabs already occupy —
+   the same subset-safe rule `reorderTemp` applies.
+
+The rule is **stable** and therefore **idempotent**: applying it to an
+already-clustered list SHALL leave the order unchanged. The hostname comparison
+SHALL be exact — `mail.example.com` and `docs.example.com` are distinct clusters,
+and no public-suffix or registrable-domain resolution SHALL be performed.
+
+**No-op condition.** The action is a no-op exactly when applying the clustering
+rule to the Space's live temporary tabs of `windowId` returns them in the order
+they are already in. Because non-live ids never move (step 4), comparing that
+live subsequence and comparing the whole `tempTabIds` array yield the same
+answer — the disabled predicate and the handler MAY use either basis and SHALL
+agree. In that case the handler SHALL NOT mutate state and SHALL NOT broadcast,
+and the "Group by site" menu item SHALL render **disabled** (not hidden),
+remaining visible and discoverable whenever the kebab menu is shown.
+
+`groupTempTabsBySite` on the store SHALL return a `boolean` reporting whether it
+changed the order, so the handler can decide whether to `markDirty` — the
+coordinator gates its broadcast solely on that flag.
+
+**Missing instance.** If the resolved Space has no instance in `windowId`, the
+handler SHALL be a silent no-op and the coordinator SHALL still ack `'ok'` —
+matching `clearDuplicateTempTabs` and `store.reorderTemp`, which both return
+without throwing. No error ack SHALL be emitted for this case.
+
+**Undo.** The sidebar SHALL capture the pre-group `tempTabIds` order LOCALLY
+before dispatching, and on a resolved ack SHALL mount the same `Toast` primitive
+Clear uses, showing "Grouped N tabs by site — Undo" (a distinct message from
+Clear's and Clear duplicates'), with the same nominal 5-second lifetime and the
+same interruptibility Clear's toast has, per the `visual-system` Toast
+requirement. **N SHALL be the number of the Space's live temporary tabs in
+`windowId`** — the size of the set the rule reordered, not the number of tabs
+whose index happened to change and not the number of distinct hostnames — so the
+sidebar can compute it from the same list it used for the disabled predicate.
+Its Undo action SHALL dispatch `bus.send({ kind:
+'reorderTemp', payload: { windowId, spaceId, tabIds } })` carrying that captured
+order. No new undo command SHALL be introduced — `reorderTemp` already accepts a
+full explicit order and already tolerates ids that have since closed.
+
+#### Scenario: Group by site dispatches groupTempTabsBySite carrying the panel's Space
+
+- **WHEN** the user activates "Group by site" for Space "work" in window 100
+- **THEN** the sidebar SHALL call `bus.send({ kind: 'groupTempTabsBySite', payload: { windowId: 100, spaceId: 'work' } })`
+
+#### Scenario: Same-host tabs become contiguous, clusters ordered by first appearance
+
+- **GIVEN** a Space instance whose temporary tabs are, in order, `a.com/1`, `b.com/1`, `a.com/2`, `c.com/1`, `b.com/2`
+- **WHEN** the `groupTempTabsBySite` handler runs
+- **THEN** the resulting order SHALL be `a.com/1`, `a.com/2`, `b.com/1`, `b.com/2`, `c.com/1`
+
+#### Scenario: Browser pages are collected after the sites
+
+- **GIVEN** a Space instance whose temporary tabs are, in order, `chrome://whats-new/`, `a.com/1`, `chrome://extensions/`, `a.com/2`
+- **WHEN** the handler runs
+- **THEN** the resulting order SHALL be `a.com/1`, `a.com/2`, `chrome://whats-new/`, `chrome://extensions/` — the two browser pages contiguous, in their original relative order, after every site cluster
+
+#### Scenario: Hostless and unparseable URLs join the browser-pages cluster
+
+- **GIVEN** a Space instance whose temporary tabs are, in order, `a.com/1`, a tab whose URL is `blob:xyz`, `a.com/2`, a tab whose URL is unparseable
+- **WHEN** the handler runs
+- **THEN** both hostless tabs SHALL be contiguous, in their original relative order, after the `a.com` cluster
+
+#### Scenario: A rendered row whose live tab reports another window still clusters
+
+- **GIVEN** a Space instance whose `tempTabIds` includes a rendered id whose live tab records a different `windowId`
+- **WHEN** the handler runs
+- **THEN** that id SHALL be clustered with its host like any other rendered row, and SHALL NOT hold its original slot
+
+#### Scenario: Grouping is idempotent
+
+- **GIVEN** a Space instance whose temporary tabs are already clustered by hostname
+- **WHEN** the handler runs
+- **THEN** `tempTabIds` SHALL be unchanged and the handler SHALL NOT broadcast
+
+#### Scenario: The Group-by-site item is disabled when grouping would change nothing
+
+- **GIVEN** a Space whose temporary tabs are already clustered by hostname
+- **WHEN** the user opens the kebab menu
+- **THEN** the "Group by site" item SHALL render, and SHALL be disabled
+
+#### Scenario: No tab is closed or archived
+
+- **GIVEN** a Space instance with five temporary tabs across three hostnames
+- **WHEN** the handler runs
+- **THEN** `archivedTabs` SHALL be unchanged, no `chrome.tabs.remove` SHALL be called, and the set of ids in `tempTabIds` SHALL be identical to before
+
+#### Scenario: Ids with no live-tab record keep their slot
+
+- **GIVEN** a Space instance whose `tempTabIds` interleaves rendered rows with an id whose live-tab record is absent
+- **WHEN** the handler runs
+- **THEN** the absent id SHALL remain at its current index and only the rendered rows' slots SHALL be reordered
+
+#### Scenario: A new toast replaces one still showing
+
+- **GIVEN** a "Cleared N tabs — Undo" toast is still visible
+- **WHEN** the user activates "Group by site" and its ack resolves
+- **THEN** exactly one toast SHALL be visible, showing the Group-by-site message
+
+#### Scenario: Group by site shows a Toast whose Undo restores the prior order
+
+- **GIVEN** a Space instance whose temporary-tab order is `X`
+- **WHEN** the user activates "Group by site" and the ack resolves, then activates the toast's Undo
+- **THEN** the sidebar SHALL show "Grouped N tabs by site — Undo"
+- **AND** Undo SHALL dispatch `bus.send({ kind: 'reorderTemp', payload: { windowId, spaceId, tabIds: X } })`
