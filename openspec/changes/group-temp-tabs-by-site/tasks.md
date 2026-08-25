@@ -37,3 +37,10 @@
 - [x] 7.1 `pnpm verify` at the workspace root is green
 - [x] 7.2 `pnpm test:e2e` is green
 - [x] 7.3 `openspec validate group-temp-tabs-by-site --strict` passes
+
+## 8. Follow-up fixes (reported after first ship)
+
+- [x] 8.1 Group exactly the ids `TempTabs` renders — drop the `windowId` filter in `store.groupTempTabsBySite` and in the sidebar's `liveTempIdsFor`, with a regression test for the immovable-pivot split
+- [x] 8.2 Collect non-http(s) tabs into one browser-pages cluster pinned last, in `clusterIdsByHost`
+- [x] 8.3 Update the `spaces-and-tabs` delta and the design log (D12, D13) to match
+- [x] 8.4 `pnpm verify` green

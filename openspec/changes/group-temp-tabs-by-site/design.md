@@ -135,6 +135,28 @@ reads with one noun. The pure helper keeps "Host" because it names the mechanism
 it implements — hostname keying — and has no notion of the user-facing "site"
 action; it would be equally correct for any caller wanting hostname clusters.
 
+**D12 — Group exactly what the list renders.**
+The first implementation filtered the movable set by `liveTabsById[id]?.windowId
+=== windowId`, while `TempTabs` renders every id carrying a live-tab record with
+no window check. Any rendered row failing the stricter test was shown but never
+moved, acting as an immovable pivot that split a site's cluster around it — the
+reported "What's new stuck in the middle". The rendered set is the user's mental
+model of "the list", so grouping now uses the render predicate. Alternative
+considered: tighten `TempTabs` to filter by window instead. Rejected — that
+changes what an existing surface displays, which is well outside a menu action's
+remit, and would hide rows rather than order them.
+
+**D13 — Browser pages are one cluster, pinned last.**
+`chrome://whats-new/`, `chrome://extensions/` and the new-tab page each carry a
+distinct hostname (`whats-new`, `extensions`, an extension id), so keying them by
+host scattered singleton clusters between the real sites — grouping "by site"
+that visibly failed to group. They are not sites. Everything that is not an
+`http:`/`https:` page — including an unparseable or missing URL — now shares one
+cluster placed after every site cluster. Alternatives: keep them in place as one
+block (rejected — the block can still land mid-list, which is the complaint), or
+leave them as separate hosts (rejected — that is the bug). This supersedes the
+earlier rule that hostless tabs cluster at their first-appearance position.
+
 **Docs.** No `docs/` file enumerates sidebar menu items, bus command kinds, or
 message keys — all three are specified under `openspec/specs/`, which this change
 updates. [docs/architecture.md](../../../docs/architecture.md) and

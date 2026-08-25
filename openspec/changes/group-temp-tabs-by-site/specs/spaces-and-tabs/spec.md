@@ -115,19 +115,27 @@ Activating "Group by site" SHALL dispatch `bus.send({ kind:
 reorder the target Space instance's `tempTabIds` so that tabs sharing a hostname
 are contiguous, by:
 
-1. Resolving the target Space's temporary tabs still open in `windowId` (the same
-   `tempTabIds` source Clear duplicates reads), and keying each by the hostname
-   of its live tab's URL, as returned by `hostOf`
-   (`apps/extension/src/shared/label-for.ts`). A URL that does not parse or
-   carries no hostname SHALL key to the empty string and cluster with other such
-   tabs, rather than being dropped or moved to a fixed edge of the list.
-2. Ordering the clusters by **first appearance**: the cluster whose hostname is
-   first seen scanning the current `tempTabIds` order comes first, and so on.
-3. Preserving each cluster's **internal relative order** from the current
+1. Resolving the ids the Temporary list actually RENDERS — every id in
+   `tempTabIds` carrying a live-tab record. The set SHALL match `TempTabs`'
+   render predicate exactly and SHALL NOT additionally require the live tab to
+   report `windowId`: a rendered row the rule refuses to move acts as an
+   immovable pivot that splits a site's cluster around it.
+2. Keying each by the hostname of its live tab's URL, as returned by `hostOf`
+   (`apps/extension/src/shared/label-for.ts`) — but ONLY for `http:`/`https:`
+   pages. Every other tab — `chrome://`, `chrome-extension://`, `about:`, a URL
+   that does not parse, or a missing URL — SHALL key to a single shared
+   **browser-pages** cluster. These are not sites; keying them by hostname would
+   scatter singleton clusters (`whats-new`, `extensions`, an extension id)
+   between the real ones.
+3. Ordering the site clusters by **first appearance**: the cluster whose hostname
+   is first seen scanning the current `tempTabIds` order comes first, and so on.
+   The browser-pages cluster SHALL be placed **LAST**, after every site cluster,
+   regardless of where its members first appeared.
+4. Preserving each cluster's **internal relative order** from the current
    `tempTabIds`.
-4. Leaving every id in `tempTabIds` that is not a live temporary tab of this
-   window in its CURRENT slot, reordering only among the slots the clustered tabs
-   already occupy — the same subset-safe rule `reorderTemp` applies.
+5. Leaving every id in `tempTabIds` that carries no live-tab record at all in its
+   CURRENT slot, reordering only among the slots the movable tabs already occupy —
+   the same subset-safe rule `reorderTemp` applies.
 
 The rule is **stable** and therefore **idempotent**: applying it to an
 already-clustered list SHALL leave the order unchanged. The hostname comparison
@@ -177,11 +185,23 @@ full explicit order and already tolerates ids that have since closed.
 - **WHEN** the `groupTempTabsBySite` handler runs
 - **THEN** the resulting order SHALL be `a.com/1`, `a.com/2`, `b.com/1`, `b.com/2`, `c.com/1`
 
-#### Scenario: Tabs with no parseable hostname cluster together
+#### Scenario: Browser pages are collected after the sites
+
+- **GIVEN** a Space instance whose temporary tabs are, in order, `chrome://whats-new/`, `a.com/1`, `chrome://extensions/`, `a.com/2`
+- **WHEN** the handler runs
+- **THEN** the resulting order SHALL be `a.com/1`, `a.com/2`, `chrome://whats-new/`, `chrome://extensions/` — the two browser pages contiguous, in their original relative order, after every site cluster
+
+#### Scenario: Hostless and unparseable URLs join the browser-pages cluster
 
 - **GIVEN** a Space instance whose temporary tabs are, in order, `a.com/1`, a tab whose URL is `blob:xyz`, `a.com/2`, a tab whose URL is unparseable
 - **WHEN** the handler runs
-- **THEN** the two hostless tabs SHALL be contiguous, in their original relative order, positioned where the first of them appeared relative to the other clusters
+- **THEN** both hostless tabs SHALL be contiguous, in their original relative order, after the `a.com` cluster
+
+#### Scenario: A rendered row whose live tab reports another window still clusters
+
+- **GIVEN** a Space instance whose `tempTabIds` includes a rendered id whose live tab records a different `windowId`
+- **WHEN** the handler runs
+- **THEN** that id SHALL be clustered with its host like any other rendered row, and SHALL NOT hold its original slot
 
 #### Scenario: Grouping is idempotent
 
@@ -201,11 +221,11 @@ full explicit order and already tolerates ids that have since closed.
 - **WHEN** the handler runs
 - **THEN** `archivedTabs` SHALL be unchanged, no `chrome.tabs.remove` SHALL be called, and the set of ids in `tempTabIds` SHALL be identical to before
 
-#### Scenario: Ids that are not live temporary tabs of this window keep their slot
+#### Scenario: Ids with no live-tab record keep their slot
 
-- **GIVEN** a Space instance whose `tempTabIds` interleaves live tabs of this window with an id whose live tab is absent
+- **GIVEN** a Space instance whose `tempTabIds` interleaves rendered rows with an id whose live-tab record is absent
 - **WHEN** the handler runs
-- **THEN** the absent id SHALL remain at its current index and only the live tabs' slots SHALL be reordered
+- **THEN** the absent id SHALL remain at its current index and only the rendered rows' slots SHALL be reordered
 
 #### Scenario: A new toast replaces one still showing
 

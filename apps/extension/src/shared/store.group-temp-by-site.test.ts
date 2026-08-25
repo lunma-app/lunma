@@ -86,7 +86,11 @@ describe('LunmaStore.groupTempTabsBySite', () => {
     expect(order(store, spaceId)).toEqual([1, 2, 4, 3]);
   });
 
-  test('leaves a live tab belonging to another window in its current slot', () => {
+  test('a row whose live tab reports another window still clusters — it is rendered, so it moves', () => {
+    // Regression: filtering by windowId here left such a row pinned in place as an
+    // immovable pivot, splitting a site's cluster around it ("What's new" stuck
+    // mid-list). TempTabs renders any id with a live record, so grouping must move
+    // the same set.
     const store = makeStore();
     const spaceId = seed(
       store,
@@ -95,10 +99,22 @@ describe('LunmaStore.groupTempTabsBySite', () => {
       { 2: 999 },
     );
     expect(store.groupTempTabsBySite(WINDOW, spaceId)).toBe(true);
-    expect(order(store, spaceId)).toEqual([1, 2, 4, 3]);
+    expect(order(store, spaceId)).toEqual([1, 4, 2, 3]);
   });
 
-  test('clusters tabs whose url has no parseable host', () => {
+  test('browser pages are collected after the sites', () => {
+    const store = makeStore();
+    const spaceId = seed(store, [1, 2, 3, 4], {
+      1: 'https://a.com/1',
+      2: 'chrome://whats-new/',
+      3: 'https://a.com/2',
+      4: 'chrome://extensions/',
+    });
+    expect(store.groupTempTabsBySite(WINDOW, spaceId)).toBe(true);
+    expect(order(store, spaceId)).toEqual([1, 3, 2, 4]);
+  });
+
+  test('tabs whose url has no parseable host land with the browser pages, last', () => {
     const store = makeStore();
     const spaceId = seed(store, [1, 2, 3, 4], {
       1: 'https://a.com/1',
