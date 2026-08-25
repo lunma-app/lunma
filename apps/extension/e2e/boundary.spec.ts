@@ -47,6 +47,13 @@ const lockItem = (p: Page): Locator =>
 /** Open the sidebar page (a normal tab — it connects to the live SW exactly like
  * the side panel) at a side-panel-ish width and wait for it to render. */
 async function openSidebar(page: Page, extensionId: string): Promise<void> {
+  page.on('console', (msg) => {
+    const t = msg.text();
+    if (/DISPATCH_FAILED|bus timed out|BusSend|Receiving end|Could not establish/i.test(t)) {
+      console.log('[[STRESS-EVIDENCE]]', t);
+    }
+  });
+  page.on('pageerror', (e) => console.log('[[STRESS-PAGEERROR]]', String(e)));
   await page.setViewportSize({ width: 390, height: 820 });
   await page.goto(`chrome-extension://${extensionId}/src/sidebar/index.html`);
   await expect(page.getByTestId('sidebar')).toBeVisible();
@@ -119,13 +126,13 @@ async function pinSite(context: BrowserContext, sidebar: Page): Promise<Page> {
  */
 async function selectOnUntilChipSeeds(editor: Locator): Promise<void> {
   const chip = editor.getByTestId('chip');
-  await expect(async () => {
-    if (!(await chip.isVisible())) {
-      await editor.getByText('Default', { exact: true }).click();
-      await editor.getByText('On', { exact: true }).click();
-    }
-    await expect(chip).toBeVisible({ timeout: 3_000 });
-  }).toPass({ timeout: 30_000, intervals: [500, 1_000, 2_000, 3_000] });
+  await editor.getByText('On', { exact: true }).click();
+  try {
+    await expect(chip).toBeVisible({ timeout: 12_000 });
+  } catch (e) {
+    console.log('[[STRESS-NO-CHIP]] chip never seeded after a single On click');
+    throw e;
+  }
 }
 
 /** Open the pinned row's right-click menu, drill into the editor, and switch to On
