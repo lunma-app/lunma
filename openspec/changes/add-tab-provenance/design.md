@@ -416,6 +416,48 @@ remains the only honest route to durability.
 This also closes the "just persist it ourselves" question for good — recorded so
 it is not re-litigated later from first principles.
 
+### Spike 4 (added 2026-08-25): history backfill CANNOT rebuild tab-spawn edges
+
+Run as the first step of the "fold the backfill in" reshape, because the whole
+reshape rests on one unverified sentence: that `chrome.history` + `getVisits()`
+reconstructs real edges. **It does not — not the edges this feature is about.**
+
+Measured with `history` temporarily in `permissions`, driving real navigations:
+
+| Open | `transition` | `referringVisitId` | resolves to |
+| --- | --- | --- | --- |
+| Same-tab link click | `link` | `1` | **the parent URL** |
+| `target="_blank"` link | `link` | `0` | — |
+| Middle-click → new tab | `link` | `0` | — |
+| `window.open()` | `link` | `0` | — |
+
+Reverse-mapping a `visitId` to a URL **is** possible (enumerate
+`history.search`, index every `getVisits` result), so that half works.
+
+The half that does not: **every new-tab open records no referring visit.** Only
+same-tab navigation carries a referrer chain — and same-tab navigation is not a
+provenance edge in this model at all. It is one tab moving, not a parent spawning
+a child. The edges the sidebar would indent are exactly the ones history cannot
+supply.
+
+**Consequences, and they are terminal for the current design:**
+
+- The backfill follow-up (`add-tab-provenance-backfill`) cannot deliver what the
+  proposal, Decision 5 and the Risks section all lean on it for. It is not
+  deferred value; it is absent value. Every "that is the backfill's job" in this
+  document should now be read as "there is no answer."
+- Combined with Spikes 2 and 3, provenance is **irrecoverably** browser-session
+  scoped. Not "session scoped until the backfill lands" — session scoped
+  permanently, with no remaining mechanism: `openerTabId` dies on restore, no
+  durable tab identity exists to re-key against, and history holds no tab-spawn
+  referrers to rebuild from.
+- What remains buildable is a feature that requires the "Read your browsing
+  history" grant, is off by default, and resets to a flat list on every browser
+  restart with no path to ever fixing that.
+
+The gate did its job: this was answered before a line of feature code was
+written, for the cost of one probe.
+
 ## Spike harness
 
 The throwaway probe (`e2e/__probe-provenance.spec.ts`) was **deleted**, not

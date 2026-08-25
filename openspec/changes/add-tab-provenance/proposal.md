@@ -46,13 +46,21 @@ sidebar that already exists.
 
 ### Not in scope (named follow-ups, not stranded)
 
-- **History backfill** (`add-tab-provenance-backfill`): sweeping
-  `chrome.history` + `getVisits()` to reconstruct edges retroactively, giving the
-  graph depth at the moment the toggle is flipped and re-deriving lineage after a
-  browser restart. Deferred because it is independently valuable and doubles this
-  change's size. Without it, enabling the toggle starts every currently-open tab
-  as a root and lineage accrues as the user browses — **honest but shallow**. No
-  fabricated edges are used to paper over this (see `design.md`, Decision 5).
+- ~~**History backfill** (`add-tab-provenance-backfill`)~~ — **RETRACTED, not
+  deferred.** Spike 4 (`design.md`) measured it: `getVisits()` returns
+  `referringVisitId: 0` for EVERY new-tab open (`target="_blank"`, middle-click,
+  `window.open`). Only same-tab navigation carries a referrer chain, and that is
+  not a provenance edge — it is one tab moving, not a parent spawning a child.
+  History cannot rebuild the edges this feature renders, so the backfill has no
+  value to deliver, whether folded in or shipped later. Every "that is the
+  backfill's job" elsewhere in these artifacts should be read as "there is no
+  answer."
+
+  With Spikes 2 and 3, this makes provenance **irrecoverably browser-session
+  scoped**: `openerTabId` dies on restore, no durable tab identity exists to
+  re-key against, and history holds no tab-spawn referrers. What remains
+  buildable requires the "Read your browsing history" grant, is off by default,
+  and resets to a flat list on every browser restart, permanently.
 - **Graph view**: rejected, not deferred.
 
 ## Capabilities
