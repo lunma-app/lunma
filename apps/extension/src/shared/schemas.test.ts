@@ -6,7 +6,7 @@ import {
   AppStateV13Schema,
   AppStateV14Schema,
   AppStateV16Schema,
-  AppStateV17Schema,
+  AppStateV18Schema,
   CURRENT_SCHEMA_VERSION,
   EnvelopeSchema,
 } from './schemas';
@@ -244,14 +244,14 @@ describe('lens-view-filters schema (v14)', () => {
     expect(result.success).toBe(false);
   });
 
-  test('CURRENT_SCHEMA_VERSION is 17', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(17);
+  test('CURRENT_SCHEMA_VERSION is 18', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(18);
   });
 });
 
 // persist-lens-article-layout (v17): the lens node gains an optional
 // `articleLayout?: 'grid' | 'list'`. Regression guard: the CURRENT schema
-// (AppStateV17Schema — what storage/messages/backup validate against) MUST accept
+// (AppStateV18Schema — what storage/messages/backup validate against) MUST accept
 // an `articleLayout`-bearing state, or the sidebar's snapshot validation rejects
 // every state written by current code.
 describe('persist-lens-article-layout schema (v17)', () => {
@@ -277,7 +277,7 @@ describe('persist-lens-article-layout schema (v17)', () => {
   }
 
   test('a lens carrying articleLayout round-trips under the current schema (v17)', () => {
-    const result = AppStateV17Schema.safeParse(stateWithLayout('list'));
+    const result = AppStateV18Schema.safeParse(stateWithLayout('list'));
     expect(result.success).toBe(true);
     if (result.success) {
       const node = result.data.pinnedBySpace.s1?.[0];
@@ -286,11 +286,11 @@ describe('persist-lens-article-layout schema (v17)', () => {
   });
 
   test('a lens without articleLayout (pre-v17 shape) validates under v17', () => {
-    expect(AppStateV17Schema.safeParse(stateWithLayout()).success).toBe(true);
+    expect(AppStateV18Schema.safeParse(stateWithLayout()).success).toBe(true);
   });
 
   test('an unknown articleLayout value rejects under v17', () => {
-    expect(AppStateV17Schema.safeParse(stateWithLayout('masonry')).success).toBe(false);
+    expect(AppStateV18Schema.safeParse(stateWithLayout('masonry')).success).toBe(false);
   });
 
   test('the frozen v16 schema rejects a lens node carrying articleLayout (downgrade detectable)', () => {

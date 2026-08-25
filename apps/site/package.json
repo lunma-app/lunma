@@ -26,7 +26,7 @@
     "@types/node": "catalog:",
     "culori": "catalog:",
     "jsdom": "catalog:",
-    "simple-icons": "16.25.0",
+    "simple-icons": "16.28.0",
     "svelte": "catalog:",
     "svelte-check": "catalog:",
     "typescript": "catalog:",

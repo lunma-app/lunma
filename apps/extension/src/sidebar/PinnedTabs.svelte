@@ -710,7 +710,7 @@ function tabMenuItems(row: TabView): MenuItem[] {
     items.push({
       id: 'reset-name',
       label: m.sidebar_tabResetName(),
-      icon: 'history',
+      icon: 'rotate-ccw-clock',
       onSelect: () => resetTabName(row.id),
     });
   }

@@ -438,7 +438,59 @@ export const migrations: Migration[] = [
     toVersion: 17,
     migrate: (raw: unknown): unknown => raw,
   },
+  {
+    // v18 (remap-renamed-lucide-icons): lucide 1.31.0 renamed five icons Lunma
+    // had offered in its picker. A stored icon is a bare string that resolves
+    // through a generated allowlist, so a legacy name would render NOTHING —
+    // rewrite it once here rather than aliasing it forever at render time.
+    toVersion: 18,
+    migrate: (raw: unknown): unknown => {
+      if (typeof raw !== 'object' || raw === null) return raw;
+      const state = raw as Record<string, unknown>;
+
+      const remap = (node: unknown): void => {
+        if (typeof node !== 'object' || node === null) return;
+        const record = node as Record<string, unknown>;
+        const icon = record.icon;
+        if (typeof icon !== 'string') return;
+        const renamed = RENAMED_ICONS[icon];
+        if (renamed !== undefined) record.icon = renamed;
+      };
+
+      if (Array.isArray(state.spaces)) {
+        for (const space of state.spaces) remap(space);
+      }
+
+      const pinned = state.pinnedBySpace;
+      if (typeof pinned === 'object' && pinned !== null) {
+        for (const nodes of Object.values(pinned as Record<string, unknown>)) {
+          if (!Array.isArray(nodes)) continue;
+          for (const node of nodes) {
+            if (typeof node !== 'object' || node === null) continue;
+            if ((node as Record<string, unknown>).kind !== 'folder') continue;
+            remap(node);
+          }
+        }
+      }
+
+      return raw;
+    },
+  },
 ];
+
+/**
+ * Icon names lucide 1.31.0 renamed, mapped to the successors lucide's own
+ * `dist/aliases/aliases.js` names. Module-private on purpose: only the v18
+ * migration may consume it — a render-time consumer would keep the legacy names
+ * alive forever (see the change's design.md, D1/D5).
+ */
+const RENAMED_ICONS: Record<string, string> = {
+  frown: 'face-slightly-frowning',
+  history: 'rotate-ccw-clock',
+  podcast: 'mic-signal',
+  smile: 'face-slightly-smiling',
+  'smile-plus': 'face-slightly-smiling-plus',
+};
 
 /** Port-bearing host for an account `baseUrl`, degrading a malformed url to the
  * raw string (the pre-v15 `sourceKey` did the same). */

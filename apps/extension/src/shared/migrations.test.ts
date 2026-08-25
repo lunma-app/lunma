@@ -7,6 +7,7 @@ import {
   AppStateV13Schema,
   AppStateV14Schema,
   AppStateV16Schema,
+  AppStateV18Schema,
   CURRENT_SCHEMA_VERSION,
 } from './schemas';
 import { createInitialState } from './store.svelte';
@@ -16,8 +17,8 @@ import { createInitialState } from './store.svelte';
 const realMigrations = [...migrations];
 
 describe('the real migration chain', () => {
-  test('holds exactly the v2 through v17 entries', () => {
-    expect(realMigrations).toHaveLength(16);
+  test('holds exactly the v2 through v18 entries', () => {
+    expect(realMigrations).toHaveLength(17);
     expect(realMigrations[0]?.toVersion).toBe(2);
     expect(realMigrations[1]?.toVersion).toBe(3);
     expect(realMigrations[2]?.toVersion).toBe(4);
@@ -34,7 +35,8 @@ describe('the real migration chain', () => {
     expect(realMigrations[13]?.toVersion).toBe(15);
     expect(realMigrations[14]?.toVersion).toBe(16);
     expect(realMigrations[15]?.toVersion).toBe(17);
-    expect(CURRENT_SCHEMA_VERSION).toBe(17);
+    expect(realMigrations[16]?.toVersion).toBe(18);
+    expect(CURRENT_SCHEMA_VERSION).toBe(18);
     // v2–v6 are pass-throughs (see comment in migrations.ts). v7 is the
     // smart-tab-boundary real transformation; v8 is the multi-source wrap.
     const input = { schemaVersion: 1, pinnedBySpace: { work: [{ kind: 'tab', id: 'a' }] } };
@@ -1080,6 +1082,137 @@ describe('v16 migration — add-bitbucket-connector identity pass-through', () =
     expect(parsed.sources['acc-bb']?.workspace).toBe('acme');
     expect(parsed.sources['acc-bb']?.provider).toBe('bitbucket');
     expect(parsed.sources['acc-gh']?.workspace).toBeUndefined();
+  });
+});
+
+describe('v18 migration — remap-renamed-lucide-icons name rewrite', () => {
+  const v18Migration = realMigrations.find((m) => m.toVersion === 18);
+  if (!v18Migration) throw new Error('expected v18 migration');
+
+  function v17Envelope(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      schemaVersion: 17,
+      spaces: [
+        { id: 's1', name: 'Fun', color: 'blue', icon: 'smile' },
+        { id: 's2', name: 'Past', color: 'gray', icon: 'history' },
+        { id: 's3', name: 'Work', color: 'red', icon: 'briefcase' },
+      ],
+      sources: {},
+      activeSpaceByWindow: {},
+      spaceInstancesByWindow: {},
+      tabBindings: {},
+      savedTabs: {},
+      lastActivatedSpaceId: null,
+      tabLastActivity: {},
+      archivedTabs: [],
+      trash: {},
+      pinnedBySpace: {
+        s1: [
+          { kind: 'tab', id: 't1' },
+          {
+            kind: 'folder',
+            id: 'f1',
+            name: 'Old',
+            icon: 'podcast',
+            color: 'green',
+            children: ['t1'],
+          },
+        ],
+      },
+      faviconRow: [],
+      lensItemBindings: {},
+      lensReadState: {},
+      ...overrides,
+    };
+  }
+
+  function iconsOf(raw: unknown): { spaces: unknown[]; folders: unknown[] } {
+    const state = raw as {
+      spaces: Array<{ icon: unknown }>;
+      pinnedBySpace: Record<string, Array<{ kind: string; icon?: unknown }>>;
+    };
+    return {
+      spaces: state.spaces.map((s) => s.icon),
+      folders: Object.values(state.pinnedBySpace)
+        .flat()
+        .filter((n) => n.kind === 'folder')
+        .map((n) => n.icon),
+    };
+  }
+
+  test('rewrites every renamed name on Spaces and folder nodes', () => {
+    const { spaces, folders } = iconsOf(v18Migration.migrate(v17Envelope()));
+    expect(spaces).toEqual(['face-slightly-smiling', 'rotate-ccw-clock', 'briefcase']);
+    expect(folders).toEqual(['mic-signal']);
+  });
+
+  test('covers all five renames', () => {
+    const legacy = ['frown', 'smile', 'smile-plus', 'podcast', 'history'];
+    const migrated = v18Migration.migrate(
+      v17Envelope({
+        spaces: legacy.map((icon, i) => ({
+          id: `s${i}`,
+          name: `S${i}`,
+          color: 'blue',
+          icon,
+        })),
+      }),
+    );
+    expect(iconsOf(migrated).spaces).toEqual([
+      'face-slightly-frowning',
+      'face-slightly-smiling',
+      'face-slightly-smiling-plus',
+      'mic-signal',
+      'rotate-ccw-clock',
+    ]);
+  });
+
+  test('leaves an unknown icon name untouched rather than defaulting it', () => {
+    const migrated = v18Migration.migrate(
+      v17Envelope({
+        spaces: [{ id: 's1', name: 'S', color: 'blue', icon: 'not-an-icon' }],
+      }),
+    );
+    expect(iconsOf(migrated).spaces).toEqual(['not-an-icon']);
+  });
+
+  test('is idempotent over already-current names', () => {
+    const once = v18Migration.migrate(v17Envelope());
+    const twice = v18Migration.migrate(once);
+    expect(iconsOf(twice)).toEqual(iconsOf(once));
+  });
+
+  test('leaves non-folder pinned nodes alone', () => {
+    const state = v18Migration.migrate(v17Envelope()) as {
+      pinnedBySpace: Record<string, Array<Record<string, unknown>>>;
+    };
+    expect(state.pinnedBySpace.s1?.[0]).toEqual({ kind: 'tab', id: 't1' });
+  });
+
+  test('tolerates malformed slices without throwing', () => {
+    for (const raw of [
+      null,
+      undefined,
+      42,
+      {},
+      { spaces: 'nope', pinnedBySpace: 'nope' },
+      { spaces: [null, 7, { icon: 'smile' }], pinnedBySpace: { s: [null, 7] } },
+    ]) {
+      expect(() => v18Migration.migrate(raw)).not.toThrow();
+    }
+  });
+
+  test('rewrites a Space icon inside an otherwise-malformed spaces array', () => {
+    const migrated = v18Migration.migrate({
+      spaces: [null, 7, { icon: 'smile' }],
+      pinnedBySpace: {},
+    }) as { spaces: Array<{ icon?: unknown } | null> };
+    expect(migrated.spaces[2]?.icon).toBe('face-slightly-smiling');
+  });
+
+  test('the migrated state validates against the current-version schema', () => {
+    const migrated = v18Migration.migrate(v17Envelope());
+    expect(AppStateV18Schema.safeParse(migrated).success).toBe(true);
   });
 });
 
