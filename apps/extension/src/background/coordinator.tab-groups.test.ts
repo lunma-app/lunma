@@ -724,6 +724,88 @@ describe('newTab / clearTempTabs commands', () => {
     expect(store.state.activeSpaceByWindow[100]).toBe('work'); // Clear never switches
   });
 
+  test('groupTempTabsBySite clusters the targeted Space and broadcasts once', async () => {
+    const { coordinator, store, broadcast, emitAck } = makeCoordinator();
+    store.state.spaces.push(space('work'));
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [10, 11, 12], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[10] = { ...live(10, 100), url: 'https://a.example/1' };
+    store.state.liveTabsById[11] = { ...live(11, 100), url: 'https://b.example/1' };
+    store.state.liveTabsById[12] = { ...live(12, 100), url: 'https://a.example/2' };
+    for (const id of [10, 11, 12]) chrome.addTab({ id, windowId: 100, groupId: 1 });
+
+    coordinator.enqueue(
+      sidebar({ kind: 'groupTempTabsBySite', payload: { windowId: 100, spaceId: 'work' } }, 'c1'),
+    );
+    await coordinator.idle();
+
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([10, 12, 11]);
+    expect(broadcast).toHaveBeenCalledTimes(1);
+    expect(emitAck.mock.calls[0]?.[0]).toMatchObject({ id: 'c1', result: 'ok' });
+  });
+
+  test('groupTempTabsBySite closes and archives nothing', async () => {
+    const { coordinator, store } = makeCoordinator();
+    store.state.spaces.push(space('work'));
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [10, 11, 12], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[10] = { ...live(10, 100), url: 'https://a.example/1' };
+    store.state.liveTabsById[11] = { ...live(11, 100), url: 'https://b.example/1' };
+    store.state.liveTabsById[12] = { ...live(12, 100), url: 'https://a.example/2' };
+    for (const id of [10, 11, 12]) chrome.addTab({ id, windowId: 100, groupId: 1 });
+
+    coordinator.enqueue(
+      sidebar({ kind: 'groupTempTabsBySite', payload: { windowId: 100, spaceId: 'work' } }, 'c1'),
+    );
+    await coordinator.idle();
+
+    expect(chrome.calls.some((c) => c.startsWith('tabs.remove'))).toBe(false);
+    expect(store.state.archivedTabs).toEqual([]);
+    for (const id of [10, 11, 12]) expect(chrome.tabs.has(id)).toBe(true);
+  });
+
+  test('groupTempTabsBySite on an already-clustered list emits no broadcast', async () => {
+    const { coordinator, store, broadcast, persist, emitAck } = makeCoordinator();
+    store.state.spaces.push(space('work'));
+    store.state.activeSpaceByWindow[100] = 'work';
+    store.state.spaceInstancesByWindow[100] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [10, 11, 12], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[10] = { ...live(10, 100), url: 'https://a.example/1' };
+    store.state.liveTabsById[11] = { ...live(11, 100), url: 'https://a.example/2' };
+    store.state.liveTabsById[12] = { ...live(12, 100), url: 'https://b.example/1' };
+    for (const id of [10, 11, 12]) chrome.addTab({ id, windowId: 100, groupId: 1 });
+
+    coordinator.enqueue(
+      sidebar({ kind: 'groupTempTabsBySite', payload: { windowId: 100, spaceId: 'work' } }, 'c1'),
+    );
+    await coordinator.idle();
+
+    expect(store.state.spaceInstancesByWindow[100]?.work?.tempTabIds).toEqual([10, 11, 12]);
+    expect(broadcast).not.toHaveBeenCalled();
+    expect(persist).not.toHaveBeenCalled();
+    expect(emitAck.mock.calls[0]?.[0]).toMatchObject({ id: 'c1', result: 'ok' });
+  });
+
+  test('groupTempTabsBySite acks ok without mutating when the Space has no instance', async () => {
+    const { coordinator, store, broadcast, emitAck } = makeCoordinator();
+    store.state.spaces.push(space('work'));
+    store.state.activeSpaceByWindow[100] = 'work';
+
+    coordinator.enqueue(
+      sidebar({ kind: 'groupTempTabsBySite', payload: { windowId: 100, spaceId: 'work' } }, 'c1'),
+    );
+    await coordinator.idle();
+
+    expect(store.state.spaceInstancesByWindow[100]).toBeUndefined();
+    expect(broadcast).not.toHaveBeenCalled();
+    expect(emitAck.mock.calls[0]?.[0]).toMatchObject({ id: 'c1', result: 'ok' });
+  });
+
   test('clearDuplicateTempTabs collapses a two-way duplicate, keeping the earliest tab', async () => {
     const { coordinator, store } = makeCoordinator();
     store.state.spaces.push(space('work'));

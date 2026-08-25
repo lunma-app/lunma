@@ -411,5 +411,21 @@
   "launcher_lensReasonReview": "review requested",
   "launcher_lensReasonCi": "CI failing",
   "launcher_lensReasonAssigned": "assigned to you",
-  "launcher_lensUnassigned": "Unassigned"
+  "launcher_lensUnassigned": "Unassigned",
+  "sidebar_tempGroupBySite": "按网站分组",
+  "sidebar_undo": "撤销",
+  "sidebar_groupedTabsBySite": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=other": "已按网站分组 {count} 个标签页"
+      }
+    }
+  ]
 }

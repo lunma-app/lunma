@@ -411,5 +411,21 @@
   "launcher_lensReasonReview": "review requested",
   "launcher_lensReasonCi": "CI failing",
   "launcher_lensReasonAssigned": "assigned to you",
-  "launcher_lensUnassigned": "Unassigned"
+  "launcher_lensUnassigned": "Unassigned",
+  "sidebar_tempGroupBySite": "사이트별로 그룹화",
+  "sidebar_undo": "실행 취소",
+  "sidebar_groupedTabsBySite": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=other": "탭 {count}개를 사이트별로 그룹화했습니다"
+      }
+    }
+  ]
 }

@@ -1,6 +1,7 @@
 <script lang="ts">
 import { onDestroy, onMount, untrack } from 'svelte';
 import { bus, dispatch } from '../shared/bus';
+import { clusterIdsByHost } from '../shared/cluster-by-host';
 import { log } from '../shared/logger';
 import { requestNewTabLauncher } from '../shared/messages';
 import { loadOnboarding, setAutoArchiveNoticeDismissed } from '../shared/onboarding';
@@ -402,6 +403,25 @@ function hasDuplicateTempTabsFor(space: Space): boolean {
   return false;
 }
 
+/** This Space's temp tabs that are live in THIS window, in `tempTabIds` order —
+ * the set Group by site reorders, the basis for its disabled state, and the N in
+ * its toast. */
+function liveTempIdsFor(space: Space): number[] {
+  const tempTabIds = store.state.spaceInstancesByWindow[windowId]?.[space.id]?.tempTabIds ?? [];
+  return tempTabIds.filter((id) => store.state.liveTabsById[id]?.windowId === windowId);
+}
+
+/** Whether clustering this Space's temp tabs by hostname would change the order —
+ * drives the "Group by site" item's disabled state. Runs the SAME
+ * `clusterIdsByHost` rule the SW applies, so the affordance and the mutation can
+ * never disagree. Non-live ids keep their slot either way, so comparing the live
+ * subsequence is equivalent to comparing the whole array. */
+function canGroupTempTabsBySite(space: Space): boolean {
+  const live = liveTempIdsFor(space);
+  const clustered = clusterIdsByHost(live, (id) => store.state.liveTabsById[id]?.url);
+  return clustered.some((id, i) => id !== live[i]);
+}
+
 // Fire-and-forget dispatch (results arrive via the state broadcast) via the
 // shared `dispatch`. New Tab / Clear act on the PANEL's OWN Space (carrying
 // spaceId): every carousel panel is fully live (§9), so nothing toggles
@@ -419,7 +439,11 @@ function openLauncher(): void {
 // coordinator's filter): the SW archives exactly these, and undo carries them back
 // — no value returns through the (void) bus ack. Only show the toast once the clear
 // actually committed (the ack resolved).
-let clearedToast = $state<{ message: string; tabIds: number[] } | null>(null);
+// One toast slot shared by Clear, Clear duplicates and Group by site: mounting a
+// new toast replaces any still showing, so two never stack in the fixed slot.
+// `onUndo` is carried rather than a payload, because Group by site undoes via
+// `reorderTemp` while the two clear actions undo via `undoClearTempTabs`.
+let clearedToast = $state<{ message: string; onUndo: () => void } | null>(null);
 function onClearTemp(spaceId: SpaceId): void {
   const tempTabIds = store.state.spaceInstancesByWindow[windowId]?.[spaceId]?.tempTabIds ?? [];
   const tabIds = tempTabIds.filter((id) => store.state.liveTabsById[id]?.windowId === windowId);
@@ -429,7 +453,7 @@ function onClearTemp(spaceId: SpaceId): void {
     .then(() => {
       clearedToast = {
         message: m.sidebar_clearedTabs({ count: tabIds.length }),
-        tabIds,
+        onUndo: () => onUndoClear(tabIds),
       };
     })
     .catch((err: unknown) => {
@@ -462,11 +486,35 @@ function onClearDuplicateTemp(spaceId: SpaceId): void {
     .then(() => {
       clearedToast = {
         message: m.sidebar_clearedDuplicateTabs({ count: tabIds.length }),
-        tabIds,
+        onUndo: () => onUndoClear(tabIds),
       };
     })
     .catch((err: unknown) => {
       log.debug('App: clearDuplicateTempTabs failed', { err });
+    });
+}
+
+// Group by site (non-destructive sibling of the two clear actions): reorder this
+// Space's temp tabs so same-hostname tabs sit together. The pre-group order is
+// captured LOCALLY before dispatch — the ack is `void`, so nothing comes back —
+// and Undo replays it through the existing `reorderTemp`, which already takes a
+// full explicit order and tolerates ids that closed in between.
+function onGroupTempBySite(spaceId: SpaceId): void {
+  const space = store.state.spaces.find((s) => s.id === spaceId);
+  if (!space) return;
+  const priorOrder = liveTempIdsFor(space);
+  if (priorOrder.length === 0) return;
+  bus
+    .send({ kind: 'groupTempTabsBySite', payload: { windowId, spaceId } })
+    .then(() => {
+      clearedToast = {
+        message: m.sidebar_groupedTabsBySite({ count: priorOrder.length }),
+        onUndo: () =>
+          dispatch({ kind: 'reorderTemp', payload: { windowId, spaceId, tabIds: priorOrder } }),
+      };
+    })
+    .catch((err: unknown) => {
+      log.debug('App: groupTempTabsBySite failed', { err });
     });
 }
 
@@ -708,6 +756,12 @@ function onCancel(): void {
                           disabled: !hasDuplicateTempTabsFor(panel.space),
                           onSelect: () => onClearDuplicateTemp(panel.space.id),
                         },
+                        {
+                          id: 'group-by-site',
+                          label: m.sidebar_tempGroupBySite(),
+                          disabled: !canGroupTempTabsBySite(panel.space),
+                          onSelect: () => onGroupTempBySite(panel.space.id),
+                        },
                       ]}
                     />
                   </span>
@@ -760,8 +814,8 @@ function onCancel(): void {
     {@const toast = clearedToast}
     <Toast
       message={toast.message}
-      actionLabel="Undo"
-      onAction={() => onUndoClear(toast.tabIds)}
+      actionLabel={m.sidebar_undo()}
+      onAction={toast.onUndo}
       onDismiss={() => {
         clearedToast = null;
       }}

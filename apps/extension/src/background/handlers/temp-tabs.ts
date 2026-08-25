@@ -23,6 +23,7 @@ export function tempTabHandlers(): Pick<
   | 'newTab'
   | 'clearTempTabs'
   | 'clearDuplicateTempTabs'
+  | 'groupTempTabsBySite'
   | 'undoClearTempTabs'
   | 'openUrl'
   | 'duplicateTab'
@@ -197,6 +198,19 @@ export function tempTabHandlers(): Pick<
         log.error('clearDuplicateTempTabs: survivor check failed', { windowId, err });
       }
       await chrome.tabs.remove(batch);
+    },
+    // Group by site (sibling of clearDuplicateTempTabs): cluster the targeted
+    // Space's temporary tabs so same-hostname tabs are contiguous. Purely a
+    // reorder — no tab is opened, closed, or archived, and Chrome's tab strip is
+    // untouched. Unlike the clear handlers there is no Chrome event to propagate
+    // the change, so this mutates `tempTabIds` directly and calls `markDirty`
+    // itself — but only when the order actually changed, since the coordinator
+    // gates persist + broadcast on that flag alone.
+    groupTempTabsBySite: (ctx, event) => {
+      const { windowId, spaceId: target } = event.payload;
+      const spaceId = target ?? ctx.store.state.activeSpaceByWindow[windowId];
+      if (spaceId === null || spaceId === undefined) return;
+      if (ctx.store.groupTempTabsBySite(windowId, spaceId)) ctx.markDirty();
     },
     // Undo a just-cleared batch (safety-destructive-actions): re-open the cleared
     // tabs in their originating window. The payload carries `tabId`s (the sidebar

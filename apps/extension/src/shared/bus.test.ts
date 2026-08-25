@@ -371,6 +371,7 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
   newTab: { kind: 'newTab', payload: { windowId: 1 } },
   clearTempTabs: { kind: 'clearTempTabs', payload: { windowId: 1 } },
   clearDuplicateTempTabs: { kind: 'clearDuplicateTempTabs', payload: { windowId: 1 } },
+  groupTempTabsBySite: { kind: 'groupTempTabsBySite', payload: { windowId: 1 } },
   undoClearTempTabs: { kind: 'undoClearTempTabs', payload: { windowId: 1, tabIds: [1, 2] } },
   openUrl: { kind: 'openUrl', payload: { url: 'https://example.com', windowId: 1 } },
   duplicateTab: { kind: 'duplicateTab', payload: { tabId: 42 } },
@@ -425,6 +426,33 @@ describe('SidebarCommandSchema (full-payload validation)', () => {
       const parsed = SidebarCommandSchema.safeParse(cmd);
       expect(parsed.success, `expected ${kind} to parse`).toBe(true);
       if (parsed.success) expect(parsed.data).toEqual(cmd);
+    }
+  });
+
+  test('groupTempTabsBySite accepts the payload with and without spaceId', () => {
+    expect(
+      SidebarCommandSchema.safeParse({
+        kind: 'groupTempTabsBySite',
+        payload: { windowId: 1, spaceId: 'sp' },
+      }).success,
+    ).toBe(true);
+    expect(
+      SidebarCommandSchema.safeParse({ kind: 'groupTempTabsBySite', payload: { windowId: 1 } })
+        .success,
+    ).toBe(true);
+  });
+
+  test('groupTempTabsBySite rejects a missing windowId, a wrong type, and an extra key', () => {
+    for (const payload of [
+      {},
+      { windowId: '1' },
+      { windowId: 1, spaceId: 7 },
+      { windowId: 1, extra: true },
+    ]) {
+      expect(
+        SidebarCommandSchema.safeParse({ kind: 'groupTempTabsBySite', payload }).success,
+        `expected ${JSON.stringify(payload)} to be rejected`,
+      ).toBe(false);
     }
   });
 

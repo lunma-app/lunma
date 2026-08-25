@@ -417,5 +417,22 @@
   "launcher_lensReasonReview": "review requested",
   "launcher_lensReasonCi": "CI failing",
   "launcher_lensReasonAssigned": "assigned to you",
-  "launcher_lensUnassigned": "Unassigned"
+  "launcher_lensUnassigned": "Unassigned",
+  "sidebar_tempGroupBySite": "Grouper par site",
+  "sidebar_undo": "Annuler",
+  "sidebar_groupedTabsBySite": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} onglet groupé par site",
+        "countPlural=other": "{count} onglets groupés par site"
+      }
+    }
+  ]
 }

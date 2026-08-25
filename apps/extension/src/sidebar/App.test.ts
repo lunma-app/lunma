@@ -406,6 +406,119 @@ describe('App', () => {
     });
   });
 
+  test('the kebab menu carries Clear duplicates then Group by site', async () => {
+    const store = makeStore('blue');
+    store.state.spaceInstancesByWindow[1] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [5], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[5] = {
+      tabId: 5,
+      windowId: 1,
+      title: 'A',
+      url: 'https://a.example/',
+      active: true,
+      status: 'complete',
+    };
+    const { container } = render(AppHarness, { props: { store, windowId: 1 } });
+    const workSlide = container.querySelector('[data-space-id="work"]') as HTMLElement;
+    const items = await openClearDuplicatesMenu(workSlide);
+    expect(items.map((el) => el.getAttribute('data-menu-id'))).toEqual([
+      'clear-duplicates',
+      'group-by-site',
+    ]);
+  });
+
+  test('Group by site is disabled when the list is already clustered', async () => {
+    const store = makeStore('blue');
+    store.state.spaceInstancesByWindow[1] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [5, 6, 7], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[5] = {
+      tabId: 5,
+      windowId: 1,
+      title: 'A1',
+      url: 'https://a.example/1',
+      active: true,
+      status: 'complete',
+    };
+    store.state.liveTabsById[6] = {
+      tabId: 6,
+      windowId: 1,
+      title: 'A2',
+      url: 'https://a.example/2',
+      active: false,
+      status: 'complete',
+    };
+    store.state.liveTabsById[7] = {
+      tabId: 7,
+      windowId: 1,
+      title: 'B1',
+      url: 'https://b.example/1',
+      active: false,
+      status: 'complete',
+    };
+    const { container } = render(AppHarness, { props: { store, windowId: 1 } });
+    const workSlide = container.querySelector('[data-space-id="work"]') as HTMLElement;
+    const items = await openClearDuplicatesMenu(workSlide);
+    const item = items.find((el) => el.getAttribute('data-menu-id') === 'group-by-site');
+    expect(item?.getAttribute('aria-disabled')).toBe('true');
+  });
+
+  test('Group by site dispatches groupTempTabsBySite, toasts the live-temp count, and Undo replays the prior order', async () => {
+    const store = makeStore('blue');
+    store.state.spaceInstancesByWindow[1] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [5, 6, 7], tempTabTitles: {} },
+    };
+    store.state.liveTabsById[5] = {
+      tabId: 5,
+      windowId: 1,
+      title: 'A1',
+      url: 'https://a.example/1',
+      active: true,
+      status: 'complete',
+    };
+    store.state.liveTabsById[6] = {
+      tabId: 6,
+      windowId: 1,
+      title: 'B1',
+      url: 'https://b.example/1',
+      active: false,
+      status: 'complete',
+    };
+    store.state.liveTabsById[7] = {
+      tabId: 7,
+      windowId: 1,
+      title: 'A2',
+      url: 'https://a.example/2',
+      active: false,
+      status: 'complete',
+    };
+    const { container } = render(AppHarness, { props: { store, windowId: 1 } });
+    const workSlide = container.querySelector('[data-space-id="work"]') as HTMLElement;
+    const items = await openClearDuplicatesMenu(workSlide);
+    const item = items.find((el) => el.getAttribute('data-menu-id') === 'group-by-site');
+    expect(item?.getAttribute('aria-disabled')).not.toBe('true');
+    await fireEvent.click(item as HTMLButtonElement);
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'groupTempTabsBySite',
+      payload: { windowId: 1, spaceId: 'work' },
+    });
+
+    let toast!: HTMLElement;
+    await waitFor(() => {
+      toast = document.querySelector('.toast') as HTMLElement;
+      expect(toast).not.toBeNull();
+    });
+    // N is every live temp tab of the Space, not just the ones that moved.
+    expect(toast.textContent).toContain('3');
+    const undoButton = toast.querySelector('button') as HTMLButtonElement;
+    await fireEvent.click(undoButton);
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'reorderTemp',
+      payload: { windowId: 1, spaceId: 'work', tabIds: [5, 6, 7] },
+    });
+  });
+
   test('the Clear-duplicates kebab trigger has a Space-scoped ariaLabel', async () => {
     const store = makeStore('blue');
     store.state.spaceInstancesByWindow[1] = {
