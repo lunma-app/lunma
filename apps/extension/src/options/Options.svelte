@@ -2,6 +2,7 @@
 import { onMount } from 'svelte';
 import { applyLocaleFromSettings, setLocale } from '../shared/i18n';
 import { m } from '../shared/paraglide/messages';
+import { hasApiPermission, onPermissionsChange, requestApiPermission } from '../shared/permissions';
 import { BUILT_IN_ENGINES } from '../shared/search-engines';
 import {
   DEFAULTS,
@@ -234,10 +235,48 @@ function onTextInput(decl: SettingDeclaration, value: string): void {
   void writeSetting(decl.key, value as Settings[typeof decl.key]);
 }
 
-/** Persist a `toggle` setting as a boolean (immediate-apply, no save button). */
+/** Persist a `toggle` setting as a boolean (immediate-apply, no save button).
+ *
+ * `trackTabProvenance` is the one exception (tab-provenance): its stored value is
+ * INTENT, and the capability behind it is a per-device permission. Enabling must
+ * request `webNavigation` from THIS click — a permission request needs a user
+ * gesture — and must write back `false` when the grant is declined, or the toggle
+ * would render on with nothing behind it. */
 function onToggle(decl: SettingDeclaration, next: boolean): void {
+  if (decl.key === 'trackTabProvenance' && next) {
+    // Optimistic paint, reverted on a declined grant.
+    settings = { ...settings, trackTabProvenance: true };
+    void requestApiPermission('webNavigation').then((granted) => {
+      if (granted) {
+        void writeSetting('trackTabProvenance', true);
+        return;
+      }
+      settings = { ...settings, trackTabProvenance: false };
+      void writeSetting('trackTabProvenance', false);
+    });
+    return;
+  }
   settings = { ...settings, [decl.key]: next as Settings[typeof decl.key] };
   void writeSetting(decl.key, next as Settings[typeof decl.key]);
+}
+
+/** The provenance toggle renders from EFFECTIVE state, not the stored value: a
+ * synced `true` can land on a device that never granted the permission. */
+let provenanceGranted = $state(false);
+$effect(() => {
+  void hasApiPermission('webNavigation').then((v) => {
+    provenanceGranted = v;
+  });
+  return onPermissionsChange(() => {
+    void hasApiPermission('webNavigation').then((v) => {
+      provenanceGranted = v;
+    });
+  });
+});
+
+function toggleValue(decl: SettingDeclaration): boolean {
+  const stored = Boolean(settings[decl.key]);
+  return decl.key === 'trackTabProvenance' ? stored && provenanceGranted : stored;
 }
 
 /** Persist a `number` setting as a positive integer (immediate-apply). Ignores
@@ -392,7 +431,7 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
             <SegmentedControl
               name={decl.key}
               options={toggleOptions}
-              value={settings[decl.key] ? 'on' : 'off'}
+              value={toggleValue(decl) ? 'on' : 'off'}
               ariaLabel={settingLabel(decl.key)}
               onchange={(value) => onToggle(decl, value === 'on')}
             />

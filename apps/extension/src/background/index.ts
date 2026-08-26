@@ -13,7 +13,7 @@ import {
   type SidebarFocusMessage,
 } from '../shared/messages';
 import { NEWTAB_PAGE_PATH } from '../shared/new-tab';
-import { hasApiPermission } from '../shared/permissions';
+import { hasApiPermission, onPermissionsChange } from '../shared/permissions';
 import { buildEngineRegistry } from '../shared/search-engines';
 import { readSettings, type Settings, watchSettings } from '../shared/settings';
 import type { TabId } from '../shared/types';
@@ -55,6 +55,11 @@ import { coordinator, loadState, store } from './store-singleton';
 import { runRestartRecovery } from './tab-bindings';
 import { reconcileTabGroupsOnBoot } from './tab-group-adoption';
 import { purgeExpiredTrash } from './trash-purge';
+
+// tab-provenance: module-level so `registerProvenanceListener` is idempotent.
+// Declared here rather than beside the function — a `let` is not hoisted, and the
+// boot chain reaches the function before that point in the module body.
+let provenanceListenerAttached = false;
 
 // Side-panel behavior is idempotent — set it on every SW boot rather than
 // gating on `chrome.runtime.onInstalled`. A top-level `chrome.runtime.X`
@@ -399,6 +404,13 @@ watchSettings((settings) => {
 // Fire-and-forget: the alarm only needs settings, not the booted store.
 void readSettings().then(syncAutoArchiveAlarm);
 
+// tab-provenance: granting `webNavigation` from the options toggle happens in a
+// live worker, so the listener has to attach then — not only at the next boot.
+onPermissionsChange(() => {
+  registerProvenanceListener();
+  void refreshProvenanceEnabled();
+});
+
 // Backfill the overlay into already-open tabs on install/update (and unpacked
 // reload). Declarative content scripts inject only into tabs opened/reloaded
 // AFTER the extension loads, so existing tabs would otherwise lack the `Alt+L`
@@ -425,6 +437,36 @@ async function refreshProvenanceEnabled(settings?: Settings): Promise<void> {
     ? settings.trackTabProvenance && (await hasApiPermission('webNavigation'))
     : await isProvenanceOn();
   coordinator.setProvenanceEnabled(on);
+}
+
+/**
+ * Attach the commit listener. Guarded on the API OBJECT existing — an optional
+ * permission gates availability, so that check IS the permission check and it is
+ * answerable synchronously, unlike `permissions.contains`.
+ *
+ * Called at top level AND on a grant: registering only at top level would leave
+ * the feature dead until the worker next restarted, because the API object does
+ * not exist at boot on the very install where the user first enables it.
+ * Idempotent — Chrome would otherwise fire a duplicate listener per call.
+ */
+function registerProvenanceListener(): void {
+  if (provenanceListenerAttached || !chrome.webNavigation) return;
+  provenanceListenerAttached = true;
+  chrome.webNavigation.onCommitted.addListener((details) => {
+    if (details.frameId !== 0) return;
+    enqueueAfterBoot({
+      source: 'chrome',
+      kind: 'webNavigation.onCommitted',
+      payload: {
+        tabId: details.tabId,
+        frameId: details.frameId,
+        url: details.url,
+        transitionType: details.transitionType,
+        transitionQualifiers: [...(details.transitionQualifiers ?? [])],
+      },
+    });
+    void syncProvenanceToken(details.tabId);
+  });
 }
 
 /** Establish a tab's identity on commit, or sweep its marker while a teardown is
@@ -456,28 +498,7 @@ function registerChromeListeners(): void {
     });
   });
 
-  // tab-provenance: an optional permission gates whether the API OBJECT exists,
-  // so availability IS the permission check and it is answerable in this
-  // synchronous turn — an async `permissions.contains` guard could not complete
-  // before the registration window closes and the worker would miss commits on
-  // wake. Subframes are filtered here so they never enter the queue.
-  if (chrome.webNavigation) {
-    chrome.webNavigation.onCommitted.addListener((details) => {
-      if (details.frameId !== 0) return;
-      enqueueAfterBoot({
-        source: 'chrome',
-        kind: 'webNavigation.onCommitted',
-        payload: {
-          tabId: details.tabId,
-          frameId: details.frameId,
-          url: details.url,
-          transitionType: details.transitionType,
-          transitionQualifiers: [...(details.transitionQualifiers ?? [])],
-        },
-      });
-      void syncProvenanceToken(details.tabId);
-    });
-  }
+  registerProvenanceListener();
 
   chrome.tabs.onActivated.addListener((activeInfo) => {
     enqueueAfterBoot({ source: 'chrome', kind: 'tabs.onActivated', payload: { activeInfo } });
