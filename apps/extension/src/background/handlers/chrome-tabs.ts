@@ -10,6 +10,7 @@ import { isLensPageUrl, isNewTabUrl } from '../../shared/new-tab';
 import { resolveBoundaryAllow } from '../../shared/url-boundary';
 import { clearInitialLoad, isInitialLoad, markInitialLoad } from '../initial-load-tabs';
 import { forgetPageOpenedTab, isPageOpenedTab } from '../page-opened-tabs';
+import { resolveAllParents } from '../provenance';
 import { closeTab } from '../tab-groups';
 import { activateSpaceInWindow } from './activation';
 import type { HandlersMap } from './context';
@@ -206,6 +207,10 @@ export function chromeTabHandlers(): Pick<
       // Redirect-chain tab dedup: bounded cleanup for a tab that closes (via
       // dedup or otherwise) before ever reaching `status: 'complete'`.
       clearInitialLoad(tabId);
+      // tab-provenance: the closed tab may have been the middle of a chain, so
+      // every tab below it now resolves to a different (higher) live ancestor.
+      // Without this the children keep pointing at a dead tab and render flat.
+      if (ctx.provenanceEnabled()) resolveAllParents(ctx.store);
       ctx.markDirty();
       // Auto-advance: open the next unread feed item in the same section — but
       // ONLY for items opened from the sidebar reading flow. An item opened from

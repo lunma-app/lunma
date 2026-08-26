@@ -56,8 +56,21 @@ check and it is answerable in the synchronous turn; an asynchronous
 `permissions.contains` guard SHALL NOT be used, because it cannot complete before
 the registration window closes and the worker would miss commits on wake.
 
-The listener SHALL enqueue only main-frame commits (`frameId === 0`); subframe
+The listener SHALL admit only main-frame commits (`frameId === 0`); subframe
 commits SHALL be discarded at the listener and never enter the queue.
+
+A main-frame commit SHALL NOT be enqueued at commit time. The transition is
+readable only at commit, but the tab's content script is not reachable then — it
+attaches its message listener after `document_start`, so a send at commit fails.
+The listener SHALL therefore hold the commit's `{ url, transitionType,
+transitionQualifiers }` as the tab's pending transition, and the tab's readiness
+announcement (`lunma/provenance-hello`, see `tab-provenance`) SHALL run the
+identity exchange and then enqueue the `webNavigation.onCommitted` `PendingEvent`
+carrying that held transition. A tab holds at most one pending transition; a
+later commit for the same tab SHALL replace it, and releasing it SHALL clear it.
+This ordering is what makes the edge-keying rule satisfiable: the exchange has
+returned before the handler runs, so no edge is keyed on a candidate the page
+rejected.
 
 Because the grant outlives the toggle (Lunma never revokes it), a registered
 listener MAY exist while the effective provenance state is off. The handler SHALL
@@ -77,6 +90,22 @@ existing `ctx.dedupNewTabNavigations()`. The gate SHALL NOT be an `await` on
 - **GIVEN** provenance is on
 - **WHEN** `chrome.webNavigation.onCommitted` fires with `frameId !== 0`
 - **THEN** the listener SHALL discard it and no `PendingEvent` SHALL be enqueued
+
+#### Scenario: A commit waits for the tab to announce itself
+
+- **GIVEN** provenance is on
+- **WHEN** `chrome.webNavigation.onCommitted` fires for a main frame in tab 42
+- **THEN** no `PendingEvent` SHALL be enqueued yet
+- **AND WHEN** tab 42 sends `lunma/provenance-hello`
+- **THEN** the identity exchange for tab 42 SHALL run
+- **AND** a `webNavigation.onCommitted` `PendingEvent` carrying the held transition SHALL then be enqueued
+
+#### Scenario: An announcement with no held transition enqueues nothing
+
+- **GIVEN** provenance is on and no commit is held for tab 7
+- **WHEN** tab 7 sends `lunma/provenance-hello`
+- **THEN** the identity exchange for tab 7 SHALL run
+- **AND** no `PendingEvent` SHALL be enqueued
 
 #### Scenario: A commit arriving with provenance off records nothing
 

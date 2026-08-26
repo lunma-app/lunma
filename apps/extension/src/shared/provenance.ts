@@ -52,7 +52,20 @@ export function resolveParentTabId(
   tabIdForToken: (token: string) => TabId | undefined,
 ): TabId | null {
   if (!childToken) return null;
-  const edge = edges[childToken];
-  if (!edge) return null;
-  return tabIdForToken(edge.parentToken) ?? null;
+  // Walk to the nearest LIVE ancestor rather than giving up one hop up. Closing a
+  // tab in the middle of a chain must not orphan everything below it: the token
+  // chain survives the close (edges are keyed by token, not by live tab), so the
+  // grandparent is still reachable and the grandchild re-indents under it.
+  const seen = new Set<string>([childToken]);
+  let token = childToken;
+  for (;;) {
+    const edge = edges[token];
+    if (!edge) return null;
+    const parentToken = edge.parentToken;
+    if (seen.has(parentToken)) return null; // a cycle resolves as a root
+    seen.add(parentToken);
+    const live = tabIdForToken(parentToken);
+    if (live !== undefined) return live;
+    token = parentToken;
+  }
 }

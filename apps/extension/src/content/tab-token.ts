@@ -41,7 +41,7 @@ import { TAB_TOKEN_KEY } from '../shared/provenance';
     }
   }
 
-  chrome.runtime.onMessage.addListener((msg: unknown) => {
+  chrome.runtime.onMessage.addListener((msg: unknown, _sender, sendResponse) => {
     const m = msg as { type?: string; token?: unknown } | null;
 
     if (m?.type === 'lunma/provenance-clear') {
@@ -61,10 +61,26 @@ import { TAB_TOKEN_KEY } from '../shared/provenance';
     const effective = existing ?? (write(m.token) ? m.token : null);
     if (effective === null) return; // unmarkable page → the SW treats it as a root
 
-    try {
-      void chrome.runtime.sendMessage({ type: 'lunma/provenance-token', token: effective });
-    } catch {
-      /* context died mid-handler; the SW will re-sync on the next commit */
-    }
+    // RESPOND to the sync — the service worker awaits this reply and records the
+    // token it carries. A separate `runtime.sendMessage` would not do: nothing
+    // listens for it, and `tabs.sendMessage` would resolve `undefined`, which the
+    // worker reads as "no identity" and silently drops the tab's lineage.
+    // The work above is synchronous, so responding inline is correct and this
+    // listener must NOT return true (that would leave the channel open).
+    sendResponse({ type: 'lunma/provenance-token', token: effective });
   });
+
+  // Announce readiness. crxjs ships content scripts as async loaders that
+  // dynamically import the real module, so this listener attaches well AFTER
+  // `document_start` — later than `onCommitted` and even `onDOMContentLoaded`,
+  // where every `tabs.sendMessage` fails with "Receiving end does not exist".
+  // The worker therefore cannot push first; the page says when it is reachable.
+  //
+  // This touches NO page storage: dormancy means no `sessionStorage` read or
+  // write until instructed, and a readiness ping is neither.
+  try {
+    void chrome.runtime.sendMessage({ type: 'lunma/provenance-hello' });
+  } catch {
+    /* extension context gone; the next load announces again */
+  }
 })();

@@ -62,6 +62,13 @@ import { purgeExpiredTrash } from './trash-purge';
 // boot chain reaches the function before that point in the module body.
 let provenanceListenerAttached = false;
 
+/** Transition captured at commit, consumed at DOMContentLoaded (tab-provenance).
+ * Session-scoped and small: one entry per in-flight navigation. */
+const pendingCommits = new Map<
+  number,
+  { url: string; transitionType: string; transitionQualifiers: string[] }
+>();
+
 // Side-panel behavior is idempotent — set it on every SW boot rather than
 // gating on `chrome.runtime.onInstalled`. A top-level `chrome.runtime.X`
 // reference can throw "Cannot read properties of undefined (reading
@@ -263,12 +270,9 @@ void bootReady.then(async () => {
   // focus can decide synchronously whether to also promote the tab.
   coordinator.setDedupMovesTabToTop(settings.dedupMovesTabToTop);
   // tab-provenance: the commit handler reads this synchronously, so it must be
-  // pushed rather than awaited at handling time.
-  void (async () => {
-    const wasOn = coordinator.provenanceWasEnabled();
-    await refreshProvenanceEnabled(settings);
-    if (wasOn && !settings.trackTabProvenance) await tearDownProvenance(store);
-  })();
+  // pushed rather than awaited at handling time. Live flips are pushed by the
+  // settings watcher below; this only seeds the mirror at boot.
+  void refreshProvenanceEnabled(settings);
   await coordinator.refreshBoundTabBoundaries();
 });
 
@@ -301,6 +305,30 @@ respondWithCurrentWindow(
 chrome.runtime.onMessage.addListener((raw: unknown, sender: chrome.runtime.MessageSender): void => {
   if (sender.id !== chrome.runtime.id) return;
   if (!raw || typeof raw !== 'object') return;
+  // tab-provenance: the page announcing it is reachable. Run the identity
+  // exchange now, then release the transition remembered at commit so the
+  // handler resolves an edge against a token that actually exists.
+  if ((raw as { type?: string }).type === 'lunma/provenance-hello') {
+    const helloTabId = sender.tab?.id;
+    if (helloTabId === undefined) return;
+    void syncProvenanceToken(helloTabId).then(() => {
+      const commit = pendingCommits.get(helloTabId);
+      if (!commit) return;
+      pendingCommits.delete(helloTabId);
+      enqueueAfterBoot({
+        source: 'chrome',
+        kind: 'webNavigation.onCommitted',
+        payload: {
+          tabId: helloTabId,
+          frameId: 0,
+          url: commit.url,
+          transitionType: commit.transitionType,
+          transitionQualifiers: commit.transitionQualifiers,
+        },
+      });
+    });
+    return;
+  }
   const m = raw as Partial<BoundaryOpenElsewhereMessage>;
   if (m.type !== 'lunma/boundary-open-elsewhere') return;
   const url = m.url;
@@ -398,6 +426,16 @@ watchSettings((settings) => {
   // Push the live dedup-promotes-to-top toggle (dedup-moves-tab-to-top) so
   // flipping it takes effect without a reload.
   coordinator.setDedupMovesTabToTop(settings.dedupMovesTabToTop);
+  // Push the live provenance mirror (tab-provenance). Without this the commit
+  // handler reads whatever the boot seed cached, so enabling the toggle in a
+  // live worker never takes effect: `onPermissionsChange` does not fire when the
+  // `webNavigation` grant already exists, leaving the mirror stale until the
+  // worker next restarts.
+  void (async () => {
+    const wasOn = coordinator.provenanceWasEnabled();
+    await refreshProvenanceEnabled(settings);
+    if (wasOn && !settings.trackTabProvenance) await tearDownProvenance(store);
+  })();
   void coordinator.refreshBoundTabBoundaries();
   void syncAutoArchiveAlarm(settings);
 });
@@ -461,23 +499,19 @@ async function refreshProvenanceEnabled(settings?: Settings): Promise<void> {
 function registerProvenanceListener(): void {
   if (provenanceListenerAttached || !chrome.webNavigation) return;
   provenanceListenerAttached = true;
+
+  // The transition is only available at COMMIT, but the tab's content script is
+  // not reachable yet — a `document_start` script has not attached its message
+  // listener when `onCommitted` fires, and every send there fails with "Receiving
+  // end does not exist". So: remember the transition at commit, and run the
+  // identity exchange at DOMContentLoaded, when the script is alive. The commit
+  // event is enqueued only after that, so the handler reads a token that exists.
   chrome.webNavigation.onCommitted.addListener((details) => {
     if (details.frameId !== 0) return;
-    // Establish identity FIRST, then enqueue: the handler reads the tab's token
-    // synchronously, so enqueuing in parallel races the exchange and drops the
-    // edge whenever the message loses.
-    void syncProvenanceToken(details.tabId).then(() => {
-      enqueueAfterBoot({
-        source: 'chrome',
-        kind: 'webNavigation.onCommitted',
-        payload: {
-          tabId: details.tabId,
-          frameId: details.frameId,
-          url: details.url,
-          transitionType: details.transitionType,
-          transitionQualifiers: [...(details.transitionQualifiers ?? [])],
-        },
-      });
+    pendingCommits.set(details.tabId, {
+      url: details.url,
+      transitionType: details.transitionType,
+      transitionQualifiers: [...(details.transitionQualifiers ?? [])],
     });
   });
 }

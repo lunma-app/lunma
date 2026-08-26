@@ -34,12 +34,19 @@ export function webNavigationHandlers(): Pick<HandlersMap, 'webNavigation.onComm
       }
 
       const openerTabId = child.openerTabId;
+      if (openerTabId === undefined) return; // no opener → nothing to attribute
       const childToken = child.provenanceToken;
-      const opener = openerTabId === undefined ? undefined : s.liveTabsById[openerTabId];
-      const parentToken = opener?.provenanceToken;
+      const parentToken = s.liveTabsById[openerTabId]?.provenanceToken;
       if (!childToken || !parentToken) return; // not positively attributable → root
 
       ctx.store.recordProvenanceEdge(childToken, parentToken, Date.now());
+      // Resolve THIS tab's parent here too. `resolveAllParents` runs during the
+      // identity exchange, which precedes this handler, so relying on it alone
+      // leaves the newest tab unindented until some LATER tab happens to trigger
+      // another pass — the tab you just opened is exactly the one you are looking
+      // at. The opener is already known to be live and tokenised (both were
+      // checked above), so no walk is needed.
+      ctx.store.setLiveTabParent(tabId, openerTabId);
       ctx.markDirty();
     },
   };

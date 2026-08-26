@@ -142,6 +142,16 @@ export interface BoundaryOpenElsewhereMessage {
 }
 
 /**
+ * Provenance hello (token content script → SW, tab-provenance): the script is
+ * loaded and reachable. crxjs content scripts are async loaders, so they attach
+ * after `document_start` — the worker cannot reliably push to them at commit or
+ * even at DOMContentLoaded, so readiness is announced rather than assumed.
+ */
+export interface ProvenanceHelloMessage {
+  type: 'lunma/provenance-hello';
+}
+
+/**
  * Provenance sync (SW → token content script, tab-provenance): carries a freshly
  * minted CANDIDATE token. The script keeps whatever token the page already holds
  * — that is what makes lineage survive a restore — and only writes the candidate

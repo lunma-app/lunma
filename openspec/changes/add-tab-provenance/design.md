@@ -53,8 +53,19 @@ the script dumb (fact 1), keeps minting in one place, and lets the SW carry a
 tab's identity across a cross-origin navigation — where `sessionStorage` resets
 and the page would otherwise mint a second identity for the same tab.
 
-**D3 — The content script stays dormant until pushed.**
-No settings read, no storage touch, until the SW sends it a message. The
+**D3 — The content script touches no page storage until pushed, and announces when it is reachable.**
+No settings read, no storage touch, until the SW sends it a message. The script
+does send one thing unprompted: a `lunma/provenance-hello` on load. It has to.
+A content script's message listener attaches after `document_start`, so the worker
+cannot reach it at `webNavigation.onCommitted` — where the transition is readable —
+nor at `onDOMContentLoaded`; both fail with "Receiving end does not exist". The
+worker therefore remembers the transition at commit and acts on it when the page
+announces itself. Polling with backoff was rejected: it trades a deterministic
+signal for a race, on every page load.
+
+The dormancy property is about what the PAGE can observe. A `chrome.runtime`
+message is not visible to page script and touches no page storage, so announcing
+readiness costs nothing against it. The
 consequence is a normative property worth stating in the spec rather than leaving
 implicit: **with the toggle off, Lunma performs zero `sessionStorage`
 interaction — not even a read.** The alternative (script checks the setting on

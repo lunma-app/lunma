@@ -48,14 +48,23 @@ re-prompt for the grant on boot — a permission request requires a user gesture
 ### Requirement: With provenance off, Lunma performs no page-storage interaction
 
 While the effective state is off, Lunma's content scripts SHALL NOT read from or
-write to any page's `sessionStorage`. They SHALL remain dormant until the service
-worker sends them a provenance message, mirroring the existing
+write to any page's `sessionStorage`. They SHALL touch page storage only after the
+service worker sends them a provenance message, mirroring the existing
 `content/tab-boundary.ts` contract, and SHALL NOT read settings or query
 permissions themselves.
 
+The token script SHALL announce its readiness to the service worker
+(`lunma/provenance-hello`) once on load, unconditionally. This is deliberately NOT
+gated on the effective state: the script cannot read settings, and the worker
+cannot reach it before it announces — a content script attaches its message
+listener after `document_start`, so a worker-initiated send at commit or at
+`DOMContentLoaded` fails with "Receiving end does not exist". The announcement is
+a `chrome.runtime` message, invisible to page script and touching no page storage.
+
 This is a normative property, not an implementation detail: a user who never
 enables provenance SHALL be indistinguishable, from any page's perspective, from a
-user without the feature.
+user without the feature. The observable surface is the page's — `sessionStorage`
+and anything page script can detect — not the extension's internal messaging.
 
 #### Scenario: A never-enabled user leaves no trace
 
@@ -225,6 +234,22 @@ knows which rows it is displaying — a panel may render a Space that is not the
 active one, and a parent may be absent from the rendered set. Resolving the edge in
 one place and the depth in the other keeps a single source of truth for each.
 
+Resolving an edge SHALL also set the child's `provenanceParentTabId` in the same
+handled event. A bulk re-resolve pass SHALL NOT be the only writer: it runs during
+the identity exchange, which precedes the commit, so a record-only handler would
+leave the newest tab — the one the user is looking at — unindented until some
+later tab happened to trigger another pass.
+
+Resolution SHALL walk to the nearest **live** ancestor, not merely one hop up.
+Edges are keyed by token, so a chain outlives the tabs in it: when a tab in the
+middle of a chain closes, its own parent edge remains and the tabs below it SHALL
+re-resolve to the closest ancestor that is still open, rather than orphaning to
+roots. A close therefore collapses one level out of the lineage; it never flattens
+the subtree beneath it.
+
+Closing a tab SHALL re-resolve the surviving tabs' parents, so a subtree re-indents
+at the moment its ancestor goes rather than at the next unrelated event.
+
 Resolution SHALL terminate on a cycle: a token encountered twice while walking SHALL
 end the walk and the tab SHALL resolve as a root.
 
@@ -234,11 +259,56 @@ end the walk and the tab SHALL resolve as a root.
 - **WHEN** the state broadcast is emitted
 - **THEN** the child's `LiveTab` SHALL carry `provenanceParentTabId` set to the parent's live tab id, and the broadcast SHALL validate against `LiveTabSchema`
 
+#### Scenario: Closing a tab re-parents its children to the grandparent
+
+- **GIVEN** live tabs A, B and C with lineage A ← B ← C
+- **WHEN** B is closed
+- **THEN** C SHALL resolve its parent to A, and SHALL NOT become a root
+
+#### Scenario: A subtree with no surviving ancestor becomes roots
+
+- **GIVEN** live tabs A ← B ← C
+- **WHEN** both A and B are closed
+- **THEN** C SHALL resolve as a root
+
 #### Scenario: A cycle degrades to a root
 
 - **GIVEN** a persisted slice containing a cycle
 - **WHEN** provenance is resolved for a tab in that cycle
 - **THEN** resolution SHALL terminate and that tab SHALL resolve as a root
+
+### Requirement: A child renders directly beneath its parent
+
+A surface rendering provenance SHALL order its rows as a pre-order walk of the
+lineage: every row immediately follows its parent, then its own children. Roots
+SHALL keep the list's own order, and so SHALL siblings under a shared parent.
+
+Indentation alone is not sufficient. The Temporary list is ordered newest-first,
+so a tab opened from another is ALWAYS listed above its parent; indenting it where
+it sits renders an indented row at the top with its parent below it at depth zero,
+which reads as the child being the root of the pair. Depth SHALL be taken from the
+walk.
+
+Rows that the walk cannot reach — a cycle in the edges — SHALL still render, as
+roots. A row SHALL NOT be dropped for having a malformed lineage.
+
+#### Scenario: A child listed above its parent is moved beneath it
+
+- **GIVEN** the Temporary list holds `[child, parent]` in that order, with an edge from child to parent
+- **WHEN** the list renders
+- **THEN** the rows SHALL render as `parent` at depth 0 followed by `child` at depth 1
+
+#### Scenario: Siblings keep their list order under the parent
+
+- **GIVEN** two tabs opened from the same parent, listed newest-first above it
+- **WHEN** the list renders
+- **THEN** both SHALL render at depth 1 directly beneath the parent, in their list order
+
+#### Scenario: A cycle still renders every row
+
+- **GIVEN** the resolved parents form a cycle
+- **WHEN** the list renders
+- **THEN** every row SHALL still be rendered
 
 ### Requirement: The persisted slice is bounded by an explicit retention rule
 

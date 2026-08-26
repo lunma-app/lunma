@@ -80,18 +80,38 @@ const items = $derived.by<TempItem[]>(() => {
     const p = store.state.liveTabsById[tabId]?.provenanceParentTabId;
     return p !== undefined && rendered.has(p) ? p : undefined;
   };
+
+  // Indenting a child where it already sits is not enough: `tempTabIds` is
+  // newest-first, so a tab opened from another lands ABOVE its parent and reads
+  // as the root of the pair. Re-order into a pre-order walk so a child always
+  // renders directly beneath its parent, and depth falls out of the walk.
+  // Roots keep their `tempTabIds` order, and so do siblings.
+  const childrenOf = new Map<TabId, TempItem[]>();
+  const roots: TempItem[] = [];
   for (const row of rows) {
-    let depth = 0;
-    let cursor = parentOf(row.tabId);
-    const seen = new Set<TabId>([row.tabId]);
-    while (cursor !== undefined && depth < PROVENANCE_MAX_DEPTH && !seen.has(cursor)) {
-      seen.add(cursor);
-      depth += 1;
-      cursor = parentOf(cursor);
+    const parent = parentOf(row.tabId);
+    if (parent === undefined) {
+      roots.push(row);
+      continue;
     }
-    row.depth = depth;
+    const bucket = childrenOf.get(parent);
+    if (bucket) bucket.push(row);
+    else childrenOf.set(parent, [row]);
   }
-  return rows;
+
+  const ordered: TempItem[] = [];
+  const placed = new Set<TabId>();
+  const place = (row: TempItem, depth: number): void => {
+    if (placed.has(row.tabId)) return; // a cycle in the edges must not loop here
+    placed.add(row.tabId);
+    row.depth = Math.min(depth, PROVENANCE_MAX_DEPTH);
+    ordered.push(row);
+    for (const child of childrenOf.get(row.tabId) ?? []) place(child, depth + 1);
+  };
+  for (const root of roots) place(root, 0);
+  // Anything a cycle kept out of the walk still has to render, as a root.
+  for (const row of rows) place(row, 0);
+  return ordered;
 });
 
 // --- drag zone registration ------------------------------------------------
