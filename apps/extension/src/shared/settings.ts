@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { log } from './logger';
 import type { locales } from './paraglide/runtime';
+import { hasApiPermission } from './permissions';
 import { BUILT_IN_ENGINES, type BuiltInEngineId } from './search-engines';
 
 /**
@@ -547,6 +548,5 @@ export function watchSettings(cb: (settings: Settings) => void): () => void {
 export async function effectiveProvenanceState(settings?: Settings): Promise<boolean> {
   const s = settings ?? (await readSettings());
   if (!s.trackTabProvenance) return false;
-  const { hasApiPermission } = await import('./permissions');
   return hasApiPermission('webNavigation');
 }
