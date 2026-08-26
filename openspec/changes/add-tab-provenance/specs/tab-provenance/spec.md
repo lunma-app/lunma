@@ -95,6 +95,19 @@ The content script SHALL NOT invent a token: it either reports what the page
 already holds or writes exactly the candidate it was given. It remains dormant
 until it receives `lunma/provenance-sync`.
 
+A tab's recorded identity is EPHEMERAL — it lives on the live-tab map, which is
+never persisted and is rebuilt on every service-worker start. The worker restarts
+routinely (an idle MV3 worker is torn down within seconds of inactivity), so Lunma
+SHALL re-establish every open tab's identity on each boot, and SHALL do so only
+AFTER the live-tab map has been rebuilt. An exchange performed before a tab is
+known has nowhere to record its answer: the page keeps the token and the worker
+discards it, leaving a tab that looks identified from the page's side and
+unidentified from Lunma's. Every link opened from such a tab resolves to a root
+until that page happens to reload.
+
+The same ordering binds the per-tab exchange a page triggers when it announces
+itself: it SHALL NOT run until the worker has booted and the tab is known.
+
 The service worker SHALL maintain a live `tabId → token` map for the session. A
 cross-origin commit resets `sessionStorage`, so the exchange finds no token and the
 script writes the candidate; the service worker SHALL instead send the token
@@ -107,6 +120,12 @@ A tab whose script never replies — already open when Lunma was installed or
 updated, or a non-injectable page — SHALL carry no identity and SHALL be a root. No
 edge SHALL be persisted for it. The same absence is why no token can exist in a tab
 the content script never reached.
+
+#### Scenario: A worker restart does not lose an open tab's identity
+
+- **GIVEN** provenance is on and a page is open and identified
+- **WHEN** the service worker restarts while that page stays open
+- **THEN** the tab's identity SHALL be re-established, and a link opened from it SHALL still resolve to it as parent
 
 #### Scenario: A restored page keeps the token it carries
 

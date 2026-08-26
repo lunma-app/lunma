@@ -146,16 +146,6 @@ const bootReady: Promise<void> = loadState()
     purgeExpiredTrash(store);
   })
   .then(() => seedExistingWindows(store))
-  // tab-provenance: prune edges no live tab can claim, re-resolve parents from
-  // what survived, push the synchronous mirror, and end a pending teardown sweep
-  // if this boot can prove no page still holds a marker.
-  .then(async () => {
-    await refreshProvenanceEnabled();
-    if (coordinator.provenanceWasEnabled()) await syncAllTabIdentities(store);
-    pruneOnBoot(store);
-    resolveAllParents(store);
-    await maybeEndSweep(store);
-  })
   // Adopt already-open tabs into their window's active Space as temp tabs, and
   // seed the ephemeral live-tab metadata — both from one tabs.query. liveTabsById
   // is never read from disk (stripped on persist); both run on every SW boot,
@@ -173,6 +163,25 @@ const bootReady: Promise<void> = loadState()
       if (tab.id !== undefined) tabGroupById.set(tab.id, tab.groupId ?? -1);
     }
     store.reconcileTabOwnership(tabGroupById);
+  })
+  // tab-provenance: re-establish every open tab's identity, prune edges no live
+  // tab can claim, re-resolve parents from what survived, push the synchronous
+  // mirror, and end a pending teardown sweep if this boot can prove no page still
+  // holds a marker.
+  //
+  // This MUST run after `rebuildLiveTabs` above. `liveTabsById` is ephemeral — it
+  // is stripped on persist and rebuilt on every boot — so a tab has no `LiveTab`
+  // until that step, and `setLiveTabToken` drops a token for a tab it does not
+  // know. Running the exchange first therefore asked every page for its token and
+  // threw all of them away, on EVERY worker restart. The pages kept their tokens,
+  // the store had none, and the next link opened from an already-open tab
+  // resolved to a root until that page happened to reload.
+  .then(async () => {
+    await refreshProvenanceEnabled();
+    if (coordinator.provenanceWasEnabled()) await syncAllTabIdentities(store);
+    pruneOnBoot(store);
+    resolveAllParents(store);
+    await maybeEndSweep(store);
   })
   // On a fresh install, convert the user's existing Chrome groups into Spaces;
   // then adopt restored groups (re-bind session-scoped ids) and materialize the

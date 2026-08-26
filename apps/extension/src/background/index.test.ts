@@ -62,7 +62,7 @@ vi.mock('./provenance', () => ({
 // (update → active) of the new-tab launcher.
 let commandHandler: ((command: string) => void) | undefined;
 let activeTab: { id?: number; windowId?: number } | undefined;
-let windowTabs: { id?: number; url?: string }[];
+let windowTabs: { id?: number; url?: string; windowId?: number }[];
 let sendMessageSpy: ReturnType<typeof vi.fn>;
 let createTabSpy: ReturnType<typeof vi.fn>;
 let updateTabSpy: ReturnType<typeof vi.fn>;
@@ -82,6 +82,9 @@ let storageChangeListeners: Array<
   (changes: Record<string, { newValue?: unknown; oldValue?: unknown }>, area: string) => void
 >;
 let grantedPermissions: string[];
+/** Backing for the `chrome.storage.sync` stub, so a test can boot with settings
+ * already on (rather than the DEFAULTS an empty read yields). */
+let syncData: Record<string, unknown>;
 interface WebNavigationDetails {
   tabId: number;
   frameId: number;
@@ -106,6 +109,7 @@ function installChrome(): void {
   sessionStore = {};
   storageChangeListeners = [];
   grantedPermissions = ['history', 'bookmarks', 'webNavigation'];
+  syncData = {};
   committedListeners = [];
   createdListeners = [];
   sendMessageSpy = vi.fn(() => Promise.resolve());
@@ -202,7 +206,13 @@ function installChrome(): void {
       },
     },
     storage: {
-      sync: { get: vi.fn(() => Promise.resolve({})) },
+      sync: {
+        get: vi.fn((key: string | null) =>
+          Promise.resolve(
+            key === null ? { ...syncData } : key in syncData ? { [key]: syncData[key] } : {},
+          ),
+        ),
+      },
       // In-memory chrome.storage.session backing the per-window sidebar-focus state
       // (launcher-sidebar-focus-reach). `set` assigns synchronously so a test can
       // dispatch a focus report and fire the command in the same tick.
@@ -257,9 +267,12 @@ function dispatchMessage(msg: unknown): void {
 
 /** Drive a full SW boot with a controlled read outcome, then wait until the boot
  * chain reaches its terminal broadcast. Returns the (fresh) store + persist mock. */
-async function boot(read: PersistedRead) {
+async function boot(read: PersistedRead, seed?: () => void) {
   vi.resetModules();
   installChrome();
+  // `installChrome` resets the stub state, so anything a test needs IN PLACE for
+  // the boot chain (open tabs, stored settings) has to be seeded after it.
+  seed?.();
   const storage = await import('../shared/chrome/storage');
   vi.mocked(storage.readPersistedState).mockResolvedValue(read);
   const messages = await import('../shared/messages');
@@ -682,5 +695,35 @@ describe('provenance readiness handshake (tab-provenance)', () => {
     await vi.waitFor(() =>
       expect(provenance.syncTabIdentity).toHaveBeenCalledWith(expect.anything(), 42),
     );
+  });
+});
+
+// `liveTabsById` is ephemeral: stripped on persist, rebuilt on every boot. A tab
+// therefore has no `LiveTab` until `rebuildLiveTabs` runs, and `setLiveTabToken`
+// drops a token for a tab it does not know. Running the identity exchange before
+// that step asked every open page for its token and threw all of them away — on
+// EVERY worker restart, which MV3 does after ~30s idle. The pages kept their
+// tokens, the store had none, and a link opened from an already-open tab resolved
+// to a root until that page happened to reload.
+describe('SW boot — provenance identity ordering (tab-provenance)', () => {
+  test('open tabs are already in the store when their identity is re-established', async () => {
+    const provenance = await import('./provenance');
+    let liveCountAtExchange = -1;
+    vi.mocked(provenance.syncAllTabIdentities).mockImplementation(async (s) => {
+      liveCountAtExchange = Object.keys(s.state.liveTabsById).length;
+    });
+
+    await boot({ kind: 'empty' }, () => {
+      windowTabs = [
+        { id: 11, url: 'https://a.example/', windowId: 1 },
+        { id: 12, url: 'https://b.example/', windowId: 1 },
+      ];
+      grantedPermissions = ['webNavigation'];
+      syncData['lunma.settings'] = { ...DEFAULT_SETTINGS, trackTabProvenance: true };
+    });
+
+    await vi.waitFor(() => expect(liveCountAtExchange).toBeGreaterThanOrEqual(0));
+    // Never exchange against a store that cannot record the answers.
+    expect(liveCountAtExchange).toBe(2);
   });
 });
