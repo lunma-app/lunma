@@ -10,7 +10,7 @@ import { isLensPageUrl, isNewTabUrl } from '../../shared/new-tab';
 import { collectDescendantTabIds } from '../../shared/provenance';
 import type { SpaceId, TabId, WindowId } from '../../shared/types';
 import { resolveBoundaryAllow } from '../../shared/url-boundary';
-import { clearCascading, isCascading, markCascading } from '../close-cascade';
+import { clearCascading, isCascading } from '../close-cascade';
 import { clearInitialLoad, isInitialLoad, markInitialLoad } from '../initial-load-tabs';
 import { forgetPageOpenedTab, isPageOpenedTab } from '../page-opened-tabs';
 import { resolveAllParents } from '../provenance';

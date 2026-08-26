@@ -642,7 +642,7 @@ describe('provenance readiness handshake (tab-provenance)', () => {
   // that `setLiveTabToken` silently dropped — page tokenised, tab not, and the
   // next link opened from it resolved to a root.
   test('the exchange waits until the store knows the tab', async () => {
-    const { store, provenance } = await bootWithProvenanceOn();
+    const { provenance } = await bootWithProvenanceOn();
     const seen: boolean[] = [];
     vi.mocked(provenance.syncTabIdentity).mockImplementation(async (s2, id) => {
       seen.push(s2.state.liveTabsById[id as number] !== undefined);
