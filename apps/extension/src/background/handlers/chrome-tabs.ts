@@ -167,6 +167,9 @@ export function chromeTabHandlers(): Pick<
         // its first commit still records its real `originalURL` instead of '' —
         // `onUpdated` overwrites with the committed URL when it lands.
         url: tab.url || tab.pendingUrl,
+        // tab-provenance: capture the opener HERE. It is only reliable at create
+        // time — a later read can report nothing for a tab that genuinely had one.
+        openerTabId: tab.openerTabId,
         active: tab.active,
         status: tab.status,
         favIconUrl: tab.favIconUrl,

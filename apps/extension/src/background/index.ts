@@ -44,6 +44,7 @@ import {
   pruneOnBoot,
   resolveAllParents,
   sweepTabOnLoad,
+  syncAllTabIdentities,
   syncTabIdentity,
   tearDownProvenance,
 } from './provenance';
@@ -143,6 +144,7 @@ const bootReady: Promise<void> = loadState()
   // if this boot can prove no page still holds a marker.
   .then(async () => {
     await refreshProvenanceEnabled();
+    if (coordinator.provenanceWasEnabled()) await syncAllTabIdentities(store);
     pruneOnBoot(store);
     resolveAllParents(store);
     await maybeEndSweep(store);
@@ -433,10 +435,17 @@ function enqueueAfterBoot(event: PendingEvent): void {
 // The commit handler reads a SYNCHRONOUS mirror, so the effective state is pushed
 // into the coordinator rather than awaited at handling time.
 async function refreshProvenanceEnabled(settings?: Settings): Promise<void> {
+  const wasOn = coordinator.provenanceWasEnabled();
   const on = settings
     ? settings.trackTabProvenance && (await hasApiPermission('webNavigation'))
     : await isProvenanceOn();
   coordinator.setProvenanceEnabled(on);
+  // Turning it on: identify the tabs that are already open, so the first link
+  // opened from one is attributable instead of silently becoming a root.
+  if (on && !wasOn) {
+    store.setProvenanceCleanupPending(false); // a pending sweep would erase them
+    await syncAllTabIdentities(store);
+  }
 }
 
 /**
@@ -454,18 +463,22 @@ function registerProvenanceListener(): void {
   provenanceListenerAttached = true;
   chrome.webNavigation.onCommitted.addListener((details) => {
     if (details.frameId !== 0) return;
-    enqueueAfterBoot({
-      source: 'chrome',
-      kind: 'webNavigation.onCommitted',
-      payload: {
-        tabId: details.tabId,
-        frameId: details.frameId,
-        url: details.url,
-        transitionType: details.transitionType,
-        transitionQualifiers: [...(details.transitionQualifiers ?? [])],
-      },
+    // Establish identity FIRST, then enqueue: the handler reads the tab's token
+    // synchronously, so enqueuing in parallel races the exchange and drops the
+    // edge whenever the message loses.
+    void syncProvenanceToken(details.tabId).then(() => {
+      enqueueAfterBoot({
+        source: 'chrome',
+        kind: 'webNavigation.onCommitted',
+        payload: {
+          tabId: details.tabId,
+          frameId: details.frameId,
+          url: details.url,
+          transitionType: details.transitionType,
+          transitionQualifiers: [...(details.transitionQualifiers ?? [])],
+        },
+      });
     });
-    void syncProvenanceToken(details.tabId);
   });
 }
 

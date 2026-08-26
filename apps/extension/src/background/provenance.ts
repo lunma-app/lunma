@@ -52,6 +52,24 @@ export async function syncTabIdentity(store: LunmaStore, tabId: TabId): Promise<
   }
 }
 
+/**
+ * Give every already-open tab an identity.
+ *
+ * Without this, enabling provenance leaves existing tabs untokenised, so the
+ * FIRST link opened from one resolves to a root and the feature looks broken on
+ * the very first thing a user tries. Identity is not lineage — no edge is
+ * invented here; the tabs simply become attributable from now on.
+ */
+export async function syncAllTabIdentities(store: LunmaStore): Promise<void> {
+  const tabs = await chrome.tabs.query({});
+  await Promise.all(
+    tabs
+      .filter((t) => t.id !== undefined && (t.url ?? '').startsWith('http'))
+      .map((t) => syncTabIdentity(store, t.id as TabId)),
+  );
+  resolveAllParents(store);
+}
+
 /** Recompute every live tab's resolved parent from the persisted edges. The SW
  * resolves the EDGE only; indent depth is layout and belongs to the surface. */
 export function resolveAllParents(store: LunmaStore): void {
