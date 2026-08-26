@@ -16,8 +16,12 @@ to `false`. The setting SHALL gate, together and without partial states: the
 
 The **effective** state SHALL be `trackTabProvenance && hasApiPermission('webNavigation')`,
 exposed as `effectiveProvenanceState()` from
-`apps/extension/src/shared/provenance.ts`. It SHALL NOT live in
-`shared/permissions.ts`, which is specified as carrying no policy.
+`apps/extension/src/shared/settings.ts`, which already reads settings and may reach
+`chrome.*`. It SHALL NOT live in `shared/permissions.ts` (specified as carrying no
+policy) nor in `shared/provenance.ts`, which MUST stay free of `chrome.*` imports:
+`content/tab-token.ts` imports `TAB_TOKEN_KEY` from it, and a content script here
+carries a hard size budget — `content/tab-boundary.ts` imports only the tiny pure
+`shared/url-boundary` for exactly this reason.
 
 Because the setting lives in `chrome.storage.sync` and the permission is per-device,
 a synced `true` can arrive on a device with no grant; on that device the effective

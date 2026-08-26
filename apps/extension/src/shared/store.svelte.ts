@@ -65,6 +65,8 @@ export const ARCHIVE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 export const createInitialState = (): AppState => ({
   schemaVersion: SCHEMA_VERSION,
+  provenanceByToken: {},
+  provenanceCleanupPending: false,
   spaces: [],
   sources: {},
   activeSpaceByWindow: {},

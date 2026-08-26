@@ -90,6 +90,10 @@ export interface Settings {
    * deduped tab is pinned (pinned tabs have no position in the Temporary
    * list to move). */
   dedupMovesTabToTop: boolean;
+  /** Track which tab each tab was opened from, and indent the Temporary list to
+   * show it. Off by default: it gates the `webNavigation` permission AND a random
+   * marker Lunma writes into visited pages (see the `tab-provenance` capability). */
+  trackTabProvenance: boolean;
   /** Master switch for auto-archive (auto-archive). `true` ⇒ the sweep runs and
    * each Space resolves its effective config; `false` ⇒ nothing is archived,
    * per-Space overrides moot. */
@@ -330,6 +334,15 @@ export const SETTINGS: readonly SettingDeclaration[] = [
     group: 'Tabs',
   },
   {
+    key: 'trackTabProvenance',
+    type: 'toggle',
+    default: false,
+    label: 'Show where tabs came from',
+    description:
+      'Indents each tab under the one it was opened from. Chrome will ask to read your browsing history, and Lunma stores a random marker in the pages you visit',
+    group: 'Tabs',
+  },
+  {
     key: 'dedupMovesTabToTop',
     type: 'toggle',
     default: true,
@@ -410,6 +423,7 @@ export const DEFAULTS: Settings = {
   pinnedTabBoundaryDefault: 'off',
   dedupNewTabNavigations: true,
   dedupMovesTabToTop: true,
+  trackTabProvenance: false,
   autoArchiveEnabled: true,
   autoArchiveIdleMinutes: 720,
   autoArchiveRetentionDays: 7,

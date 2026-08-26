@@ -434,5 +434,8 @@
         "countPlural=other": "{count} pestañas agrupadas por sitio"
       }
     }
-  ]
+  ],
+  "options_label_trackTabProvenance": "Mostrar de dónde vienen las pestañas",
+  "options_desc_trackTabProvenance": "Sangra cada pestaña bajo aquella desde la que se abrió. Chrome pedirá leer tu historial de navegación, y Lunma guarda una marca aleatoria en las páginas que visitas — esas páginas pueden leerla.",
+  "options_note_trackTabProvenance": "Al desactivarlo se borran las marcas que Lunma aún puede alcanzar. Desinstalar Lunma no borra las ya escritas, y una pestaña que no vuelvas a abrir nunca se alcanza — pero una marca nunca sobrevive a la sesión de navegación en la que se escribió."
 }

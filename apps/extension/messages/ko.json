@@ -427,5 +427,8 @@
         "countPlural=other": "탭 {count}개를 사이트별로 그룹화했습니다"
       }
     }
-  ]
+  ],
+  "options_label_trackTabProvenance": "탭의 출처 표시",
+  "options_desc_trackTabProvenance": "각 탭을 그 탭을 연 탭 아래에 들여씁니다. Chrome이 방문 기록 읽기를 요청하며, Lunma는 방문한 페이지에 무작위 표시를 저장합니다 — 해당 페이지에서 읽을 수 있습니다.",
+  "options_note_trackTabProvenance": "끄면 Lunma가 아직 접근할 수 있는 표시는 지워집니다. 제거해도 이미 기록된 표시는 지울 수 없고 다시 열지 않는 탭에는 접근할 수 없지만, 표시는 기록된 브라우징 세션을 넘겨 남지 않습니다."
 }

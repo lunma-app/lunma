@@ -252,6 +252,13 @@ export class Coordinator {
    * to `true` (the setting's declared default) until seeded.
    */
   private dedupPromotesToTop = true;
+
+  /** Cached `trackTabProvenance && webNavigation granted` mirror (tab-provenance),
+   * kept current by {@link setProvenanceEnabled}. The `webNavigation.onCommitted`
+   * handler must read it SYNCHRONOUSLY — `hasApiPermission` is async and settings
+   * live in `storage.sync`, so an await there would break handler purity. Defaults
+   * to `false`: the feature is off until the boot read says otherwise. */
+  private provenanceOn = false;
   private drainPromise: Promise<void> | null = null;
   /** Per-drain ack buffer. Includes both coalesce-time pushes (D5b) and
    * handler-tail pushes. Flushed at end of drain. */
@@ -309,6 +316,7 @@ export class Coordinator {
       // is visible to the handler.
       dedupNewTabNavigations: () => this.dedupNavigations,
       dedupMovesTabToTop: () => this.dedupPromotesToTop,
+      provenanceEnabled: () => this.provenanceOn,
       groups: this.groups,
       boundary: this.boundary,
     };
@@ -455,6 +463,12 @@ export class Coordinator {
    */
   setDedupMovesTabToTop(value: boolean): void {
     this.dedupPromotesToTop = value;
+  }
+
+  /** Update the cached provenance mirror. Called from the boot settings read and
+   * from `watchSettings`, and on a permission change. */
+  setProvenanceEnabled(value: boolean): void {
+    this.provenanceOn = value;
   }
 
   /**

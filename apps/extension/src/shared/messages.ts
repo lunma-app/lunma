@@ -7,7 +7,7 @@ import type {
   SuggestionsResult,
 } from './launcher-contract';
 import { log } from './logger';
-import { AppStateV18Schema } from './schemas';
+import { AppStateV19Schema } from './schemas';
 import type { AppState, WindowId } from './types';
 
 export interface StateBroadcastMessage {
@@ -142,6 +142,38 @@ export interface BoundaryOpenElsewhereMessage {
 }
 
 /**
+ * Provenance sync (SW → token content script, tab-provenance): carries a freshly
+ * minted CANDIDATE token. The script keeps whatever token the page already holds
+ * — that is what makes lineage survive a restore — and only writes the candidate
+ * when the page holds none. Either way it replies with `ProvenanceTokenMessage`
+ * carrying the token now in effect. Targeted at a single tab.
+ */
+export interface ProvenanceSyncMessage {
+  type: 'lunma/provenance-sync';
+  token: string;
+}
+
+/**
+ * Provenance token report (token content script → SW, tab-provenance): the token
+ * in effect for this page after a sync. The SW records it as the tab's identity;
+ * a page-carried token therefore WINS over the candidate it was offered.
+ */
+export interface ProvenanceTokenMessage {
+  type: 'lunma/provenance-token';
+  token: string;
+}
+
+/**
+ * Provenance clear (SW → token content script, tab-provenance): remove the marker
+ * from this page. Sent to every reachable tab when the setting is turned off, and
+ * then to each tab as it loads while the cleanup sweep is pending — a tab that was
+ * unloaded keeps its marker, and a session restore would otherwise bring it back.
+ */
+export interface ProvenanceClearMessage {
+  type: 'lunma/provenance-clear';
+}
+
+/**
  * Sidebar focus report (sidebar → SW, launcher-sidebar-focus-reach): the side
  * panel tells the SW whether it currently holds keyboard focus, keyed by the
  * window it lives in (the panel is not a tab, so the SW can't read its window from
@@ -267,7 +299,7 @@ export function onStateBroadcast(handler: (msg: StateBroadcastMessage) => void):
     const m = raw as Partial<LunmaMessage>;
     if (m.type !== 'lunma/state-broadcast') return;
     const candidate = m as Record<string, unknown>;
-    const stateResult = AppStateV18Schema.safeParse(candidate.state);
+    const stateResult = AppStateV19Schema.safeParse(candidate.state);
     if (!stateResult.success) return;
     const state = stateResult.data;
     handler({ type: 'lunma/state-broadcast', method: String(candidate.method ?? ''), state });
@@ -297,7 +329,7 @@ export async function requestStateSnapshot(): Promise<AppState> {
   if (msg.type !== 'lunma/state-snapshot' || !msg.state) {
     throw new Error('requestStateSnapshot: malformed response');
   }
-  const parsed = AppStateV18Schema.safeParse(msg.state);
+  const parsed = AppStateV19Schema.safeParse(msg.state);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
     throw new Error(

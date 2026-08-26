@@ -434,5 +434,8 @@
         "countPlural=other": "Grouped {count} tabs by site"
       }
     }
-  ]
+  ],
+  "options_label_trackTabProvenance": "Show where tabs came from",
+  "options_desc_trackTabProvenance": "Indents each tab under the one it was opened from. Chrome will ask to read your browsing history, and Lunma stores a random marker in the pages you visit — those pages can read it.",
+  "options_note_trackTabProvenance": "Turning this off clears the markers Lunma can still reach. Uninstalling Lunma cannot clear markers already written, and a tab you never open again is never reached — but a marker never outlives the browsing session it was written in."
 }

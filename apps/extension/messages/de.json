@@ -434,5 +434,8 @@
         "countPlural=other": "{count} Tabs nach Website gruppiert"
       }
     }
-  ]
+  ],
+  "options_label_trackTabProvenance": "Zeigen, woher Tabs kommen",
+  "options_desc_trackTabProvenance": "Rückt jeden Tab unter den Tab ein, aus dem er geöffnet wurde. Chrome fragt nach Zugriff auf deinen Browserverlauf, und Lunma speichert eine zufällige Markierung in den besuchten Seiten — diese Seiten können sie lesen.",
+  "options_note_trackTabProvenance": "Beim Ausschalten werden die Markierungen gelöscht, die Lunma noch erreichen kann. Eine Deinstallation löscht bereits geschriebene nicht, und ein Tab, den du nie wieder öffnest, wird nie erreicht — aber eine Markierung überdauert nie die Browsersitzung, in der sie geschrieben wurde."
 }

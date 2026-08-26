@@ -20,8 +20,8 @@
  * No other module SHALL touch `chrome.permissions.*` directly.
  */
 
-/** The two optional API permissions Lunma requests at runtime. */
-export type OptionalApiPermission = 'history' | 'bookmarks';
+/** The optional API permissions Lunma requests at runtime. */
+export type OptionalApiPermission = 'history' | 'bookmarks' | 'webNavigation';
 
 /** Whether an optional API permission is currently granted. Never throws. */
 export async function hasApiPermission(name: OptionalApiPermission): Promise<boolean> {

@@ -434,5 +434,8 @@
         "countPlural=other": "{count} onglets groupés par site"
       }
     }
-  ]
+  ],
+  "options_label_trackTabProvenance": "Montrer d’où viennent les onglets",
+  "options_desc_trackTabProvenance": "Indente chaque onglet sous celui depuis lequel il a été ouvert. Chrome demandera à lire votre historique de navigation, et Lunma stocke un marqueur aléatoire dans les pages que vous visitez — ces pages peuvent le lire.",
+  "options_note_trackTabProvenance": "Le désactiver efface les marqueurs que Lunma peut encore atteindre. Désinstaller Lunma n’efface pas ceux déjà écrits, et un onglet que vous ne rouvrez jamais n’est jamais atteint — mais un marqueur ne survit jamais à la session de navigation où il a été écrit."
 }

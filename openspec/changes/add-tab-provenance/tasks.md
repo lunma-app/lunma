@@ -1,22 +1,22 @@
 ## 1. Foundation — permission, setting, disclosure copy
 
-- [ ] 1.1 Add `webNavigation` to `optional_permissions` in `apps/extension/public/manifest.json`
-- [ ] 1.2 RED first: extend `OptionalApiPermission` to `'history' | 'bookmarks' | 'webNavigation'` in `apps/extension/src/shared/permissions.ts`, with a test asserting `requestApiPermission('webNavigation')` routes through the foundation module
-- [ ] 1.3 Add the `trackTabProvenance` toggle to `SETTINGS` (`shared/settings.ts`), `Tabs` group, default `false`; confirm the `AssertEqual<z.infer<typeof SettingsSchema>, Settings>` guard still holds
+- [x] 1.1 Add `webNavigation` to `optional_permissions` in `apps/extension/public/manifest.json`
+- [x] 1.2 RED first: extend `OptionalApiPermission` to `'history' | 'bookmarks' | 'webNavigation'` in `apps/extension/src/shared/permissions.ts`, with a test asserting `requestApiPermission('webNavigation')` routes through the foundation module
+- [x] 1.3 Add the `trackTabProvenance` toggle to `SETTINGS` (`shared/settings.ts`), `Tabs` group, default `false`; confirm the `AssertEqual<z.infer<typeof SettingsSchema>, Settings>` guard still holds
 - [ ] 1.4 Add `effectiveProvenanceState()` to `shared/provenance.ts` — NOT `shared/permissions.ts`, which is specified as carrying no policy — and render the options toggle from it, not from the stored value. Do NOT add a permission-removal export anywhere
 - [ ] 1.5 RED first: wire the toggle to request the permission inside the user gesture, writing `false` back on a declined grant — the stuck-on toggle is the bug this test exists to prevent
 - [ ] 1.6 RED first: a synced `true` with no local grant renders the toggle off and raises no prompt on boot
-- [ ] 1.7 Add `options_label_trackTabProvenance`, a ONE-LINE `options_desc_trackTabProvenance` naming the browsing-history prompt and the page-readable marker, and `options_note_trackTabProvenance` — an inline note rendered beneath the toggle carrying the uninstall limit and the browsing-session bound. Do NOT overload `options_tabsGroupIntro`, which describes the whole group. Disclosure copy to `apps/extension/messages/en.json` — naming the "read your browsing history" prompt, the page-readable marker, the uninstall limit, and the browsing-session bound, and NOT claiming unconditionally that turning it off clears every marker — then authored translations for the eight non-base locales; confirm the catalog key-parity test passes
+- [x] 1.7 Add `options_label_trackTabProvenance`, a ONE-LINE `options_desc_trackTabProvenance` naming the browsing-history prompt and the page-readable marker, and `options_note_trackTabProvenance` — an inline note rendered beneath the toggle carrying the uninstall limit and the browsing-session bound. Do NOT overload `options_tabsGroupIntro`, which describes the whole group. Disclosure copy to `apps/extension/messages/en.json` — naming the "read your browsing history" prompt, the page-readable marker, the uninstall limit, and the browsing-session bound, and NOT claiming unconditionally that turning it off clears every marker — then authored translations for the eight non-base locales; confirm the catalog key-parity test passes
 
 ## 2. Token identity
 
 - [ ] 2.1 RED first: `shared/provenance.ts` unit tests for `isRootTransition()` — `start_page`, `typed`, `auto_bookmark`, `generated`, `reload`, `keyword` are roots; both `start_page` and `auto_toplevel` spellings accepted; `link` is not a root
-- [ ] 2.2 Add `shared/provenance.ts` with `ProvenanceEdge` (`{ parentToken, recordedAt }`), `resolveParentTabId()`, `effectiveProvenanceState()`, `isRootTransition()`, `PROVENANCE_EDGE_CAP` (2000), `PROVENANCE_MAX_DEPTH` (5), `TAB_TOKEN_KEY` (`'lunma.tabToken'`) and `PROVENANCE_SESSION_MARKER_KEY` (`'lunma.provenanceSession'`) — no depth type, since depth is layout
-- [ ] 2.3 Declare `lunma/provenance-sync`, `lunma/provenance-token` and `lunma/provenance-clear` in `shared/messages.ts` — where the existing `lunma/boundary-*` content-script messages already live, NOT a new module and NOT `shared/bus.ts` — then add `content/tab-token.ts`: dormant until messaged, no settings read, no `chrome.*` beyond `runtime.onMessage`, mirroring `content/tab-boundary.ts`'s budget and re-injection guard. Register it as the third content script in the manifest
-- [ ] 2.4 RED first: with the effective state OFF, no page `sessionStorage` read or write occurs — the normative property from the `tab-provenance` spec, and the test that keeps it honest
+- [x] 2.2 Add `shared/provenance.ts` with `ProvenanceEdge` (`{ parentToken, recordedAt }`), `resolveParentTabId()`, `effectiveProvenanceState()`, `isRootTransition()`, `PROVENANCE_EDGE_CAP` (2000), `PROVENANCE_MAX_DEPTH` (5), `TAB_TOKEN_KEY` (`'lunma.tabToken'`) and `PROVENANCE_SESSION_MARKER_KEY` (`'lunma.provenanceSession'`) — no depth type, since depth is layout
+- [x] 2.3 Declare `lunma/provenance-sync`, `lunma/provenance-token` and `lunma/provenance-clear` in `shared/messages.ts` — where the existing `lunma/boundary-*` content-script messages already live, NOT a new module and NOT `shared/bus.ts` — then add `content/tab-token.ts`: dormant until messaged, no settings read, no `chrome.*` beyond `runtime.onMessage`, mirroring `content/tab-boundary.ts`'s budget and re-injection guard. Register it as the third content script in the manifest
+- [x] 2.4 RED first: with the effective state OFF, no page `sessionStorage` read or write occurs — the normative property from the `tab-provenance` spec, and the test that keeps it honest
 - [ ] 2.5 SW-side identity exchange on every main-frame commit: mint a candidate, send `provenance-sync`, take the token the script replies with (a token already on the page WINS), keep a live `tabId → token` map, and re-send the mapped token on a cross-origin commit. Add `provenanceToken?: string` / `provenanceParentTabId?: TabId` to `LiveTab` plus `setLiveTabToken()` and `setLiveTabParent()`
 - [ ] 2.5b RED first: declare `provenanceToken` and `provenanceParentTabId` on `LiveTabSchema` (a `z.strictObject` — an undeclared field rejects the whole broadcast) and make `syncLiveTab` treat a change to either as material; without it the gate swallows the report and the sidebar never re-indents
-- [ ] 2.6 RED first: a page already holding a token keeps it and the candidate is discarded (this is what makes restore work); a page with none takes the candidate; a cross-origin commit re-sends the mapped token so one tab keeps one identity
+- [x] 2.6 RED first: a page already holding a token keeps it and the candidate is discarded (this is what makes restore work); a page with none takes the candidate; a cross-origin commit re-sends the mapped token so one tab keeps one identity
 
 ## 3. Parent resolution
 
@@ -28,10 +28,10 @@
 
 ## 4. Persistence — schema v19
 
-- [ ] 4.1 RED first: `AppStateV19Schema` accepts `provenanceByToken` and `provenanceCleanupPending`; `AppStateV18Schema` stays frozen
-- [ ] 4.2 Raise `CURRENT_SCHEMA_VERSION` to 19, add `AppStateV19Schema` extending v18 with both slices carrying Zod `.default(...)`, point `EnvelopeSchema` at it, export `AppStateV19`, advance the `AssertEqual` coherence guard to V19, and repoint the current-version consumers (`chrome/storage.ts`, `messages.ts`, `backup.ts`)
-- [ ] 4.3 RED first: the v18 → v19 migration defaults both slices and reshapes nothing; the chain holds eighteen entries ending at 19; a v17 envelope validates only after BOTH the v18 and v19 migrations; a portable backup carrying no provenance slices still imports
-- [ ] 4.4 Add the `{ toVersion: 19 }` migration entry
+- [x] 4.1 RED first: `AppStateV19Schema` accepts `provenanceByToken` and `provenanceCleanupPending`; `AppStateV18Schema` stays frozen
+- [x] 4.2 Raise `CURRENT_SCHEMA_VERSION` to 19, add `AppStateV19Schema` extending v18 with both slices carrying Zod `.default(...)`, point `EnvelopeSchema` at it, export `AppStateV19`, advance the `AssertEqual` coherence guard to V19, and repoint the current-version consumers (`chrome/storage.ts`, `messages.ts`, `backup.ts`)
+- [x] 4.3 RED first: the v18 → v19 migration defaults both slices and reshapes nothing; the chain holds eighteen entries ending at 19; a v17 envelope validates only after BOTH the v18 and v19 migrations; a portable backup carrying no provenance slices still imports
+- [x] 4.4 Add the `{ toVersion: 19 }` migration entry
 - [ ] 4.5 RED first: boot pruning retains the TRANSITIVE closure of reported tokens — a chain three levels deep survives, which a single unordered pass would sever — and the cap drops edges in ascending `recordedAt` order
 - [ ] 4.6 Implement `recordProvenanceEdge()` and `pruneProvenanceEdges()` — pruning to a fixpoint AND the `PROVENANCE_EDGE_CAP` eviction both run in the boot prune, not on every record
 

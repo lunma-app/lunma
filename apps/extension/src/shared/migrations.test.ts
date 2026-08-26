@@ -8,6 +8,7 @@ import {
   AppStateV14Schema,
   AppStateV16Schema,
   AppStateV18Schema,
+  AppStateV19Schema,
   CURRENT_SCHEMA_VERSION,
 } from './schemas';
 import { createInitialState } from './store.svelte';
@@ -17,8 +18,8 @@ import { createInitialState } from './store.svelte';
 const realMigrations = [...migrations];
 
 describe('the real migration chain', () => {
-  test('holds exactly the v2 through v18 entries', () => {
-    expect(realMigrations).toHaveLength(17);
+  test('holds exactly the v2 through v19 entries', () => {
+    expect(realMigrations).toHaveLength(18);
     expect(realMigrations[0]?.toVersion).toBe(2);
     expect(realMigrations[1]?.toVersion).toBe(3);
     expect(realMigrations[2]?.toVersion).toBe(4);
@@ -36,7 +37,8 @@ describe('the real migration chain', () => {
     expect(realMigrations[14]?.toVersion).toBe(16);
     expect(realMigrations[15]?.toVersion).toBe(17);
     expect(realMigrations[16]?.toVersion).toBe(18);
-    expect(CURRENT_SCHEMA_VERSION).toBe(18);
+    expect(realMigrations[17]?.toVersion).toBe(19);
+    expect(CURRENT_SCHEMA_VERSION).toBe(19);
     // v2–v6 are pass-throughs (see comment in migrations.ts). v7 is the
     // smart-tab-boundary real transformation; v8 is the multi-source wrap.
     const input = { schemaVersion: 1, pinnedBySpace: { work: [{ kind: 'tab', id: 'a' }] } };
@@ -189,10 +191,10 @@ describe('v7 migration — smart-tab-boundary slot widening', () => {
 
   test('v1 envelope migrates through all twelve entries cleanly (no smartItemBindings)', () => {
     migrations.push(...realMigrations);
-    const v1State = {
-      ...createInitialState(),
-      schemaVersion: 1,
-    } as unknown as Record<string, unknown>;
+    // A genuine v1 envelope carries none of the slices added since; strip the
+    // ones `createInitialState` seeds at the CURRENT version.
+    const { provenanceByToken: _p, provenanceCleanupPending: _c, ...v1Base } = createInitialState();
+    const v1State = { ...v1Base, schemaVersion: 1 } as unknown as Record<string, unknown>;
     // No smart nodes in v1 — v7 and v8 migrations are both no-ops.
     const migrated = runMigrations(v1State, 1);
     const parsed = AppStateV13Schema.parse(migrated);
@@ -1213,6 +1215,43 @@ describe('v18 migration — remap-renamed-lucide-icons name rewrite', () => {
   test('the migrated state validates against the current-version schema', () => {
     const migrated = v18Migration.migrate(v17Envelope());
     expect(AppStateV18Schema.safeParse(migrated).success).toBe(true);
+  });
+});
+
+describe('v19 migration — add-tab-provenance slices', () => {
+  const v19 = realMigrations.find((m) => m.toVersion === 19);
+  if (!v19) throw new Error('expected v19 migration');
+
+  test('is an identity pass-through — the schema defaults materialise the slices', () => {
+    const before = { schemaVersion: 18, spaces: [{ id: 'w' }], pinnedBySpace: { w: [] } };
+    expect(v19.migrate(before)).toBe(before);
+  });
+
+  test('the schema, not the migration, supplies the defaults', () => {
+    const parsed = AppStateV19Schema.parse({
+      ...createInitialState(),
+      provenanceByToken: undefined,
+      provenanceCleanupPending: undefined,
+    });
+    expect(parsed.provenanceByToken).toEqual({});
+    expect(parsed.provenanceCleanupPending).toBe(false);
+  });
+
+  test('already-present slices survive the parse unchanged', () => {
+    const edges = { TC: { parentToken: 'TP', recordedAt: 5 } };
+    const parsed = AppStateV19Schema.parse({
+      ...createInitialState(),
+      provenanceByToken: edges,
+      provenanceCleanupPending: true,
+    });
+    expect(parsed.provenanceByToken).toEqual(edges);
+    expect(parsed.provenanceCleanupPending).toBe(true);
+  });
+
+  test('tolerates a non-object without throwing', () => {
+    for (const raw of [null, undefined, 42, 'x']) {
+      expect(() => v19.migrate(raw)).not.toThrow();
+    }
   });
 });
 

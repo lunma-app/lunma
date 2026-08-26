@@ -133,6 +133,21 @@ by structure. The requirement changes, not just the page. Splitting the disclosu
 a window where the shipped extension does something the spec forbids the page from
 admitting.
 
+**D11 — `shared/provenance.ts` stays free of `chrome.*`; the effective-state
+helper lives in `shared/settings.ts`.**
+Raised at apply time and agreed with the user: the artifacts placed
+`effectiveProvenanceState()` in `shared/provenance.ts`, but `content/tab-token.ts`
+imports `TAB_TOKEN_KEY` from that module, and a content script here carries a hard
+size budget — `content/tab-boundary.ts` imports only the tiny pure
+`shared/url-boundary` precisely so it stays under it. A helper reaching
+`chrome.permissions` in the same module would drag Chrome into the content bundle.
+
+Resolution: the artifacts were updated (option (a) of the drift protocol) rather
+than the implementation. `provenance.ts` holds constants and pure functions only;
+the helper moves to `shared/settings.ts`, which already reads settings and is where
+setting-derived state belongs. `shared/permissions.ts` remains excluded either way,
+as it is specified to carry no policy.
+
 **Docs this change must update:**
 
 - `docs/adr/0005-tab-provenance.md` — the "not currently implemented" sentence

@@ -476,6 +476,16 @@ export const migrations: Migration[] = [
       return raw;
     },
   },
+  {
+    // v19 (add-tab-provenance): a pure identity pass-through. The state gains
+    // `provenanceByToken` and `provenanceCleanupPending`, but both are declared on
+    // `AppStateV19Schema` with `.default(...)`, so older data materialises them at
+    // parse time and there is nothing to transform — the same shape as the v16 and
+    // v17 additive bumps. The entry exists to advance the version, so a downgrade
+    // past v19 is detectable via the version gate.
+    toVersion: 19,
+    migrate: (raw: unknown): unknown => raw,
+  },
 ];
 
 /**

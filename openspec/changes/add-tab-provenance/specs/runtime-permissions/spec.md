@@ -100,7 +100,7 @@ The module SHALL still NOT export programmatic removal: turning the provenance
 toggle off stops commit handling and clears its data but does NOT revoke the grant,
 so revocation remains something Lunma observes. Carrying no policy, the module
 SHALL NOT host the provenance effective-state helper; `effectiveProvenanceState()`
-lives in `shared/provenance.ts` and merely calls `hasApiPermission('webNavigation')`.
+lives in `shared/settings.ts` and merely calls `hasApiPermission('webNavigation')`.
 
 #### Scenario: Turning provenance off does not revoke the grant
 

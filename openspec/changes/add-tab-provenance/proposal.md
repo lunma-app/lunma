@@ -118,7 +118,9 @@ reached. Both are bounded by `sessionStorage` not outliving the browsing session
 
 - `apps/extension/src/shared/provenance.ts` — `ProvenanceEdge`
   (`{ parentToken: string; recordedAt: number }`), `resolveParentTabId()` — the service
-  worker resolves the EDGE only; depth is layout and belongs to the surface —
+  worker resolves the EDGE only; depth is layout and belongs to the surface. This
+  module stays free of `chrome.*` imports so `content/tab-token.ts` can import
+  `TAB_TOKEN_KEY` from it within a content script's size budget —
   `isRootTransition()`, `PROVENANCE_EDGE_CAP` (2000), `PROVENANCE_MAX_DEPTH` (5),
   and `TAB_TOKEN_KEY` (`'lunma.tabToken'`) — the `sessionStorage` key, named here
   because it is the most user-visible identifier this change ships.
@@ -135,7 +137,8 @@ reached. Both are bounded by `sessionStorage` not outliving the browsing session
 - The `webNavigation.onCommitted` `PendingEvent` kind and its `EventPolicy` entry.
 - Store mutators `recordProvenanceEdge()`, `pruneProvenanceEdges()`,
   `setProvenanceCleanupPending()`, and `setLiveTabToken()`.
-- `Settings.trackTabProvenance: boolean` + its `SETTINGS` declaration.
+- `Settings.trackTabProvenance: boolean` + its `SETTINGS` declaration, and
+  `effectiveProvenanceState()` in `shared/settings.ts`.
 - `OptionalApiPermission` gains `'webNavigation'`.
 - `TabRow.svelte` gains `depth?: number`.
 - `LiveTab` and `LiveTabSchema` gain `provenanceToken?: string` and

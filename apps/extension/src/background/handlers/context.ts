@@ -200,6 +200,12 @@ export interface HandlerContext {
    * seeded.
    */
   dedupMovesTabToTop(): boolean;
+  /**
+   * Read the cached effective provenance state (tab-provenance): the setting AND
+   * the `webNavigation` grant. Synchronous by design — the commit handler is pure
+   * and cannot await a permission query.
+   */
+  provenanceEnabled(): boolean;
   readonly groups: GroupOrchestrator;
   readonly boundary: BoundaryController;
 }
