@@ -22,7 +22,7 @@
       }
     }
   ],
-  "sidebar_cascadeClosedTabs": [
+  "sidebar_cascadeConfirm": [
     {
       "declarations": [
         "input count",
@@ -32,11 +32,12 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} onglet enfant fermé",
-        "countPlural=other": "{count} onglets enfants fermés"
+        "countPlural=one": "Fermer {count} onglet ouvert depuis celui-ci ?",
+        "countPlural=other": "Fermer {count} onglets ouverts depuis celui-ci ?"
       }
     }
   ],
+  "sidebar_cascadeConfirmAction": "Fermer",
   "sidebar_clearedDuplicateTabs": [
     {
       "declarations": [

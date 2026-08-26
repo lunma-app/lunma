@@ -90,6 +90,8 @@ interface WebNavigationDetails {
   transitionQualifiers: string[];
 }
 let committedListeners: Array<(d: WebNavigationDetails) => void>;
+/** Captured `chrome.tabs.onCreated` listeners, so a test can queue a creation. */
+let createdListeners: Array<(tab: chrome.tabs.Tab) => void>;
 
 /** A minimal chrome stub: enough for the synchronous listener registration and
  * the boot's single `chrome.tabs.query({})`, plus the `toggle-launcher` command
@@ -105,6 +107,7 @@ function installChrome(): void {
   storageChangeListeners = [];
   grantedPermissions = ['history', 'bookmarks', 'webNavigation'];
   committedListeners = [];
+  createdListeners = [];
   sendMessageSpy = vi.fn(() => Promise.resolve());
   createTabSpy = vi.fn(() => Promise.resolve({ id: 999 }));
   updateTabSpy = vi.fn(() => Promise.resolve());
@@ -121,7 +124,9 @@ function installChrome(): void {
       sendMessage: sendMessageSpy,
       create: createTabSpy,
       update: updateTabSpy,
-      onCreated: { addListener },
+      onCreated: {
+        addListener: vi.fn((l: (tab: chrome.tabs.Tab) => void) => createdListeners.push(l)),
+      },
       onRemoved: { addListener },
       onUpdated: { addListener },
       onActivated: { addListener },
@@ -629,6 +634,29 @@ describe('provenance readiness handshake (tab-provenance)', () => {
     await vi.waitFor(() =>
       expect(provenance.syncTabIdentity).toHaveBeenCalledWith(expect.anything(), 42),
     );
+  });
+
+  // The regression that made provenance look broken after every browser restart:
+  // the hello is often the very message that WAKES the worker, so it can arrive
+  // before the store knows the tab. The exchange then wrote a token to the page
+  // that `setLiveTabToken` silently dropped — page tokenised, tab not, and the
+  // next link opened from it resolved to a root.
+  test('the exchange waits until the store knows the tab', async () => {
+    const { store, provenance } = await bootWithProvenanceOn();
+    const seen: boolean[] = [];
+    vi.mocked(provenance.syncTabIdentity).mockImplementation(async (s2, id) => {
+      seen.push(s2.state.liveTabsById[id as number] !== undefined);
+    });
+
+    // A creation still queued when the page announces itself.
+    for (const l of createdListeners) {
+      l({ id: 77, windowId: 1, url: 'https://x/77' } as chrome.tabs.Tab);
+    }
+    dispatchFromTab({ type: 'lunma/provenance-hello' }, 77);
+
+    await vi.waitFor(() => expect(seen.length).toBeGreaterThan(0));
+    // Never exchange against a tab the store cannot record the answer on.
+    expect(seen).not.toContain(false);
   });
 
   test('an announcement from an untracked tab exchanges but resolves no commit', async () => {

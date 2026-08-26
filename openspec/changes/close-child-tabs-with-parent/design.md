@@ -35,17 +35,18 @@ Five facts about the codebase shape every decision below.
 **Goals:**
 
 - Closing a tab closes its visible indented subtree, from any close affordance.
-- The whole cascade is one undoable batch.
+- The user answers before anything is closed, and the whole batch goes at once.
 - A window close, a browser quit, and the cascade's own removals never cascade.
 - Off by default, and inert when provenance is off.
 
 **Non-Goals:**
 
 - **No subtree drag/move.** Dragging a parent still moves only its own row.
-- **No confirmation prompt.** Undo is the safety net; a modal on every close of a
-  tab that happens to have children would be worse than the problem.
-- **No new undo mechanism.** The restore handler and the toast component are reused
-  as-is; only the worker→sidebar announcement that raises the toast is new.
+- **No blocking modal.** The confirmation is a transient prompt in the sidebar, not
+  a dialog that interrupts the close — the close has already happened when Lunma
+  finds out about it.
+- **No new toast component.** The existing toast slot and its generic action are
+  reused; only the worker→sidebar request and the command answering it are new.
 - **No cross-Space or pinned closing.** Out of scope by spec, not by omission.
 - **No "close descendants" one-off menu action.** The setting is the only entry
   point in this change; a per-tab menu item is a separate proposal.
@@ -104,6 +105,32 @@ which solve the same "Chrome will call you back about something you just did"
 problem the same way, down to the test-only reset export — a new pattern would be
 gratuitous.
 
+**D6a — Ask, do not act-and-offer-undo.**
+The first design closed the batch and raised an undo toast. That is the wrong
+default for this feature: the batch's size is not predictable from the tab strip,
+so "five tabs vanished, here is undo" makes the user discover the blast radius by
+suffering it. The worker instead asks — naming the count and the tab they came
+from — and closes nothing until the answer arrives. Dismissal is a refusal.
+
+The prompt is post-hoc by necessity: `tabs.onRemoved` fires after the tab is gone,
+so there is nothing left to block. The question is therefore about the tabs that
+REMAIN, which is also the more honest question.
+
+The cost is that a cascade needs a surface to ask. When none is listening the
+`chrome.runtime` send rejects and the cascade does not happen. Accepted, and
+deliberately not softened into a fallback: closing without asking is the exact
+behaviour this decision exists to prevent, and "nothing happened" is recoverable by
+closing the tabs by hand.
+
+The answer arrives as a `closeChildTabs` command, so the destructive work still runs
+on the drain through the single-writer path rather than from the surface.
+
+**D6b — A confirmed batch is re-validated.**
+Seconds pass between question and answer. The handler intersects the batch with the
+Space's current `tempTabIds` and live tabs, so a tab that has since closed, been
+pinned, or moved Spaces is not closed — the user agreed to the subtree they were
+shown, not to a list of ids.
+
 **D6 — The directly-closed tab is not archived.**
 Only the descendants are. The user closed that tab on purpose, and Chrome's own
 reopen-closed-tab covers it. Archiving it would also make undo reopen a tab the user
@@ -127,13 +154,13 @@ This also inherits the bug the provenance mirror just had — a mirror seeded at
 but never pushed on change is stale for the life of the worker — so the watcher
 push and its regression test are tasks here, not an afterthought.
 
-**D7b — The batch is announced to the sidebar; the toast is reused, not rebuilt.**
-The worker broadcasts `CASCADE_CLOSED` with `{ windowId, tabIds }` via
-`chrome.runtime.sendMessage`, exactly as the dedup flash already does from this same
-handler file. `sidebar/App.svelte` listens, and raises its EXISTING `clearedToast`
-slot with `onUndo: () => onUndoClear(tabIds)` — the same slot Clear and Clear
-duplicates use, so a cascade toast and a clear toast can never stack. No new undo
-handler, no new toast component; only the announcement is new. Alternative
+**D7b — The request rides the existing broadcast + toast plumbing.**
+The worker broadcasts `CASCADE_CONFIRM` with `{ windowId, spaceId, tabIds, title }`
+via `chrome.runtime.sendMessage`, exactly as the dedup flash already does from this
+same handler file. `sidebar/App.svelte` listens and raises its EXISTING toast slot
+— the one Clear and Clear duplicates use, so a cascade prompt and a clear toast can
+never stack — with the action labelled "Close" instead of "Undo". `Toast` already
+takes a generic `actionLabel`/`onAction`, so no primitive changes. Alternative
 rejected: returning the batch through a bus ack — there is no command to ack, since
 the close originated in Chrome, not in the sidebar.
 
@@ -247,10 +274,11 @@ the API, so the test moved to section 7 and task 3.4 was rewritten to say so.
 
 ## Risks / Trade-offs
 
-- **The blast radius is invisible in the tab strip.** A user closing from Chrome's
-  tab strip does not see the indented subtree that makes the action legible.
-  Mitigated by undo and by the setting being opt-in; accepted, because the
-  alternative (cascade only from Lunma's own UI) is the inconsistency D1 rejects.
+- **The cascade needs an open sidebar.** With no surface to ask, nothing happens —
+  so the feature is inert for a user who keeps the sidebar closed. Accepted: the
+  alternative is closing tabs without asking, which is what D6a exists to prevent.
+  The prompt naming both the count and the parent is what makes a tab-strip close
+  legible without the indented subtree in view.
 - **The lineage under-reports.** Tabs opened by means other than a link click are
   roots, so a user may expect a cascade that does not happen. This direction of
   error is the safe one — under-closing, never over-closing — and is why the
@@ -261,11 +289,10 @@ the API, so the test moved to section 7 and task 3.4 was rewritten to say so.
 - **`onRemoved` is hot.** The handler now does work on every tab close. The guards
   are ordered cheapest-first (shutdown flag, then the two mirrors, then the
   re-entrancy set), so the off-by-default path costs one boolean read.
-- **Undo restores tabs, not lineage.** Restored descendants come back as new tabs
-  with new ids and no provenance token, so the subtree returns FLAT — the tabs are
-  recovered, their indentation is not. Accepted: recovering the pages is the point,
-  and re-synthesising lineage for restored tabs would mean inventing edges the
-  capability's own "never infer a relationship" rule forbids.
+- **Recovery restores tabs, not lineage.** Tabs restored from the archive come back
+  with new ids and no provenance token, so the subtree returns FLAT. Accepted:
+  recovering the pages is the point, and re-synthesising lineage would mean
+  inventing edges the capability's own "never infer a relationship" rule forbids.
 - **Ordering with `add-tab-provenance`.** This change cannot archive before that
   one, since it adds requirements to a capability that change introduces. Tracked in
   the proposal; if the ordering slips, `openspec archive` fails loudly rather than

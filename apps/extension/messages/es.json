@@ -22,7 +22,7 @@
       }
     }
   ],
-  "sidebar_cascadeClosedTabs": [
+  "sidebar_cascadeConfirm": [
     {
       "declarations": [
         "input count",
@@ -32,11 +32,12 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Se cerró {count} pestaña hija",
-        "countPlural=other": "Se cerraron {count} pestañas hijas"
+        "countPlural=one": "¿Cerrar {count} pestaña abierta desde ella?",
+        "countPlural=other": "¿Cerrar {count} pestañas abiertas desde ella?"
       }
     }
   ],
+  "sidebar_cascadeConfirmAction": "Cerrar",
   "sidebar_clearedDuplicateTabs": [
     {
       "declarations": [

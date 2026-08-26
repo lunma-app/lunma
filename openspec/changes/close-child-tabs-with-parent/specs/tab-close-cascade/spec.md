@@ -59,12 +59,6 @@ collected again.
 - **WHEN** the pinned tab is closed
 - **THEN** no cascade SHALL run and those temporary tabs SHALL remain open
 
-#### Scenario: A cascade whose toast cannot be shown is still recoverable
-
-- **GIVEN** the setting is on and no sidebar is listening
-- **WHEN** a cascade closes B and C
-- **THEN** the cascade SHALL complete, B and C SHALL be in the archived tabs, and no error SHALL be reported
-
 #### Scenario: Closing a child does not close its parent
 
 - **GIVEN** the setting is on, and B was opened from A
@@ -106,58 +100,72 @@ user cannot see is not legible.
 - **WHEN** A is closed
 - **THEN** that descendant SHALL remain open and SHALL resolve its parent to the nearest surviving ancestor
 
-### Requirement: A cascaded batch is announced and recoverable by one undo
+### Requirement: The user confirms a cascade before anything is closed
 
-Every tab a cascade closes SHALL be archived before it is removed, under a single
-shared batch stamp, so the whole cascade is restored by one undo. Lunma SHALL reuse
-the existing cleared-batch restore path rather than introducing a second undo
-mechanism.
+A cascade SHALL NOT close or archive anything until the user has confirmed it.
+On a qualifying close, Lunma SHALL ask — naming how many tabs would close and the
+tab they were opened from — and act only on an affirmative answer.
 
-The service worker SHALL announce the closed batch to the sidebar, carrying the
-window and the closed tab ids, and the sidebar SHALL offer undo for it through the
-same toast slot its own bulk-clear actions use. The announcement is required, not
-incidental: the existing undo affordance is raised only by sidebar actions that
-already know which tabs they closed, and a cascade originates in the service worker,
-so without it a cascade would be silently unrecoverable.
+Dismissing or ignoring the request SHALL be treated as a refusal: the tabs stay
+open and nothing is archived. Silence is not consent.
 
-The announcement is best-effort and MUST NOT gate the cascade: it is a
-`chrome.runtime` broadcast that rejects when no surface is listening, and whether a
-sidebar is open is not knowable in advance. Recoverability therefore rests on the
-ARCHIVE, which is written before removal and is not best-effort: a cascade whose
-toast never appears — the tab strip with the sidebar closed, the case this
-capability exists to cover — SHALL still be recoverable from the archived-tabs
-view. A failed announcement SHALL NOT fail the cascade, and SHALL NOT be reported
-as an error.
+The request is necessary because the closing tab is already gone by the time Lunma
+observes the close, so the question is asked about the tabs that remain rather than
+as a prompt that blocks the close. It is also why the cascade cannot simply act and
+offer undo: the batch's size is not predictable from the tab strip, so the user
+learns what a cascade would take only by being told.
 
-The tab the user closed directly SHALL NOT be archived by the cascade — the user
-closed it deliberately, and Chrome's own reopen-closed-tab already covers it.
+If no surface is available to ask, the cascade SHALL NOT happen. Being unable to
+ask is not permission to act.
+
+A confirmed batch SHALL be re-validated before it is closed: seconds pass between
+the request and the answer, and any tab that has since been closed, pinned, or
+moved to another Space is no longer part of the subtree the user was shown and
+SHALL NOT be closed.
+
+Every tab a confirmed cascade closes SHALL be archived under a single shared batch
+stamp before removal, so the batch remains recoverable from the archived-tabs view
+afterwards. The tab the user closed directly SHALL NOT be archived — they closed it
+deliberately, and Chrome's own reopen-closed-tab already covers it.
 
 A cascade SHALL NOT leave its window with no tabs: if closing the batch would empty
 the window, Lunma SHALL open a replacement tab, matching the existing clear-batch
 behaviour.
 
-#### Scenario: The cascade offers undo without being asked
+#### Scenario: The user is asked before anything closes
 
-- **GIVEN** the setting is on and closing A cascaded to B and C
-- **WHEN** the cascade completes
-- **THEN** the sidebar SHALL show an undo affordance naming the number of tabs closed
+- **GIVEN** the setting is on and closing A would cascade to B and C
+- **WHEN** A is closed
+- **THEN** B and C SHALL still be open, nothing SHALL be archived, and the user SHALL be asked whether to close 2 tabs
 
-#### Scenario: Undo restores the whole cascaded batch
+#### Scenario: Confirming closes exactly the offered tabs
 
-- **GIVEN** the setting is on and closing A cascaded to B and C
-- **WHEN** the user takes that undo
-- **THEN** B and C SHALL both be reopened
+- **GIVEN** the user was asked about B and C
+- **WHEN** they confirm
+- **THEN** B and C SHALL be closed and archived under ONE batch stamp
 
-#### Scenario: A cascade toast replaces rather than stacks
+#### Scenario: Ignoring the request closes nothing
 
-- **GIVEN** a bulk-clear toast is already showing
-- **WHEN** a cascade completes
-- **THEN** the cascade's undo SHALL occupy the same single toast slot, and two toasts SHALL NOT be shown at once
+- **GIVEN** the user was asked about B and C
+- **WHEN** they dismiss it or do nothing
+- **THEN** B and C SHALL remain open and nothing SHALL be archived
+
+#### Scenario: A cascade that cannot be asked about does not happen
+
+- **GIVEN** the setting is on and no surface is listening
+- **WHEN** a qualifying close occurs
+- **THEN** nothing SHALL be closed or archived
+
+#### Scenario: A tab that went away between question and answer is not closed
+
+- **GIVEN** the user was asked about B and C, and C has since closed on its own
+- **WHEN** they confirm
+- **THEN** only B SHALL be closed
 
 #### Scenario: The window is never left empty
 
-- **GIVEN** the setting is on and the cascade would close every remaining tab in the window
-- **WHEN** the cascade runs
+- **GIVEN** a confirmed cascade would close every remaining tab in the window
+- **WHEN** it runs
 - **THEN** a replacement tab SHALL be opened so the window survives
 
 ### Requirement: A cascade never runs during shutdown or re-entrantly
@@ -179,7 +187,7 @@ the tab the user closed.
 #### Scenario: The batch is archived once, not once per level
 
 - **GIVEN** the setting is on and the lineage is A ← B ← C
-- **WHEN** A is closed
+- **WHEN** A is closed and the cascade is confirmed
 - **THEN** B and C SHALL be archived under ONE batch stamp, and no descendant SHALL be archived more than once
 
 ### Requirement: The cascade is off unless the user turned it on

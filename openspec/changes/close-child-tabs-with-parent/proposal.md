@@ -22,14 +22,14 @@ can see the subtree (it is indented), and can undo it.
 - The cascade triggers on **any** close of a tracked temporary tab — the Lunma
   sidebar, the Chrome tab strip, or `Cmd+W` — because it is observed at
   `chrome.tabs.onRemoved` rather than at one command handler.
-- The closed descendants are archived as **one batch** (a single shared
-  `archivedAt`) and the worker announces the batch to the sidebar, which raises
-  its existing undo toast. The restore itself reuses the existing
-  `undoClearTempTabs` handler unchanged — but the announcement is new, because
-  today that toast is raised only by the sidebar's own Clear actions, which know
-  the tab ids because they computed them. A worker-initiated close does not, so
-  without the announcement there is no undo affordance at all and the safety
-  argument for shipping this feature would be unbacked.
+- **Nothing closes until the user says so.** The worker asks — naming the count and
+  the tab they were opened from — and closes only on an affirmative answer.
+  Dismissing is a refusal. If no surface is listening to ask, the cascade does not
+  happen; being unable to ask is not permission to act.
+- The confirmed descendants are archived as **one batch** (a single shared
+  `archivedAt`) before removal, so they stay recoverable from the archived-tabs
+  view afterwards. The batch is re-validated at confirm time against the tabs that
+  still exist.
 - The cascade is scoped: only descendants that are **temporary tabs in the same
   Space** are closed. Pinned descendants and descendants in other Spaces survive
   and re-parent as they already do.
@@ -83,16 +83,22 @@ implementation without agreement):
   (same file). The key set is narrowed to boolean-valued settings — "when the
   named setting is off" is meaningless for `density` or `customSearchUrl`, and the
   type should refuse them rather than the prose forbidding them.
-- `CASCADE_CLOSED` = `'lunma/cascade-closed'` in `apps/extension/src/shared/bus.ts`
-  — the worker→sidebar announcement carrying `{ windowId, tabIds }`, modelled on
-  the existing `TAB_DEDUP_FLASH` constant and its `chrome.runtime.sendMessage`
-  broadcast from the same handler file.
-- Four message keys in all nine `apps/extension/messages/*.json`:
+- `CASCADE_CONFIRM` = `'lunma/cascade-confirm'` in `apps/extension/src/shared/bus.ts`
+  — the worker→sidebar request carrying `{ windowId, spaceId, tabIds, title }`,
+  modelled on the existing `TAB_DEDUP_FLASH` constant and its
+  `chrome.runtime.sendMessage` broadcast from the same handler file.
+- A `closeChildTabs` sidebar command (`{ windowId, spaceId, tabIds }`) — the
+  answer, so the destructive work runs on the drain through the single-writer
+  path rather than from the surface. Handled in
+  `apps/extension/src/background/handlers/temp-tabs.ts` beside `clearTempTabs`,
+  whose archive-batch shape it reuses.
+- Five message keys in all nine `apps/extension/messages/*.json`:
   `options_label_closeChildTabsWithParent`,
   `options_desc_closeChildTabsWithParent`, `options_desc_requiresSetting`
   (parameterised by `{setting}` — the disabled-reason line), and
-  `sidebar_cascadeClosedTabs` (the undo toast's plural-aware count, mirroring
-  `sidebar_clearedTabs`), plus the two per-setting entries in
+  `sidebar_cascadeConfirm` (the prompt's plural-aware count, mirroring
+  `sidebar_clearedTabs`) and `sidebar_cascadeConfirmAction` (its action label),
+  plus the two per-setting entries in
   `apps/extension/src/options/labels.ts`.
 - `SegmentedControl.disabled?: boolean` — a control-level disabled prop on
   `apps/extension/src/ui/SegmentedControl.svelte`, and the matching catalog story
@@ -114,8 +120,8 @@ implementation without agreement):
 **Modified code:** the `tabs.onRemoved` handler
 (`background/handlers/chrome-tabs.ts`), the settings watcher and mirror seed
 (`background/index.ts`), the toggle rendering (`options/Options.svelte`), and the
-undo toast (`sidebar/App.svelte`, which gains a listener for the announcement and
-reuses its existing `clearedToast` slot and `onUndoClear`).
+confirmation prompt (`sidebar/App.svelte`, which gains a listener for the request
+and reuses its existing toast slot with a "Close" action).
 
 **No storage change.** The setting lives in `chrome.storage.sync` under the
 existing derived `Settings` schema, so there is no `AppState` version bump and no

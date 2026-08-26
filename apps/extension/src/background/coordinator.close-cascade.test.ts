@@ -98,29 +98,64 @@ function close(
   return coordinator.idle();
 }
 
-describe('close cascade — what goes', () => {
+/** The confirmation request the worker sent, if it sent one. */
+function ask(): { spaceId: string; tabIds: number[]; title: string } | undefined {
+  return sent.find((m) => (m as { type?: string }).type === 'lunma/cascade-confirm') as
+    | { spaceId: string; tabIds: number[]; title: string }
+    | undefined;
+}
+
+/** Answer the worker's request with a yes — what clicking the prompt does. */
+function accept(coordinator: ReturnType<typeof makeCoordinator>['coordinator']) {
+  const asked = ask();
+  if (!asked) throw new Error('accept(): the worker never asked');
+  coordinator.enqueue({
+    source: 'sidebar',
+    kind: 'closeChildTabs',
+    payload: { windowId: WINDOW, spaceId: asked.spaceId, tabIds: asked.tabIds },
+    correlationId: 'cmd:test',
+  });
+  return coordinator.idle();
+}
+
+describe('close cascade — what goes, once confirmed', () => {
   test('a parent takes both its children', async () => {
     const { coordinator } = seed([1, 2, 3], { 2: 1, 3: 1 });
     await close(coordinator, 1);
+    expect(removed).toEqual([]); // asked, not acted on
+    await accept(coordinator);
     expect(removed.sort()).toEqual([2, 3]);
   });
 
   test('a three-level chain goes whole', async () => {
     const { coordinator } = seed([1, 2, 3], { 2: 1, 3: 2 });
     await close(coordinator, 1);
+    await accept(coordinator);
     expect(removed.sort()).toEqual([2, 3]);
   });
 
   test('an unrelated tab survives', async () => {
     const { coordinator } = seed([1, 2, 9], { 2: 1 });
     await close(coordinator, 1);
+    await accept(coordinator);
     expect(removed).toEqual([2]);
   });
 
   test('closing a child leaves the parent open', async () => {
     const { coordinator } = seed([1, 2], { 2: 1 });
     await close(coordinator, 2);
+    expect(ask()).toBeUndefined();
     expect(removed).toEqual([]);
+  });
+
+  test('an unanswered prompt closes nothing', async () => {
+    // Dismissing is a decision, and the decision is no. Nothing is archived
+    // either — the batch is not touched until the answer arrives.
+    const { coordinator, store } = seed([1, 2], { 2: 1 });
+    await close(coordinator, 1);
+    expect(ask()?.tabIds).toEqual([2]);
+    expect(removed).toEqual([]);
+    expect(store.state.archivedTabs).toEqual([]);
   });
 });
 
@@ -130,6 +165,7 @@ describe('close cascade — guards', () => {
     // session as though the user had discarded it.
     const { coordinator, store } = seed([1, 2], { 2: 1 });
     await close(coordinator, 1, true);
+    expect(ask()).toBeUndefined(); // not even asked
     expect(removed).toEqual([]);
     expect(store.state.archivedTabs).toEqual([]);
   });
@@ -138,27 +174,28 @@ describe('close cascade — guards', () => {
     const { coordinator } = seed([1, 2], { 2: 1 });
     coordinator.setCloseChildTabsWithParent(false);
     await close(coordinator, 1);
-    expect(removed).toEqual([]);
+    expect(ask()).toBeUndefined();
   });
 
   test('provenance off cascades nothing', async () => {
     const { coordinator } = seed([1, 2], { 2: 1 });
     coordinator.setProvenanceEnabled(false);
     await close(coordinator, 1);
-    expect(removed).toEqual([]);
+    expect(ask()).toBeUndefined();
   });
 
   test('a removal that is the cascade’s own work starts no second cascade', async () => {
     // Chrome reports onRemoved for each tab the cascade closed. Re-entering would
     // produce one archive batch per level and undo would restore only the last.
-    const { coordinator, store } = seed([1, 2, 3], { 2: 1, 3: 2 });
+    const { coordinator } = seed([1, 2, 3], { 2: 1, 3: 2 });
     await close(coordinator, 1);
-    const batches = new Set(store.state.archivedTabs.map((a) => a.archivedAt));
+    await accept(coordinator);
+    sent.length = 0;
     removed.length = 0;
 
     await close(coordinator, 2); // the cascade's own removal reported back
+    expect(ask()).toBeUndefined();
     expect(removed).toEqual([]);
-    expect(new Set(store.state.archivedTabs.map((a) => a.archivedAt))).toEqual(batches);
   });
 
   test('closing a pinned tab cascades nothing', async () => {
@@ -178,7 +215,7 @@ describe('close cascade — guards', () => {
 
     await close(coordinator, 7);
 
-    expect(removed).toEqual([]);
+    expect(ask()).toBeUndefined();
   });
 });
 
@@ -186,6 +223,7 @@ describe('close cascade — scope', () => {
   test('a descendant outside the Space temp list survives', async () => {
     const { coordinator } = seed([1, 2], { 2: 1, 5: 1 }, [5]);
     await close(coordinator, 1);
+    await accept(coordinator);
     expect(removed).toEqual([2]);
   });
 
@@ -194,14 +232,46 @@ describe('close cascade — scope', () => {
     // may not touch, so 6 is not confidently part of the subtree.
     const { coordinator } = seed([1, 6], { 5: 1, 6: 5 }, [5]);
     await close(coordinator, 1);
+    expect(ask()).toBeUndefined();
     expect(removed).toEqual([]);
   });
 });
 
-describe('close cascade — batch, undo, announcement', () => {
-  test('every descendant is archived under ONE stamp', async () => {
+describe('close cascade — the request, and the batch it produces', () => {
+  test('the request names the tabs and the Space, and archives nothing yet', async () => {
     const { coordinator, store } = seed([1, 2, 3], { 2: 1, 3: 2 });
     await close(coordinator, 1);
+
+    expect(ask()?.spaceId).toBe('work');
+    expect([...(ask()?.tabIds ?? [])].sort()).toEqual([2, 3]);
+    expect(store.state.archivedTabs).toEqual([]);
+  });
+
+  test('the request carries the closed tab’s title, so the prompt can name it', async () => {
+    const { coordinator } = seed([1, 2], { 2: 1 });
+    await close(coordinator, 1);
+    expect(ask()?.title).toBe('tab 1');
+  });
+
+  test('a request nobody answers leaves everything open', async () => {
+    // The send rejects when no surface is listening. Not being able to ask is
+    // not permission to act.
+    (
+      globalThis as unknown as { chrome: { runtime: { sendMessage: unknown } } }
+    ).chrome.runtime.sendMessage = vi.fn(async () => {
+      throw new Error('Could not establish connection.');
+    });
+    const { coordinator, store } = seed([1, 2], { 2: 1 });
+    await close(coordinator, 1);
+    expect(removed).toEqual([]);
+    expect(store.state.archivedTabs).toEqual([]);
+  });
+
+  test('once confirmed, every tab is archived under ONE stamp', async () => {
+    const { coordinator, store } = seed([1, 2, 3], { 2: 1, 3: 2 });
+    await close(coordinator, 1);
+    await accept(coordinator);
+
     const stamps = new Set(store.state.archivedTabs.map((a) => a.archivedAt));
     expect(store.state.archivedTabs.map((a) => a.tabId).sort()).toEqual([2, 3]);
     expect(stamps.size).toBe(1);
@@ -210,40 +280,31 @@ describe('close cascade — batch, undo, announcement', () => {
   test('the directly-closed tab is NOT archived', async () => {
     const { coordinator, store } = seed([1, 2], { 2: 1 });
     await close(coordinator, 1);
+    await accept(coordinator);
     expect(store.state.archivedTabs.map((a) => a.tabId)).not.toContain(1);
   });
 
-  test('no descendant is archived twice', async () => {
+  test('no tab is archived twice', async () => {
     const { coordinator, store } = seed([1, 2, 3], { 2: 1, 3: 1 });
     await close(coordinator, 1);
+    await accept(coordinator);
     const ids = store.state.archivedTabs.map((a) => a.tabId);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  test('the announcement carries exactly the archived ids', async () => {
-    const { coordinator, store } = seed([1, 2, 3], { 2: 1, 3: 2 });
+  test('a confirmation is re-validated against the tabs that still exist', async () => {
+    // Seconds pass between the request and the answer. A tab that has since gone
+    // is not closed again, and nothing outside the Space's temp list is touched.
+    const { coordinator } = seed([1, 2], { 2: 1 });
     await close(coordinator, 1);
-    const msg = sent.find((m) => (m as { type?: string }).type === 'lunma/cascade-closed') as
-      | { windowId: number; tabIds: number[] }
-      | undefined;
-    expect(msg?.windowId).toBe(WINDOW);
-    expect([...(msg?.tabIds ?? [])].sort()).toEqual(
-      store.state.archivedTabs.map((a) => a.tabId).sort(),
-    );
-  });
-
-  test('a rejected announcement does not fail the cascade', async () => {
-    // No sidebar listening is the ORDINARY case for a tab-strip close, so the
-    // broadcast rejecting must not read as an error or undo the archive.
-    (
-      globalThis as unknown as { chrome: { runtime: { sendMessage: unknown } } }
-    ).chrome.runtime.sendMessage = vi.fn(async () => {
-      throw new Error('Could not establish connection.');
+    coordinator.enqueue({
+      source: 'sidebar',
+      kind: 'closeChildTabs',
+      payload: { windowId: WINDOW, spaceId: 'work', tabIds: [2, 4242] },
+      correlationId: 'cmd:test',
     });
-    const { coordinator, store } = seed([1, 2], { 2: 1 });
-    await close(coordinator, 1);
+    await coordinator.idle();
     expect(removed).toEqual([2]);
-    expect(store.state.archivedTabs.map((a) => a.tabId)).toEqual([2]);
   });
 
   test('the window is never left empty', async () => {
@@ -252,6 +313,7 @@ describe('close cascade — batch, undo, announcement', () => {
     );
     const { coordinator } = seed([1, 2], { 2: 1 });
     await close(coordinator, 1);
+    await accept(coordinator);
     expect(created).toBe(1);
   });
 });

@@ -24,7 +24,7 @@
       }
     }
   ],
-  "sidebar_cascadeClosedTabs": [
+  "sidebar_cascadeConfirm": [
     {
       "declarations": [
         "input count",
@@ -34,11 +34,12 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "Закрыта {count} дочерняя вкладка",
-        "countPlural=other": "Закрыто дочерних вкладок: {count}"
+        "countPlural=one": "Закрыть {count} вкладку, открытую из неё?",
+        "countPlural=other": "Закрыть вкладки, открытые из неё: {count}?"
       }
     }
   ],
+  "sidebar_cascadeConfirmAction": "Закрыть",
   "sidebar_clearedDuplicateTabs": [
     {
       "declarations": [

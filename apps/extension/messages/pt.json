@@ -22,7 +22,7 @@
       }
     }
   ],
-  "sidebar_cascadeClosedTabs": [
+  "sidebar_cascadeConfirm": [
     {
       "declarations": [
         "input count",
@@ -32,11 +32,12 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} aba filha fechada",
-        "countPlural=other": "{count} abas filhas fechadas"
+        "countPlural=one": "Fechar {count} aba aberta a partir dela?",
+        "countPlural=other": "Fechar {count} abas abertas a partir dela?"
       }
     }
   ],
+  "sidebar_cascadeConfirmAction": "Fechar",
   "sidebar_clearedDuplicateTabs": [
     {
       "declarations": [

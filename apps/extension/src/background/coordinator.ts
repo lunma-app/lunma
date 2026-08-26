@@ -86,6 +86,8 @@ function mergeTabGroupsOnUpdatedPayload(
 export const EventPolicy: Record<PendingEventKind, EventPolicyEntry> = {
   'tabs.onCreated': {},
   'tabs.onRemoved': {},
+  // Never coalesced: each confirmed batch is its own destructive act.
+  closeChildTabs: {},
   'tabs.onUpdated': {
     coalesceKey: (e) => (e.kind === 'tabs.onUpdated' ? e.payload.tabId : -1),
     mergePayload: mergeTabsOnUpdatedPayload,

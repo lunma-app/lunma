@@ -1,6 +1,6 @@
 <script lang="ts">
 import { onDestroy, onMount, untrack } from 'svelte';
-import { bus, CASCADE_CLOSED, dispatch } from '../shared/bus';
+import { bus, CASCADE_CONFIRM, dispatch } from '../shared/bus';
 import { clusterIdsByHost } from '../shared/cluster-by-host';
 import { log } from '../shared/logger';
 import { requestNewTabLauncher } from '../shared/messages';
@@ -445,7 +445,13 @@ function openLauncher(): void {
 // new toast replaces any still showing, so two never stack in the fixed slot.
 // `onUndo` is carried rather than a payload, because Group by site undoes via
 // `reorderTemp` while the two clear actions undo via `undoClearTempTabs`.
-let clearedToast = $state<{ message: string; onUndo: () => void } | null>(null);
+let clearedToast = $state<{
+  message: string;
+  onUndo: () => void;
+  /** Overrides the default "Undo" label — the close-cascade prompt ASKS rather
+   * than reverses, so its action is "Close" and dismissing means "don't". */
+  actionLabel?: string;
+} | null>(null);
 function onClearTemp(spaceId: SpaceId): void {
   const tempTabIds = store.state.spaceInstancesByWindow[windowId]?.[spaceId]?.tempTabIds ?? [];
   const tabIds = tempTabIds.filter((id) => store.state.liveTabsById[id]?.windowId === windowId);
@@ -466,25 +472,37 @@ function onUndoClear(tabIds: number[]): void {
   dispatch({ kind: 'undoClearTempTabs', payload: { windowId, tabIds } });
 }
 
-// Close cascade (tab-close-cascade): the worker closed a tab's children after a
-// close it observed itself — from the Chrome tab strip as easily as from here —
-// so it has to TELL us which tabs went. The bulk-clear actions above raise this
-// toast from ids they computed before dispatching; a cascade has no such path,
-// and without the announcement a destructive action would land with no way back.
+// Close cascade (tab-close-cascade): the worker noticed a tab close that COULD
+// take its children with it, and is asking. Nothing has been closed or archived
+// yet — dismissing the prompt is a decision, and it means no.
+//
+// The worker observes closes from the Chrome tab strip as readily as from here,
+// so it cannot show this itself; and how many tabs a cascade takes is not
+// predictable from the tab strip, which is exactly why it is asked rather than
+// announced.
 $effect(() => {
   const api = chrome?.runtime?.onMessage;
   if (!api) return;
   const listener = (msg: unknown): void => {
     if (typeof msg !== 'object' || msg === null) return;
-    const m2 = msg as { type?: unknown; windowId?: unknown; tabIds?: unknown };
-    if (m2.type !== CASCADE_CLOSED || m2.windowId !== windowId) return;
+    const m2 = msg as {
+      type?: unknown;
+      windowId?: unknown;
+      spaceId?: unknown;
+      tabIds?: unknown;
+    };
+    if (m2.type !== CASCADE_CONFIRM || m2.windowId !== windowId) return;
+    if (typeof m2.spaceId !== 'string') return;
+    const spaceId = m2.spaceId;
     const tabIds = m2.tabIds;
-    if (!Array.isArray(tabIds) || tabIds.length === 0) return;
+    if (!Array.isArray(tabIds)) return;
     const ids = tabIds.filter((id): id is number => typeof id === 'number');
     if (ids.length === 0) return;
     clearedToast = {
-      message: m.sidebar_cascadeClosedTabs({ count: ids.length }),
-      onUndo: () => onUndoClear(ids),
+      message: m.sidebar_cascadeConfirm({ count: ids.length }),
+      actionLabel: m.sidebar_cascadeConfirmAction(),
+      onUndo: () =>
+        dispatch({ kind: 'closeChildTabs', payload: { windowId, spaceId, tabIds: ids } }),
     };
   };
   api.addListener(listener);
@@ -841,7 +859,7 @@ function onCancel(): void {
     {@const toast = clearedToast}
     <Toast
       message={toast.message}
-      actionLabel={m.sidebar_undo()}
+      actionLabel={toast.actionLabel ?? m.sidebar_undo()}
       onAction={toast.onUndo}
       onDismiss={() => {
         clearedToast = null;

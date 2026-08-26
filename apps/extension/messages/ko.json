@@ -21,7 +21,7 @@
       }
     }
   ],
-  "sidebar_cascadeClosedTabs": [
+  "sidebar_cascadeConfirm": [
     {
       "declarations": [
         "input count",
@@ -31,11 +31,12 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "하위 탭 {count}개를 닫았습니다",
-        "countPlural=other": "하위 탭 {count}개를 닫았습니다"
+        "countPlural=one": "그 탭에서 연 탭 {count}개도 닫을까요?",
+        "countPlural=other": "그 탭에서 연 탭 {count}개도 닫을까요?"
       }
     }
   ],
+  "sidebar_cascadeConfirmAction": "닫기",
   "sidebar_clearedDuplicateTabs": [
     {
       "declarations": [

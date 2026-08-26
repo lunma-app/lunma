@@ -36,7 +36,7 @@ vi.mock('../shared/bus', () => ({
   // Message-type constants are plain strings, so the mock carries the real
   // values — a mocked-away constant would make the listener match nothing.
   TAB_DEDUP_FLASH: 'lunma/tab-dedup-flash',
-  CASCADE_CLOSED: 'lunma/cascade-closed',
+  CASCADE_CONFIRM: 'lunma/cascade-confirm',
 }));
 
 // Backing store for the `chrome.storage.sync` mock, reset per test. Drives the
@@ -904,11 +904,11 @@ describe('App — first-run auto-archive notice (auto-archive)', () => {
   });
 });
 
-// The worker closes a tab's children after a close it observed itself — from the
-// Chrome tab strip as easily as from the sidebar — so it announces the batch and
-// the sidebar raises undo for it. Without this the only destructive action in the
-// feature would land with no way back (tab-close-cascade).
-describe('close-cascade undo toast', () => {
+// The worker sees a close that COULD take a tab's children with it — from the
+// Chrome tab strip as readily as from the sidebar — and asks before anything
+// goes. Nothing is archived or closed until the answer comes back, and no answer
+// means no (tab-close-cascade).
+describe('close-cascade confirmation', () => {
   function deliver(msg: unknown): void {
     for (const l of runtimeMessageListeners) l(msg);
   }
@@ -921,9 +921,17 @@ describe('close-cascade undo toast', () => {
     return render(AppHarness, { props: { store, windowId: 1 } });
   }
 
-  test('the announcement raises a toast whose Undo restores exactly those tabs', async () => {
+  const ASK = {
+    type: 'lunma/cascade-confirm',
+    windowId: 1,
+    spaceId: 'work',
+    tabIds: [7, 8],
+    title: 'Parent',
+  };
+
+  test('accepting the prompt closes exactly the offered tabs', async () => {
     renderApp();
-    deliver({ type: 'lunma/cascade-closed', windowId: 1, tabIds: [7, 8] });
+    deliver(ASK);
 
     let toast!: HTMLElement;
     await waitFor(() => {
@@ -934,21 +942,37 @@ describe('close-cascade undo toast', () => {
 
     await fireEvent.click(toast.querySelector('button') as HTMLButtonElement);
     expect(sendMock).toHaveBeenCalledWith({
-      kind: 'undoClearTempTabs',
-      payload: { windowId: 1, tabIds: [7, 8] },
+      kind: 'closeChildTabs',
+      payload: { windowId: 1, spaceId: 'work', tabIds: [7, 8] },
     });
   });
 
-  test('an announcement for another window is ignored', async () => {
+  test('dismissing the prompt closes nothing', async () => {
+    // Dismissal is an answer, and the answer is no.
     renderApp();
-    deliver({ type: 'lunma/cascade-closed', windowId: 2, tabIds: [7] });
+    deliver(ASK);
+    await waitFor(() => expect(document.querySelector('.toast')).not.toBeNull());
+
+    expect(sendMock).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'closeChildTabs' }));
+  });
+
+  test('a prompt for another window is ignored', async () => {
+    renderApp();
+    deliver({ ...ASK, windowId: 2 });
     await new Promise((r) => setTimeout(r, 0));
     expect(document.querySelector('.toast')).toBeNull();
   });
 
-  test('an empty batch raises nothing', async () => {
+  test('a prompt with no tabs raises nothing', async () => {
     renderApp();
-    deliver({ type: 'lunma/cascade-closed', windowId: 1, tabIds: [] });
+    deliver({ ...ASK, tabIds: [] });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.querySelector('.toast')).toBeNull();
+  });
+
+  test('a prompt with no Space raises nothing', async () => {
+    renderApp();
+    deliver({ ...ASK, spaceId: undefined });
     await new Promise((r) => setTimeout(r, 0));
     expect(document.querySelector('.toast')).toBeNull();
   });

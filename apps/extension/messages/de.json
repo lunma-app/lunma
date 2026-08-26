@@ -22,7 +22,7 @@
       }
     }
   ],
-  "sidebar_cascadeClosedTabs": [
+  "sidebar_cascadeConfirm": [
     {
       "declarations": [
         "input count",
@@ -32,11 +32,12 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} untergeordneten Tab geschlossen",
-        "countPlural=other": "{count} untergeordnete Tabs geschlossen"
+        "countPlural=one": "{count} daraus geöffneten Tab schließen?",
+        "countPlural=other": "{count} daraus geöffnete Tabs schließen?"
       }
     }
   ],
+  "sidebar_cascadeConfirmAction": "Schließen",
   "sidebar_clearedDuplicateTabs": [
     {
       "declarations": [

@@ -370,6 +370,10 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
   closeTab: { kind: 'closeTab', payload: { tabId: 42 } },
   newTab: { kind: 'newTab', payload: { windowId: 1 } },
   clearTempTabs: { kind: 'clearTempTabs', payload: { windowId: 1 } },
+  closeChildTabs: {
+    kind: 'closeChildTabs',
+    payload: { windowId: 1, spaceId: 'work', tabIds: [2, 3] },
+  },
   clearDuplicateTempTabs: { kind: 'clearDuplicateTempTabs', payload: { windowId: 1 } },
   groupTempTabsBySite: { kind: 'groupTempTabsBySite', payload: { windowId: 1 } },
   undoClearTempTabs: { kind: 'undoClearTempTabs', payload: { windowId: 1, tabIds: [1, 2] } },
@@ -420,12 +424,31 @@ const VALID_COMMANDS: { [K in SidebarCommandKind]: Extract<SidebarCommand, { kin
 };
 
 describe('SidebarCommandSchema (full-payload validation)', () => {
+  // Iterate VALID_COMMANDS, not SIDEBAR_COMMAND_KINDS. Only `VALID_COMMANDS` is
+  // exhaustive by TYPE over `SidebarCommandKind`; the Set and the schema union
+  // are hand-maintained lists, so driving the loop from the Set makes a kind
+  // missing from BOTH invisible — it is simply never visited. That is exactly how
+  // `closeChildTabs` shipped registered in one list of three and failed only at
+  // runtime, with BUS_UNKNOWN_KIND.
   test('every command kind has a valid representative that parses', () => {
-    for (const kind of SIDEBAR_COMMAND_KINDS) {
+    for (const kind of Object.keys(VALID_COMMANDS) as SidebarCommandKind[]) {
       const cmd = VALID_COMMANDS[kind];
       const parsed = SidebarCommandSchema.safeParse(cmd);
       expect(parsed.success, `expected ${kind} to parse`).toBe(true);
       if (parsed.success) expect(parsed.data).toEqual(cmd);
+    }
+  });
+
+  test('every command kind is registered in SIDEBAR_COMMAND_KINDS', () => {
+    // The adapter rejects an unregistered kind before it ever reaches the schema.
+    for (const kind of Object.keys(VALID_COMMANDS) as SidebarCommandKind[]) {
+      expect(SIDEBAR_COMMAND_KINDS.has(kind), `expected ${kind} to be registered`).toBe(true);
+    }
+  });
+
+  test('SIDEBAR_COMMAND_KINDS carries no kind the union cannot parse', () => {
+    for (const kind of SIDEBAR_COMMAND_KINDS) {
+      expect(VALID_COMMANDS[kind], `expected a representative for ${kind}`).toBeDefined();
     }
   });
 

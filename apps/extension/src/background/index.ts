@@ -313,22 +313,33 @@ chrome.runtime.onMessage.addListener((raw: unknown, sender: chrome.runtime.Messa
   if ((raw as { type?: string }).type === 'lunma/provenance-hello') {
     const helloTabId = sender.tab?.id;
     if (helloTabId === undefined) return;
-    void syncProvenanceToken(helloTabId).then(() => {
-      const commit = pendingCommits.get(helloTabId);
-      if (!commit) return;
-      pendingCommits.delete(helloTabId);
-      enqueueAfterBoot({
-        source: 'chrome',
-        kind: 'webNavigation.onCommitted',
-        payload: {
-          tabId: helloTabId,
-          frameId: 0,
-          url: commit.url,
-          transitionType: commit.transitionType,
-          transitionQualifiers: commit.transitionQualifiers,
-        },
+    // The exchange records the token on the tab's `LiveTab`, so the store has to
+    // KNOW the tab first. A page announcing itself can easily arrive before that:
+    // on a cold start the hello is often the very message that wakes the worker,
+    // and even warm, `tabs.onCreated` is still queued. Running the exchange then
+    // writes a token to the page that the store silently drops — the page looks
+    // tokenised, the tab is not, and the next link opened from it resolves to a
+    // root. Waiting for boot AND for the queue to drain removes the race instead
+    // of trying to win it.
+    void bootReady
+      .then(() => coordinator.idle())
+      .then(() => syncProvenanceToken(helloTabId))
+      .then(() => {
+        const commit = pendingCommits.get(helloTabId);
+        if (!commit) return;
+        pendingCommits.delete(helloTabId);
+        enqueueAfterBoot({
+          source: 'chrome',
+          kind: 'webNavigation.onCommitted',
+          payload: {
+            tabId: helloTabId,
+            frameId: 0,
+            url: commit.url,
+            transitionType: commit.transitionType,
+            transitionQualifiers: commit.transitionQualifiers,
+          },
+        });
       });
-    });
     return;
   }
   const m = raw as Partial<BoundaryOpenElsewhereMessage>;

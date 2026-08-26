@@ -21,7 +21,7 @@
       }
     }
   ],
-  "sidebar_cascadeClosedTabs": [
+  "sidebar_cascadeConfirm": [
     {
       "declarations": [
         "input count",
@@ -31,11 +31,12 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "子タブを{count}個閉じました",
-        "countPlural=other": "子タブを{count}個閉じました"
+        "countPlural=one": "そこから開いた{count}個のタブも閉じますか？",
+        "countPlural=other": "そこから開いた{count}個のタブも閉じますか？"
       }
     }
   ],
+  "sidebar_cascadeConfirmAction": "閉じる",
   "sidebar_clearedDuplicateTabs": [
     {
       "declarations": [

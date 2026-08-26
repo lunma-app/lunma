@@ -4,11 +4,11 @@
 // group/boundary helpers → `ctx.groups.*` / `ctx.boundary.*`, read predicates →
 // `./queries`.
 
-import { CASCADE_CLOSED, TAB_DEDUP_FLASH } from '../../shared/bus';
+import { CASCADE_CONFIRM, TAB_DEDUP_FLASH } from '../../shared/bus';
 import { log } from '../../shared/logger';
 import { isLensPageUrl, isNewTabUrl } from '../../shared/new-tab';
 import { collectDescendantTabIds } from '../../shared/provenance';
-import type { TabId, WindowId } from '../../shared/types';
+import type { SpaceId, TabId, WindowId } from '../../shared/types';
 import { resolveBoundaryAllow } from '../../shared/url-boundary';
 import { clearCascading, isCascading, markCascading } from '../close-cascade';
 import { clearInitialLoad, isInitialLoad, markInitialLoad } from '../initial-load-tabs';
@@ -36,70 +36,49 @@ function collectCascadeBatch(
   ctx: HandlerContext,
   tabId: TabId,
   info: chrome.tabs.OnRemovedInfo,
-): TabId[] {
-  if (info.isWindowClosing) return [];
-  if (!ctx.closeChildTabsWithParent()) return [];
-  if (!ctx.provenanceEnabled()) return [];
-  if (isCascading(tabId)) return []; // our own removals, not a user close
+): { batch: TabId[]; spaceId: SpaceId; title: string } | null {
+  if (info.isWindowClosing) return null;
+  if (!ctx.closeChildTabsWithParent()) return null;
+  if (!ctx.provenanceEnabled()) return null;
+  if (isCascading(tabId)) return null; // our own removals, not a user close
   const windowId = info.windowId;
-  if (windowId === undefined) return [];
+  if (windowId === undefined) return null;
 
   const spaceId = spaceOwningTab(ctx.store.state, windowId, tabId);
-  if (spaceId === null) return [];
+  if (spaceId === null) return null;
   const tempTabIds = ctx.store.state.spaceInstancesByWindow[windowId]?.[spaceId]?.tempTabIds ?? [];
   // `spaceOwningTab` also resolves a Space through `tabBindings`, so it answers
   // for a PINNED tab too. Pinned tabs are outside this capability in both
   // directions — they neither cascade nor get cascaded.
-  if (!tempTabIds.includes(tabId)) return [];
+  if (!tempTabIds.includes(tabId)) return null;
 
-  return collectDescendantTabIds(ctx.store.state.liveTabsById, tabId, tempTabIds);
+  const batch = collectDescendantTabIds(ctx.store.state.liveTabsById, tabId, tempTabIds);
+  if (batch.length === 0) return null;
+  return { batch, spaceId, title: ctx.store.state.liveTabsById[tabId]?.title ?? '' };
 }
 
 /**
- * Archive the batch under ONE stamp, then close it off the drain.
+ * Ask the sidebar whether to close `batch`. Nothing is archived or closed here.
  *
- * The archive is written synchronously and is what makes a cascade recoverable;
- * the toast is a convenience on top. The announcement is deliberately not awaited
- * or reported — `chrome.runtime.sendMessage` rejects whenever no surface is
- * listening, which is the ordinary case for a tab-strip close with the sidebar
- * shut, and that must not read as a failure.
+ * The cascade is destructive and its size is not predictable from the tab strip,
+ * so the user answers before anything goes — an undo after the fact was the
+ * earlier design and it asks forgiveness rather than permission. The reply comes
+ * back as a `closeChildTabs` command.
+ *
+ * If no surface is listening the send rejects and the cascade simply does not
+ * happen. That is the correct outcome, not a degraded one: a confirmation the
+ * user asked for cannot be skipped just because nobody could be asked.
  */
-function runCascade(ctx: HandlerContext, batch: TabId[], windowId: WindowId | undefined): void {
-  const now = Date.now();
-  for (const id of batch) {
-    const live = ctx.store.state.liveTabsById[id];
-    ctx.store.appendArchivedTab({
-      tabId: id,
-      url: live?.url ?? '',
-      title: live?.title ?? '',
-      spaceId: spaceOwningTab(ctx.store.state, live?.windowId ?? (windowId as WindowId), id) ?? '',
-      archivedAt: now,
-    });
-  }
-  ctx.store.pruneArchivedTabs(now);
-  markCascading(batch);
-
+function askToCascade(
+  ctx: HandlerContext,
+  batch: TabId[],
+  spaceId: SpaceId,
+  windowId: WindowId | undefined,
+  title: string,
+): void {
   ctx.runSideEffect(async () => {
-    try {
-      if (windowId !== undefined) {
-        const all = await chrome.tabs.query({ windowId });
-        const removing = new Set<number>(batch);
-        const survivors = all.filter((t) => t.id !== undefined && !removing.has(t.id));
-        if (survivors.length === 0) await chrome.tabs.create({ windowId, active: true });
-      }
-      await chrome.tabs.remove(batch);
-    } catch (err) {
-      log.error('close cascade: removal failed', { err });
-      // Nothing will be removed, so no per-removal clear is coming for these —
-      // release them here or they would suppress a later, real cascade.
-      clearCascading(batch);
-    }
-    // On SUCCESS the marks are deliberately left standing: Chrome reports each
-    // removal after this resolves, and each report clears its own mark. Clearing
-    // the batch here would drop the marks before the very events they exist to
-    // suppress arrive, and every cascaded tab would start a cascade of its own.
     await chrome.runtime
-      .sendMessage({ type: CASCADE_CLOSED, windowId, tabIds: batch })
+      .sendMessage({ type: CASCADE_CONFIRM, windowId, spaceId, tabIds: batch, title })
       .catch(() => undefined);
   });
 }
@@ -298,7 +277,9 @@ export function chromeTabHandlers(): Pick<
       // every tab below it now resolves to a different (higher) live ancestor.
       // Without this the children keep pointing at a dead tab and render flat.
       if (ctx.provenanceEnabled()) resolveAllParents(ctx.store);
-      if (cascade.length > 0) runCascade(ctx, cascade, info.windowId);
+      if (cascade !== null) {
+        askToCascade(ctx, cascade.batch, cascade.spaceId, info.windowId, cascade.title);
+      }
       ctx.markDirty();
       // Auto-advance: open the next unread feed item in the same section — but
       // ONLY for items opened from the sidebar reading flow. An item opened from
