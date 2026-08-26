@@ -533,3 +533,20 @@ export function watchSettings(cb: (settings: Settings) => void): () => void {
   chrome.storage.onChanged.addListener(listener);
   return () => chrome.storage.onChanged.removeListener(listener);
 }
+
+/**
+ * Whether tab provenance is EFFECTIVELY on: the synced intent AND the per-device
+ * grant (tab-provenance). The setting syncs; the `webNavigation` permission does
+ * not, so a synced `true` can land on a device with no grant — on that device the
+ * feature is off and the toggle renders off.
+ *
+ * Lives here rather than in `shared/permissions.ts` (specified to carry no policy)
+ * or `shared/provenance.ts` (which must stay free of `chrome.*` so the token
+ * content script can import it within its size budget).
+ */
+export async function effectiveProvenanceState(settings?: Settings): Promise<boolean> {
+  const s = settings ?? (await readSettings());
+  if (!s.trackTabProvenance) return false;
+  const { hasApiPermission } = await import('./permissions');
+  return hasApiPermission('webNavigation');
+}

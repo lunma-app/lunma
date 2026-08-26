@@ -4,6 +4,7 @@ import { flip } from 'svelte/animate';
 import { dispatch, TAB_DEDUP_FLASH } from '../shared/bus';
 import { labelFor } from '../shared/label-for';
 import { m } from '../shared/paraglide/messages';
+import { PROVENANCE_MAX_DEPTH } from '../shared/provenance';
 import type { LiveTab, SpaceId, TabId, WindowId } from '../shared/types';
 import { faviconCacheKey, faviconFor, faviconUrl } from '../ui/favicon';
 import IconButton from '../ui/IconButton.svelte';
@@ -31,6 +32,10 @@ const ZONE = $derived(`temp:${windowId}`);
 interface TempItem {
   id: string; // stringified TabId — the drag-controller item id
   tabId: TabId;
+  /** Indent level (tab-provenance). Derived HERE, not in the SW: the service
+   * worker resolves the parent EDGE, but only this panel knows which rows it is
+   * displaying — a parent in another Space, or a closed tab, must render flat. */
+  depth: number;
   title: string;
   faviconSrc: string;
   /** The `_favicon` endpoint, retried when the primary `faviconSrc` fails to load. */
@@ -50,7 +55,7 @@ const items = $derived.by<TempItem[]>(() => {
   // Defensive de-dup: a duplicate tab id in (corrupted or same-tick re-broadcast)
   // tempTabIds would collide the keyed {#each} and crash the sidebar. First wins.
   const seen = new Set<number>();
-  return (instance?.tempTabIds ?? [])
+  const rows = (instance?.tempTabIds ?? [])
     .filter((tabId) => {
       if (seen.has(tabId)) return false;
       seen.add(tabId);
@@ -61,6 +66,7 @@ const items = $derived.by<TempItem[]>(() => {
     .map((tab) => ({
       id: String(tab.tabId),
       tabId: tab.tabId,
+      depth: 0,
       title: instance?.tempTabTitles?.[tab.tabId] ?? labelFor(tab.title, tab.url),
       faviconSrc: faviconFor(tab.url, tab.favIconUrl),
       // Cache-bust the endpoint fallback on the live `favIconUrl` so a CORP-blocked
@@ -69,6 +75,23 @@ const items = $derived.by<TempItem[]>(() => {
       active: tab.active,
       loading: tab.status === 'loading',
     }));
+  const rendered = new Set(rows.map((r) => r.tabId));
+  const parentOf = (tabId: TabId): TabId | undefined => {
+    const p = store.state.liveTabsById[tabId]?.provenanceParentTabId;
+    return p !== undefined && rendered.has(p) ? p : undefined;
+  };
+  for (const row of rows) {
+    let depth = 0;
+    let cursor = parentOf(row.tabId);
+    const seen = new Set<TabId>([row.tabId]);
+    while (cursor !== undefined && depth < PROVENANCE_MAX_DEPTH && !seen.has(cursor)) {
+      seen.add(cursor);
+      depth += 1;
+      cursor = parentOf(cursor);
+    }
+    row.depth = depth;
+  }
+  return rows;
 });
 
 // --- drag zone registration ------------------------------------------------
@@ -355,7 +378,7 @@ function commitRename(item: TempItem, newName: string): void {
           flashTabId = null;
         }
       }}
-      animate:flip={{ duration: () => reorderFlipMs() }}
+      animate:flip={{ duration: () => (drag.state.active ? reorderFlipMs() : 0) }}
     >
       <Menu trigger="context" items={tabMenuItems(item)} ariaLabel={m.sidebar_tabActions()} testid="temp-menu">
         {#snippet children(menuProps)}
@@ -382,6 +405,7 @@ function commitRename(item: TempItem, newName: string): void {
               faviconSrc={item.faviconSrc}
               faviconFallbackSrc={item.faviconFallbackSrc}
               active={item.active}
+              depth={item.depth}
               loading={item.loading}
               editing={item.id === renamingId}
               oncommitName={(next) => commitRename(item, next)}

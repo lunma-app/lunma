@@ -3,14 +3,14 @@
 - [x] 1.1 Add `webNavigation` to `optional_permissions` in `apps/extension/public/manifest.json`
 - [x] 1.2 RED first: extend `OptionalApiPermission` to `'history' | 'bookmarks' | 'webNavigation'` in `apps/extension/src/shared/permissions.ts`, with a test asserting `requestApiPermission('webNavigation')` routes through the foundation module
 - [x] 1.3 Add the `trackTabProvenance` toggle to `SETTINGS` (`shared/settings.ts`), `Tabs` group, default `false`; confirm the `AssertEqual<z.infer<typeof SettingsSchema>, Settings>` guard still holds
-- [ ] 1.4 Add `effectiveProvenanceState()` to `shared/provenance.ts` — NOT `shared/permissions.ts`, which is specified as carrying no policy — and render the options toggle from it, not from the stored value. Do NOT add a permission-removal export anywhere
-- [ ] 1.5 RED first: wire the toggle to request the permission inside the user gesture, writing `false` back on a declined grant — the stuck-on toggle is the bug this test exists to prevent
-- [ ] 1.6 RED first: a synced `true` with no local grant renders the toggle off and raises no prompt on boot
+- [x] 1.4 Add `effectiveProvenanceState()` to `shared/provenance.ts` — NOT `shared/permissions.ts`, which is specified as carrying no policy — and render the options toggle from it, not from the stored value. Do NOT add a permission-removal export anywhere
+- [x] 1.5 RED first: wire the toggle to request the permission inside the user gesture, writing `false` back on a declined grant — the stuck-on toggle is the bug this test exists to prevent
+- [x] 1.6 RED first: a synced `true` with no local grant renders the toggle off and raises no prompt on boot
 - [x] 1.7 Add `options_label_trackTabProvenance`, a ONE-LINE `options_desc_trackTabProvenance` naming the browsing-history prompt and the page-readable marker, and `options_note_trackTabProvenance` — an inline note rendered beneath the toggle carrying the uninstall limit and the browsing-session bound. Do NOT overload `options_tabsGroupIntro`, which describes the whole group. Disclosure copy to `apps/extension/messages/en.json` — naming the "read your browsing history" prompt, the page-readable marker, the uninstall limit, and the browsing-session bound, and NOT claiming unconditionally that turning it off clears every marker — then authored translations for the eight non-base locales; confirm the catalog key-parity test passes
 
 ## 2. Token identity
 
-- [ ] 2.1 RED first: `shared/provenance.ts` unit tests for `isRootTransition()` — `start_page`, `typed`, `auto_bookmark`, `generated`, `reload`, `keyword` are roots; both `start_page` and `auto_toplevel` spellings accepted; `link` is not a root
+- [x] 2.1 RED first: `shared/provenance.ts` unit tests for `isRootTransition()` — `start_page`, `typed`, `auto_bookmark`, `generated`, `reload`, `keyword` are roots; both `start_page` and `auto_toplevel` spellings accepted; `link` is not a root
 - [x] 2.2 Add `shared/provenance.ts` with `ProvenanceEdge` (`{ parentToken, recordedAt }`), `resolveParentTabId()`, `effectiveProvenanceState()`, `isRootTransition()`, `PROVENANCE_EDGE_CAP` (2000), `PROVENANCE_MAX_DEPTH` (5), `TAB_TOKEN_KEY` (`'lunma.tabToken'`) and `PROVENANCE_SESSION_MARKER_KEY` (`'lunma.provenanceSession'`) — no depth type, since depth is layout
 - [x] 2.3 Declare `lunma/provenance-sync`, `lunma/provenance-token` and `lunma/provenance-clear` in `shared/messages.ts` — where the existing `lunma/boundary-*` content-script messages already live, NOT a new module and NOT `shared/bus.ts` — then add `content/tab-token.ts`: dormant until messaged, no settings read, no `chrome.*` beyond `runtime.onMessage`, mirroring `content/tab-boundary.ts`'s budget and re-injection guard. Register it as the third content script in the manifest
 - [x] 2.4 RED first: with the effective state OFF, no page `sessionStorage` read or write occurs — the normative property from the `tab-provenance` spec, and the test that keeps it honest
@@ -37,39 +37,39 @@
 
 ## 5. Restore and teardown
 
-- [ ] 5.1 RED first: a restored tab reporting a known token recovers its exact parent across new tab ids; an unknown token is a root; no URL or ordering match is attempted
-- [ ] 5.2 RED first: toggle-off unregisters the listener, clears the slice, and clears tokens on every loaded tab — and does NOT call any permission-removal API, since the grant is never revoked by Lunma
-- [ ] 5.3 RED first: with `provenanceCleanupPending` set, a tab loading later has its token cleared; a sweep finding nothing among LOADED tabs does NOT clear the flag; the flag clears only on a boot where `chrome.storage.session` holds no marker AND `chrome.tabs.query` reports no http(s) tab; re-enabling the toggle clears the flag
-- [ ] 5.4 Implement teardown (no permission revocation) + the converge-on-load sweep driven by `tabs.onUpdated`, `setProvenanceCleanupPending()`, and `PROVENANCE_SESSION_MARKER_KEY` in `chrome.storage.session` — READ the marker and evaluate the clear condition BEFORE writing it, or the condition can never be satisfied
-- [ ] 5.5 RED first: `resolveParentTabId()` writes `provenanceParentTabId` onto each `LiveTab` (the SW does NOT compute depth — that is layout); a cycle terminates as a root rather than hanging
+- [x] 5.1 RED first: a restored tab reporting a known token recovers its exact parent across new tab ids; an unknown token is a root; no URL or ordering match is attempted
+- [x] 5.2 RED first: toggle-off unregisters the listener, clears the slice, and clears tokens on every loaded tab — and does NOT call any permission-removal API, since the grant is never revoked by Lunma
+- [x] 5.3 RED first: with `provenanceCleanupPending` set, a tab loading later has its token cleared; a sweep finding nothing among LOADED tabs does NOT clear the flag; the flag clears only on a boot where `chrome.storage.session` holds no marker AND `chrome.tabs.query` reports no http(s) tab; re-enabling the toggle clears the flag
+- [x] 5.4 Implement teardown (no permission revocation) + the converge-on-load sweep driven by `tabs.onUpdated`, `setProvenanceCleanupPending()`, and `PROVENANCE_SESSION_MARKER_KEY` in `chrome.storage.session` — READ the marker and evaluate the clear condition BEFORE writing it, or the condition can never be satisfied
+- [x] 5.5 RED first: `resolveParentTabId()` writes `provenanceParentTabId` onto each `LiveTab` (the SW does NOT compute depth — that is layout); a cycle terminates as a root rather than hanging
 
 ## 6. Sidebar rendering
 
-- [ ] 6.1 RED first: `TempTabs` derives depth by following `provenanceParentTabId` among the rows IT renders, indenting a child one step under its parent, in `tempTabIds` order, in one flat scroll container; depth caps at `PROVENANCE_MAX_DEPTH`
-- [ ] 6.2 RED first: with the effective state off, every row renders at depth 0 with no lineage rule and no reserved indent gutter
-- [ ] 6.3 RED first: provenance changes indentation, never order — a resolved parent set leaves `tempTabIds` order untouched
-- [ ] 6.3b RED first: a row whose `provenanceParentTabId` is absent from the rendered rows renders at depth 0 with no lineage rule
-- [ ] 6.4 Add `depth?: number` to `TabRow.svelte`, indenting one `--space-3` per step with a `--border-soft` hairline lineage rule — existing tokens only; confirm `lint:styles` passes
-- [ ] 6.5 Update `apps/extension/catalog/stories/ui/TabRow.stories.svelte` for the `depth` prop — required by the component-library policy, and gated by `src/ui/stories-coverage.test.ts`
-- [ ] 6.6 RED first: make `TempTabs`' existing `animate:flip` duration function return 0 unless a drag is in progress (an `animate:` directive cannot be applied conditionally), so a late-arriving parent changes indent with NO transition while drag keeps `reorderFlipMs()`
+- [x] 6.1 RED first: `TempTabs` derives depth by following `provenanceParentTabId` among the rows IT renders, indenting a child one step under its parent, in `tempTabIds` order, in one flat scroll container; depth caps at `PROVENANCE_MAX_DEPTH`
+- [x] 6.2 RED first: with the effective state off, every row renders at depth 0 with no lineage rule and no reserved indent gutter
+- [x] 6.3 RED first: provenance changes indentation, never order — a resolved parent set leaves `tempTabIds` order untouched
+- [x] 6.3b RED first: a row whose `provenanceParentTabId` is absent from the rendered rows renders at depth 0 with no lineage rule
+- [x] 6.4 Add `depth?: number` to `TabRow.svelte`, indenting one `--space-3` per step with a `--border-soft` hairline lineage rule — existing tokens only; confirm `lint:styles` passes
+- [x] 6.5 Update `apps/extension/catalog/stories/ui/TabRow.stories.svelte` for the `depth` prop — required by the component-library policy, and gated by `src/ui/stories-coverage.test.ts`
+- [x] 6.6 RED first: make `TempTabs`' existing `animate:flip` duration function return 0 unless a drag is in progress (an `animate:` directive cannot be applied conditionally), so a late-arriving parent changes indent with NO transition while drag keeps `reorderFlipMs()`
 
 ## 7. Disclosure — privacy policy
 
-- [ ] 7.1 Update `apps/site/src/routes/privacy/+page.svelte`: KEEP the "never page content" clause verbatim (writing a marker is not reading the page) and add the marker — off by default, stored in visited pages while on, readable by those pages so a site can tell Lunma is installed, cleared where Lunma can still reach, not clearable by uninstall, and never outliving the browsing session
-- [ ] 7.2 Add the marker to the "What Lunma stores, and where" section — it is the only storage location outside Lunma's own
-- [ ] 7.3 Add `webNavigation` to the permissions list, described by the job it does
-- [ ] 7.4 Confirm the page does not contradict `TrustBand.svelte` — the retained requirement text obliges this change to keep the two in agreement — and that `apps/site` verify (contrast test + prerender build) passes
+- [x] 7.1 Update `apps/site/src/routes/privacy/+page.svelte`: KEEP the "never page content" clause verbatim (writing a marker is not reading the page) and add the marker — off by default, stored in visited pages while on, readable by those pages so a site can tell Lunma is installed, cleared where Lunma can still reach, not clearable by uninstall, and never outliving the browsing session
+- [x] 7.2 Add the marker to the "What Lunma stores, and where" section — it is the only storage location outside Lunma's own
+- [x] 7.3 Add `webNavigation` to the permissions list, described by the job it does
+- [x] 7.4 Confirm the page does not contradict `TrustBand.svelte` — the retained requirement text obliges this change to keep the two in agreement — and that `apps/site` verify (contrast test + prerender build) passes
 
 ## 8. Docs
 
-- [ ] 8.1 `docs/adr/0005-tab-provenance.md` — remove the "not currently implemented" statement, the "whether the two costs are worth it is an open product question" paragraph, and the unresolved re-indent-vs-hold choice (settled by D6); correct its claim that the EXISTING content scripts carry the token (a third one does)
-- [ ] 8.2 `docs/architecture.md` — the permission enumeration (a closed list today), the SW event-source list, and the `AppState` slice inventory
-- [ ] 8.3 Confirm `docs/tech-stack.md` needs no change (no new dependency)
+- [x] 8.1 `docs/adr/0005-tab-provenance.md` — remove the "not currently implemented" statement, the "whether the two costs are worth it is an open product question" paragraph, and the unresolved re-indent-vs-hold choice (settled by D6); correct its claim that the EXISTING content scripts carry the token (a third one does)
+- [x] 8.2 `docs/architecture.md` — the permission enumeration (a closed list today), the SW event-source list, and the `AppState` slice inventory
+- [x] 8.3 Confirm `docs/tech-stack.md` needs no change (no new dependency)
 
 ## 9. Verify
 
-- [ ] 9.1 `pnpm verify` at the workspace root is green
-- [ ] 9.2 `pnpm test:e2e` is green
-- [ ] 9.3 Write a committed e2e spec asserting the behaviour ADR 0005 records: a token in `sessionStorage` survives `--restore-last-session`, distinct per tab, through same-origin navigation. It guards the Chrome behaviour the whole mechanism rests on, and can only land once the token script exists
-- [ ] 9.4 `openspec validate add-tab-provenance --strict` passes
+- [x] 9.1 `pnpm verify` at the workspace root is green
+- [x] 9.2 `pnpm test:e2e` is green
+- [x] 9.3 Write a committed e2e spec asserting the behaviour ADR 0005 records: a token in `sessionStorage` survives `--restore-last-session`, distinct per tab, through same-origin navigation. It guards the Chrome behaviour the whole mechanism rests on, and can only land once the token script exists
+- [x] 9.4 `openspec validate add-tab-provenance --strict` passes
 - [ ] 9.5 Release task, outside this repo: write the Chrome Web Store `webNavigation` permission justification, and CONFIRM (do not assume) that the data-usage declaration still reads "no data collected" — it is a signed declaration

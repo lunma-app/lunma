@@ -136,11 +136,12 @@ SHALL record a parent edge only when BOTH hold: the commit's `transitionType` is
 not a root transition, AND the tab's `openerTabId` resolves to a tab whose token is
 known.
 
-`isRootTransition()` SHALL treat `start_page`, `auto_toplevel`, `typed`,
-`auto_bookmark`, `generated`, `reload` and `keyword` as roots. Both the
-`start_page` and `auto_toplevel` spellings are accepted because Chrome is not
-consistent between them across platforms — not in anticipation of any future
-consumer.
+`isRootTransition()` SHALL be expressed as an allow-list of CONTINUING
+transitions — `link` — treating every other value as a root, rather than as a
+deny-list of known roots. The two formulations agree on the documented
+transitions, but the allow-list **fails open**: an unfamiliar or future
+`transitionType` yields a root instead of silently attributing a parent, which is
+the premise that a wrong parent is worse than no parent.
 
 An **external application handoff** commits as `start_page` while carrying a live
 `openerTabId` pointing at whatever tab was last focused. It SHALL therefore be

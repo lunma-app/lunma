@@ -13,6 +13,7 @@ import {
   type SidebarFocusMessage,
 } from '../shared/messages';
 import { NEWTAB_PAGE_PATH } from '../shared/new-tab';
+import { hasApiPermission } from '../shared/permissions';
 import { buildEngineRegistry } from '../shared/search-engines';
 import { readSettings, type Settings, watchSettings } from '../shared/settings';
 import type { TabId } from '../shared/types';
@@ -37,6 +38,15 @@ import { openOptionsAtResultSources } from './open-options-grant';
 import { backfillOverlayIntoOpenTabs, injectOverlay } from './overlay-injection';
 import { buildOverlayLabels } from './overlay-labels';
 import { resolvePinActiveTab } from './pin-active-tab';
+import {
+  isProvenanceOn,
+  maybeEndSweep,
+  pruneOnBoot,
+  resolveAllParents,
+  sweepTabOnLoad,
+  syncTabIdentity,
+  tearDownProvenance,
+} from './provenance';
 import { seedExistingTabs } from './seed-existing-tabs';
 import { seedExistingWindows } from './seed-existing-windows';
 import { resolveSpaceTint } from './space-tint';
@@ -123,6 +133,15 @@ const bootReady: Promise<void> = loadState()
     purgeExpiredTrash(store);
   })
   .then(() => seedExistingWindows(store))
+  // tab-provenance: prune edges no live tab can claim, re-resolve parents from
+  // what survived, push the synchronous mirror, and end a pending teardown sweep
+  // if this boot can prove no page still holds a marker.
+  .then(async () => {
+    await refreshProvenanceEnabled();
+    pruneOnBoot(store);
+    resolveAllParents(store);
+    await maybeEndSweep(store);
+  })
   // Adopt already-open tabs into their window's active Space as temp tabs, and
   // seed the ephemeral live-tab metadata — both from one tabs.query. liveTabsById
   // is never read from disk (stripped on persist); both run on every SW boot,
@@ -236,6 +255,13 @@ void bootReady.then(async () => {
   // Seed the dedup-promotes-to-top mirror (dedup-moves-tab-to-top) so a dedup
   // focus can decide synchronously whether to also promote the tab.
   coordinator.setDedupMovesTabToTop(settings.dedupMovesTabToTop);
+  // tab-provenance: the commit handler reads this synchronously, so it must be
+  // pushed rather than awaited at handling time.
+  void (async () => {
+    const wasOn = coordinator.provenanceWasEnabled();
+    await refreshProvenanceEnabled(settings);
+    if (wasOn && !settings.trackTabProvenance) await tearDownProvenance(store);
+  })();
   await coordinator.refreshBoundTabBoundaries();
 });
 
@@ -391,6 +417,28 @@ function enqueueAfterBoot(event: PendingEvent): void {
   void bootReady.then(() => coordinator.enqueue(event));
 }
 
+// ── tab-provenance ───────────────────────────────────────────────────────────
+// The commit handler reads a SYNCHRONOUS mirror, so the effective state is pushed
+// into the coordinator rather than awaited at handling time.
+async function refreshProvenanceEnabled(settings?: Settings): Promise<void> {
+  const on = settings
+    ? settings.trackTabProvenance && (await hasApiPermission('webNavigation'))
+    : await isProvenanceOn();
+  coordinator.setProvenanceEnabled(on);
+}
+
+/** Establish a tab's identity on commit, or sweep its marker while a teardown is
+ * still converging. Both are no-ops when nothing applies. */
+async function syncProvenanceToken(tabId: number): Promise<void> {
+  if (store.state.provenanceCleanupPending) {
+    await sweepTabOnLoad(store, tabId);
+    return;
+  }
+  if (!(await isProvenanceOn())) return;
+  await syncTabIdentity(store, tabId);
+  resolveAllParents(store);
+}
+
 function registerChromeListeners(): void {
   chrome.tabs.onCreated.addListener((tab) => {
     enqueueAfterBoot({ source: 'chrome', kind: 'tabs.onCreated', payload: { tab } });
@@ -407,6 +455,29 @@ function registerChromeListeners(): void {
       payload: { tabId, changeInfo },
     });
   });
+
+  // tab-provenance: an optional permission gates whether the API OBJECT exists,
+  // so availability IS the permission check and it is answerable in this
+  // synchronous turn — an async `permissions.contains` guard could not complete
+  // before the registration window closes and the worker would miss commits on
+  // wake. Subframes are filtered here so they never enter the queue.
+  if (chrome.webNavigation) {
+    chrome.webNavigation.onCommitted.addListener((details) => {
+      if (details.frameId !== 0) return;
+      enqueueAfterBoot({
+        source: 'chrome',
+        kind: 'webNavigation.onCommitted',
+        payload: {
+          tabId: details.tabId,
+          frameId: details.frameId,
+          url: details.url,
+          transitionType: details.transitionType,
+          transitionQualifiers: [...(details.transitionQualifiers ?? [])],
+        },
+      });
+      void syncProvenanceToken(details.tabId);
+    });
+  }
 
   chrome.tabs.onActivated.addListener((activeInfo) => {
     enqueueAfterBoot({ source: 'chrome', kind: 'tabs.onActivated', payload: { activeInfo } });

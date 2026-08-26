@@ -70,9 +70,7 @@ on** (default off), and the options copy SHALL disclose that a random tab marker
 is stored in visited pages, beside the permission prompt. Writing it silently, or
 for users who have not enabled the feature, is not acceptable.
 
-Provenance is **not currently implemented**. This decision governs how it is built
-if it is built; whether the two costs above are worth the feature is a product
-question, open.
+Both costs are accepted as the price of lineage that survives a restart.
 
 ## Alternatives considered
 
@@ -106,8 +104,8 @@ question, open.
 - A tab reopened from history is genuinely new and appears as a root.
 - Chrome may defer loading a restored tab until it is activated. The content
   script runs at `document_start`, so the token arrives whenever the tab loads —
-  lineage is delayed, never wrong. Whether rows re-indent as tabs are visited, or
-  indentation is held until the restored set reports, is a design choice the
-  implementation must make deliberately.
+  lineage is delayed, never wrong. Rows re-indent as restored tabs are visited,
+  with no transition: `animate:flip` is given a zero duration unless a drag is in
+  progress, so motion in the Temporary list always means "you moved something".
 - The persisted slice is keyed by token rather than live tab, so eviction by
   `tabs.onRemoved` no longer bounds it. It needs an explicit retention rule.

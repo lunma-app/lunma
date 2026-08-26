@@ -23,7 +23,7 @@ The list holds **eighteen** entries:
 - `{ toVersion: 17 }` (`persist-lens-article-layout`): a pure **identity pass-through** (`(raw) => raw`). The lens `PinNode` gains an OPTIONAL `articleLayout?: 'grid' | 'list'`; pre-v17 nodes simply lack it and remain valid (resolving to the `grid` default), so no transform is required and the entry exists only to advance the version;
 - `{ toVersion: 18 }` (`remap-renamed-lucide-icons`): a **real transformation** that rewrites renamed lucide icon names in place (see Requirement: Renamed lucide icon names are remapped on load).
 
-- `{ toVersion: 19 }` (`add-tab-provenance`): an **additive** migration defaulting `provenanceByToken` to `{}` and `provenanceCleanupPending` to `false`. No existing data is reshaped; the entry exists so a downgrade past v19 is detectable via the version gate.
+- `{ toVersion: 19 }` (`add-tab-provenance`): a pure **identity pass-through**. Both slices are declared on `AppStateV19Schema` with `.default(...)`, so older data materialises them at parse time and there is nothing to transform — the v16/v17 precedent. A migration that WROTE the keys would make full-chain output fail every frozen intermediate schema, which are `strictObject`. The entry exists to advance the version, so a downgrade past v19 is detectable.
 
 The last entry's `toVersion` SHALL equal `CURRENT_SCHEMA_VERSION` (19); `assertMigrationsTerminal`/`runMigrations` SHALL throw on boot if they disagree.
 
@@ -57,8 +57,8 @@ The last entry's `toVersion` SHALL equal `CURRENT_SCHEMA_VERSION` (19); `assertM
 #### Scenario: The v19 migration defaults the provenance slices
 
 - **GIVEN** a v18 envelope carrying no provenance slices
-- **WHEN** `runMigrations` applies the v19 migration
-- **THEN** the state SHALL carry `provenanceByToken: {}` and `provenanceCleanupPending: false`, and nothing else SHALL be reshaped
+- **WHEN** `runMigrations` applies the v19 migration and the result is parsed by `AppStateV19Schema`
+- **THEN** the migration SHALL return its input unchanged, and the parse SHALL materialise `provenanceByToken: {}` and `provenanceCleanupPending: false`
 
 ### Requirement: Migration runner applies pending migrations in order
 

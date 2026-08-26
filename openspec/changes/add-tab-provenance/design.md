@@ -148,6 +148,17 @@ the helper moves to `shared/settings.ts`, which already reads settings and is wh
 setting-derived state belongs. `shared/permissions.ts` remains excluded either way,
 as it is specified to carry no policy.
 
+**D12 — Four apply-time alignments, agreed and recorded.**
+(a) The v19 migration is an identity pass-through, not a writer: `AppStateV19Schema`
+carries Zod defaults, and a writing migration made full-chain output fail every
+frozen `strictObject` intermediate schema. (b) `isRootTransition` is an allow-list
+of continuing transitions rather than a deny-list of roots, so an unfamiliar
+`transitionType` fails open to a root. (c) `ResultSourcesCard` is narrowed to
+`OptionalResultSource` — widening the permission union must not force
+`webNavigation` onto a card about launcher result sources. (d) `LiveTab.openerTabId`
+is restored: it was dropped during an artifact rewrite, and the commit handler
+cannot resolve an opener without it.
+
 **Docs this change must update:**
 
 - `docs/adr/0005-tab-provenance.md` — the "not currently implemented" sentence

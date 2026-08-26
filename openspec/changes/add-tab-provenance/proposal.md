@@ -141,8 +141,8 @@ reached. Both are bounded by `sessionStorage` not outliving the browsing session
   `effectiveProvenanceState()` in `shared/settings.ts`.
 - `OptionalApiPermission` gains `'webNavigation'`.
 - `TabRow.svelte` gains `depth?: number`.
-- `LiveTab` and `LiveTabSchema` gain `provenanceToken?: string` and
-  `provenanceParentTabId?: TabId`. Both must be DECLARED on the schema:
+- `LiveTab` and `LiveTabSchema` gain `openerTabId?: TabId` (captured at CREATE,
+  because it decays), `provenanceToken?: string` and `provenanceParentTabId?: TabId`. Both must be DECLARED on the schema:
   `LiveTabSchema` is a `z.strictObject` parsed on every broadcast, so an
   undeclared field rejects the whole broadcast.
 - `AppStateV19Schema` + the `AppStateV19` type; both new slices carry Zod
@@ -166,6 +166,9 @@ script), `src/background/index.ts`, `src/background/coordinator.ts`,
 `src/shared/store.svelte.ts`, `src/shared/permissions.ts`, `src/shared/settings.ts`,
 `src/shared/chrome/storage.ts`, `src/shared/messages.ts`, `src/shared/backup.ts`,
 `src/options/Options.svelte`, `src/options/labels.ts`,
+`src/options/ResultSourcesCard.svelte` (narrowed to `OptionalResultSource`: it is
+about launcher result sources, so widening the permission union must not force an
+unrelated key on it), `src/sidebar/TempTabs.svelte`, `src/ui/TabRow.svelte`,
 `src/sidebar/TempTabs.svelte`, `src/ui/TabRow.svelte`, `src/options/labels.ts`,
 `apps/site/src/routes/privacy/+page.svelte`, all nine
 `apps/extension/messages/*.json`.

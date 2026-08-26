@@ -477,6 +477,12 @@ export class Coordinator {
     this.provenanceOn = value;
   }
 
+  /** The mirror's CURRENT value, read before a settings push so a flip to off can
+   * be distinguished from a no-op write and trigger exactly one teardown. */
+  provenanceWasEnabled(): boolean {
+    return this.provenanceOn;
+  }
+
   /**
    * Re-resolve and re-push the boundary config for every currently-bound saved
    * tab. Delegates to {@link BoundaryController}; preserved on this class so the

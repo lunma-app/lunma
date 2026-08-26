@@ -221,7 +221,7 @@ optional capability requests in-context, the first time you reach for it.
 | Tier | Permissions |
 |---|---|
 | Required `permissions` | `tabs`, `tabGroups`, `storage`, `sidePanel`, `alarms`, `scripting`, `favicon` |
-| `optional_permissions` | `history`, `bookmarks` (the launcher's two suggestion providers) |
+| `optional_permissions` | `history`, `bookmarks` (the launcher's two suggestion providers), `webNavigation` (tab provenance — `transitionType` is the only signal separating a link click from an external-app handoff) |
 | `optional_host_permissions` | the connector SaaS hosts plus self-hosted fallbacks (see below) |
 
 Notes on the required tier:

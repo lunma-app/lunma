@@ -64,6 +64,15 @@ const lastUpdated = '15 June 2026';
         not ours, and your Spaces and tabs are never part of it.
       </p>
       <p>
+        One optional setting writes outside Lunma's own storage. With <em>Show where
+        tabs came from</em> turned on — it is off unless you turn it on — Lunma
+        stores a random marker in the pages you visit, so a tab tree survives a
+        browser restart. The pages themselves can read that marker, which means a
+        site can tell Lunma is installed. It carries nothing about you, it never
+        leaves your browser, and it cannot outlive the browsing session it was
+        written in.
+      </p>
+      <p>
         If you give a connector an access token, it stays in local storage on this
         device and never syncs. We keep tokens out of synced storage on purpose,
         so one can't ride your browser account to another machine. A token is
@@ -87,6 +96,13 @@ const lastUpdated = '15 June 2026';
           A small script on the pages you open, so the launcher works wherever you
           are and a pinned tab stays on its own page. It reads the text you type
           into the launcher and the link you click. It never reads the page around it.
+        </li>
+        <li>
+          Reading your browsing history is optional, and only for <em>Show where tabs
+          came from</em>. Lunma needs it to tell a link you clicked from a link
+          another app handed to Chrome — without that it would indent tabs under the
+          wrong parent. It is asked for when you turn the setting on, never at
+          install, and it is read on your machine and sent nowhere.
         </li>
       </ul>
       <p>All of it reads locally. None of it goes to a server of ours, because we don't have one.</p>
@@ -124,6 +140,14 @@ const lastUpdated = '15 June 2026';
 
     <section>
       <h2>Keeping it, and deleting it</h2>
+      <p>
+        Turning <em>Show where tabs came from</em> off clears the tab tree and
+        removes the markers Lunma can still reach, then keeps clearing them as those
+        pages are next opened. Two honest limits: uninstalling Lunma cannot remove
+        markers already written, and a tab you never open again is never reached.
+        Neither matters for long — a marker cannot survive the browsing session it
+        was written in.
+      </p>
       <p>
         Lunma holds nothing of yours, so there's nothing for us to keep or delete.
         Your data lasts exactly as long as it sits in your browser. Clear the
