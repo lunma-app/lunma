@@ -28,7 +28,7 @@ ADRs are curated to durable decisions. When a decision changes, update its ADR i
 | 0002 | [Spaces materialize as Chrome tab groups](0002-tab-group-materialization.md) |
 | 0003 | [Per-window tab bindings](0003-per-window-tab-bindings.md) |
 | 0004 | [pnpm workspace and the marketing site](0004-workspace-and-marketing-site.md) |
-| 0005 | [No tab provenance — Chrome cannot supply durable tab lineage](0005-no-tab-provenance.md) |
+| 0005 | [Tab provenance — durable lineage is feasible via page-carried identity](0005-tab-provenance.md) |
 
 ## Format
 
