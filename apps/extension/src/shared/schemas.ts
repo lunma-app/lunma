@@ -394,6 +394,7 @@ const LiveTabSchema = z.strictObject({
   // tab-provenance. Ephemeral like the rest of this slice — the durable record is
   // `provenanceByToken`. Declared here because this is a `strictObject` parsed on
   // every broadcast: an undeclared field would reject the whole broadcast.
+  openerTabId: z.number().optional(),
   provenanceToken: z.string().optional(),
   provenanceParentTabId: z.number().optional(),
 });

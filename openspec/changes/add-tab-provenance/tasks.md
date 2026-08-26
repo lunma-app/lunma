@@ -14,17 +14,17 @@
 - [x] 2.2 Add `shared/provenance.ts` with `ProvenanceEdge` (`{ parentToken, recordedAt }`), `resolveParentTabId()`, `effectiveProvenanceState()`, `isRootTransition()`, `PROVENANCE_EDGE_CAP` (2000), `PROVENANCE_MAX_DEPTH` (5), `TAB_TOKEN_KEY` (`'lunma.tabToken'`) and `PROVENANCE_SESSION_MARKER_KEY` (`'lunma.provenanceSession'`) — no depth type, since depth is layout
 - [x] 2.3 Declare `lunma/provenance-sync`, `lunma/provenance-token` and `lunma/provenance-clear` in `shared/messages.ts` — where the existing `lunma/boundary-*` content-script messages already live, NOT a new module and NOT `shared/bus.ts` — then add `content/tab-token.ts`: dormant until messaged, no settings read, no `chrome.*` beyond `runtime.onMessage`, mirroring `content/tab-boundary.ts`'s budget and re-injection guard. Register it as the third content script in the manifest
 - [x] 2.4 RED first: with the effective state OFF, no page `sessionStorage` read or write occurs — the normative property from the `tab-provenance` spec, and the test that keeps it honest
-- [ ] 2.5 SW-side identity exchange on every main-frame commit: mint a candidate, send `provenance-sync`, take the token the script replies with (a token already on the page WINS), keep a live `tabId → token` map, and re-send the mapped token on a cross-origin commit. Add `provenanceToken?: string` / `provenanceParentTabId?: TabId` to `LiveTab` plus `setLiveTabToken()` and `setLiveTabParent()`
-- [ ] 2.5b RED first: declare `provenanceToken` and `provenanceParentTabId` on `LiveTabSchema` (a `z.strictObject` — an undeclared field rejects the whole broadcast) and make `syncLiveTab` treat a change to either as material; without it the gate swallows the report and the sidebar never re-indents
+- [x] 2.5 SW-side identity exchange on every main-frame commit: mint a candidate, send `provenance-sync`, take the token the script replies with (a token already on the page WINS), keep a live `tabId → token` map, and re-send the mapped token on a cross-origin commit. Add `provenanceToken?: string` / `provenanceParentTabId?: TabId` to `LiveTab` plus `setLiveTabToken()` and `setLiveTabParent()`
+- [x] 2.5b RED first: declare `provenanceToken` and `provenanceParentTabId` on `LiveTabSchema` (a `z.strictObject` — an undeclared field rejects the whole broadcast) and make `syncLiveTab` treat a change to either as material; without it the gate swallows the report and the sidebar never re-indents
 - [x] 2.6 RED first: a page already holding a token keeps it and the candidate is discarded (this is what makes restore work); a page with none takes the candidate; a cross-origin commit re-sends the mapped token so one tab keeps one identity
 
 ## 3. Parent resolution
 
-- [ ] 3.1 RED first: an external handoff (`transitionType: 'start_page'` with a live `openerTabId`) resolves to a ROOT and ignores the opener
-- [ ] 3.2 RED first: a `link` commit with a tokenised opener records an edge; an untokenised opener yields a root; a `frameId !== 0` commit is ignored
-- [ ] 3.3 Add `background/handlers/web-navigation.ts`; register at top level guarded on `chrome.webNavigation` being DEFINED (a synchronous check that is exactly the permission check) — never an async `permissions.contains`. Filter `frameId !== 0` AT THE LISTENER so subframe commits never enter the queue. Add `ctx.provenanceEnabled()` — a cached synchronous settings mirror matching `ctx.dedupNewTabNavigations()` — and gate the handler on it, keeping the handler pure and dispatching the re-stamp through the side-effect channel
-- [ ] 3.4 Add the `PendingEvent` kind with an EMPTY `EventPolicy` entry — no coalescing. `replace` would discard the first commit, which is the one carrying the opener attribution, and no third mode exists. Confirm the exhaustiveness check still passes
-- [ ] 3.5 RED first: a commit arriving while the grant is held but the effective state is off records nothing
+- [x] 3.1 RED first: an external handoff (`transitionType: 'start_page'` with a live `openerTabId`) resolves to a ROOT and ignores the opener
+- [x] 3.2 RED first: a `link` commit with a tokenised opener records an edge; an untokenised opener yields a root; a `frameId !== 0` commit is ignored
+- [x] 3.3 Add `background/handlers/web-navigation.ts`; register at top level guarded on `chrome.webNavigation` being DEFINED (a synchronous check that is exactly the permission check) — never an async `permissions.contains`. Filter `frameId !== 0` AT THE LISTENER so subframe commits never enter the queue. Add `ctx.provenanceEnabled()` — a cached synchronous settings mirror matching `ctx.dedupNewTabNavigations()` — and gate the handler on it, keeping the handler pure and dispatching the re-stamp through the side-effect channel
+- [x] 3.4 Add the `PendingEvent` kind with an EMPTY `EventPolicy` entry — no coalescing. `replace` would discard the first commit, which is the one carrying the opener attribution, and no third mode exists. Confirm the exhaustiveness check still passes
+- [x] 3.5 RED first: a commit arriving while the grant is held but the effective state is off records nothing
 
 ## 4. Persistence — schema v19
 
@@ -32,8 +32,8 @@
 - [x] 4.2 Raise `CURRENT_SCHEMA_VERSION` to 19, add `AppStateV19Schema` extending v18 with both slices carrying Zod `.default(...)`, point `EnvelopeSchema` at it, export `AppStateV19`, advance the `AssertEqual` coherence guard to V19, and repoint the current-version consumers (`chrome/storage.ts`, `messages.ts`, `backup.ts`)
 - [x] 4.3 RED first: the v18 → v19 migration defaults both slices and reshapes nothing; the chain holds eighteen entries ending at 19; a v17 envelope validates only after BOTH the v18 and v19 migrations; a portable backup carrying no provenance slices still imports
 - [x] 4.4 Add the `{ toVersion: 19 }` migration entry
-- [ ] 4.5 RED first: boot pruning retains the TRANSITIVE closure of reported tokens — a chain three levels deep survives, which a single unordered pass would sever — and the cap drops edges in ascending `recordedAt` order
-- [ ] 4.6 Implement `recordProvenanceEdge()` and `pruneProvenanceEdges()` — pruning to a fixpoint AND the `PROVENANCE_EDGE_CAP` eviction both run in the boot prune, not on every record
+- [x] 4.5 RED first: boot pruning retains the TRANSITIVE closure of reported tokens — a chain three levels deep survives, which a single unordered pass would sever — and the cap drops edges in ascending `recordedAt` order
+- [x] 4.6 Implement `recordProvenanceEdge()` and `pruneProvenanceEdges()` — pruning to a fixpoint AND the `PROVENANCE_EDGE_CAP` eviction both run in the boot prune, not on every record
 
 ## 5. Restore and teardown
 

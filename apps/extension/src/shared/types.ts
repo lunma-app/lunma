@@ -539,6 +539,11 @@ export interface LiveTab {
   url: string;
   active: boolean;
   status: 'loading' | 'complete';
+  /** The tab this one was opened from, as Chrome reported it at creation
+   * (`chrome.tabs.Tab.openerTabId`). Captured at CREATE because it decays — a
+   * later read can return nothing for a tab that genuinely had an opener. Only a
+   * candidate: `transitionType` decides whether the edge is real. */
+  openerTabId?: TabId | undefined;
   /** Opaque provenance identity carried by this tab's page (tab-provenance).
    * Ephemeral; the durable record is `AppState.provenanceByToken`. */
   provenanceToken?: string | undefined;

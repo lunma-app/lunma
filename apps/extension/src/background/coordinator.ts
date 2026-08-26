@@ -26,6 +26,7 @@ import { lensHandlers } from './handlers/lenses';
 import { pinnedTabHandlers } from './handlers/pinned-tabs';
 import { spaceHandlers } from './handlers/spaces';
 import { tempTabHandlers } from './handlers/temp-tabs';
+import { webNavigationHandlers } from './handlers/web-navigation';
 
 // Re-export of underlying types for documentation; kept narrow on purpose.
 export type { SpaceId, WindowId } from '../shared/types';
@@ -97,6 +98,10 @@ export const EventPolicy: Record<PendingEventKind, EventPolicyEntry> = {
     coalesceKey: (e) => (e.kind === 'tabGroups.onUpdated' ? e.payload.group.id : -1),
     mergePayload: mergeTabGroupsOnUpdatedPayload,
   },
+  // No coalescing (tab-provenance): the FIRST commit for a tab is the one
+  // carrying the opener attribution an edge resolves from, so `replace` would
+  // discard exactly the event provenance depends on.
+  'webNavigation.onCommitted': {},
   'windows.onCreated': {},
   'windows.onRemoved': {},
   // Sidebar-source commands per design D4. Coalesce only the two clear
@@ -325,6 +330,7 @@ export class Coordinator {
     // union of fragments omits any `kind` — exhaustiveness enforced at this site.
     this.handlers = {
       ...chromeTabHandlers(),
+      ...webNavigationHandlers(),
       ...chromeGroupWindowHandlers(),
       ...spaceHandlers(),
       ...pinnedTabHandlers(),

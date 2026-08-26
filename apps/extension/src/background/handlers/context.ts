@@ -52,6 +52,17 @@ export type PendingEvent =
       kind: 'tabGroups.onUpdated';
       payload: { group: chrome.tabGroups.TabGroup };
     }
+  | {
+      source: 'chrome';
+      kind: 'webNavigation.onCommitted';
+      payload: {
+        tabId: number;
+        frameId: number;
+        url: string;
+        transitionType: string;
+        transitionQualifiers: string[];
+      };
+    }
   | { source: 'chrome'; kind: 'windows.onCreated'; payload: { window: chrome.windows.Window } }
   | { source: 'chrome'; kind: 'windows.onRemoved'; payload: { windowId: number } }
   | SidebarVariant<'createSpace'>
