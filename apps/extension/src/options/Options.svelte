@@ -243,6 +243,12 @@ function onTextInput(decl: SettingDeclaration, value: string): void {
  * gesture — and must write back `false` when the grant is declined, or the toggle
  * would render on with nothing behind it. */
 function onToggle(decl: SettingDeclaration, next: boolean): void {
+  // An unmet dependency makes this setting meaningless, so it must not be
+  // written. The control is rendered disabled too, but the guard belongs here:
+  // "never written while unavailable" is a data invariant, not a rendering
+  // detail, and it keeps the user's stored choice intact for when the dependency
+  // comes back.
+  if (!dependencyMet(decl)) return;
   if (decl.key === 'trackTabProvenance' && next) {
     // Optimistic paint, reverted on a declined grant.
     settings = { ...settings, trackTabProvenance: true };
@@ -277,6 +283,34 @@ $effect(() => {
 function toggleValue(decl: SettingDeclaration): boolean {
   const stored = Boolean(settings[decl.key]);
   return decl.key === 'trackTabProvenance' ? stored && provenanceGranted : stored;
+}
+
+/** Is this toggle's declared dependency currently satisfied (tab-close-cascade)?
+ * Resolved through the dependency's EFFECTIVE value, not its stored one — a
+ * setting synced `true` from another device can be off here for want of a
+ * per-device grant, and a toggle for a feature that cannot run must not look
+ * available. */
+function dependencyMet(decl: SettingDeclaration): boolean {
+  if (decl.type !== 'toggle' || decl.dependsOn === undefined) return true;
+  const dep = SETTINGS.find((d) => d.key === decl.dependsOn);
+  // An unresolvable dependency reads as UNMET: a typo'd key must fail closed
+  // (control disabled, nothing written) rather than silently enabling the very
+  // gate it was meant to impose.
+  return dep === undefined ? false : toggleValue(dep);
+}
+
+/** The row description, replaced by the reason when the dependency is unmet — in
+ * the row itself, never a tooltip: a hover the user has no cue to attempt, and
+ * one that touch and keyboard cannot reach, is not an explanation. */
+function describeSetting(decl: SettingDeclaration): string {
+  const own = settingDescription(decl.key);
+  if (dependencyMet(decl)) return own;
+  const dep = decl.type === 'toggle' ? decl.dependsOn : undefined;
+  if (dep === undefined) return own;
+  // APPEND the reason rather than replace the description: the disabled state is
+  // the one state in which the user is deciding whether the dependency is worth
+  // enabling, so what the setting does has to stay readable.
+  return `${own} ${m.options_desc_requiresSetting({ setting: settingLabel(dep) })}`;
 }
 
 /** Persist a `number` setting as a positive integer (immediate-apply). Ignores
@@ -367,7 +401,7 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
     {#each decls as decl (decl.key)}
       {#if isVisible(decl)}
         <div class="setting" class:stacked={isStacked(decl)}>
-          <SettingText label={settingLabel(decl.key)} description={settingDescription(decl.key)} />
+          <SettingText label={settingLabel(decl.key)} description={describeSetting(decl)} />
           {#if decl.type === 'enum' && decl.options.length > SEGMENTED_MAX}
             <Select
               options={localizedOptionsByKey.get(decl.key) ?? []}
@@ -433,6 +467,7 @@ function onNumberInput(decl: SettingDeclaration, raw: string): void {
               options={toggleOptions}
               value={toggleValue(decl) ? 'on' : 'off'}
               ariaLabel={settingLabel(decl.key)}
+              disabled={!dependencyMet(decl)}
               onchange={(value) => onToggle(decl, value === 'on')}
             />
           {:else if decl.type === 'number'}

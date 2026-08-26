@@ -22,6 +22,21 @@
       }
     }
   ],
+  "sidebar_cascadeClosedTabs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} untergeordneten Tab geschlossen",
+        "countPlural=other": "{count} untergeordnete Tabs geschlossen"
+      }
+    }
+  ],
   "sidebar_clearedDuplicateTabs": [
     {
       "declarations": [
@@ -437,5 +452,8 @@
   ],
   "options_label_trackTabProvenance": "Zeigen, woher Tabs kommen",
   "options_desc_trackTabProvenance": "Rückt jeden Tab unter den Tab ein, aus dem er geöffnet wurde. Chrome fragt nach Zugriff auf deinen Browserverlauf, und Lunma speichert eine zufällige Markierung in den besuchten Seiten — diese Seiten können sie lesen.",
-  "options_note_trackTabProvenance": "Beim Ausschalten werden die Markierungen gelöscht, die Lunma noch erreichen kann. Eine Deinstallation löscht bereits geschriebene nicht, und ein Tab, den du nie wieder öffnest, wird nie erreicht — aber eine Markierung überdauert nie die Browsersitzung, in der sie geschrieben wurde."
+  "options_note_trackTabProvenance": "Beim Ausschalten werden die Markierungen gelöscht, die Lunma noch erreichen kann. Eine Deinstallation löscht bereits geschriebene nicht, und ein Tab, den du nie wieder öffnest, wird nie erreicht — aber eine Markierung überdauert nie die Browsersitzung, in der sie geschrieben wurde.",
+  "options_label_closeChildTabsWithParent": "Untergeordnete Tabs mit dem übergeordneten schließen",
+  "options_desc_closeChildTabsWithParent": "Beim Schließen eines Tabs werden auch die daraus geöffneten Tabs geschlossen. Du kannst das direkt danach rückgängig machen.",
+  "options_desc_requiresSetting": "Aktiviere zuerst „{setting}“."
 }

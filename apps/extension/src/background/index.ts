@@ -273,6 +273,8 @@ void bootReady.then(async () => {
   // pushed rather than awaited at handling time. Live flips are pushed by the
   // settings watcher below; this only seeds the mirror at boot.
   void refreshProvenanceEnabled(settings);
+  // tab-close-cascade: same mirror discipline as provenance above.
+  coordinator.setCloseChildTabsWithParent(settings.closeChildTabsWithParent);
   await coordinator.refreshBoundTabBoundaries();
 });
 
@@ -426,6 +428,9 @@ watchSettings((settings) => {
   // Push the live dedup-promotes-to-top toggle (dedup-moves-tab-to-top) so
   // flipping it takes effect without a reload.
   coordinator.setDedupMovesTabToTop(settings.dedupMovesTabToTop);
+  // Push the live close-cascade mirror (tab-close-cascade), for the same reason
+  // the provenance mirror below is pushed rather than seeded once.
+  coordinator.setCloseChildTabsWithParent(settings.closeChildTabsWithParent);
   // Push the live provenance mirror (tab-provenance). Without this the commit
   // handler reads whatever the boot seed cached, so enabling the toggle in a
   // live worker never takes effect: `onPermissionsChange` does not fire when the

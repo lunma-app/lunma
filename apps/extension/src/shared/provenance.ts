@@ -69,3 +69,45 @@ export function resolveParentTabId(
     token = parentToken;
   }
 }
+
+/**
+ * The tabs opened from `rootTabId`, transitively (tab-close-cascade).
+ *
+ * Restricted to `spaceTempTabIds` so a cascade can never reach a pinned tab or a
+ * tab in another Space — the subtree's visibility in the Temporary list is what
+ * makes closing it legible, and a tab the user cannot see is not legible.
+ *
+ * `rootTabId` itself is never included: the caller closed it, the cascade owns
+ * only what follows.
+ */
+export function collectDescendantTabIds(
+  liveTabsById: Readonly<
+    Record<number, { tabId: TabId; provenanceParentTabId?: TabId | undefined }>
+  >,
+  rootTabId: TabId,
+  spaceTempTabIds: readonly TabId[],
+): TabId[] {
+  const eligible = new Set<TabId>(spaceTempTabIds);
+  const childrenOf = new Map<TabId, TabId[]>();
+  for (const live of Object.values(liveTabsById)) {
+    const parent = live.provenanceParentTabId;
+    if (parent === undefined || !eligible.has(live.tabId)) continue;
+    const bucket = childrenOf.get(parent);
+    if (bucket) bucket.push(live.tabId);
+    else childrenOf.set(parent, [live.tabId]);
+  }
+
+  const out: TabId[] = [];
+  const seen = new Set<TabId>([rootTabId]); // also the cycle guard
+  const queue: TabId[] = [rootTabId];
+  while (queue.length > 0) {
+    const next = queue.shift() as TabId;
+    for (const child of childrenOf.get(next) ?? []) {
+      if (seen.has(child)) continue;
+      seen.add(child);
+      out.push(child);
+      queue.push(child);
+    }
+  }
+  return out;
+}

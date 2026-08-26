@@ -1154,6 +1154,12 @@ export const bus: Bus = new Proxy({} as Bus, {
 /** Runtime message type for the sidebar flash when dedup focuses an existing tab. */
 export const TAB_DEDUP_FLASH = 'lunma/tab-dedup-flash' as const;
 
+/** Runtime message type announcing a close cascade's archived batch to the sidebar,
+ * so it can offer undo (tab-close-cascade). Carries `{ windowId, tabIds }`. The
+ * batch is already archived when this is sent — the announcement raises the undo
+ * affordance, it does not carry the recovery itself. */
+export const CASCADE_CLOSED = 'lunma/cascade-closed' as const;
+
 /**
  * Fire-and-forget command dispatch (Task 3.x). The single sanctioned path for
  * sidebar UI actions that do not await the ack: it calls `bus.send` and routes

@@ -3,6 +3,7 @@ import {
   DEFAULTS,
   readSettings,
   SETTINGS,
+  type ToggleSettingDeclaration,
   watchSettings,
   writeAllSettings,
   writeSetting,
@@ -115,6 +116,7 @@ describe('writeSetting', () => {
       dedupNewTabNavigations: true,
       dedupMovesTabToTop: true,
       trackTabProvenance: false,
+      closeChildTabsWithParent: false,
       autoArchiveEnabled: true,
       autoArchiveIdleMinutes: 720,
       autoArchiveRetentionDays: 7,
@@ -142,6 +144,7 @@ describe('writeSetting', () => {
       dedupNewTabNavigations: true,
       dedupMovesTabToTop: true,
       trackTabProvenance: false,
+      closeChildTabsWithParent: false,
       autoArchiveEnabled: true,
       autoArchiveIdleMinutes: 720,
       autoArchiveRetentionDays: 7,
@@ -179,6 +182,7 @@ describe('watchSettings', () => {
       dedupNewTabNavigations: true,
       dedupMovesTabToTop: true,
       trackTabProvenance: false,
+      closeChildTabsWithParent: false,
       autoArchiveEnabled: true,
       autoArchiveIdleMinutes: 720,
       autoArchiveRetentionDays: 7,
@@ -235,6 +239,7 @@ describe('watchSettings', () => {
       dedupNewTabNavigations: true,
       dedupMovesTabToTop: true,
       trackTabProvenance: false,
+      closeChildTabsWithParent: false,
       autoArchiveEnabled: true,
       autoArchiveIdleMinutes: 720,
       autoArchiveRetentionDays: 7,
@@ -294,6 +299,7 @@ describe('tint setting', () => {
       dedupNewTabNavigations: true,
       dedupMovesTabToTop: true,
       trackTabProvenance: false,
+      closeChildTabsWithParent: false,
       autoArchiveEnabled: true,
       autoArchiveIdleMinutes: 720,
       autoArchiveRetentionDays: 7,
@@ -584,5 +590,32 @@ describe('language setting (i18n)', () => {
   test('writeSetting persists a language change', async () => {
     await writeSetting('language', 'ja');
     expect((await readSettings()).language).toBe('ja');
+  });
+});
+
+// `dependsOn` names a setting that can be "off", so the type admits only
+// boolean-valued keys (tab-close-cascade). This is enforced by the type, not by
+// prose in the spec — a text or enum key must not compile.
+describe('ToggleSettingDeclaration.dependsOn', () => {
+  test('accepts a boolean setting key and refuses a non-boolean one', () => {
+    const ok: ToggleSettingDeclaration = {
+      key: 'closeChildTabsWithParent',
+      type: 'toggle',
+      default: false,
+      dependsOn: 'trackTabProvenance',
+      label: 'x',
+      group: 'Tabs',
+    };
+    const bad: ToggleSettingDeclaration = {
+      key: 'closeChildTabsWithParent',
+      type: 'toggle',
+      default: false,
+      // @ts-expect-error `density` is an enum setting — "while it is off" is meaningless.
+      dependsOn: 'density',
+      label: 'x',
+      group: 'Tabs',
+    };
+    expect(ok.dependsOn).toBe('trackTabProvenance');
+    expect(bad.key).toBe('closeChildTabsWithParent');
   });
 });

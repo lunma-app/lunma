@@ -264,6 +264,10 @@ export class Coordinator {
    * live in `storage.sync`, so an await there would break handler purity. Defaults
    * to `false`: the feature is off until the boot read says otherwise. */
   private provenanceOn = false;
+  /** Cached `closeChildTabsWithParent` mirror (tab-close-cascade), kept current by
+   * {@link setCloseChildTabsWithParent}. Defaults to `false`: the cascade is
+   * destructive, so it stays off until a settings read says the user enabled it. */
+  private closeChildrenWithParent = false;
   private drainPromise: Promise<void> | null = null;
   /** Per-drain ack buffer. Includes both coalesce-time pushes (D5b) and
    * handler-tail pushes. Flushed at end of drain. */
@@ -322,6 +326,7 @@ export class Coordinator {
       dedupNewTabNavigations: () => this.dedupNavigations,
       dedupMovesTabToTop: () => this.dedupPromotesToTop,
       provenanceEnabled: () => this.provenanceOn,
+      closeChildTabsWithParent: () => this.closeChildrenWithParent,
       groups: this.groups,
       boundary: this.boundary,
     };
@@ -481,6 +486,13 @@ export class Coordinator {
    * be distinguished from a no-op write and trigger exactly one teardown. */
   provenanceWasEnabled(): boolean {
     return this.provenanceOn;
+  }
+
+  /** Update the cached close-cascade mirror (tab-close-cascade). Called from the
+   * boot settings read and from `watchSettings` — both, because a mirror seeded
+   * only at boot is stale for the rest of the worker's life. */
+  setCloseChildTabsWithParent(value: boolean): void {
+    this.closeChildrenWithParent = value;
   }
 
   /**

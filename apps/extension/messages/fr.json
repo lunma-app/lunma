@@ -22,6 +22,21 @@
       }
     }
   ],
+  "sidebar_cascadeClosedTabs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} onglet enfant fermé",
+        "countPlural=other": "{count} onglets enfants fermés"
+      }
+    }
+  ],
   "sidebar_clearedDuplicateTabs": [
     {
       "declarations": [
@@ -437,5 +452,8 @@
   ],
   "options_label_trackTabProvenance": "Montrer d’où viennent les onglets",
   "options_desc_trackTabProvenance": "Indente chaque onglet sous celui depuis lequel il a été ouvert. Chrome demandera à lire votre historique de navigation, et Lunma stocke un marqueur aléatoire dans les pages que vous visitez — ces pages peuvent le lire.",
-  "options_note_trackTabProvenance": "Le désactiver efface les marqueurs que Lunma peut encore atteindre. Désinstaller Lunma n’efface pas ceux déjà écrits, et un onglet que vous ne rouvrez jamais n’est jamais atteint — mais un marqueur ne survit jamais à la session de navigation où il a été écrit."
+  "options_note_trackTabProvenance": "Le désactiver efface les marqueurs que Lunma peut encore atteindre. Désinstaller Lunma n’efface pas ceux déjà écrits, et un onglet que vous ne rouvrez jamais n’est jamais atteint — mais un marqueur ne survit jamais à la session de navigation où il a été écrit.",
+  "options_label_closeChildTabsWithParent": "Fermer les onglets enfants avec leur parent",
+  "options_desc_closeChildTabsWithParent": "Fermer un onglet ferme aussi ceux que vous avez ouverts depuis lui. Vous pouvez annuler juste après.",
+  "options_desc_requiresSetting": "Activez d’abord « {setting} »."
 }

@@ -4,16 +4,19 @@
 // group/boundary helpers → `ctx.groups.*` / `ctx.boundary.*`, read predicates →
 // `./queries`.
 
-import { TAB_DEDUP_FLASH } from '../../shared/bus';
+import { CASCADE_CLOSED, TAB_DEDUP_FLASH } from '../../shared/bus';
 import { log } from '../../shared/logger';
 import { isLensPageUrl, isNewTabUrl } from '../../shared/new-tab';
+import { collectDescendantTabIds } from '../../shared/provenance';
+import type { TabId, WindowId } from '../../shared/types';
 import { resolveBoundaryAllow } from '../../shared/url-boundary';
+import { clearCascading, isCascading, markCascading } from '../close-cascade';
 import { clearInitialLoad, isInitialLoad, markInitialLoad } from '../initial-load-tabs';
 import { forgetPageOpenedTab, isPageOpenedTab } from '../page-opened-tabs';
 import { resolveAllParents } from '../provenance';
 import { closeTab } from '../tab-groups';
 import { activateSpaceInWindow } from './activation';
-import type { HandlersMap } from './context';
+import type { HandlerContext, HandlersMap } from './context';
 import { consumePendingDuplicateTab } from './pending-duplicate-tabs';
 import {
   findTabInActiveSpace,
@@ -21,6 +24,85 @@ import {
   savedTabIdForBoundTab,
   spaceOwningTab,
 } from './queries';
+
+/**
+ * The tabs a close of `tabId` should take with it (tab-close-cascade), or empty.
+ *
+ * Guards run cheapest-first because this is on the path of EVERY tab close. A
+ * window teardown is rejected outright: it removes every tab, so cascading through
+ * it would archive the user's whole session as though they had discarded it.
+ */
+function collectCascadeBatch(
+  ctx: HandlerContext,
+  tabId: TabId,
+  info: chrome.tabs.OnRemovedInfo,
+): TabId[] {
+  if (info.isWindowClosing) return [];
+  if (!ctx.closeChildTabsWithParent()) return [];
+  if (!ctx.provenanceEnabled()) return [];
+  if (isCascading(tabId)) return []; // our own removals, not a user close
+  const windowId = info.windowId;
+  if (windowId === undefined) return [];
+
+  const spaceId = spaceOwningTab(ctx.store.state, windowId, tabId);
+  if (spaceId === null) return [];
+  const tempTabIds = ctx.store.state.spaceInstancesByWindow[windowId]?.[spaceId]?.tempTabIds ?? [];
+  // `spaceOwningTab` also resolves a Space through `tabBindings`, so it answers
+  // for a PINNED tab too. Pinned tabs are outside this capability in both
+  // directions — they neither cascade nor get cascaded.
+  if (!tempTabIds.includes(tabId)) return [];
+
+  return collectDescendantTabIds(ctx.store.state.liveTabsById, tabId, tempTabIds);
+}
+
+/**
+ * Archive the batch under ONE stamp, then close it off the drain.
+ *
+ * The archive is written synchronously and is what makes a cascade recoverable;
+ * the toast is a convenience on top. The announcement is deliberately not awaited
+ * or reported — `chrome.runtime.sendMessage` rejects whenever no surface is
+ * listening, which is the ordinary case for a tab-strip close with the sidebar
+ * shut, and that must not read as a failure.
+ */
+function runCascade(ctx: HandlerContext, batch: TabId[], windowId: WindowId | undefined): void {
+  const now = Date.now();
+  for (const id of batch) {
+    const live = ctx.store.state.liveTabsById[id];
+    ctx.store.appendArchivedTab({
+      tabId: id,
+      url: live?.url ?? '',
+      title: live?.title ?? '',
+      spaceId: spaceOwningTab(ctx.store.state, live?.windowId ?? (windowId as WindowId), id) ?? '',
+      archivedAt: now,
+    });
+  }
+  ctx.store.pruneArchivedTabs(now);
+  markCascading(batch);
+
+  ctx.runSideEffect(async () => {
+    try {
+      if (windowId !== undefined) {
+        const all = await chrome.tabs.query({ windowId });
+        const removing = new Set<number>(batch);
+        const survivors = all.filter((t) => t.id !== undefined && !removing.has(t.id));
+        if (survivors.length === 0) await chrome.tabs.create({ windowId, active: true });
+      }
+      await chrome.tabs.remove(batch);
+    } catch (err) {
+      log.error('close cascade: removal failed', { err });
+      // Nothing will be removed, so no per-removal clear is coming for these —
+      // release them here or they would suppress a later, real cascade.
+      clearCascading(batch);
+    }
+    // On SUCCESS the marks are deliberately left standing: Chrome reports each
+    // removal after this resolves, and each report clears its own mark. Clearing
+    // the batch here would drop the marks before the very events they exist to
+    // suppress arrive, and every cascaded tab would start a cascade of its own.
+    await chrome.runtime
+      .sendMessage({ type: CASCADE_CLOSED, windowId, tabIds: batch })
+      .catch(() => undefined);
+  });
+}
 
 export function chromeTabHandlers(): Pick<
   HandlersMap,
@@ -187,6 +269,10 @@ export function chromeTabHandlers(): Pick<
     },
     'tabs.onRemoved': (ctx, event) => {
       const { tabId, info } = event.payload;
+      // Close cascade (tab-close-cascade): resolve the subtree BEFORE
+      // `onTabRemoved` below, which splices this tab out of `tempTabIds` — after
+      // that `spaceOwningTab` answers `null` and the subtree is uncomputable.
+      const cascade = collectCascadeBatch(ctx, tabId, info);
       // Query next feed item BEFORE onTabRemoved (binding still visible, item still unread).
       const advance = info.isWindowClosing
         ? undefined
@@ -207,10 +293,12 @@ export function chromeTabHandlers(): Pick<
       // Redirect-chain tab dedup: bounded cleanup for a tab that closes (via
       // dedup or otherwise) before ever reaching `status: 'complete'`.
       clearInitialLoad(tabId);
+      clearCascading(tabId); // this removal arrived; stop suppressing it
       // tab-provenance: the closed tab may have been the middle of a chain, so
       // every tab below it now resolves to a different (higher) live ancestor.
       // Without this the children keep pointing at a dead tab and render flat.
       if (ctx.provenanceEnabled()) resolveAllParents(ctx.store);
+      if (cascade.length > 0) runCascade(ctx, cascade, info.windowId);
       ctx.markDirty();
       // Auto-advance: open the next unread feed item in the same section — but
       // ONLY for items opened from the sidebar reading flow. An item opened from

@@ -30,6 +30,7 @@ function settings(over: Partial<Settings> = {}): Settings {
     dedupNewTabNavigations: true,
     dedupMovesTabToTop: true,
     trackTabProvenance: false,
+    closeChildTabsWithParent: false,
     autoArchiveEnabled: true,
     autoArchiveIdleMinutes: 60,
     autoArchiveRetentionDays: 30,

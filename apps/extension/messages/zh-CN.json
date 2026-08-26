@@ -21,6 +21,21 @@
       }
     }
   ],
+  "sidebar_cascadeClosedTabs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "已关闭 {count} 个子标签页",
+        "countPlural=other": "已关闭 {count} 个子标签页"
+      }
+    }
+  ],
   "sidebar_clearedDuplicateTabs": [
     {
       "declarations": [
@@ -430,5 +445,8 @@
   ],
   "options_label_trackTabProvenance": "显示标签页的来源",
   "options_desc_trackTabProvenance": "将每个标签页缩进显示在打开它的标签页下方。Chrome 会请求读取你的浏览记录，Lunma 会在你访问的页面中存储一个随机标记 — 这些页面可以读取它。",
-  "options_note_trackTabProvenance": "关闭后会清除 Lunma 仍能触及的标记。卸载 Lunma 无法清除已写入的标记，你不再打开的标签页也无法触及 — 但标记不会存活于写入它的浏览会话之外。"
+  "options_note_trackTabProvenance": "关闭后会清除 Lunma 仍能触及的标记。卸载 Lunma 无法清除已写入的标记，你不再打开的标签页也无法触及 — 但标记不会存活于写入它的浏览会话之外。",
+  "options_label_closeChildTabsWithParent": "关闭标签页时一并关闭其子标签页",
+  "options_desc_closeChildTabsWithParent": "关闭一个标签页时，从它打开的标签页也会关闭。你可以随后撤销。",
+  "options_desc_requiresSetting": "请先开启“{setting}”。"
 }

@@ -95,6 +95,12 @@ export interface Settings {
    * show it. Off by default: it gates the `webNavigation` permission AND a random
    * marker Lunma writes into visited pages (see the `tab-provenance` capability). */
   trackTabProvenance: boolean;
+  /** Closing a temporary tab also closes the tabs opened from it — its provenance
+   * subtree (tab-close-cascade). Off by default: the lineage records a parent only
+   * for a continuing transition from a known tab, so how many tabs one close
+   * destroys is not predictable from the tab strip. Inert while
+   * `trackTabProvenance` is off, since there is then no lineage. */
+  closeChildTabsWithParent: boolean;
   /** Master switch for auto-archive (auto-archive). `true` ⇒ the sweep runs and
    * each Space resolves its effective config; `false` ⇒ nothing is archived,
    * per-Space overrides moot. */
@@ -108,6 +114,12 @@ export interface Settings {
    * ≤100-entry FIFO cap still applies independently and can evict sooner. */
   autoArchiveRetentionDays: number;
 }
+
+/** The boolean-valued settings — the only ones a `dependsOn` may name, since
+ * "while the named setting is off" has no meaning for a text or enum setting. */
+export type BooleanSettingKey = {
+  [K in keyof Settings]: Settings[K] extends boolean ? K : never;
+}[keyof Settings];
 
 interface EnumOption {
   value: string;
@@ -148,6 +160,13 @@ export interface ToggleSettingDeclaration {
   label: string;
   description?: string;
   group: string;
+  /** Another setting this toggle is meaningless without. The options page renders
+   * the toggle DISABLED while the named setting is off, and says which setting to
+   * enable first. Rendering only — the gated behaviour is enforced where it
+   * happens, so a stored `true` under a disabled dependency is inert but
+   * preserved. Declared here rather than branched per-setting in `Options.svelte`,
+   * so the declaration list keeps describing how the page renders. */
+  dependsOn?: BooleanSettingKey;
 }
 
 /** A positive-integer setting. Rendered via a numeric `TextInput`; its derived
@@ -344,6 +363,16 @@ export const SETTINGS: readonly SettingDeclaration[] = [
     group: 'Tabs',
   },
   {
+    key: 'closeChildTabsWithParent',
+    type: 'toggle',
+    default: false,
+    dependsOn: 'trackTabProvenance',
+    label: 'Close child tabs with their parent',
+    description:
+      'Closing a tab also closes the tabs you opened from it. You can undo this right after',
+    group: 'Tabs',
+  },
+  {
     key: 'dedupMovesTabToTop',
     type: 'toggle',
     default: true,
@@ -425,6 +454,7 @@ export const DEFAULTS: Settings = {
   dedupNewTabNavigations: true,
   dedupMovesTabToTop: true,
   trackTabProvenance: false,
+  closeChildTabsWithParent: false,
   autoArchiveEnabled: true,
   autoArchiveIdleMinutes: 720,
   autoArchiveRetentionDays: 7,

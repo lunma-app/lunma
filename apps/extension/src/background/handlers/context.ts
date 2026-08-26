@@ -217,6 +217,13 @@ export interface HandlerContext {
    * and cannot await a permission query.
    */
   provenanceEnabled(): boolean;
+  /**
+   * Read the cached `closeChildTabsWithParent` setting (tab-close-cascade),
+   * pushed by the SW settings watcher like {@link provenanceEnabled}. Synchronous
+   * because `tabs.onRemoved` fires on EVERY tab close, and a `storage.sync` read
+   * per close is waste for a feature that is off by default. Defaults to `false`.
+   */
+  closeChildTabsWithParent(): boolean;
   readonly groups: GroupOrchestrator;
   readonly boundary: BoundaryController;
 }
