@@ -1,21 +1,38 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { PROVENANCE_SESSION_MARKER_KEY } from '../shared/provenance';
 import { makeStore } from '../shared/store.test-helpers';
-import { maybeEndSweep, pruneOnBoot, resolveAllParents, tearDownProvenance } from './provenance';
+import {
+  maybeEndSweep,
+  pruneOnBoot,
+  resolveAllParents,
+  syncAllTabIdentities,
+  tearDownProvenance,
+} from './provenance';
 
 const tabsQuery = vi.fn();
 const sendMessage = vi.fn();
 const sessionGet = vi.fn();
 const sessionSet = vi.fn();
+const executeScript = vi.fn();
+const getManifest = vi.fn();
 
 beforeEach(() => {
   tabsQuery.mockReset().mockResolvedValue([]);
   sendMessage.mockReset().mockResolvedValue(undefined);
   sessionGet.mockReset().mockResolvedValue({});
   sessionSet.mockReset().mockResolvedValue(undefined);
+  executeScript.mockReset().mockResolvedValue([]);
+  getManifest.mockReset().mockReturnValue({
+    content_scripts: [
+      { js: ['assets/overlay.ts-loader.js'] },
+      { js: ['assets/tab-token.ts-loader.js'] },
+    ],
+  });
   vi.stubGlobal('chrome', {
     tabs: { query: tabsQuery, sendMessage },
     storage: { session: { get: sessionGet, set: sessionSet } },
+    scripting: { executeScript },
+    runtime: { getManifest },
   });
 });
 
@@ -113,5 +130,73 @@ describe('maybeEndSweep', () => {
     expect(sessionGet.mock.invocationCallOrder[0]).toBeLessThan(
       sessionSet.mock.invocationCallOrder[0] as number,
     );
+  });
+});
+
+// Reloading the extension kills the content scripts already running in open
+// pages, and a declarative content script only enters tabs opened or reloaded
+// AFTER the extension loads. So on every install, update, or unpacked reload,
+// messaging an open tab finds no receiver: the tab stays unidentified and every
+// link opened from it resolves to a root — until the user manually reloads that
+// page. The sweep therefore injects before it talks.
+describe('syncAllTabIdentities — reaching pages that predate this extension load', () => {
+  test('injects the token script into each http tab before messaging it', async () => {
+    const store = makeStore();
+    tabsQuery.mockResolvedValue([
+      { id: 1, url: 'https://a.example/' },
+      { id: 2, url: 'https://b.example/' },
+    ]);
+    const order: string[] = [];
+    executeScript.mockImplementation(async (o: { target: { tabId: number } }) => {
+      order.push(`inject:${o.target.tabId}`);
+      return [];
+    });
+    sendMessage.mockImplementation(async (tabId: number) => {
+      order.push(`send:${tabId}`);
+      return undefined;
+    });
+
+    await syncAllTabIdentities(store);
+
+    expect(order.indexOf('inject:1')).toBeLessThan(order.indexOf('send:1'));
+    expect(order.indexOf('inject:2')).toBeLessThan(order.indexOf('send:2'));
+  });
+
+  test('injects the token script, not another content script', async () => {
+    const store = makeStore();
+    tabsQuery.mockResolvedValue([{ id: 1, url: 'https://a.example/' }]);
+
+    await syncAllTabIdentities(store);
+
+    expect(executeScript).toHaveBeenCalledWith({
+      target: { tabId: 1 },
+      files: ['assets/tab-token.ts-loader.js'],
+    });
+  });
+
+  test('a tab Chrome forbids injecting does not abort the sweep', async () => {
+    const store = makeStore();
+    tabsQuery.mockResolvedValue([
+      { id: 1, url: 'https://a.example/' },
+      { id: 2, url: 'https://b.example/' },
+    ]);
+    executeScript.mockImplementation(async (o: { target: { tabId: number } }) => {
+      if (o.target.tabId === 1) throw new Error('Cannot access contents of the page');
+      return [];
+    });
+
+    await syncAllTabIdentities(store);
+
+    expect(executeScript).toHaveBeenCalledTimes(2);
+    expect(sendMessage).toHaveBeenCalledWith(2, expect.anything());
+  });
+
+  test('non-http tabs are never injected', async () => {
+    const store = makeStore();
+    tabsQuery.mockResolvedValue([{ id: 3, url: 'chrome://settings' }]);
+
+    await syncAllTabIdentities(store);
+
+    expect(executeScript).not.toHaveBeenCalled();
   });
 });

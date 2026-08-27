@@ -9,6 +9,13 @@ import { createInitialState } from '../shared/store.svelte';
 // rest of the boot collaborators (so importing `index` is inert beyond the gating
 // logic under test). `store-singleton`, `store.svelte`, `default-space`, the
 // logger, and the coordinator stay REAL so the gating actually mutates the store.
+// Every test here boots the worker, and booting means `vi.resetModules()` plus a
+// cold import of the ENTIRE service-worker module graph — several seconds on its
+// own, and more under full-suite parallelism. The 5s default is not a meaningful
+// hang detector for that; it just makes this file flaky as tests are added. Scoped
+// to this file so the default still guards everything else.
+vi.setConfig({ testTimeout: 30_000 });
+
 vi.mock('../shared/chrome/storage', () => ({
   readPersistedState: vi.fn(),
   persist: vi.fn(() => Promise.resolve()),

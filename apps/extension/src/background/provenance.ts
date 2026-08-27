@@ -65,9 +65,42 @@ export async function syncAllTabIdentities(store: LunmaStore): Promise<void> {
   await Promise.all(
     tabs
       .filter((t) => t.id !== undefined && (t.url ?? '').startsWith('http'))
-      .map((t) => syncTabIdentity(store, t.id as TabId)),
+      .map(async (t) => {
+        await ensureTokenScript(t.id as TabId);
+        await syncTabIdentity(store, t.id as TabId);
+      }),
   );
   resolveAllParents(store);
+}
+
+/**
+ * Make sure the token content script is actually running in `tabId` before we try
+ * to talk to it.
+ *
+ * A declarative content script only enters tabs opened or reloaded AFTER the
+ * extension loads, and reloading the extension kills the scripts already running
+ * in open pages. So on every install, update, or unpacked reload, each page the
+ * user has open is left with no token script — `tabs.sendMessage` finds no
+ * receiver, the tab stays unidentified, and every link opened from it resolves to
+ * a root until that page is manually reloaded. This is the same gap
+ * `backfillOverlayIntoOpenTabs` closes for the launcher overlay, solved the same
+ * way.
+ *
+ * Idempotent: the script early-returns on its own install guard, so injecting
+ * into a tab that already runs it is a no-op. Failures are per-tab and swallowed —
+ * Chrome forbids injecting `chrome://`, the Web Store, and extension pages, and
+ * one forbidden tab must not abort the sweep.
+ */
+async function ensureTokenScript(tabId: TabId): Promise<void> {
+  const files = chrome.runtime
+    .getManifest()
+    .content_scripts?.find((cs) => cs.js?.some((file) => file.includes('tab-token')))?.js;
+  if (!files || files.length === 0) return;
+  try {
+    await chrome.scripting.executeScript({ target: { tabId }, files });
+  } catch {
+    /* not injectable (chrome://, Web Store, extension page) — it is simply a root */
+  }
 }
 
 /** Recompute every live tab's resolved parent from the persisted edges. The SW

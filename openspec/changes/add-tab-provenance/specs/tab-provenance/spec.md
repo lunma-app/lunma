@@ -108,6 +108,16 @@ until that page happens to reload.
 The same ordering binds the per-tab exchange a page triggers when it announces
 itself: it SHALL NOT run until the worker has booted and the tab is known.
 
+Re-establishing identity SHALL NOT assume the token script is still running in an
+open page. A declarative content script enters only tabs opened or reloaded AFTER
+the extension loads, and reloading the extension terminates the scripts already
+running in open pages — so after every install, update, or reload, the pages the
+user has open have no token script and cannot be messaged. Lunma SHALL therefore
+inject the script into each eligible tab before attempting the exchange. Injection
+SHALL be idempotent, SHALL be attempted only for `http(s)` tabs, and a tab Chrome
+refuses to inject SHALL be skipped without aborting the sweep — it is simply a
+root.
+
 The service worker SHALL maintain a live `tabId → token` map for the session. A
 cross-origin commit resets `sessionStorage`, so the exchange finds no token and the
 script writes the candidate; the service worker SHALL instead send the token
