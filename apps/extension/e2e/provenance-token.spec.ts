@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium, test, expect } from '@playwright/test';
+import { chromium, expect, test } from '@playwright/test';
 
 // tab-provenance: the whole mechanism rests on ONE undocumented Chrome behaviour —
 // a token written to a page's sessionStorage comes back after a session restore.
@@ -21,7 +21,12 @@ const KEY = 'lunma.tabToken';
 async function launch(dir: string, extra: string[] = []) {
   const ctx = await chromium.launchPersistentContext(dir, {
     headless: false,
-    args: [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`, '--no-first-run', ...extra],
+    args: [
+      `--disable-extensions-except=${EXT}`,
+      `--load-extension=${EXT}`,
+      '--no-first-run',
+      ...extra,
+    ],
   });
   return ctx;
 }
@@ -32,7 +37,11 @@ let port: number;
 test.beforeAll(async () => {
   server = createServer((req, res) => {
     res.writeHead(200, { 'content-type': 'text/html' });
-    res.end(`<!doctype html><title>${req.url}</title><h1>${req.url}</h1>`);
+    // Deliberately does NOT echo `req.url`. Nothing here asserts on the page's
+    // content — the paths only need to be distinct URLs — and reflecting the
+    // request into the response is a real XSS shape that CodeQL flags, test
+    // fixture or not.
+    res.end('<!doctype html><title>provenance fixture</title><h1>provenance fixture</h1>');
   });
   await new Promise<void>((r) => server.listen(0, r));
   port = (server.address() as AddressInfo).port;
