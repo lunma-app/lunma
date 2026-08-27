@@ -12,15 +12,9 @@ on:
 
 jobs:
   claude-review:
-    # Skip automated/bot-authored PRs (e.g. release-please) — the action
-    # rejects non-human actors and there's nothing to review.
-    if: ${{ github.event.pull_request.user.type != 'Bot' }}
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
-
+    # The JOB always runs so this check always reports — a job skipped by an `if`
+    # here reports as "skipped", which a required status check can sit waiting on.
+    # Which review runs (if either) is decided per STEP below.
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -36,6 +30,9 @@ jobs:
 
       - name: Run Claude Code Review
         id: claude-review
+        # Human-authored PRs only. Bots are handled below (Dependabot) or not at
+        # all (release-please, which only moves version numbers and a changelog).
+        if: ${{ github.event.pull_request.user.type != 'Bot' }}
         uses: anthropics/claude-code-action@v1.0.196
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -45,3 +42,55 @@ jobs:
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
 
+      # Dependency bumps get their own review, because the general code-review
+      # prompt has almost nothing to read: the diff is a manifest and a lockfile.
+      # The risk lives in the CHANGELOGS and in how this repo's guards react —
+      # which is what this prompt asks about.
+      #
+      # REQUIRES `CLAUDE_CODE_OAUTH_TOKEN` to exist as a **Dependabot** secret
+      # (Settings → Secrets and variables → Dependabot). A Dependabot-triggered
+      # run cannot see ordinary Actions secrets — that is a GitHub security
+      # boundary, not a setting — so the repo-level secret is invisible here.
+      - name: Review dependency update
+        id: claude-review-deps
+        if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
+        uses: anthropics/claude-code-action@v1.0.196
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Review dependency-update PR ${{ github.repository }}/pull/${{ github.event.pull_request.number }}.
+
+            The diff is a manifest and a lockfile, so reading it proves little. Judge the
+            UPDATE, not the diff, and ground every claim in this repo rather than in
+            general advice. Read the PR body's release notes, and check the packages'
+            changelogs for the versions actually crossed.
+
+            Report only things that would change whether a human merges this. For each,
+            name the package, the version range, and the file or command in THIS repo
+            that is affected. Say plainly when you find nothing.
+
+            Look for, in rough order of how often they have bitten this repo:
+
+            1. Removed or renamed exports in a MINOR or PATCH bump. `@lucide/svelte` has
+               removed icons in a minor before, which silently emptied the Space-icon
+               picker. `apps/extension/scripts/gen-icon-loaders.mjs` INTERSECTS the
+               curated allowlist with the icons that really exist, so a removal is
+               dropped rather than erroring — `src/ui/icon-loaders.generated.test.ts` is
+               what actually catches it. Check whether any name in
+               `src/shared/icon-names.ts` disappeared.
+            2. A raised `engines` floor. The repo declares `node: >=24` and devbox pins
+               `nodejs@24`, while CI runs `node-version: 24` (the newest 24.x). A
+               dependency requiring, say, `^24.15.0` installs and usually works — there is
+               no `engine-strict` — but leaves local dev below the supported floor. Say so
+               and name the version numbers.
+            3. ESM migrations, peer-dependency moves, and dropped Node support in a MAJOR.
+               A peer moved out of `dependencies` may need adding as a direct devDependency.
+            4. Whether this repo's gates would actually CATCH a regression from this bump,
+               or would pass vacuously. A tool that silently stops parsing (stylelint via
+               `postcss-html` over `.svelte` files is the standing example) reports success
+               while checking nothing. If a green gate would be vacuous, say which one and
+               what would prove it is not.
+            5. Security fixes in the range — worth calling out as a reason TO merge.
+
+            Do not summarise the changelog, do not restate the version table, and do not
+            praise the update. Prefer "no concerns found, CI covers this" over filler.
