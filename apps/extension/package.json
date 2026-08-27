@@ -53,7 +53,7 @@
     "@vitest/coverage-v8": "^4.1.11",
     "culori": "catalog:",
     "jsdom": "catalog:",
-    "postcss-html": "^1.8.1",
+    "postcss-html": "^2.0.0",
     "shiki": "^4.4.3",
     "stylelint": "^17.14.1",
     "stylelint-declaration-strict-value": "^1.11.1",
