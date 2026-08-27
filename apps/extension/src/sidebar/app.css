@@ -377,3 +377,45 @@ body,
   transform: translateY(-50%) scale(var(--press-scale));
 }
 
+
+/* ── SPIKE: quiet sidebar ─────────────────────────────────────────────────────
+ * Prototype only (`?quiet=1`), for looking at the calm direction next to the
+ * default. Goes further than the shipping dials: `showGlares:false` removes the
+ * aurora and glows, and `tint:subtle` lowers chroma, but BOTH keep the frosted
+ * glass, the hue wash on the substrate, and the lifted shadows. This flattens
+ * all three, on the theory that a 350px column of dense UI reads as browser
+ * surface when it stops behaving like a lit stage.
+ *
+ * Space identity is deliberately KEPT — chips, tinted headers and the per-Space
+ * accents still carry hue. What goes is the atmosphere, not the colour system. */
+.sidebar[data-quiet='true'] {
+  /* No top-down hue wash on the substrate. */
+  --wash-a1: 0;
+  --wash-a2: 0;
+
+  /* No hue glow anywhere. */
+  --glow-space: 0 0 0 0 transparent;
+  --glow-space-soft: 0 0 0 0 transparent;
+  --glow-hearth: transparent;
+
+  /* Frosted glass becomes an opaque surface with a hairline. Blur is the single
+   * loudest "floating panel" cue in a narrow column, and it costs compositing. */
+  --glass-bg: var(--surface);
+  --glass-bg-strong: var(--surface-2);
+  --glass-blur: 0px;
+  --glass-border: oklch(1 0 0 / 0.07);
+  --glass-highlight: none;
+
+  /* Flatten elevation: keep hierarchy through value, not drop shadows. */
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-pop: 0 2px 8px oklch(0 0 0 / 0.35);
+}
+
+/* The substrate itself: a plain neutral surface. `--atm-bg` is the warm,
+ * hue-lifted "atmosphere" ground the immersive look is built on; the quiet
+ * variant drops to the flat app background so the panel reads as a surface
+ * rather than a lit room. The wash gradient is already zeroed above. */
+.sidebar[data-quiet='true'] {
+  background: var(--bg);
+}

@@ -608,10 +608,16 @@ function onCancel(): void {
   if (!live || stageWidth === 0) return;
   easeTo(baseX(activeIndex));
 }
+
+// SPIKE ONLY (quiet-sidebar): render the calm variant with `?quiet=1` so one
+// build can be compared against the default side by side. Not a shipping switch.
+const quietSpike =
+  typeof location !== 'undefined' && new URLSearchParams(location.search).get('quiet') === '1';
 </script>
 
 <main
   class="sidebar lunma-space-scope"
+  data-quiet={quietSpike ? 'true' : undefined}
   data-testid="sidebar"
   data-tint={tint}
   style:--space-h={String(spaceHue)}
@@ -634,7 +640,7 @@ function onCancel(): void {
        wrapper masks the aurora to the upper region so it reads as one soft glow
        cohesive with the top wash, and the dense working area below stays clean.
        Sits behind every foreground region; aria-hidden, never interactive. -->
-  {#if sidebarGlares.value}
+  {#if sidebarGlares.value && !quietSpike}
     <div class="sidebar-aurora"><Aurora /></div>
   {/if}
   <!-- Top search bar: a trigger-mode `SearchField` that opens the new-tab launcher
