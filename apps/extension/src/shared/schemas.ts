@@ -31,7 +31,7 @@ import type { AppState, BackupEnvelope, SpaceColor } from './types';
 // `sources` from embedded `LensSource[]` to `LensSourceRef[]` references — a REAL
 // transformation that extracts the embedded `(provider, baseUrl)` pairs into
 // first-class accounts. Each bump is deliberate: it makes a downgrade detectable.
-export const CURRENT_SCHEMA_VERSION = 18;
+export const CURRENT_SCHEMA_VERSION = 19;
 
 const SpaceInstanceSchema = z.strictObject({
   spaceId: z.string(),
@@ -391,6 +391,12 @@ const LiveTabSchema = z.strictObject({
   active: z.boolean(),
   status: z.enum(['loading', 'complete']),
   favIconUrl: z.string().optional(),
+  // tab-provenance. Ephemeral like the rest of this slice — the durable record is
+  // `provenanceByToken`. Declared here because this is a `strictObject` parsed on
+  // every broadcast: an undeclared field would reject the whole broadcast.
+  openerTabId: z.number().optional(),
+  provenanceToken: z.string().optional(),
+  provenanceParentTabId: z.number().optional(),
 });
 
 // Per-(saved tab, window) live bindings (per-window-tab-bindings, ADR 0003):
@@ -770,9 +776,26 @@ export const AppStateV17Schema = z.strictObject({
  */
 export const AppStateV18Schema = AppStateV17Schema;
 
+/**
+ * v19 (add-tab-provenance): v18 plus the two provenance slices. A REAL shape
+ * change, not an alias, so v18 stays frozen. Both slices carry `.default(...)` —
+ * `backup.ts` validates an imported portable subset against the current AppState
+ * schema, and without defaults a same-version backup import would fail.
+ */
+export const ProvenanceEdgeSchema = z.strictObject({
+  parentToken: z.string(),
+  recordedAt: z.number(),
+});
+
+export const AppStateV19Schema = z.strictObject({
+  ...AppStateV18Schema.shape,
+  provenanceByToken: z.record(z.string(), ProvenanceEdgeSchema).default({}),
+  provenanceCleanupPending: z.boolean().default(false),
+});
+
 export const EnvelopeSchema = z.strictObject({
   schemaVersion: z.number(),
-  state: AppStateV18Schema,
+  state: AppStateV19Schema,
 });
 
 export type AppStateV6 = z.infer<typeof AppStateV6Schema>;
@@ -787,12 +810,13 @@ export type AppStateV15 = z.infer<typeof AppStateV15Schema>;
 export type AppStateV16 = z.infer<typeof AppStateV16Schema>;
 export type AppStateV17 = z.infer<typeof AppStateV17Schema>;
 export type AppStateV18 = z.infer<typeof AppStateV18Schema>;
+export type AppStateV19 = z.infer<typeof AppStateV19Schema>;
 export type Envelope = z.infer<typeof EnvelopeSchema>;
 
 type AssertEqual<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
-const _schemaMatchesAppState: AssertEqual<AppStateV17, AppState> = true;
+const _schemaMatchesAppState: AssertEqual<AppStateV19, AppState> = true;
 void _schemaMatchesAppState;
 
 // ── Data-backup: BackupEnvelopeSchema ────────────────────────────────────────

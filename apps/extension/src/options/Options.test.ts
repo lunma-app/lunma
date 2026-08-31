@@ -173,6 +173,8 @@ describe('Options', () => {
           launcherScope: 'prefer-current-space',
           dedupNewTabNavigations: true,
           dedupMovesTabToTop: true,
+          trackTabProvenance: false,
+          closeChildTabsWithParent: false,
           autoArchiveEnabled: true,
           autoArchiveIdleMinutes: 720,
           autoArchiveRetentionDays: 7,
@@ -205,6 +207,8 @@ describe('Options', () => {
           launcherScope: 'prefer-current-space',
           dedupNewTabNavigations: true,
           dedupMovesTabToTop: true,
+          trackTabProvenance: false,
+          closeChildTabsWithParent: false,
           autoArchiveEnabled: true,
           autoArchiveIdleMinutes: 720,
           autoArchiveRetentionDays: 7,
@@ -236,6 +240,8 @@ describe('Options', () => {
           launcherScope: 'prefer-current-space',
           dedupNewTabNavigations: true,
           dedupMovesTabToTop: true,
+          trackTabProvenance: false,
+          closeChildTabsWithParent: false,
           autoArchiveEnabled: true,
           autoArchiveIdleMinutes: 720,
           autoArchiveRetentionDays: 7,
@@ -520,5 +526,93 @@ describe('Options — Auto-archive group (toggle + number)', () => {
           ?.autoArchiveIdleMinutes,
       ).toBe(1);
     });
+  });
+});
+
+// A toggle whose meaning depends on another setting renders disabled with the
+// reason in the row (tab-close-cascade, settings `dependsOn`). The dependency is
+// read through its EFFECTIVE value: `trackTabProvenance` can be stored `true` and
+// still be off on a device that never granted `webNavigation`, and offering a
+// switch for a permanently inert feature is worse than showing it unavailable.
+describe('Options — dependent toggles', () => {
+  /** Both radios of the `closeChildTabsWithParent` toggle. */
+  function cascadeRadios(container: HTMLElement): HTMLInputElement[] {
+    return [
+      ...container.querySelectorAll<HTMLInputElement>('input[name="closeChildTabsWithParent"]'),
+    ];
+  }
+
+  async function renderWith(
+    stored: Record<string, unknown>,
+    granted: boolean,
+  ): Promise<HTMLElement> {
+    chromeMock.data['lunma.settings'] = stored;
+    (
+      globalThis as unknown as { chrome: { permissions: { contains: ReturnType<typeof vi.fn> } } }
+    ).chrome.permissions.contains = vi.fn(async () => granted);
+    const { container } = render(Options, { props: {} });
+    await waitFor(() => expect(chromeMock.get).toHaveBeenCalled());
+    return container as HTMLElement;
+  }
+
+  test('is disabled while its dependency is off', async () => {
+    const container = await renderWith({ trackTabProvenance: false }, false);
+    await waitFor(() => expect(cascadeRadios(container).length).toBe(2));
+    expect(cascadeRadios(container).every((r) => r.disabled)).toBe(true);
+  });
+
+  test('is disabled when the dependency is stored true but not granted', async () => {
+    // Synced `true` landing on a device with no `webNavigation` grant.
+    const container = await renderWith({ trackTabProvenance: true }, false);
+    await waitFor(() => expect(cascadeRadios(container).length).toBe(2));
+    expect(cascadeRadios(container).every((r) => r.disabled)).toBe(true);
+  });
+
+  test('is interactive once the dependency is effectively on', async () => {
+    const container = await renderWith({ trackTabProvenance: true }, true);
+    await waitFor(() => expect(cascadeRadios(container).some((r) => !r.disabled)).toBe(true));
+  });
+
+  test('shows the reason alongside the description while disabled', async () => {
+    const container = await renderWith({ trackTabProvenance: false }, false);
+    await waitFor(() => expect(cascadeRadios(container).length).toBe(2));
+    // The reason names the dependency to enable...
+    expect(container.textContent).toContain('Show where tabs came from');
+    // ...and the setting's own description SURVIVES, because this is exactly when
+    // the user is deciding whether enabling that dependency is worth it.
+    expect(container.textContent).toContain('closes the tabs you opened from it');
+  });
+
+  test('does not write its setting while disabled', async () => {
+    const container = await renderWith({ trackTabProvenance: false }, false);
+    await waitFor(() => expect(cascadeRadios(container).length).toBe(2));
+    chromeMock.set.mockClear();
+
+    const on = cascadeRadios(container).find((r) => r.value === 'on') as HTMLInputElement;
+    await fireEvent.click(on);
+
+    expect(chromeMock.set).not.toHaveBeenCalled();
+  });
+
+  test('preserves the stored choice across a dependency flip', async () => {
+    // Turning provenance off must not reset the user's cascade choice — it is
+    // inert, not discarded, so re-enabling restores what they picked.
+    const container = await renderWith(
+      { trackTabProvenance: false, closeChildTabsWithParent: true },
+      false,
+    );
+    await waitFor(() => expect(cascadeRadios(container).length).toBe(2));
+    expect(chromeMock.data['lunma.settings']).toMatchObject({
+      closeChildTabsWithParent: true,
+    });
+  });
+
+  test('a toggle with no declared dependency stays interactive', async () => {
+    const container = await renderWith({ trackTabProvenance: false }, false);
+    const dedup = [
+      ...container.querySelectorAll<HTMLInputElement>('input[name="dedupMovesTabToTop"]'),
+    ];
+    expect(dedup.length).toBe(2);
+    expect(dedup.every((r) => !r.disabled)).toBe(true);
   });
 });

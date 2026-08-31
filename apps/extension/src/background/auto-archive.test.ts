@@ -29,6 +29,8 @@ function settings(over: Partial<Settings> = {}): Settings {
     launcherScope: 'prefer-current-space',
     dedupNewTabNavigations: true,
     dedupMovesTabToTop: true,
+    trackTabProvenance: false,
+    closeChildTabsWithParent: false,
     autoArchiveEnabled: true,
     autoArchiveIdleMinutes: 60,
     autoArchiveRetentionDays: 30,

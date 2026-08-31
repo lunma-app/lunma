@@ -24,6 +24,22 @@
       }
     }
   ],
+  "sidebar_cascadeConfirm": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Закрыть {count} вкладку, открытую из неё?",
+        "countPlural=other": "Закрыть вкладки, открытые из неё: {count}?"
+      }
+    }
+  ],
+  "sidebar_cascadeConfirmAction": "Закрыть",
   "sidebar_clearedDuplicateTabs": [
     {
       "declarations": [
@@ -448,5 +464,11 @@
         "countPlural=other": "{count} вкладки сгруппированы по сайту"
       }
     }
-  ]
+  ],
+  "options_label_trackTabProvenance": "Показывать, откуда открыта вкладка",
+  "options_desc_trackTabProvenance": "Отступом показывает каждую вкладку под той, из которой она открыта. Chrome запросит доступ к истории браузера, а Lunma сохраняет случайную метку на посещаемых страницах — эти страницы могут её прочитать.",
+  "options_note_trackTabProvenance": "Отключение удаляет метки, до которых Lunma ещё может добраться. Удаление Lunma не стирает уже записанные, а до вкладки, которую вы больше не откроете, добраться нельзя — но метка не переживает сеанс просмотра, в котором была записана.",
+  "options_label_closeChildTabsWithParent": "Закрывать дочерние вкладки вместе с родительской",
+  "options_desc_closeChildTabsWithParent": "При закрытии вкладки закроются и те, что вы открыли из неё. Это можно сразу отменить.",
+  "options_desc_requiresSetting": "Сначала включите «{setting}»."
 }

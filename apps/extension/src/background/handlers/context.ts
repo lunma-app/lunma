@@ -52,6 +52,17 @@ export type PendingEvent =
       kind: 'tabGroups.onUpdated';
       payload: { group: chrome.tabGroups.TabGroup };
     }
+  | {
+      source: 'chrome';
+      kind: 'webNavigation.onCommitted';
+      payload: {
+        tabId: number;
+        frameId: number;
+        url: string;
+        transitionType: string;
+        transitionQualifiers: string[];
+      };
+    }
   | { source: 'chrome'; kind: 'windows.onCreated'; payload: { window: chrome.windows.Window } }
   | { source: 'chrome'; kind: 'windows.onRemoved'; payload: { windowId: number } }
   | SidebarVariant<'createSpace'>
@@ -103,6 +114,7 @@ export type PendingEvent =
   | SidebarVariant<'closeTab'>
   | SidebarVariant<'newTab'>
   | SidebarVariant<'clearTempTabs'>
+  | SidebarVariant<'closeChildTabs'>
   | SidebarVariant<'clearDuplicateTempTabs'>
   | SidebarVariant<'groupTempTabsBySite'>
   | SidebarVariant<'undoClearTempTabs'>
@@ -200,6 +212,19 @@ export interface HandlerContext {
    * seeded.
    */
   dedupMovesTabToTop(): boolean;
+  /**
+   * Read the cached effective provenance state (tab-provenance): the setting AND
+   * the `webNavigation` grant. Synchronous by design — the commit handler is pure
+   * and cannot await a permission query.
+   */
+  provenanceEnabled(): boolean;
+  /**
+   * Read the cached `closeChildTabsWithParent` setting (tab-close-cascade),
+   * pushed by the SW settings watcher like {@link provenanceEnabled}. Synchronous
+   * because `tabs.onRemoved` fires on EVERY tab close, and a `storage.sync` read
+   * per close is waste for a feature that is off by default. Defaults to `false`.
+   */
+  closeChildTabsWithParent(): boolean;
   readonly groups: GroupOrchestrator;
   readonly boundary: BoundaryController;
 }

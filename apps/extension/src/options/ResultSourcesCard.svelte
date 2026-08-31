@@ -1,12 +1,8 @@
 <script lang="ts">
 import { onMount } from 'svelte';
+import type { OptionalResultSource } from '../shared/launcher-contract';
 import { m } from '../shared/paraglide/messages';
-import {
-  hasApiPermission,
-  type OptionalApiPermission,
-  onPermissionsChange,
-  requestApiPermission,
-} from '../shared/permissions';
+import { hasApiPermission, onPermissionsChange, requestApiPermission } from '../shared/permissions';
 import Button from '../ui/Button.svelte';
 import SettingsCard from '../ui/SettingsCard.svelte';
 import Toast from '../ui/Toast.svelte';
@@ -20,7 +16,7 @@ import Toast from '../ui/Toast.svelte';
 // the indicators live when a grant is revoked in Chrome's own UI.
 
 const RESULT_SOURCES: Array<{
-  name: OptionalApiPermission;
+  name: OptionalResultSource;
   label: string;
   desc: string;
   cta: string;
@@ -39,7 +35,7 @@ const RESULT_SOURCES: Array<{
   },
 ];
 
-let resultSourceGranted = $state<Record<OptionalApiPermission, boolean>>({
+let resultSourceGranted = $state<Record<OptionalResultSource, boolean>>({
   history: false,
   bookmarks: false,
 });
@@ -58,7 +54,7 @@ async function refreshResultSources(): Promise<void> {
 /** Grant an optional result source from this user gesture (extension page).
  * `onPermissionsChange` also refreshes, but refresh here too so the indicator
  * updates immediately on this surface. On success, announce the swap via Toast. */
-async function enableResultSource(name: OptionalApiPermission): Promise<void> {
+async function enableResultSource(name: OptionalResultSource): Promise<void> {
   const granted = await requestApiPermission(name);
   await refreshResultSources();
   if (granted) {

@@ -16,6 +16,10 @@ interface Props {
   faviconFallbackSrc?: string | undefined;
   /** Active-tab treatment: a soft Space-coloured background wash (no accent bar). */
   active?: boolean | undefined;
+  /** Provenance indent depth (tab-provenance): `0` is a root, each step nests the
+   * row one `--space-3` further with a hairline lineage rule. Layout only — the SW
+   * resolves the parent EDGE; the list that renders the rows owns the depth. */
+  depth?: number | undefined;
   /** Loading treatment: favicon slot becomes a spinner, title dims. */
   loading?: boolean | undefined;
   /** Drift treatment: the bound tab has wandered off its home URL
@@ -62,6 +66,7 @@ const {
   faviconSrc,
   faviconFallbackSrc,
   active = false,
+  depth = 0,
   loading = false,
   drifted = false,
   onGoHome,
@@ -103,6 +108,8 @@ const returnable = $derived(drifted && !!homeHost);
   class:trailing-visible={trailingVisible}
   data-testid="tab-row"
   data-active={active}
+  data-depth={depth > 0 ? depth : undefined}
+  style:--tab-row-depth={depth}
   aria-busy={loading ? 'true' : undefined}
 >
   {#if editing}
@@ -263,6 +270,15 @@ const returnable = $derived(drifted && !!homeHost);
    * in `.row-end`) paint above it and keep their own clicks. Every other pixel of
    * the row falls through to this, so a click anywhere focuses the tab. Chromeless;
    * no focus ring (it is `tabindex=-1` — keyboard uses the title/favicon buttons). */
+  /* tab-provenance: indent one --space-3 per level, with a hairline lineage rule
+     at the row's leading edge. Structure, not status — it must not compete with
+     the Space colour or the active row's wash. Depth is capped by the caller. */
+  .tab-row[data-depth] {
+    margin-left: calc(var(--tab-row-depth, 0) * var(--space-3));
+    border-left: 1px solid var(--border-soft);
+    padding-left: var(--space-2);
+  }
+
   .row-focus {
     position: absolute;
     inset: 0;

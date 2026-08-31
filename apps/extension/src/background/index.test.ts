@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { PersistedRead } from '../shared/chrome/storage';
 import { BUILT_IN_ENGINES } from '../shared/search-engines';
+import { DEFAULTS as DEFAULT_SETTINGS } from '../shared/settings';
 import { createInitialState } from '../shared/store.svelte';
 
 // The SW boot chain in `index.ts` runs at module-eval with many chrome-touching
@@ -8,6 +9,13 @@ import { createInitialState } from '../shared/store.svelte';
 // rest of the boot collaborators (so importing `index` is inert beyond the gating
 // logic under test). `store-singleton`, `store.svelte`, `default-space`, the
 // logger, and the coordinator stay REAL so the gating actually mutates the store.
+// Every test here boots the worker, and booting means `vi.resetModules()` plus a
+// cold import of the ENTIRE service-worker module graph — several seconds on its
+// own, and more under full-suite parallelism. The 5s default is not a meaningful
+// hang detector for that; it just makes this file flaky as tests are added. Scoped
+// to this file so the default still guards everything else.
+vi.setConfig({ testTimeout: 30_000 });
+
 vi.mock('../shared/chrome/storage', () => ({
   readPersistedState: vi.fn(),
   persist: vi.fn(() => Promise.resolve()),
@@ -39,6 +47,18 @@ vi.mock('./tab-group-adoption', () => ({
   reconcileTabGroupsOnBoot: vi.fn(() => Promise.resolve()),
 }));
 vi.mock('./trash-purge', () => ({ purgeExpiredTrash: vi.fn() }));
+// tab-provenance: the SW half is mocked so a test can assert WHICH pushes the
+// settings watcher makes without driving real `chrome.tabs.sendMessage` traffic.
+vi.mock('./provenance', () => ({
+  syncAllTabIdentities: vi.fn(() => Promise.resolve()),
+  syncTabIdentity: vi.fn(() => Promise.resolve()),
+  tearDownProvenance: vi.fn(() => Promise.resolve()),
+  sweepTabOnLoad: vi.fn(() => Promise.resolve()),
+  maybeEndSweep: vi.fn(() => Promise.resolve()),
+  pruneOnBoot: vi.fn(),
+  resolveAllParents: vi.fn(),
+  isProvenanceOn: vi.fn(() => Promise.resolve(false)),
+}));
 
 // Captures populated by `installChrome` so a test can drive the `toggle-launcher`
 // command path: the registered command handler, the active tab the
@@ -49,7 +69,7 @@ vi.mock('./trash-purge', () => ({ purgeExpiredTrash: vi.fn() }));
 // (update → active) of the new-tab launcher.
 let commandHandler: ((command: string) => void) | undefined;
 let activeTab: { id?: number; windowId?: number } | undefined;
-let windowTabs: { id?: number; url?: string }[];
+let windowTabs: { id?: number; url?: string; windowId?: number }[];
 let sendMessageSpy: ReturnType<typeof vi.fn>;
 let createTabSpy: ReturnType<typeof vi.fn>;
 let updateTabSpy: ReturnType<typeof vi.fn>;
@@ -62,6 +82,26 @@ let messageListeners: Array<
 >;
 let windowRemovedHandler: ((windowId: number) => void) | undefined;
 let sessionStore: Record<string, unknown>;
+// tab-provenance: the captured `chrome.storage.onChanged` listeners (so a test
+// can fire a settings change) and the set of granted optional permissions
+// `chrome.permissions.contains` answers from.
+let storageChangeListeners: Array<
+  (changes: Record<string, { newValue?: unknown; oldValue?: unknown }>, area: string) => void
+>;
+let grantedPermissions: string[];
+/** Backing for the `chrome.storage.sync` stub, so a test can boot with settings
+ * already on (rather than the DEFAULTS an empty read yields). */
+let syncData: Record<string, unknown>;
+interface WebNavigationDetails {
+  tabId: number;
+  frameId: number;
+  url: string;
+  transitionType: string;
+  transitionQualifiers: string[];
+}
+let committedListeners: Array<(d: WebNavigationDetails) => void>;
+/** Captured `chrome.tabs.onCreated` listeners, so a test can queue a creation. */
+let createdListeners: Array<(tab: chrome.tabs.Tab) => void>;
 
 /** A minimal chrome stub: enough for the synchronous listener registration and
  * the boot's single `chrome.tabs.query({})`, plus the `toggle-launcher` command
@@ -74,6 +114,11 @@ function installChrome(): void {
   messageListeners = [];
   windowRemovedHandler = undefined;
   sessionStore = {};
+  storageChangeListeners = [];
+  grantedPermissions = ['history', 'bookmarks', 'webNavigation'];
+  syncData = {};
+  committedListeners = [];
+  createdListeners = [];
   sendMessageSpy = vi.fn(() => Promise.resolve());
   createTabSpy = vi.fn(() => Promise.resolve({ id: 999 }));
   updateTabSpy = vi.fn(() => Promise.resolve());
@@ -90,7 +135,9 @@ function installChrome(): void {
       sendMessage: sendMessageSpy,
       create: createTabSpy,
       update: updateTabSpy,
-      onCreated: { addListener },
+      onCreated: {
+        addListener: vi.fn((l: (tab: chrome.tabs.Tab) => void) => createdListeners.push(l)),
+      },
       onRemoved: { addListener },
       onUpdated: { addListener },
       onActivated: { addListener },
@@ -108,7 +155,12 @@ function installChrome(): void {
     // (least-privilege-permissions D5/D9); `contains` defaults to granted so the
     // post-boot refresh exercises the connectors.
     permissions: {
-      contains: vi.fn(() => Promise.resolve(true)),
+      // Answers from `grantedPermissions`, which defaults to every optional
+      // permission — so a test that does not care sees the always-granted
+      // behaviour, while a provenance test can withhold the `webNavigation` grant.
+      contains: vi.fn((p: { permissions?: string[] }) =>
+        Promise.resolve((p.permissions ?? []).every((n) => grantedPermissions.includes(n))),
+      ),
       request: vi.fn(() => Promise.resolve(true)),
       onAdded: { addListener },
       onRemoved: { addListener },
@@ -148,9 +200,26 @@ function installChrome(): void {
         ),
       },
       getURL: (path: string) => `chrome-extension://test/${path}`,
+      // The SW's onMessage handlers reject anything not sent by this extension.
+      id: 'test-extension-id',
+    },
+    // tab-provenance: present only while the optional permission is granted, so
+    // its mere existence is what `registerProvenanceListener` guards on.
+    webNavigation: {
+      onCommitted: {
+        addListener: vi.fn((l: (d: WebNavigationDetails) => void) => {
+          committedListeners.push(l);
+        }),
+      },
     },
     storage: {
-      sync: { get: vi.fn(() => Promise.resolve({})) },
+      sync: {
+        get: vi.fn((key: string | null) =>
+          Promise.resolve(
+            key === null ? { ...syncData } : key in syncData ? { [key]: syncData[key] } : {},
+          ),
+        ),
+      },
       // In-memory chrome.storage.session backing the per-window sidebar-focus state
       // (launcher-sidebar-focus-reach). `set` assigns synchronously so a test can
       // dispatch a focus report and fire the command in the same tick.
@@ -167,22 +236,50 @@ function installChrome(): void {
           return Promise.resolve();
         }),
       },
-      onChanged: { addListener },
+      onChanged: {
+        addListener: vi.fn(
+          (
+            l: (
+              changes: Record<string, { newValue?: unknown; oldValue?: unknown }>,
+              area: string,
+            ) => void,
+          ) => storageChangeListeners.push(l),
+        ),
+      },
     },
   };
+}
+
+/** Fan a runtime message out as if it came from a content script in `tabId`
+ * (tab-provenance's readiness announcement). */
+function dispatchFromTab(msg: unknown, tabId: number): void {
+  for (const l of messageListeners) {
+    l(msg, { id: 'test-extension-id', tab: { id: tabId, windowId: 1 } }, () => undefined);
+  }
+}
+
+/** Fire a `chrome.storage.sync` settings change at every captured listener —
+ * what flipping a toggle in the options page produces (tab-provenance). */
+function dispatchSettingsChange(settings: Record<string, unknown>): void {
+  for (const l of storageChangeListeners) {
+    l({ 'lunma.settings': { newValue: settings } }, 'sync');
+  }
 }
 
 /** Fan a runtime message out to every captured SW onMessage listener — mirrors
  * chrome.runtime.sendMessage delivery (launcher-sidebar-focus-reach). */
 function dispatchMessage(msg: unknown): void {
-  for (const l of messageListeners) l(msg, {}, () => undefined);
+  for (const l of messageListeners) l(msg, { id: 'test-extension-id' }, () => undefined);
 }
 
 /** Drive a full SW boot with a controlled read outcome, then wait until the boot
  * chain reaches its terminal broadcast. Returns the (fresh) store + persist mock. */
-async function boot(read: PersistedRead) {
+async function boot(read: PersistedRead, seed?: () => void) {
   vi.resetModules();
   installChrome();
+  // `installChrome` resets the stub state, so anything a test needs IN PLACE for
+  // the boot chain (open tabs, stored settings) has to be seeded after it.
+  seed?.();
   const storage = await import('../shared/chrome/storage');
   vi.mocked(storage.readPersistedState).mockResolvedValue(read);
   const messages = await import('../shared/messages');
@@ -467,5 +564,173 @@ describe('toggle-launcher command path — sidebar focus routing (launcher-sideb
     await vi.waitFor(() =>
       expect(createTabSpy).toHaveBeenCalledWith({ url: NEWTAB_URL, windowId: 100, active: true }),
     );
+  });
+});
+
+// tab-provenance: the `webNavigation.onCommitted` handler reads a SYNCHRONOUS
+// mirror on the coordinator, so the effective state has to be PUSHED on every
+// settings change. Seeding it only at boot leaves the mirror stale for the whole
+// life of the worker: `onPermissionsChange` does not fire when the
+// `webNavigation` grant already exists, so enabling the toggle records no edges
+// at all until the worker happens to restart.
+describe('settings watcher — provenance mirror (tab-provenance)', () => {
+  test('enabling the toggle in a live worker pushes the mirror and identifies open tabs', async () => {
+    await boot({ kind: 'empty' });
+    const { syncAllTabIdentities } = await import('./provenance');
+    vi.mocked(syncAllTabIdentities).mockClear();
+    grantedPermissions = ['webNavigation'];
+
+    dispatchSettingsChange({ ...DEFAULT_SETTINGS, trackTabProvenance: true });
+
+    // The `off → on` edge inside `refreshProvenanceEnabled` only runs when the
+    // mirror actually flips, so this asserts the push happened.
+    await vi.waitFor(() => expect(syncAllTabIdentities).toHaveBeenCalled());
+  });
+
+  test('the mirror stays off when the setting is on but the grant is missing', async () => {
+    await boot({ kind: 'empty' });
+    const { syncAllTabIdentities } = await import('./provenance');
+    vi.mocked(syncAllTabIdentities).mockClear();
+    grantedPermissions = []; // synced `true` landing on a device with no grant
+
+    dispatchSettingsChange({ ...DEFAULT_SETTINGS, trackTabProvenance: true });
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(syncAllTabIdentities).not.toHaveBeenCalled();
+  });
+
+  test('disabling the toggle in a live worker tears provenance down', async () => {
+    await boot({ kind: 'empty' });
+    const { syncAllTabIdentities, tearDownProvenance } = await import('./provenance');
+    grantedPermissions = ['webNavigation'];
+
+    dispatchSettingsChange({ ...DEFAULT_SETTINGS, trackTabProvenance: true });
+    await vi.waitFor(() => expect(syncAllTabIdentities).toHaveBeenCalled());
+
+    dispatchSettingsChange({ ...DEFAULT_SETTINGS, trackTabProvenance: false });
+    await vi.waitFor(() => expect(tearDownProvenance).toHaveBeenCalled());
+  });
+});
+
+// The transition is only readable at COMMIT, but the tab's content script is not
+// reachable then — crxjs loader shims attach their listener well after
+// `document_start`. The worker therefore remembers the transition at commit and
+// acts on it when the page announces itself.
+describe('provenance readiness handshake (tab-provenance)', () => {
+  const COMMIT = {
+    tabId: 42,
+    frameId: 0,
+    url: 'https://example.com/child',
+    transitionType: 'link',
+    transitionQualifiers: [],
+  };
+
+  async function bootWithProvenanceOn() {
+    const booted = await boot({ kind: 'empty' });
+    const provenance = await import('./provenance');
+    vi.mocked(provenance.isProvenanceOn).mockResolvedValue(true);
+    grantedPermissions = ['webNavigation'];
+    dispatchSettingsChange({ ...DEFAULT_SETTINGS, trackTabProvenance: true });
+    await vi.waitFor(() => expect(provenance.syncAllTabIdentities).toHaveBeenCalled());
+    vi.mocked(provenance.syncTabIdentity).mockClear();
+    return { ...booted, provenance };
+  }
+
+  test('a commit alone does not message the tab — the page is not reachable yet', async () => {
+    const { provenance } = await bootWithProvenanceOn();
+
+    for (const l of committedListeners) l(COMMIT);
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(provenance.syncTabIdentity).not.toHaveBeenCalled();
+  });
+
+  test('the readiness announcement runs the identity exchange for that tab', async () => {
+    const { provenance } = await bootWithProvenanceOn();
+
+    for (const l of committedListeners) l(COMMIT);
+    dispatchFromTab({ type: 'lunma/provenance-hello' }, 42);
+
+    await vi.waitFor(() =>
+      expect(provenance.syncTabIdentity).toHaveBeenCalledWith(expect.anything(), 42),
+    );
+  });
+
+  // The regression that made provenance look broken after every browser restart:
+  // the hello is often the very message that WAKES the worker, so it can arrive
+  // before the store knows the tab. The exchange then wrote a token to the page
+  // that `setLiveTabToken` silently dropped — page tokenised, tab not, and the
+  // next link opened from it resolved to a root.
+  test('the exchange waits until the store knows the tab', async () => {
+    const { provenance } = await bootWithProvenanceOn();
+    const seen: boolean[] = [];
+    vi.mocked(provenance.syncTabIdentity).mockImplementation(async (s2, id) => {
+      seen.push(s2.state.liveTabsById[id as number] !== undefined);
+    });
+
+    // A creation still queued when the page announces itself.
+    for (const l of createdListeners) {
+      l({ id: 77, windowId: 1, url: 'https://x/77' } as chrome.tabs.Tab);
+    }
+    dispatchFromTab({ type: 'lunma/provenance-hello' }, 77);
+
+    await vi.waitFor(() => expect(seen.length).toBeGreaterThan(0));
+    // Never exchange against a tab the store cannot record the answer on.
+    expect(seen).not.toContain(false);
+  });
+
+  test('an announcement from an untracked tab exchanges but resolves no commit', async () => {
+    const { provenance } = await bootWithProvenanceOn();
+
+    // No commit was remembered for tab 7 — nothing to attribute, but the tab
+    // still gets an identity so the NEXT link opened from it is attributable.
+    dispatchFromTab({ type: 'lunma/provenance-hello' }, 7);
+
+    await vi.waitFor(() =>
+      expect(provenance.syncTabIdentity).toHaveBeenCalledWith(expect.anything(), 7),
+    );
+  });
+
+  test('a subframe commit is ignored', async () => {
+    const { provenance } = await bootWithProvenanceOn();
+
+    for (const l of committedListeners) l({ ...COMMIT, frameId: 3 });
+    dispatchFromTab({ type: 'lunma/provenance-hello' }, 42);
+
+    // The exchange still runs (the tab is reachable); the subframe commit simply
+    // never became a pending transition.
+    await vi.waitFor(() =>
+      expect(provenance.syncTabIdentity).toHaveBeenCalledWith(expect.anything(), 42),
+    );
+  });
+});
+
+// `liveTabsById` is ephemeral: stripped on persist, rebuilt on every boot. A tab
+// therefore has no `LiveTab` until `rebuildLiveTabs` runs, and `setLiveTabToken`
+// drops a token for a tab it does not know. Running the identity exchange before
+// that step asked every open page for its token and threw all of them away — on
+// EVERY worker restart, which MV3 does after ~30s idle. The pages kept their
+// tokens, the store had none, and a link opened from an already-open tab resolved
+// to a root until that page happened to reload.
+describe('SW boot — provenance identity ordering (tab-provenance)', () => {
+  test('open tabs are already in the store when their identity is re-established', async () => {
+    const provenance = await import('./provenance');
+    let liveCountAtExchange = -1;
+    vi.mocked(provenance.syncAllTabIdentities).mockImplementation(async (s) => {
+      liveCountAtExchange = Object.keys(s.state.liveTabsById).length;
+    });
+
+    await boot({ kind: 'empty' }, () => {
+      windowTabs = [
+        { id: 11, url: 'https://a.example/', windowId: 1 },
+        { id: 12, url: 'https://b.example/', windowId: 1 },
+      ];
+      grantedPermissions = ['webNavigation'];
+      syncData['lunma.settings'] = { ...DEFAULT_SETTINGS, trackTabProvenance: true };
+    });
+
+    await vi.waitFor(() => expect(liveCountAtExchange).toBeGreaterThanOrEqual(0));
+    // Never exchange against a store that cannot record the answers.
+    expect(liveCountAtExchange).toBe(2);
   });
 });

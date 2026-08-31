@@ -65,6 +65,8 @@ export const ARCHIVE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 export const createInitialState = (): AppState => ({
   schemaVersion: SCHEMA_VERSION,
+  provenanceByToken: {},
+  provenanceCleanupPending: false,
   spaces: [],
   sources: {},
   activeSpaceByWindow: {},
@@ -680,6 +682,62 @@ export class LunmaStore {
    * that instance (e.g. it's a bound/pinned tab, which has no `tempTabIds`
    * position) or is already at the top.
    */
+  /** Record the token a tab's page reports (tab-provenance). Ephemeral. */
+  setLiveTabToken(tabId: TabId, token: string): void {
+    const live = this.state.liveTabsById[tabId];
+    if (!live) return;
+    live.provenanceToken = token;
+  }
+
+  /** Record a tab's resolved parent, or clear it. Ephemeral — the durable record
+   * is `provenanceByToken`. Depth is NOT stored: it is layout, and only the
+   * surface rendering a list knows which rows it displays. */
+  setLiveTabParent(tabId: TabId, parentTabId: TabId | null): void {
+    const live = this.state.liveTabsById[tabId];
+    if (!live) return;
+    if (parentTabId === null) delete live.provenanceParentTabId;
+    else live.provenanceParentTabId = parentTabId;
+  }
+
+  /** Persist a parent edge, keyed by the CHILD's token. */
+  recordProvenanceEdge(childToken: string, parentToken: string, now: number): void {
+    if (childToken === parentToken) return; // a tab is never its own parent
+    this.state.provenanceByToken[childToken] = { parentToken, recordedAt: now };
+  }
+
+  /**
+   * Boot prune (tab-provenance). Retains the TRANSITIVE closure of the tokens
+   * live tabs report — an edge survives when its child token is live, or when it
+   * is the parent of a retained edge — computed to a fixpoint, because a single
+   * pass over an unordered map would sever a chain three or more levels deep.
+   * Then caps the slice, dropping oldest `recordedAt` first.
+   */
+  pruneProvenanceEdges(liveTokens: ReadonlySet<string>, cap: number): void {
+    const edges = this.state.provenanceByToken;
+    const keep = new Set<string>();
+    for (const token of Object.keys(edges)) if (liveTokens.has(token)) keep.add(token);
+    for (;;) {
+      let grew = false;
+      for (const [child, edge] of Object.entries(edges)) {
+        if (keep.has(child) && !keep.has(edge.parentToken) && edges[edge.parentToken]) {
+          keep.add(edge.parentToken);
+          grew = true;
+        }
+      }
+      if (!grew) break;
+    }
+    let kept = Object.entries(edges).filter(([child]) => keep.has(child));
+    if (kept.length > cap) {
+      kept = kept.sort((a, b) => a[1].recordedAt - b[1].recordedAt).slice(kept.length - cap);
+    }
+    this.state.provenanceByToken = Object.fromEntries(kept);
+  }
+
+  /** Set or clear the teardown-sweep flag. */
+  setProvenanceCleanupPending(value: boolean): void {
+    this.state.provenanceCleanupPending = value;
+  }
+
   promoteTempTab(windowId: WindowId, spaceId: SpaceId, tabId: TabId): void {
     const instance = this.state.spaceInstancesByWindow[windowId]?.[spaceId];
     if (!instance) return;
@@ -1807,6 +1865,7 @@ export class LunmaStore {
     active?: boolean | undefined;
     status?: string | undefined;
     favIconUrl?: string | undefined;
+    openerTabId?: TabId | undefined;
   }): void {
     const tabId = tab.id;
     if (tabId === undefined) {
@@ -1837,6 +1896,16 @@ export class LunmaStore {
     // one. Set conditionally so the optional key isn't assigned `undefined`.
     const favIconUrl = tab.favIconUrl ?? existing?.favIconUrl;
     if (favIconUrl !== undefined) next.favIconUrl = favIconUrl;
+    // Provenance fields (tab-provenance) are rebuilt from `existing` like the
+    // favicon: `next` is constructed fresh, so without this an unrelated update
+    // would silently drop a tab's identity and its resolved parent. `openerTabId`
+    // is captured at CREATE and never overwritten by a later, decayed read.
+    const openerTabId = existing?.openerTabId ?? tab.openerTabId;
+    if (openerTabId !== undefined) next.openerTabId = openerTabId;
+    if (existing?.provenanceToken !== undefined) next.provenanceToken = existing.provenanceToken;
+    if (existing?.provenanceParentTabId !== undefined) {
+      next.provenanceParentTabId = existing.provenanceParentTabId;
+    }
     if (
       existing &&
       existing.windowId === next.windowId &&
@@ -1844,7 +1913,12 @@ export class LunmaStore {
       existing.url === next.url &&
       existing.active === next.active &&
       existing.status === next.status &&
-      existing.favIconUrl === next.favIconUrl
+      existing.favIconUrl === next.favIconUrl &&
+      // A token report or a newly-resolved parent IS material: without these the
+      // gate would swallow the broadcast and the sidebar would never re-indent.
+      existing.provenanceToken === next.provenanceToken &&
+      existing.provenanceParentTabId === next.provenanceParentTabId &&
+      existing.openerTabId === next.openerTabId
     ) {
       return; // visible fields unchanged — no mutation, no broadcast needed
     }

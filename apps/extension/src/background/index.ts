@@ -13,6 +13,7 @@ import {
   type SidebarFocusMessage,
 } from '../shared/messages';
 import { NEWTAB_PAGE_PATH } from '../shared/new-tab';
+import { hasApiPermission, onPermissionsChange } from '../shared/permissions';
 import { buildEngineRegistry } from '../shared/search-engines';
 import { readSettings, type Settings, watchSettings } from '../shared/settings';
 import type { TabId } from '../shared/types';
@@ -37,6 +38,16 @@ import { openOptionsAtResultSources } from './open-options-grant';
 import { backfillOverlayIntoOpenTabs, injectOverlay } from './overlay-injection';
 import { buildOverlayLabels } from './overlay-labels';
 import { resolvePinActiveTab } from './pin-active-tab';
+import {
+  isProvenanceOn,
+  maybeEndSweep,
+  pruneOnBoot,
+  resolveAllParents,
+  sweepTabOnLoad,
+  syncAllTabIdentities,
+  syncTabIdentity,
+  tearDownProvenance,
+} from './provenance';
 import { seedExistingTabs } from './seed-existing-tabs';
 import { seedExistingWindows } from './seed-existing-windows';
 import { resolveSpaceTint } from './space-tint';
@@ -45,6 +56,18 @@ import { coordinator, loadState, store } from './store-singleton';
 import { runRestartRecovery } from './tab-bindings';
 import { reconcileTabGroupsOnBoot } from './tab-group-adoption';
 import { purgeExpiredTrash } from './trash-purge';
+
+// tab-provenance: module-level so `registerProvenanceListener` is idempotent.
+// Declared here rather than beside the function — a `let` is not hoisted, and the
+// boot chain reaches the function before that point in the module body.
+let provenanceListenerAttached = false;
+
+/** Transition captured at commit, consumed at DOMContentLoaded (tab-provenance).
+ * Session-scoped and small: one entry per in-flight navigation. */
+const pendingCommits = new Map<
+  number,
+  { url: string; transitionType: string; transitionQualifiers: string[] }
+>();
 
 // Side-panel behavior is idempotent — set it on every SW boot rather than
 // gating on `chrome.runtime.onInstalled`. A top-level `chrome.runtime.X`
@@ -141,6 +164,25 @@ const bootReady: Promise<void> = loadState()
     }
     store.reconcileTabOwnership(tabGroupById);
   })
+  // tab-provenance: re-establish every open tab's identity, prune edges no live
+  // tab can claim, re-resolve parents from what survived, push the synchronous
+  // mirror, and end a pending teardown sweep if this boot can prove no page still
+  // holds a marker.
+  //
+  // This MUST run after `rebuildLiveTabs` above. `liveTabsById` is ephemeral — it
+  // is stripped on persist and rebuilt on every boot — so a tab has no `LiveTab`
+  // until that step, and `setLiveTabToken` drops a token for a tab it does not
+  // know. Running the exchange first therefore asked every page for its token and
+  // threw all of them away, on EVERY worker restart. The pages kept their tokens,
+  // the store had none, and the next link opened from an already-open tab
+  // resolved to a root until that page happened to reload.
+  .then(async () => {
+    await refreshProvenanceEnabled();
+    if (coordinator.provenanceWasEnabled()) await syncAllTabIdentities(store);
+    pruneOnBoot(store);
+    resolveAllParents(store);
+    await maybeEndSweep(store);
+  })
   // On a fresh install, convert the user's existing Chrome groups into Spaces;
   // then adopt restored groups (re-bind session-scoped ids) and materialize the
   // active Space's group when missing — before the boot persist/broadcast so the
@@ -236,6 +278,12 @@ void bootReady.then(async () => {
   // Seed the dedup-promotes-to-top mirror (dedup-moves-tab-to-top) so a dedup
   // focus can decide synchronously whether to also promote the tab.
   coordinator.setDedupMovesTabToTop(settings.dedupMovesTabToTop);
+  // tab-provenance: the commit handler reads this synchronously, so it must be
+  // pushed rather than awaited at handling time. Live flips are pushed by the
+  // settings watcher below; this only seeds the mirror at boot.
+  void refreshProvenanceEnabled(settings);
+  // tab-close-cascade: same mirror discipline as provenance above.
+  coordinator.setCloseChildTabsWithParent(settings.closeChildTabsWithParent);
   await coordinator.refreshBoundTabBoundaries();
 });
 
@@ -268,6 +316,41 @@ respondWithCurrentWindow(
 chrome.runtime.onMessage.addListener((raw: unknown, sender: chrome.runtime.MessageSender): void => {
   if (sender.id !== chrome.runtime.id) return;
   if (!raw || typeof raw !== 'object') return;
+  // tab-provenance: the page announcing it is reachable. Run the identity
+  // exchange now, then release the transition remembered at commit so the
+  // handler resolves an edge against a token that actually exists.
+  if ((raw as { type?: string }).type === 'lunma/provenance-hello') {
+    const helloTabId = sender.tab?.id;
+    if (helloTabId === undefined) return;
+    // The exchange records the token on the tab's `LiveTab`, so the store has to
+    // KNOW the tab first. A page announcing itself can easily arrive before that:
+    // on a cold start the hello is often the very message that wakes the worker,
+    // and even warm, `tabs.onCreated` is still queued. Running the exchange then
+    // writes a token to the page that the store silently drops — the page looks
+    // tokenised, the tab is not, and the next link opened from it resolves to a
+    // root. Waiting for boot AND for the queue to drain removes the race instead
+    // of trying to win it.
+    void bootReady
+      .then(() => coordinator.idle())
+      .then(() => syncProvenanceToken(helloTabId))
+      .then(() => {
+        const commit = pendingCommits.get(helloTabId);
+        if (!commit) return;
+        pendingCommits.delete(helloTabId);
+        enqueueAfterBoot({
+          source: 'chrome',
+          kind: 'webNavigation.onCommitted',
+          payload: {
+            tabId: helloTabId,
+            frameId: 0,
+            url: commit.url,
+            transitionType: commit.transitionType,
+            transitionQualifiers: commit.transitionQualifiers,
+          },
+        });
+      });
+    return;
+  }
   const m = raw as Partial<BoundaryOpenElsewhereMessage>;
   if (m.type !== 'lunma/boundary-open-elsewhere') return;
   const url = m.url;
@@ -365,6 +448,19 @@ watchSettings((settings) => {
   // Push the live dedup-promotes-to-top toggle (dedup-moves-tab-to-top) so
   // flipping it takes effect without a reload.
   coordinator.setDedupMovesTabToTop(settings.dedupMovesTabToTop);
+  // Push the live close-cascade mirror (tab-close-cascade), for the same reason
+  // the provenance mirror below is pushed rather than seeded once.
+  coordinator.setCloseChildTabsWithParent(settings.closeChildTabsWithParent);
+  // Push the live provenance mirror (tab-provenance). Without this the commit
+  // handler reads whatever the boot seed cached, so enabling the toggle in a
+  // live worker never takes effect: `onPermissionsChange` does not fire when the
+  // `webNavigation` grant already exists, leaving the mirror stale until the
+  // worker next restarts.
+  void (async () => {
+    const wasOn = coordinator.provenanceWasEnabled();
+    await refreshProvenanceEnabled(settings);
+    if (wasOn && !settings.trackTabProvenance) await tearDownProvenance(store);
+  })();
   void coordinator.refreshBoundTabBoundaries();
   void syncAutoArchiveAlarm(settings);
 });
@@ -372,6 +468,13 @@ watchSettings((settings) => {
 // Initial alarm sync from persisted settings (the watcher only fires on CHANGE).
 // Fire-and-forget: the alarm only needs settings, not the booted store.
 void readSettings().then(syncAutoArchiveAlarm);
+
+// tab-provenance: granting `webNavigation` from the options toggle happens in a
+// live worker, so the listener has to attach then — not only at the next boot.
+onPermissionsChange(() => {
+  registerProvenanceListener();
+  void refreshProvenanceEnabled();
+});
 
 // Backfill the overlay into already-open tabs on install/update (and unpacked
 // reload). Declarative content scripts inject only into tabs opened/reloaded
@@ -391,6 +494,65 @@ function enqueueAfterBoot(event: PendingEvent): void {
   void bootReady.then(() => coordinator.enqueue(event));
 }
 
+// ── tab-provenance ───────────────────────────────────────────────────────────
+// The commit handler reads a SYNCHRONOUS mirror, so the effective state is pushed
+// into the coordinator rather than awaited at handling time.
+async function refreshProvenanceEnabled(settings?: Settings): Promise<void> {
+  const wasOn = coordinator.provenanceWasEnabled();
+  const on = settings
+    ? settings.trackTabProvenance && (await hasApiPermission('webNavigation'))
+    : await isProvenanceOn();
+  coordinator.setProvenanceEnabled(on);
+  // Turning it on: identify the tabs that are already open, so the first link
+  // opened from one is attributable instead of silently becoming a root.
+  if (on && !wasOn) {
+    store.setProvenanceCleanupPending(false); // a pending sweep would erase them
+    await syncAllTabIdentities(store);
+  }
+}
+
+/**
+ * Attach the commit listener. Guarded on the API OBJECT existing — an optional
+ * permission gates availability, so that check IS the permission check and it is
+ * answerable synchronously, unlike `permissions.contains`.
+ *
+ * Called at top level AND on a grant: registering only at top level would leave
+ * the feature dead until the worker next restarted, because the API object does
+ * not exist at boot on the very install where the user first enables it.
+ * Idempotent — Chrome would otherwise fire a duplicate listener per call.
+ */
+function registerProvenanceListener(): void {
+  if (provenanceListenerAttached || !chrome.webNavigation) return;
+  provenanceListenerAttached = true;
+
+  // The transition is only available at COMMIT, but the tab's content script is
+  // not reachable yet — a `document_start` script has not attached its message
+  // listener when `onCommitted` fires, and every send there fails with "Receiving
+  // end does not exist". So: remember the transition at commit, and run the
+  // identity exchange at DOMContentLoaded, when the script is alive. The commit
+  // event is enqueued only after that, so the handler reads a token that exists.
+  chrome.webNavigation.onCommitted.addListener((details) => {
+    if (details.frameId !== 0) return;
+    pendingCommits.set(details.tabId, {
+      url: details.url,
+      transitionType: details.transitionType,
+      transitionQualifiers: [...(details.transitionQualifiers ?? [])],
+    });
+  });
+}
+
+/** Establish a tab's identity on commit, or sweep its marker while a teardown is
+ * still converging. Both are no-ops when nothing applies. */
+async function syncProvenanceToken(tabId: number): Promise<void> {
+  if (store.state.provenanceCleanupPending) {
+    await sweepTabOnLoad(store, tabId);
+    return;
+  }
+  if (!(await isProvenanceOn())) return;
+  await syncTabIdentity(store, tabId);
+  resolveAllParents(store);
+}
+
 function registerChromeListeners(): void {
   chrome.tabs.onCreated.addListener((tab) => {
     enqueueAfterBoot({ source: 'chrome', kind: 'tabs.onCreated', payload: { tab } });
@@ -407,6 +569,8 @@ function registerChromeListeners(): void {
       payload: { tabId, changeInfo },
     });
   });
+
+  registerProvenanceListener();
 
   chrome.tabs.onActivated.addListener((activeInfo) => {
     enqueueAfterBoot({ source: 'chrome', kind: 'tabs.onActivated', payload: { activeInfo } });

@@ -26,6 +26,7 @@ import { lensHandlers } from './handlers/lenses';
 import { pinnedTabHandlers } from './handlers/pinned-tabs';
 import { spaceHandlers } from './handlers/spaces';
 import { tempTabHandlers } from './handlers/temp-tabs';
+import { webNavigationHandlers } from './handlers/web-navigation';
 
 // Re-export of underlying types for documentation; kept narrow on purpose.
 export type { SpaceId, WindowId } from '../shared/types';
@@ -85,6 +86,8 @@ function mergeTabGroupsOnUpdatedPayload(
 export const EventPolicy: Record<PendingEventKind, EventPolicyEntry> = {
   'tabs.onCreated': {},
   'tabs.onRemoved': {},
+  // Never coalesced: each confirmed batch is its own destructive act.
+  closeChildTabs: {},
   'tabs.onUpdated': {
     coalesceKey: (e) => (e.kind === 'tabs.onUpdated' ? e.payload.tabId : -1),
     mergePayload: mergeTabsOnUpdatedPayload,
@@ -97,6 +100,10 @@ export const EventPolicy: Record<PendingEventKind, EventPolicyEntry> = {
     coalesceKey: (e) => (e.kind === 'tabGroups.onUpdated' ? e.payload.group.id : -1),
     mergePayload: mergeTabGroupsOnUpdatedPayload,
   },
+  // No coalescing (tab-provenance): the FIRST commit for a tab is the one
+  // carrying the opener attribution an edge resolves from, so `replace` would
+  // discard exactly the event provenance depends on.
+  'webNavigation.onCommitted': {},
   'windows.onCreated': {},
   'windows.onRemoved': {},
   // Sidebar-source commands per design D4. Coalesce only the two clear
@@ -252,6 +259,17 @@ export class Coordinator {
    * to `true` (the setting's declared default) until seeded.
    */
   private dedupPromotesToTop = true;
+
+  /** Cached `trackTabProvenance && webNavigation granted` mirror (tab-provenance),
+   * kept current by {@link setProvenanceEnabled}. The `webNavigation.onCommitted`
+   * handler must read it SYNCHRONOUSLY — `hasApiPermission` is async and settings
+   * live in `storage.sync`, so an await there would break handler purity. Defaults
+   * to `false`: the feature is off until the boot read says otherwise. */
+  private provenanceOn = false;
+  /** Cached `closeChildTabsWithParent` mirror (tab-close-cascade), kept current by
+   * {@link setCloseChildTabsWithParent}. Defaults to `false`: the cascade is
+   * destructive, so it stays off until a settings read says the user enabled it. */
+  private closeChildrenWithParent = false;
   private drainPromise: Promise<void> | null = null;
   /** Per-drain ack buffer. Includes both coalesce-time pushes (D5b) and
    * handler-tail pushes. Flushed at end of drain. */
@@ -309,6 +327,8 @@ export class Coordinator {
       // is visible to the handler.
       dedupNewTabNavigations: () => this.dedupNavigations,
       dedupMovesTabToTop: () => this.dedupPromotesToTop,
+      provenanceEnabled: () => this.provenanceOn,
+      closeChildTabsWithParent: () => this.closeChildrenWithParent,
       groups: this.groups,
       boundary: this.boundary,
     };
@@ -317,6 +337,7 @@ export class Coordinator {
     // union of fragments omits any `kind` — exhaustiveness enforced at this site.
     this.handlers = {
       ...chromeTabHandlers(),
+      ...webNavigationHandlers(),
       ...chromeGroupWindowHandlers(),
       ...spaceHandlers(),
       ...pinnedTabHandlers(),
@@ -455,6 +476,25 @@ export class Coordinator {
    */
   setDedupMovesTabToTop(value: boolean): void {
     this.dedupPromotesToTop = value;
+  }
+
+  /** Update the cached provenance mirror. Called from the boot settings read and
+   * from `watchSettings`, and on a permission change. */
+  setProvenanceEnabled(value: boolean): void {
+    this.provenanceOn = value;
+  }
+
+  /** The mirror's CURRENT value, read before a settings push so a flip to off can
+   * be distinguished from a no-op write and trigger exactly one teardown. */
+  provenanceWasEnabled(): boolean {
+    return this.provenanceOn;
+  }
+
+  /** Update the cached close-cascade mirror (tab-close-cascade). Called from the
+   * boot settings read and from `watchSettings` — both, because a mirror seeded
+   * only at boot is stale for the rest of the worker's life. */
+  setCloseChildTabsWithParent(value: boolean): void {
+    this.closeChildrenWithParent = value;
   }
 
   /**

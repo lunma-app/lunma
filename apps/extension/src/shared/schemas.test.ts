@@ -6,46 +6,74 @@ import {
   AppStateV13Schema,
   AppStateV14Schema,
   AppStateV16Schema,
-  AppStateV18Schema,
+  AppStateV19Schema,
   CURRENT_SCHEMA_VERSION,
   EnvelopeSchema,
 } from './schemas';
 import { createInitialState } from './store.svelte';
 
+/**
+ * A freshly-minted state as an OLDER, frozen schema would have seen it: without
+ * the top-level slices added since. Historical schemas are `strictObject`, so a
+ * current state cannot be validated against them directly. The current schema
+ * still accepts this shape — both provenance slices carry Zod defaults.
+ */
+function legacyInitialState() {
+  const {
+    provenanceByToken: _provenanceByToken,
+    provenanceCleanupPending: _provenanceCleanupPending,
+    ...rest
+  } = createInitialState();
+  return rest;
+}
+
 // Validates the freshly-minted initial state against the current persisted
-// schema (v14 — lens-view-filters adds the optional `filter` on the lens node).
-describe('AppStateV14Schema validation', () => {
+// schema (v19 — add-tab-provenance adds the two provenance slices).
+describe('AppStateV19Schema validation', () => {
+  test('accepts a state carrying the provenance slices', () => {
+    const state = {
+      ...createInitialState(),
+      provenanceByToken: { TC: { parentToken: 'TP', recordedAt: 1 } },
+    };
+    const result = AppStateV19Schema.safeParse(state);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.provenanceByToken.TC?.parentToken).toBe('TP');
+      expect(result.data.provenanceCleanupPending).toBe(false);
+    }
+  });
+
   test('valid initial AppState parses', () => {
-    const state = createInitialState();
-    const result = AppStateV14Schema.safeParse(state);
+    const state = legacyInitialState();
+    const result = AppStateV19Schema.safeParse(state);
     expect(result.success).toBe(true);
   });
 
   test('missing required field rejects', () => {
-    const state = createInitialState() as unknown as Record<string, unknown>;
+    const state = legacyInitialState() as unknown as Record<string, unknown>;
     delete state.spaces;
-    const result = AppStateV14Schema.safeParse(state);
+    const result = AppStateV19Schema.safeParse(state);
     expect(result.success).toBe(false);
   });
 });
 
-describe('AppStateV13Schema validation', () => {
+describe('Current-schema validation of a freshly-minted state', () => {
   test('valid initial AppState parses', () => {
-    const state = createInitialState();
-    const result = AppStateV13Schema.safeParse(state);
+    const state = legacyInitialState();
+    const result = AppStateV19Schema.safeParse(state);
     expect(result.success).toBe(true);
   });
 
   test('missing required field rejects', () => {
-    const state = createInitialState() as unknown as Record<string, unknown>;
+    const state = legacyInitialState() as unknown as Record<string, unknown>;
     delete state.spaces;
-    const result = AppStateV13Schema.safeParse(state);
+    const result = AppStateV19Schema.safeParse(state);
     expect(result.success).toBe(false);
   });
 
   test('unknown extra field rejects (strict)', () => {
-    const state = { ...createInitialState(), extra: 'nope' };
-    const result = AppStateV13Schema.safeParse(state);
+    const state = { ...legacyInitialState(), extra: 'nope' };
+    const result = AppStateV19Schema.safeParse(state);
     expect(result.success).toBe(false);
   });
 
@@ -53,7 +81,7 @@ describe('AppStateV13Schema validation', () => {
   // secret — a `token` field on the account is rejected (the schema is strict),
   // so a token can never ride `AppState` / a state broadcast.
   test('a SourceAccount carrying a token is rejected (no secret reaches AppState)', () => {
-    const state = createInitialState() as unknown as Record<string, unknown>;
+    const state = legacyInitialState() as unknown as Record<string, unknown>;
     state.sources = {
       'acc-1': {
         id: 'acc-1',
@@ -62,16 +90,16 @@ describe('AppStateV13Schema validation', () => {
         token: 'ghp-leaked',
       },
     };
-    const result = AppStateV13Schema.safeParse(state);
+    const result = AppStateV19Schema.safeParse(state);
     expect(result.success).toBe(false);
   });
 
   test('a tokenless SourceAccount round-trips in the broadcast-safe sources map', () => {
-    const state = createInitialState() as unknown as Record<string, unknown>;
+    const state = legacyInitialState() as unknown as Record<string, unknown>;
     state.sources = {
       'acc-1': { id: 'acc-1', provider: 'github', baseUrl: 'https://github.com', name: 'Work' },
     };
-    const result = AppStateV13Schema.safeParse(state);
+    const result = AppStateV19Schema.safeParse(state);
     expect(result.success).toBe(true);
   });
 });
@@ -80,7 +108,7 @@ describe('EnvelopeSchema', () => {
   test('parses a valid envelope', () => {
     const envelope = {
       schemaVersion: CURRENT_SCHEMA_VERSION,
-      state: createInitialState(),
+      state: legacyInitialState(),
     };
     const result = EnvelopeSchema.safeParse(envelope);
     expect(result.success).toBe(true);
@@ -90,7 +118,7 @@ describe('EnvelopeSchema', () => {
 // review-lens: the v12 schema widens the persisted lens node's `lensKind` enum.
 describe('AppStateV12Schema lensKind enum widening', () => {
   function stateWithLens(lensKind: string) {
-    const state = createInitialState() as unknown as Record<string, unknown>;
+    const state = legacyInitialState() as unknown as Record<string, unknown>;
     // V12 is frozen pre-`sources` (strict) — drop the v13 account map and the
     // ephemeral peek slice so the historical schema validates the embedded lens shape.
     delete state.sources;
@@ -135,7 +163,7 @@ describe('AppStateV12Schema lensKind enum widening', () => {
 
 describe('saved-tab boundary', () => {
   function envelopeWithSavedTab(boundary?: unknown) {
-    const state = createInitialState() as unknown as Record<string, unknown>;
+    const state = legacyInitialState() as unknown as Record<string, unknown>;
     state.savedTabs = {
       st1: {
         id: 'st1',
@@ -182,7 +210,7 @@ describe('saved-tab boundary', () => {
 // lens-view-filters (v14): schema round-trip, pre-14 parse, empty-filter handling.
 describe('lens-view-filters schema (v14)', () => {
   function stateWithLensFilter(filter?: unknown) {
-    const base = createInitialState() as unknown as Record<string, unknown>;
+    const base = legacyInitialState() as unknown as Record<string, unknown>;
     const accId = 'acc-gh';
     base.sources = { [accId]: { id: accId, provider: 'github', baseUrl: 'https://github.com' } };
     base.spaces = [{ id: 's1', name: 'Work', color: 'blue', icon: 'star' }];
@@ -244,19 +272,19 @@ describe('lens-view-filters schema (v14)', () => {
     expect(result.success).toBe(false);
   });
 
-  test('CURRENT_SCHEMA_VERSION is 18', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(18);
+  test('CURRENT_SCHEMA_VERSION is 19', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(19);
   });
 });
 
 // persist-lens-article-layout (v17): the lens node gains an optional
 // `articleLayout?: 'grid' | 'list'`. Regression guard: the CURRENT schema
-// (AppStateV18Schema — what storage/messages/backup validate against) MUST accept
+// (AppStateV19Schema — what storage/messages/backup validate against) MUST accept
 // an `articleLayout`-bearing state, or the sidebar's snapshot validation rejects
 // every state written by current code.
 describe('persist-lens-article-layout schema (v17)', () => {
   function stateWithLayout(articleLayout?: unknown) {
-    const base = createInitialState() as unknown as Record<string, unknown>;
+    const base = legacyInitialState() as unknown as Record<string, unknown>;
     const accId = 'acc-gh';
     base.sources = { [accId]: { id: accId, provider: 'github', baseUrl: 'https://github.com' } };
     base.spaces = [{ id: 's1', name: 'Work', color: 'blue', icon: 'star' }];
@@ -277,7 +305,7 @@ describe('persist-lens-article-layout schema (v17)', () => {
   }
 
   test('a lens carrying articleLayout round-trips under the current schema (v17)', () => {
-    const result = AppStateV18Schema.safeParse(stateWithLayout('list'));
+    const result = AppStateV19Schema.safeParse(stateWithLayout('list'));
     expect(result.success).toBe(true);
     if (result.success) {
       const node = result.data.pinnedBySpace.s1?.[0];
@@ -286,11 +314,11 @@ describe('persist-lens-article-layout schema (v17)', () => {
   });
 
   test('a lens without articleLayout (pre-v17 shape) validates under v17', () => {
-    expect(AppStateV18Schema.safeParse(stateWithLayout()).success).toBe(true);
+    expect(AppStateV19Schema.safeParse(stateWithLayout()).success).toBe(true);
   });
 
   test('an unknown articleLayout value rejects under v17', () => {
-    expect(AppStateV18Schema.safeParse(stateWithLayout('masonry')).success).toBe(false);
+    expect(AppStateV19Schema.safeParse(stateWithLayout('masonry')).success).toBe(false);
   });
 
   test('the frozen v16 schema rejects a lens node carrying articleLayout (downgrade detectable)', () => {
@@ -305,7 +333,7 @@ describe('persist-lens-article-layout schema (v17)', () => {
 
 describe('AppStateV7Schema smartItemBindings slot shape', () => {
   function stateWithBindings(bindings: unknown) {
-    const state = createInitialState() as unknown as Record<string, unknown>;
+    const state = legacyInitialState() as unknown as Record<string, unknown>;
     // V7Schema uses old field names; strip V11/V13 fields and add V7-compatible ones.
     delete state.sources;
     delete state.lensPeekByWindow;

@@ -17,7 +17,8 @@
   ],
   "optional_permissions": [
     "bookmarks",
-    "history"
+    "history",
+    "webNavigation"
   ],
   "optional_host_permissions": [
     "https://*/*",
@@ -45,6 +46,16 @@
       ],
       "js": [
         "src/content/tab-boundary.ts"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://*/*",
+        "http://*/*"
+      ],
+      "js": [
+        "src/content/tab-token.ts"
       ],
       "run_at": "document_start"
     }

@@ -22,6 +22,22 @@
       }
     }
   ],
+  "sidebar_cascadeConfirm": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Close {count} tab opened from it?",
+        "countPlural=other": "Close {count} tabs opened from it?"
+      }
+    }
+  ],
+  "sidebar_cascadeConfirmAction": "Close",
   "sidebar_clearedDuplicateTabs": [
     {
       "declarations": [
@@ -434,5 +450,11 @@
         "countPlural=other": "Grouped {count} tabs by site"
       }
     }
-  ]
+  ],
+  "options_label_trackTabProvenance": "Show where tabs came from",
+  "options_desc_trackTabProvenance": "Indents each tab under the one it was opened from. Chrome will ask to read your browsing history, and Lunma stores a random marker in the pages you visit — those pages can read it.",
+  "options_note_trackTabProvenance": "Turning this off clears the markers Lunma can still reach. Uninstalling Lunma cannot clear markers already written, and a tab you never open again is never reached — but a marker never outlives the browsing session it was written in.",
+  "options_label_closeChildTabsWithParent": "Close child tabs with their parent",
+  "options_desc_closeChildTabsWithParent": "Closing a tab also closes the tabs you opened from it. You can undo this right after.",
+  "options_desc_requiresSetting": "Turn on “{setting}” first."
 }

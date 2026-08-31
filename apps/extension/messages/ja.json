@@ -21,6 +21,22 @@
       }
     }
   ],
+  "sidebar_cascadeConfirm": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "そこから開いた{count}個のタブも閉じますか？",
+        "countPlural=other": "そこから開いた{count}個のタブも閉じますか？"
+      }
+    }
+  ],
+  "sidebar_cascadeConfirmAction": "閉じる",
   "sidebar_clearedDuplicateTabs": [
     {
       "declarations": [
@@ -427,5 +443,11 @@
         "countPlural=other": "{count} 個のタブをサイトごとにグループ化しました"
       }
     }
-  ]
+  ],
+  "options_label_trackTabProvenance": "タブの出どころを表示",
+  "options_desc_trackTabProvenance": "各タブを、それを開いた元のタブの下にインデントします。Chrome が閲覧履歴の読み取りを求め、Lunma は訪問したページにランダムな目印を保存します（ページ側から読み取れます）。",
+  "options_note_trackTabProvenance": "オフにすると、Lunma がまだ到達できる目印は消去されます。アンインストールでは既に書き込まれた目印は消せず、二度と開かないタブには到達できません。ただし目印は書き込まれたブラウジングセッションを超えて残ることはありません。",
+  "options_label_closeChildTabsWithParent": "親タブと一緒に子タブも閉じる",
+  "options_desc_closeChildTabsWithParent": "タブを閉じると、そこから開いたタブも閉じます。直後に元に戻せます。",
+  "options_desc_requiresSetting": "先に「{setting}」をオンにしてください。"
 }

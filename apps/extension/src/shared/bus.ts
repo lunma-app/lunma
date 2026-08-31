@@ -219,6 +219,13 @@ export type SidebarCommand =
   | { kind: 'closeTab'; payload: { tabId: TabId } }
   | { kind: 'newTab'; payload: { windowId: WindowId; spaceId?: SpaceId } }
   | { kind: 'clearTempTabs'; payload: { windowId: WindowId; spaceId?: SpaceId } }
+  // Close a confirmed cascade batch (tab-close-cascade): the tabs opened from a
+  // tab the user just closed. Sent only after the user confirms — the worker
+  // observed the close but never acts on it unasked.
+  | {
+      kind: 'closeChildTabs';
+      payload: { windowId: WindowId; spaceId: SpaceId; tabIds: TabId[] };
+    }
   // Close only the targeted Space's temporary tabs that duplicate another
   // temporary tab's exact URL, keeping the earliest-listed tab per URL group.
   | { kind: 'clearDuplicateTempTabs'; payload: { windowId: WindowId; spaceId?: SpaceId } }
@@ -318,6 +325,7 @@ export const SIDEBAR_COMMAND_KINDS: ReadonlySet<SidebarCommandKind> = new Set<Si
   'closeTab',
   'newTab',
   'clearTempTabs',
+  'closeChildTabs',
   'clearDuplicateTempTabs',
   'groupTempTabsBySite',
   'undoClearTempTabs',
@@ -385,6 +393,7 @@ const _kindExhaustiveness = {
   closeTab: true,
   newTab: true,
   clearTempTabs: true,
+  closeChildTabs: true,
   clearDuplicateTempTabs: true,
   groupTempTabsBySite: true,
   undoClearTempTabs: true,
@@ -817,6 +826,14 @@ const COMMAND_SCHEMAS = {
     kind: z.literal('clearTempTabs'),
     payload: z.strictObject({ windowId: z.number(), spaceId: z.string().optional() }),
   }),
+  closeChildTabs: z.strictObject({
+    kind: z.literal('closeChildTabs'),
+    payload: z.strictObject({
+      windowId: z.number(),
+      spaceId: z.string(),
+      tabIds: z.array(z.number()),
+    }),
+  }),
   clearDuplicateTempTabs: z.strictObject({
     kind: z.literal('clearDuplicateTempTabs'),
     payload: z.strictObject({ windowId: z.number(), spaceId: z.string().optional() }),
@@ -936,6 +953,7 @@ export const SidebarCommandSchema = z.discriminatedUnion('kind', [
   COMMAND_SCHEMAS.closeTab,
   COMMAND_SCHEMAS.newTab,
   COMMAND_SCHEMAS.clearTempTabs,
+  COMMAND_SCHEMAS.closeChildTabs,
   COMMAND_SCHEMAS.clearDuplicateTempTabs,
   COMMAND_SCHEMAS.groupTempTabsBySite,
   COMMAND_SCHEMAS.undoClearTempTabs,
@@ -1153,6 +1171,13 @@ export const bus: Bus = new Proxy({} as Bus, {
 
 /** Runtime message type for the sidebar flash when dedup focuses an existing tab. */
 export const TAB_DEDUP_FLASH = 'lunma/tab-dedup-flash' as const;
+
+/** Runtime message type ASKING the sidebar whether to close the tabs opened from
+ * a tab that just closed (tab-close-cascade). Carries
+ * `{ windowId, spaceId, tabIds, title }`. Nothing has been closed or archived
+ * when this is sent: the cascade is destructive and the user answers first. No
+ * answer means no cascade. */
+export const CASCADE_CONFIRM = 'lunma/cascade-confirm' as const;
 
 /**
  * Fire-and-forget command dispatch (Task 3.x). The single sanctioned path for

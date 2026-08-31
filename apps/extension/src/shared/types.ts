@@ -33,6 +33,10 @@ export type SpaceColor =
  */
 export type { IconName } from './icon-names';
 
+import type { ProvenanceEdge } from './provenance';
+
+export type { ProvenanceEdge };
+
 /**
  * Per-Space auto-archive override (auto-archive). Mirrors the per-tab
  * `TabBoundary` override shape. An ABSENT `autoArchive` on a `Space` means
@@ -535,6 +539,17 @@ export interface LiveTab {
   url: string;
   active: boolean;
   status: 'loading' | 'complete';
+  /** The tab this one was opened from, as Chrome reported it at creation
+   * (`chrome.tabs.Tab.openerTabId`). Captured at CREATE because it decays — a
+   * later read can return nothing for a tab that genuinely had an opener. Only a
+   * candidate: `transitionType` decides whether the edge is real. */
+  openerTabId?: TabId | undefined;
+  /** Opaque provenance identity carried by this tab's page (tab-provenance).
+   * Ephemeral; the durable record is `AppState.provenanceByToken`. */
+  provenanceToken?: string | undefined;
+  /** Live tab id of the tab this one was opened from, when resolvable. The SW
+   * resolves the EDGE; indent depth is layout and belongs to the surface. */
+  provenanceParentTabId?: TabId | undefined;
   /**
    * The tab's Chrome-resolved favicon URL (`chrome.tabs.Tab.favIconUrl`), when
    * known. Surfaces prefer this over the `_favicon` page-URL endpoint so the
@@ -622,6 +637,11 @@ export interface AppState {
    * (stripped in `persist()`); rebuilt at SW boot from `chrome.tabs.query`.
    */
   liveTabsById: { [tabId: TabId]: LiveTab };
+  /** Persisted parent edges keyed by the CHILD's provenance token
+   * (tab-provenance). Never keyed by tab id — those do not survive a restart. */
+  provenanceByToken: { [token: string]: ProvenanceEdge };
+  /** Set while a provenance teardown sweep is still converging. */
+  provenanceCleanupPending: boolean;
   /**
    * Ephemeral lens runtime results keyed by folder id (lenses, design D2).
    * Never persisted (stripped in `persist()` exactly like `liveTabsById`);

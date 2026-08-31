@@ -7,6 +7,10 @@ export const meta = defineStory({
   controlOverrides: {
     title: { default: 'svelte/svelte · Pull Request #14201', description: 'Tab title.' },
     active: { description: 'Active-tab Space-wash treatment.' },
+    depth: {
+      description:
+        'Provenance indent (tab-provenance): 0 is a root; each step nests one --space-3 with a hairline lineage rule.',
+    },
     loading: { description: 'Favicon → spinner.' },
     drifted: { description: 'Tab wandered off home.' },
     meta: { description: 'Right-edge metadata (e.g. archived age).' },
@@ -44,6 +48,7 @@ const { source }: { source: string } = $props();
         faviconSrc={(args.faviconSrc as string) || favicon('github.com')}
         faviconFallbackSrc={(args.faviconFallbackSrc as string) || undefined}
         active={args.active as boolean}
+        depth={args.depth as number}
         loading={args.loading as boolean}
         drifted={args.drifted as boolean}
         homeHost={(args.homeHost as string) || 'github.com'}
@@ -86,5 +91,24 @@ const { source }: { source: string } = $props();
         <TabRow title="GitHub" faviconSrc={favicon('github.com')} drifted homeHost="github.com" onGoHome={noop} onclick={noop} />
       </div>
     </Variant>
+
+    <Variant label="provenance depth (opened-from lineage)">
+      <div style="width: 18rem; display: grid; gap: 2px">
+        <TabRow title="Hacker News" faviconSrc={favicon('news.ycombinator.com')} onclick={noop} />
+        <TabRow
+          title="Show HN: a thing I built"
+          faviconSrc={favicon('example.com')}
+          depth={1}
+          onclick={noop}
+        />
+        <TabRow
+          title="The thing's GitHub repo"
+          faviconSrc={favicon('github.com')}
+          depth={2}
+          onclick={noop}
+        />
+        <TabRow title="Unrelated tab you opened yourself" faviconSrc={favicon('figma.com')} onclick={noop} />
+      </div>
+  </Variant>
   {/snippet}
 </Story>

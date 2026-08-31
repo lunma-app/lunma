@@ -22,6 +22,22 @@
       }
     }
   ],
+  "sidebar_cascadeConfirm": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Fechar {count} aba aberta a partir dela?",
+        "countPlural=other": "Fechar {count} abas abertas a partir dela?"
+      }
+    }
+  ],
+  "sidebar_cascadeConfirmAction": "Fechar",
   "sidebar_clearedDuplicateTabs": [
     {
       "declarations": [
@@ -434,5 +450,11 @@
         "countPlural=other": "{count} separadores agrupados por site"
       }
     }
-  ]
+  ],
+  "options_label_trackTabProvenance": "Mostrar de onde vieram os separadores",
+  "options_desc_trackTabProvenance": "Avança cada separador sob aquele a partir do qual foi aberto. O Chrome vai pedir para ler o teu histórico de navegação, e o Lunma guarda uma marca aleatória nas páginas que visitas — essas páginas conseguem lê-la.",
+  "options_note_trackTabProvenance": "Desligar limpa as marcas que o Lunma ainda consegue alcançar. Desinstalar o Lunma não limpa as já escritas, e um separador que nunca mais abras nunca é alcançado — mas uma marca nunca sobrevive à sessão de navegação em que foi escrita.",
+  "options_label_closeChildTabsWithParent": "Fechar as abas filhas junto com a de origem",
+  "options_desc_closeChildTabsWithParent": "Fechar uma aba também fecha as que você abriu a partir dela. Você pode desfazer logo depois.",
+  "options_desc_requiresSetting": "Ative primeiro “{setting}”."
 }

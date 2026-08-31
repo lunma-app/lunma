@@ -21,9 +21,23 @@ interface Props {
   /** Span the full width with equal-width segments, instead of the default
    * content-width inline control (useful in a narrow column like the sidebar). */
   block?: boolean;
+  /** Disable the WHOLE control. Distinct from marking every option `disabled`,
+   * which dims the option labels but leaves the selection pill at full strength —
+   * a half-lit control that reads as broken rather than as conditional. Use this
+   * for a control whose setting is currently meaningless (see the settings
+   * `dependsOn` contract). */
+  disabled?: boolean;
 }
 
-const { name, options, value, onchange, ariaLabel, block = false }: Props = $props();
+const {
+  name,
+  options,
+  value,
+  onchange,
+  ariaLabel,
+  block = false,
+  disabled = false,
+}: Props = $props();
 
 // The sliding pill is measured from the DOM (not computed from label widths) so
 // it stays flush with options of any length/locale. We measure the active
@@ -78,7 +92,14 @@ function select(next: string): void {
 }
 </script>
 
-<fieldset class="segmented" class:block aria-label={ariaLabel} bind:this={trackEl}>
+<fieldset
+  class="segmented"
+  class:block
+  class:control-disabled={disabled}
+  aria-label={ariaLabel}
+  {disabled}
+  bind:this={trackEl}
+>
   {#if pillReady}
     <span
       class="pill"
@@ -101,7 +122,7 @@ function select(next: string): void {
         {name}
         value={option.value}
         checked={option.value === value}
-        disabled={option.disabled}
+        disabled={disabled || option.disabled}
         onchange={() => select(option.value)}
       />
       <span class="option-label">{option.label}</span>
@@ -155,7 +176,8 @@ function select(next: string): void {
     transition:
       transform var(--motion-base) var(--ease-emphasised),
       width var(--motion-base) var(--ease-emphasised),
-      height var(--motion-base) var(--ease-emphasised);
+      height var(--motion-base) var(--ease-emphasised),
+      opacity var(--motion-base) var(--ease-standard);
     pointer-events: none;
   }
 
@@ -174,6 +196,23 @@ function select(next: string): void {
   }
   .option.disabled {
     opacity: 0.4;
+    cursor: not-allowed;
+  }
+  /* Whole-control disable. The pill is a SIBLING of the options, so dimming the
+     options alone would leave the selection background at full strength — a
+     half-lit control that reads as broken. Fade both together. The fade rides
+     --motion-base, which the tokens' own reduced-motion block collapses, so no
+     per-component media query is needed (see tokens.css). The pill's opacity
+     transition is declared in its own rule above: a later shorthand here would
+     replace the transform/width/height list and kill the slide everywhere. */
+  .option {
+    transition: opacity var(--motion-base) var(--ease-standard);
+  }
+  .segmented.control-disabled .option,
+  .segmented.control-disabled .pill {
+    opacity: 0.4;
+  }
+  .segmented.control-disabled .option {
     cursor: not-allowed;
   }
 

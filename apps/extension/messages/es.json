@@ -22,6 +22,22 @@
       }
     }
   ],
+  "sidebar_cascadeConfirm": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "¿Cerrar {count} pestaña abierta desde ella?",
+        "countPlural=other": "¿Cerrar {count} pestañas abiertas desde ella?"
+      }
+    }
+  ],
+  "sidebar_cascadeConfirmAction": "Cerrar",
   "sidebar_clearedDuplicateTabs": [
     {
       "declarations": [
@@ -434,5 +450,11 @@
         "countPlural=other": "{count} pestañas agrupadas por sitio"
       }
     }
-  ]
+  ],
+  "options_label_trackTabProvenance": "Mostrar de dónde vienen las pestañas",
+  "options_desc_trackTabProvenance": "Sangra cada pestaña bajo aquella desde la que se abrió. Chrome pedirá leer tu historial de navegación, y Lunma guarda una marca aleatoria en las páginas que visitas — esas páginas pueden leerla.",
+  "options_note_trackTabProvenance": "Al desactivarlo se borran las marcas que Lunma aún puede alcanzar. Desinstalar Lunma no borra las ya escritas, y una pestaña que no vuelvas a abrir nunca se alcanza — pero una marca nunca sobrevive a la sesión de navegación en la que se escribió.",
+  "options_label_closeChildTabsWithParent": "Cerrar las pestañas hijas con su pestaña de origen",
+  "options_desc_closeChildTabsWithParent": "Al cerrar una pestaña también se cierran las que abriste desde ella. Puedes deshacerlo justo después.",
+  "options_desc_requiresSetting": "Activa primero «{setting}»."
 }

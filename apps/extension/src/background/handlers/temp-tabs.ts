@@ -8,6 +8,7 @@ import { TAB_DEDUP_FLASH } from '../../shared/bus';
 import { log } from '../../shared/logger';
 import type { ArchivedTab } from '../../shared/types';
 import { handleRestoreArchivedTab } from '../auto-archive';
+import { clearCascading, markCascading } from '../close-cascade';
 import { activateTab } from '../tab-groups';
 import type { HandlersMap } from './context';
 import { markPendingDuplicateTab } from './pending-duplicate-tabs';
@@ -22,6 +23,7 @@ export function tempTabHandlers(): Pick<
   | 'closeTab'
   | 'newTab'
   | 'clearTempTabs'
+  | 'closeChildTabs'
   | 'clearDuplicateTempTabs'
   | 'groupTempTabsBySite'
   | 'undoClearTempTabs'
@@ -198,6 +200,55 @@ export function tempTabHandlers(): Pick<
         log.error('clearDuplicateTempTabs: survivor check failed', { windowId, err });
       }
       await chrome.tabs.remove(batch);
+    },
+    // Close a CONFIRMED cascade batch (tab-close-cascade): the tabs opened from a
+    // tab the user closed, which the worker asked about and the user accepted.
+    // Archived under one shared stamp like `clearTempTabs`, so the batch is
+    // recoverable from the archived-tabs view afterwards.
+    //
+    // The batch is re-validated rather than trusted: it was computed when the
+    // parent closed, the user then had seconds to answer, and anything that has
+    // since been closed, pinned, or moved to another Space is no longer part of
+    // the subtree that was described to them.
+    closeChildTabs: async (ctx, event) => {
+      const { windowId, spaceId, tabIds } = event.payload;
+      const s = ctx.store.state;
+      const tempTabIds = s.spaceInstancesByWindow[windowId]?.[spaceId]?.tempTabIds ?? [];
+      const ids = tabIds.filter(
+        (id) => tempTabIds.includes(id) && s.liveTabsById[id]?.windowId === windowId,
+      );
+      if (ids.length === 0) return;
+
+      const now = Date.now();
+      for (const id of ids) {
+        const live = s.liveTabsById[id];
+        ctx.store.appendArchivedTab({
+          tabId: id,
+          url: live?.url ?? '',
+          title: live?.title ?? '',
+          spaceId,
+          archivedAt: now,
+        });
+      }
+      ctx.store.pruneArchivedTabs(now);
+      markCascading(ids);
+      ctx.markDirty();
+
+      try {
+        const all = await chrome.tabs.query({ windowId });
+        const removing = new Set(ids);
+        const survivors = all.filter((t) => t.id !== undefined && !removing.has(t.id));
+        if (survivors.length === 0) await chrome.tabs.create({ windowId, active: true });
+      } catch (err) {
+        log.error('closeChildTabs: survivor check failed', { windowId, err });
+      }
+      try {
+        await chrome.tabs.remove(ids);
+      } catch (err) {
+        log.error('closeChildTabs: removal failed', { err });
+        // No removals will be reported, so nothing else will release these marks.
+        clearCascading(ids);
+      }
     },
     // Group by site (sibling of clearDuplicateTempTabs): cluster the targeted
     // Space's temporary tabs so same-hostname tabs are contiguous. Purely a

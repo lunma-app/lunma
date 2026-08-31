@@ -30,7 +30,14 @@ const { sendMock } = vi.hoisted(() => ({ sendMock: vi.fn(() => Promise.resolve()
 // Both the awaited `bus.send` (clearTempTabs confirmation flow) and the
 // fire-and-forget `dispatch` route to the same spy, so existing call assertions
 // hold whichever path the surface uses.
-vi.mock('../shared/bus', () => ({ bus: { send: sendMock }, dispatch: sendMock }));
+vi.mock('../shared/bus', () => ({
+  bus: { send: sendMock },
+  dispatch: sendMock,
+  // Message-type constants are plain strings, so the mock carries the real
+  // values — a mocked-away constant would make the listener match nothing.
+  TAB_DEDUP_FLASH: 'lunma/tab-dedup-flash',
+  CASCADE_CONFIRM: 'lunma/cascade-confirm',
+}));
 
 // Backing store for the `chrome.storage.sync` mock, reset per test. Drives the
 // first-run-notice gating (settings: `autoArchiveEnabled`/`autoArchiveIdleMinutes`;
@@ -38,13 +45,23 @@ vi.mock('../shared/bus', () => ({ bus: { send: sendMock }, dispatch: sendMock })
 let syncData: Record<string, unknown> = {};
 // Spies for the options-deep-link path ("Recently archived" / "Manage in settings").
 let tabsCreate: ReturnType<typeof vi.fn>;
+// Captured `chrome.runtime.onMessage` listeners, so a test can deliver the
+// worker's cascade announcement (tab-close-cascade).
+let runtimeMessageListeners: Array<(msg: unknown) => void>;
 
 function installChrome(): void {
   tabsCreate = vi.fn(async () => undefined);
+  runtimeMessageListeners = [];
   (globalThis as unknown as { chrome: unknown }).chrome = {
     runtime: {
       sendMessage: vi.fn(async () => undefined),
-      onMessage: { addListener: vi.fn(), removeListener: vi.fn() },
+      onMessage: {
+        addListener: vi.fn((l: (msg: unknown) => void) => runtimeMessageListeners.push(l)),
+        removeListener: vi.fn((l: (msg: unknown) => void) => {
+          const i = runtimeMessageListeners.indexOf(l);
+          if (i !== -1) runtimeMessageListeners.splice(i, 1);
+        }),
+      },
       openOptionsPage: vi.fn(),
       getURL: (path: string) => `chrome-extension://abc/${path}`,
     },
@@ -884,5 +901,86 @@ describe('App — first-run auto-archive notice (auto-archive)', () => {
     await fireEvent.click(noticeButton(container, 'Got it'));
     flushSync();
     expect(sendMock).not.toHaveBeenCalled();
+  });
+});
+
+// The worker sees a close that COULD take a tab's children with it — from the
+// Chrome tab strip as readily as from the sidebar — and asks before anything
+// goes. Nothing is archived or closed until the answer comes back, and no answer
+// means no (tab-close-cascade).
+describe('close-cascade confirmation', () => {
+  function deliver(msg: unknown): void {
+    for (const l of runtimeMessageListeners) l(msg);
+  }
+
+  function renderApp() {
+    const store = makeStore('blue');
+    store.state.spaceInstancesByWindow[1] = {
+      work: { spaceId: 'work', groupId: 1, tempTabIds: [5], tempTabTitles: {} },
+    };
+    return render(AppHarness, { props: { store, windowId: 1 } });
+  }
+
+  const ASK = {
+    type: 'lunma/cascade-confirm',
+    windowId: 1,
+    spaceId: 'work',
+    tabIds: [7, 8],
+    title: 'Parent',
+  };
+
+  test('accepting the prompt closes exactly the offered tabs', async () => {
+    renderApp();
+    deliver(ASK);
+
+    let toast!: HTMLElement;
+    await waitFor(() => {
+      toast = document.querySelector('.toast') as HTMLElement;
+      expect(toast).not.toBeNull();
+    });
+    expect(toast.textContent).toContain('2');
+
+    await fireEvent.click(toast.querySelector('button') as HTMLButtonElement);
+    expect(sendMock).toHaveBeenCalledWith({
+      kind: 'closeChildTabs',
+      payload: { windowId: 1, spaceId: 'work', tabIds: [7, 8] },
+    });
+  });
+
+  test('dismissing the prompt closes nothing', async () => {
+    // Dismissal is an answer, and the answer is no.
+    renderApp();
+    deliver(ASK);
+    await waitFor(() => expect(document.querySelector('.toast')).not.toBeNull());
+
+    expect(sendMock).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'closeChildTabs' }));
+  });
+
+  test('a prompt for another window is ignored', async () => {
+    renderApp();
+    deliver({ ...ASK, windowId: 2 });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.querySelector('.toast')).toBeNull();
+  });
+
+  test('a prompt with no tabs raises nothing', async () => {
+    renderApp();
+    deliver({ ...ASK, tabIds: [] });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.querySelector('.toast')).toBeNull();
+  });
+
+  test('a prompt with no Space raises nothing', async () => {
+    renderApp();
+    deliver({ ...ASK, spaceId: undefined });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.querySelector('.toast')).toBeNull();
+  });
+
+  test('an unrelated runtime message raises nothing', async () => {
+    renderApp();
+    deliver({ type: 'lunma/tab-dedup-flash', tabId: 5 });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.querySelector('.toast')).toBeNull();
   });
 });

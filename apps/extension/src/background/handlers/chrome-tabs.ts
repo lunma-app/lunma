@@ -4,15 +4,19 @@
 // group/boundary helpers → `ctx.groups.*` / `ctx.boundary.*`, read predicates →
 // `./queries`.
 
-import { TAB_DEDUP_FLASH } from '../../shared/bus';
+import { CASCADE_CONFIRM, TAB_DEDUP_FLASH } from '../../shared/bus';
 import { log } from '../../shared/logger';
 import { isLensPageUrl, isNewTabUrl } from '../../shared/new-tab';
+import { collectDescendantTabIds } from '../../shared/provenance';
+import type { SpaceId, TabId, WindowId } from '../../shared/types';
 import { resolveBoundaryAllow } from '../../shared/url-boundary';
+import { clearCascading, isCascading } from '../close-cascade';
 import { clearInitialLoad, isInitialLoad, markInitialLoad } from '../initial-load-tabs';
 import { forgetPageOpenedTab, isPageOpenedTab } from '../page-opened-tabs';
+import { resolveAllParents } from '../provenance';
 import { closeTab } from '../tab-groups';
 import { activateSpaceInWindow } from './activation';
-import type { HandlersMap } from './context';
+import type { HandlerContext, HandlersMap } from './context';
 import { consumePendingDuplicateTab } from './pending-duplicate-tabs';
 import {
   findTabInActiveSpace,
@@ -20,6 +24,64 @@ import {
   savedTabIdForBoundTab,
   spaceOwningTab,
 } from './queries';
+
+/**
+ * The tabs a close of `tabId` should take with it (tab-close-cascade), or empty.
+ *
+ * Guards run cheapest-first because this is on the path of EVERY tab close. A
+ * window teardown is rejected outright: it removes every tab, so cascading through
+ * it would archive the user's whole session as though they had discarded it.
+ */
+function collectCascadeBatch(
+  ctx: HandlerContext,
+  tabId: TabId,
+  info: chrome.tabs.OnRemovedInfo,
+): { batch: TabId[]; spaceId: SpaceId; title: string } | null {
+  if (info.isWindowClosing) return null;
+  if (!ctx.closeChildTabsWithParent()) return null;
+  if (!ctx.provenanceEnabled()) return null;
+  if (isCascading(tabId)) return null; // our own removals, not a user close
+  const windowId = info.windowId;
+  if (windowId === undefined) return null;
+
+  const spaceId = spaceOwningTab(ctx.store.state, windowId, tabId);
+  if (spaceId === null) return null;
+  const tempTabIds = ctx.store.state.spaceInstancesByWindow[windowId]?.[spaceId]?.tempTabIds ?? [];
+  // `spaceOwningTab` also resolves a Space through `tabBindings`, so it answers
+  // for a PINNED tab too. Pinned tabs are outside this capability in both
+  // directions — they neither cascade nor get cascaded.
+  if (!tempTabIds.includes(tabId)) return null;
+
+  const batch = collectDescendantTabIds(ctx.store.state.liveTabsById, tabId, tempTabIds);
+  if (batch.length === 0) return null;
+  return { batch, spaceId, title: ctx.store.state.liveTabsById[tabId]?.title ?? '' };
+}
+
+/**
+ * Ask the sidebar whether to close `batch`. Nothing is archived or closed here.
+ *
+ * The cascade is destructive and its size is not predictable from the tab strip,
+ * so the user answers before anything goes — an undo after the fact was the
+ * earlier design and it asks forgiveness rather than permission. The reply comes
+ * back as a `closeChildTabs` command.
+ *
+ * If no surface is listening the send rejects and the cascade simply does not
+ * happen. That is the correct outcome, not a degraded one: a confirmation the
+ * user asked for cannot be skipped just because nobody could be asked.
+ */
+function askToCascade(
+  ctx: HandlerContext,
+  batch: TabId[],
+  spaceId: SpaceId,
+  windowId: WindowId | undefined,
+  title: string,
+): void {
+  ctx.runSideEffect(async () => {
+    await chrome.runtime
+      .sendMessage({ type: CASCADE_CONFIRM, windowId, spaceId, tabIds: batch, title })
+      .catch(() => undefined);
+  });
+}
 
 export function chromeTabHandlers(): Pick<
   HandlersMap,
@@ -167,6 +229,9 @@ export function chromeTabHandlers(): Pick<
         // its first commit still records its real `originalURL` instead of '' —
         // `onUpdated` overwrites with the committed URL when it lands.
         url: tab.url || tab.pendingUrl,
+        // tab-provenance: capture the opener HERE. It is only reliable at create
+        // time — a later read can report nothing for a tab that genuinely had one.
+        openerTabId: tab.openerTabId,
         active: tab.active,
         status: tab.status,
         favIconUrl: tab.favIconUrl,
@@ -183,6 +248,10 @@ export function chromeTabHandlers(): Pick<
     },
     'tabs.onRemoved': (ctx, event) => {
       const { tabId, info } = event.payload;
+      // Close cascade (tab-close-cascade): resolve the subtree BEFORE
+      // `onTabRemoved` below, which splices this tab out of `tempTabIds` — after
+      // that `spaceOwningTab` answers `null` and the subtree is uncomputable.
+      const cascade = collectCascadeBatch(ctx, tabId, info);
       // Query next feed item BEFORE onTabRemoved (binding still visible, item still unread).
       const advance = info.isWindowClosing
         ? undefined
@@ -203,6 +272,14 @@ export function chromeTabHandlers(): Pick<
       // Redirect-chain tab dedup: bounded cleanup for a tab that closes (via
       // dedup or otherwise) before ever reaching `status: 'complete'`.
       clearInitialLoad(tabId);
+      clearCascading(tabId); // this removal arrived; stop suppressing it
+      // tab-provenance: the closed tab may have been the middle of a chain, so
+      // every tab below it now resolves to a different (higher) live ancestor.
+      // Without this the children keep pointing at a dead tab and render flat.
+      if (ctx.provenanceEnabled()) resolveAllParents(ctx.store);
+      if (cascade !== null) {
+        askToCascade(ctx, cascade.batch, cascade.spaceId, info.windowId, cascade.title);
+      }
       ctx.markDirty();
       // Auto-advance: open the next unread feed item in the same section — but
       // ONLY for items opened from the sidebar reading flow. An item opened from

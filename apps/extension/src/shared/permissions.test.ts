@@ -70,6 +70,12 @@ describe('hasApiPermission', () => {
     expect(permissions.contains).toHaveBeenCalledWith({ permissions: ['history'] });
   });
 
+  test('webNavigation routes through the foundation module', async () => {
+    permissions.contains.mockResolvedValueOnce(true);
+    await expect(hasApiPermission('webNavigation')).resolves.toBe(true);
+    expect(permissions.contains).toHaveBeenCalledWith({ permissions: ['webNavigation'] });
+  });
+
   test('returns false when not granted', async () => {
     permissions.contains.mockResolvedValueOnce(false);
     await expect(hasApiPermission('bookmarks')).resolves.toBe(false);

@@ -6,6 +6,10 @@ export const meta = defineStory({
   group: 'Form',
   controlOverrides: {
     block: { description: 'Full-width equal segments.' },
+    disabled: {
+      description:
+        'Disable the whole control — dims the selection pill along with the options, unlike marking every option disabled.',
+    },
     ariaLabel: { default: 'Colour intensity', description: 'Radio-group accessible name.' },
   },
   excludeControls: {
@@ -52,6 +56,7 @@ let playgroundValue = $state('vivid');
         value={playgroundValue}
         onchange={(v) => (playgroundValue = v)}
         block={args.block as boolean}
+        disabled={args.disabled as boolean}
       />
     </div>
   {/snippet}
@@ -62,6 +67,29 @@ let playgroundValue = $state('vivid');
         ariaLabel="Colour intensity"
         options={tintOptions}
         value="vivid"
+        onchange={noop}
+      />
+    </Variant>
+    <Variant label="disabled (whole control)">
+      <SegmentedControl
+        name="story-disabled"
+        ariaLabel="Colour intensity"
+        options={tintOptions}
+        value="vivid"
+        onchange={noop}
+        disabled
+      />
+    </Variant>
+    <Variant label="disabled (single option)">
+      <SegmentedControl
+        name="story-option-disabled"
+        ariaLabel="Theme"
+        options={[
+          { value: 'system', label: 'System' },
+          { value: 'light', label: 'Light' },
+          { value: 'dark', label: 'Dark', disabled: true },
+        ]}
+        value="system"
         onchange={noop}
       />
     </Variant>
