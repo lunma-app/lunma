@@ -33,7 +33,7 @@ jobs:
         # Human-authored PRs only. Bots are handled below (Dependabot) or not at
         # all (release-please, which only moves version numbers and a changelog).
         if: ${{ github.event.pull_request.user.type != 'Bot' }}
-        uses: anthropics/claude-code-action@v1.0.196
+        uses: anthropics/claude-code-action@v1.0.206
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
@@ -54,7 +54,7 @@ jobs:
       - name: Review dependency update
         id: claude-review-deps
         if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
-        uses: anthropics/claude-code-action@v1.0.196
+        uses: anthropics/claude-code-action@v1.0.206
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
