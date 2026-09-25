@@ -1,19 +1,35 @@
 # Lunma
 
+[![CI](https://github.com/lunma-app/lunma/actions/workflows/ci.yml/badge.svg)](https://github.com/lunma-app/lunma/actions/workflows/ci.yml)
+
 A Chrome extension for vertical tab spaces. Spec-driven, TypeScript-strict, Svelte 5.
+
+<p align="center">
+  <img src="apps/site/static/shots/sidebar.webp" alt="Lunma sidebar: colour-coded Spaces with pinned and temporary tabs" width="420" />
+  <img src="apps/site/static/shots/newtab.webp" alt="Lunma launcher on the new-tab page" width="420" />
+</p>
 
 - **Author:** The Lunma Authors
 - **Status:** Active development — pre-release
 - **Inspired by:** Arcify v4 by Nisarg Kolhe — Lunma is a clean-room reimplementation that builds on Arcify's ideas with its own architecture and codebase.
+
+## Why I built it
+
+I wanted Arc's Spaces without leaving Chrome: one colour-coded workspace per project,
+tabs that stay pinned across restarts, and everything else archived when I stop
+touching it. Backing that state with the Chrome bookmark tree means a binding-and-drift
+layer to keep two copies in step (`docs/adr/0001`), so Lunma owns its records locally
+and materialises each Space as a real Chrome tab group: the tab strip and the sidebar
+always agree, and the extension stays small.
 
 ## What Lunma delivers
 
 A Chrome Manifest V3 extension that gives every project its own colour-coded vertical workspace — the Spaces pattern Arc popularised, brought to the browser you already use:
 
 - **Spaces** — Chrome tab groups augmented with metadata; one active Space per window
-- **Pinned tabs** — durable, bookmark-backed, sync across devices
+- **Pinned tabs** — durable saved tabs owned by Lunma in `chrome.storage.local`; backup and restore as a file
 - **Temporary tabs** — ephemeral; archived automatically when idle
-- **Favicon row** — compact bar of bookmark-backed shortcuts with live-tab binding
+- **Favicon row** — compact bar of saved shortcuts with live-tab binding
 - **Launcher** — keyboard search across tabs, bookmarks, history (overlay + new-tab page)
 - **Options** — schema-driven settings UI
 - **Onboarding** — install + update flows from a single source of content
@@ -57,11 +73,16 @@ Capability behavior lives in the living specs under `openspec/specs/`; durable d
 pnpm install                              # link the workspace
 pnpm --filter @lunma/extension dev        # extension: Vite + crxjs dev build (load apps/extension/dist unpacked)
 pnpm --filter @lunma/site dev             # site: SvelteKit dev server
+pnpm test                                 # extension Vitest unit tests (delegates to @lunma/extension)
 pnpm verify                               # pnpm -r verify — gates every package (extension + site)
 pnpm --filter @lunma/extension build      # extension: production build → apps/extension/dist
 pnpm --filter @lunma/site build           # site: static prerender → apps/site/build
 pnpm test:e2e                             # extension Playwright smoke (delegates to @lunma/extension)
 ```
+
+Releases are cut by release-please from Conventional Commits on `main`; the
+extension's `package.json` version is canonical and tagged `vX.Y.Z`. See
+`docs/releasing.md`.
 
 Non-trivial work starts with an OpenSpec change under `openspec/changes/`
 (see the `openspec-*` skills); each capability has a living spec under
