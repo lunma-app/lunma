@@ -2,7 +2,7 @@
 
 The component catalog (`apps/extension/catalog/`) is the tool a reviewer uses to
 hold every `src/ui` primitive to Lunma's visual-quality and component-library
-bar before it ships. A sibling catalog in `slotterpro-next` — a port of *this*
+bar before it ships. A sibling catalog in a sibling project — a port of *this*
 catalog that has since evolved — proved out several concrete improvements to
 that build-and-review loop. This change adopts the ones that fit Lunma
 (adapted to the flat `src/ui/` layout, Lunma's own `ui/` primitives, and the
@@ -62,7 +62,7 @@ Gaps 1–2 land first (the core mechanism); 3–7 are the adopted upgrades.
   authored markup (extracted verbatim from the story source, Shiki-highlighted).
   The Playground gains live code rebuilt from the current control values.
   Component name comes from `meta.title` (Lunma's title *is* the component name),
-  not slotterpro's `componentId`.
+  not the sibling catalog's `componentId`.
 - **Build-exclusion gate (gap 5).** New
   `apps/extension/scripts/assert-catalog-excluded.sh` runs one extension
   `vite build`, then greps `dist/` for catalog-engine markers (`defineStory`,

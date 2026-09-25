@@ -42,3 +42,8 @@ test-results/
 
 # Claude Code worktrees
 .claude/worktrees/
+
+# Per-machine review workflow state (hardcoded local paths)
+.claude/repo-review-history.json
+.claude/repo-review-memory.json
+.claude/workflows/repo-review.js

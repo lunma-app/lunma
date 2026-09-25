@@ -14,7 +14,7 @@ contrast/motion) → archive → next.
 ## Triage first (resolve before scheduling)
 
 - **DS-35 "Migrate Select to bits-ui Popover positioning" — REJECT / reinterpret.**
-  `bits-ui` is not a Lunma dependency (it's slotterpro's stack). Reviewer
+  `bits-ui` is not a Lunma dependency (it comes from another project's stack). Reviewer
   context-bleed. If Select's popover positioning is genuinely wrong, refile as
   "fix Select popover positioning with Lunma's own approach"; otherwise drop.
 - Skim the P3 corpus for taste-only items; downgrade/defer any that aren't real

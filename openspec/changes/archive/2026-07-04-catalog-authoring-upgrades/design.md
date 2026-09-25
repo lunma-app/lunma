@@ -46,14 +46,14 @@ two: chrome theme stays global; the selected story's content gets its own
 independent theme.
 
 **Broadened scope (this change was rescoped from `catalog-story-backgrounds`).**
-Beyond the canvas/theme mechanism above, the catalog in `slotterpro-next` — a
+Beyond the canvas/theme mechanism above, the catalog in a sibling project — a
 port of this one that evolved further — surfaced five more improvements worth
 adopting into the build-and-review loop: author-declared controls for opaque
 primitives, per-variant and live **code** views, an automated build-exclusion
 gate, control persistence, and an information-architecture split of the shell.
 This change folds those in, adapted to Lunma's flat `src/ui/` layout, its own
 `ui/` primitives, and its biome/stylelint/vitest gates. What it deliberately
-does **not** adopt: slotterpro's Tailwind/`bits-ui`/`lucide` chrome, its neutral
+does **not** adopt: the sibling catalog's Tailwind/`bits-ui`/`lucide` chrome, its neutral
 `--cat-*` palette (both conflict with Lunma's immersive-shell visual policy),
 and its `componentId` indirection (Lunma keys off `meta.title`, and a second
 identifier would duplicate the title and undercut the filename↔title coverage
@@ -194,7 +194,7 @@ guard). The per-feature Decisions for the adopted upgrades are in
 - **(A) Author-declared `controls` merge under derived controls.** `StoryMeta`
   gains `controls?: Controls`. `registry.ts`'s `resolveControls` replaces its
   `if (!derived) return {}` early-return with a three-step merge, identical in
-  ordering to slotterpro's but keyed by `meta.title` (Lunma's title == the
+  ordering to the sibling catalog's but keyed by `meta.title` (Lunma's title == the
   primitive filename == the `derivedControls` key), not `componentId`: (1) union
   `{ ...meta.controls, ...derived }` — a derived control of the same name wins
   wholesale (object-spread order); (2) drop keys named in `excludeControls`;
@@ -218,31 +218,31 @@ guard). The per-feature Decisions for the adopted upgrades are in
   control could drive — recorded in each story's `excludeControls`).
 
 - **(B) Code views: exact per-variant markup + live Playground code.** New
-  `extract-code.ts` ports slotterpro's `extractVariantCode` (a syntactic
+  `extract-code.ts` ports the sibling catalog's `extractVariantCode` (a syntactic
   `<Variant label>…</Variant>` scan of the raw story source → `Map<label,
   dedented markup>`) and `generatePlaygroundCode` (component reconstructed from
   its name + only the args that differ from default; children shown as a `…`
-  placeholder). slotterpro's `componentName(componentId)` slug-caser is dropped
+  placeholder). the sibling catalog's `componentName(componentId)` slug-caser is dropped
   — Lunma passes `meta.title` straight in (it is already the PascalCase
   component name; `MultiSelect` etc. survive verbatim). New `variant-code.ts`
   ports the Svelte context (`codeFor`/`toggle`/`openLabel`): each `<Variant>`
   tile carries a `</>` trigger; the `Story.svelte` host owns one shared,
   full-width drawer below the Examples grid so the code is never clipped in a
   narrow matrix column. Highlighting reuses Lunma's existing `shiki`
-  `vitesse-light`/`vitesse-dark` themes (not slotterpro's `github-*`), matching
+  `vitesse-light`/`vitesse-dark` themes (not the sibling catalog's `github-*`), matching
   the current Source panel. The `…`-children fidelity tradeoff is deliberate
   (the catalog only knows the derived prop contract, not authored children) and
   is recorded here rather than in a code comment (comment policy).
 
 - **(B-primitives) The `</>` trigger and code-token colours use Lunma
-  primitives/tokens, not Tailwind/hex.** slotterpro hand-rolls the trigger as a
+  primitives/tokens, not Tailwind/hex.** The sibling catalog hand-rolls the trigger as a
   Tailwind `<button>` and hard-codes token colours (`#147a67` …). Lunma's
   compose-own-primitives + stylelint token gate forbid both: the trigger is an
   `IconButton` (icon `code`, or the nearest existing icon if `code` is absent
   from the generated set), and `.cat-tok-*` colours resolve through
   `@lunma/tokens` semantic vars (following the existing `.shiki` block in
   `catalog.css`, gated on `[data-theme='light']` — Lunma's single canvas-theme
-  axis, not slotterpro's `[data-cat-theme]`).
+  axis, not the sibling catalog's `[data-cat-theme]`).
 
 - **(C) Build-exclusion gate wired into `verify` (agreed fork).** The living
   "The catalog ships nothing in the extension bundle" requirement is enforced
@@ -251,9 +251,9 @@ guard). The per-feature Decisions for the adopted upgrades are in
   `pnpm run build` (crxjs → `dist/`, not SvelteKit's `build/`), then `grep -rl`
   over `dist/` for engine markers (`"catalog: #app mount target is missing"`,
   `generateDerivedControls`, `defineStory`, `resolveControls`) and any
-  `*catalog*` path. slotterpro's `resolveVariantPropsAlias` marker is dropped
+  `*catalog*` path. the sibling catalog's `resolveVariantPropsAlias` marker is dropped
   (no Lunma equivalent). The marker-grep approach sidesteps the two-build byte
-  diff (content-hashing makes that flaky) exactly as slotterpro documents.
+  diff (content-hashing makes that flaky) exactly as the sibling catalog documents.
   **Agreed cost:** the user chose to wire it into `verify:catalog` (and thus
   `pnpm verify`), so every `pnpm verify` now pays a full extension `vite build`
   (+ `gen:icons`, chained by the `build` script). This changes the verify
@@ -280,7 +280,7 @@ guard). The per-feature Decisions for the adopted upgrades are in
   product's skin made the chrome compete with — and be mistaken for — the
   primitives under review (the user's "nothing related to the lunma theme, to
   avoid confusion; clean, simple, industrial, raw"). Resolution (user-chosen):
-  adopt slotterpro's approach after all — a bespoke neutral grayscale palette
+  adopt the sibling catalog's approach after all — a bespoke neutral grayscale palette
   (`--cat-*`, in `catalog.css`) for the entire chrome (nav, toolbar, topbar,
   footer, `Story.svelte` panel frames, API table, code, source), built from
   **plain controls, not `src/ui` primitives** (a primitive would carry lunma's
@@ -307,11 +307,11 @@ guard). The per-feature Decisions for the adopted upgrades are in
   are audited and kept only where an intentional non-alphabetical position is
   justified (else removed for consistency). Lunma's existing section order
   (Playground → API → Examples → Source) is **kept**, not flipped to
-  slotterpro's Examples-first — the per-variant drawer works regardless of
+  the sibling catalog's Examples-first — the per-variant drawer works regardless of
   section position, and reordering every story is churn without payoff.
 
 - **(G) Nav taxonomy: add `Overlay`, de-load `Atoms`.** The `buildGroups`/
-  `compare` algorithm is already byte-identical to slotterpro's — no engine
+  `compare` algorithm is already byte-identical to the sibling catalog's — no engine
   change. The improvement is a `meta.group` data pass: a new `Overlay` group
   collects `Menu`, `BottomSheet`, `Toast`, `Tooltip` (today split across
   `Composite` and `Atoms`), shrinking the 16-item `Atoms` catch-all. Group
