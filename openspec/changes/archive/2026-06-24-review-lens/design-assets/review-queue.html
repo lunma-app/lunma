@@ -5,19 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Review Queue — prototype</title>
 
-<!-- Real Lunma design tokens + recipes (absolute file paths) -->
-<link rel="stylesheet" href="file:///Users/emanuel.fonseca/Workspaces/lunma/.claude/worktrees/lenses/packages/tokens/tokens.css" />
-<link rel="stylesheet" href="file:///Users/emanuel.fonseca/Workspaces/lunma/.claude/worktrees/lenses/packages/tokens/recipes.css" />
+<!-- Real Lunma design tokens + recipes (relative paths to the workspace package) -->
+<link rel="stylesheet" href="../../../../../packages/tokens/tokens.css" />
+<link rel="stylesheet" href="../../../../../packages/tokens/recipes.css" />
 
 <style>
   /* Brand faces, pointed at the bundled woff2 (fonts.css uses /fonts/*; override). */
   @font-face {
     font-family: 'Mona Sans'; font-style: normal; font-weight: 200 900; font-display: swap;
-    src: url('file:///Users/emanuel.fonseca/Workspaces/lunma/.claude/worktrees/lenses/packages/tokens/fonts/MonaSans-Variable.woff2') format('woff2');
+    src: url('../../../../../packages/tokens/fonts/MonaSans-Variable.woff2') format('woff2');
   }
   @font-face {
     font-family: 'Instrument Serif'; font-style: normal; font-weight: 400; font-display: swap;
-    src: url('file:///Users/emanuel.fonseca/Workspaces/lunma/.claude/worktrees/lenses/packages/tokens/fonts/InstrumentSerif-Regular.woff2') format('woff2');
+    src: url('../../../../../packages/tokens/fonts/InstrumentSerif-Regular.woff2') format('woff2');
   }
 
   html, body { margin: 0; height: 100%; background: var(--surface); }
