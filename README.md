@@ -13,6 +13,8 @@ A Chrome extension for vertical tab spaces. Spec-driven, TypeScript-strict, Svel
 - **Status:** Active development — pre-release
 - **Inspired by:** Arcify v4 by Nisarg Kolhe — Lunma is a clean-room reimplementation that builds on Arcify's ideas with its own architecture and codebase.
 
+> **Project status: released and maintained.** Version 0.6.0 is out; this is the side project I keep shipping.
+
 ## Why I built it
 
 I wanted Arc's Spaces without leaving Chrome: one colour-coded workspace per project,
