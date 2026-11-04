@@ -39,7 +39,7 @@
     "@lunma/tokens": "workspace:*",
     "bits-ui": "^2.18.1",
     "saxes": "6.0.0",
-    "zod": "^4.4.3"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.7.1",
